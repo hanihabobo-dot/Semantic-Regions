@@ -7,6 +7,8 @@ Updated: 2026-03-17 (#55 partially done; #56 partially done; #87-#92 dead code
          inventory added; CODEBASE POLICY section added)
 Updated: 2026-03-17 (#95 systemic PDDL state drift added; PDDL issues
          promoted to Tier 0 — highest priority)
+Updated: 2026-03-17 (#97 streams coupling/limitations moved from inline
+         code comments to audit; Tier 4 — accepted simplification)
 
 Resolved issues archived to archive/CODEBASE_AUDIT_RESOLVED.txt.
 
@@ -1049,6 +1051,72 @@ Fix:   DECISION NEEDED — choose one:
            (nuclear option — clean history, but loses all prior commits).
 
 ================================================================================
+97. STREAMS NOT GENERIC — TIGHTLY COUPLED TO PANDA/PYBULLET/TABLETOP
+================================================================================
+Where: streams.py (BoxelStreams class, sample_grasp, plan_motion,
+       compute_kin_solution)
+
+What:  All three streams and the BoxelStreams class itself are tightly
+       coupled to the specific hardware, simulator, and scenario:
+
+       Robot:
+         - Franka Panda 7-DOF (joint limits, IK seed offsets, REST_POSES
+           from robot_utils.py are all Panda-specific)
+         - IK seed perturbations in _IK_SEED_OFFSETS are hand-tuned for
+           the Panda's kinematic structure
+
+       Simulator:
+         - IK via p.calculateInverseKinematics (cannot swap in IKFast,
+           TracIK, or MoveIt without rewriting _pybullet_ik)
+         - Collision checking via p.getContactPoints (no abstraction for
+           FCL, Bullet standalone, or OMPL collision checkers)
+         - RRT-Connect implemented inline; a generic system would use
+           OMPL/MoveIt where you can swap RRT*, PRM, BIT*, etc.
+
+       Scenario:
+         - Boxel grid world (target poses derived from BoxelRegistry
+           centers; a generic stream would take an arbitrary world-frame
+           pose)
+         - Tabletop-only: support_body_ids hack ignores the table during
+           pick/place because the Panda is mounted ON the table — its
+           lower arm links overlap the table geometry in PyBullet, causing
+           false-positive collisions on nearly every config.  A ceiling-
+           or mobile-mounted robot would need different logic.
+         - RRT parameters (2000 iters, 0.2 rad step, 75 smooth) are tuned
+           for light tabletop clutter (2-4 objects); a cluttered shelf or
+           high-DOF dual-arm setup would need very different values.
+
+       sample_grasp limitations:
+         - Only produces top-down grasps at fixed Z-offsets (0.05, 0.10,
+           0.15 m above object center)
+         - No side grasps, angled approaches, or yaw rotation
+         - No X/Y offsets — always directly above the object center
+         - Ignores object geometry entirely (sphere, box, L-bracket all
+           get the same three grasps)
+         - Assumes the object is reachable from above (tabletop only)
+         - A generic version would sample grasp poses on the object
+           surface using shape info and evaluate grasp quality (force
+           closure, etc.)
+
+       plan_motion limitations:
+         - Single-motion design: the ignored-body union across both
+           endpoints can't distinguish transit (no object) from approach
+           (gripper entering clutter).  A decomposed transit+approach
+           architecture could restrict the ignore set to the approach
+           phase only.
+
+Fix:   Accepted for thesis scope.  Document as known simplifications.
+       If generalising beyond the Panda tabletop scenario:
+       (a) Abstract IK behind a solver interface (PyBullet, IKFast,
+           TracIK, MoveIt).
+       (b) Abstract collision checking behind a checker interface
+           (PyBullet, FCL, OMPL).
+       (c) Replace inline RRT with OMPL or MoveIt planning pipeline.
+       (d) Make sample_grasp geometry-aware (object mesh → grasp sampling).
+       (e) Decompose plan_motion into transit + approach phases with
+           separate ignored-body sets.
+
+================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without redoing
@@ -1110,6 +1178,10 @@ DEFERRABLE (Tier 4 — accepted simplifications, fidelity):
   #59  Objects fly away on first grasp — constraint-based grasping works
   +#77  functionally; friction grasping is a fidelity improvement.
        Depends on #77 (object dimensions exceed gripper capacity).
+  #97  Streams not generic — tightly coupled to Panda/PyBullet/tabletop.
+       Accepted for thesis scope; would need abstraction layers (IK
+       solver interface, collision checker interface, geometry-aware
+       grasping) to generalise beyond the current scenario.
 
 DEAD CODE — DOCUMENTED, PRESERVED (Tier 5 — no action needed):
   #87  Dead methods/properties across codebase (~160 lines).
@@ -1252,6 +1324,8 @@ Priority order for remaining fixes (updated 2026-03-17):
     #59  Friction-based grasping — fidelity improvement, not
     +#77 correctness fix. Constraint grasping works functionally.
          Depends on #77 (object resizing). Fix together if pursued.
+    #97  Streams not generic — Panda/PyBullet/tabletop coupling.
+         Accepted for thesis scope.
 
   TIER 5 — Dead code inventory (documented, preserved per policy):
     #87  Dead methods/properties (~160 lines across 5 files)
