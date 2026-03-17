@@ -1171,8 +1171,20 @@ THESIS-CRITICAL (Tier 3 — days/weeks):
        batch evaluation runner (#76).
   #76  No evaluation framework (PA-1) — thesis cannot have a Results
        section without metrics, baselines, or scene variation.
-  #81  Missing recursive object discovery (PA-2) — implement or
-       document as accepted simplification / future work.
+  #81  Missing recursive object discovery (PA-2).
+       Shadow computation is one-shot at scene init: the overhead camera
+       sees object A, computes shadow S1 behind it.  If a previously
+       unknown object B is discovered inside S1 (after moving A), B may
+       itself occlude further regions — but the system does NOT recompute
+       shadows for newly discovered objects.  The planner can only reason
+       about shadows already in the BoxelRegistry; it cannot deduce
+       shadows it was never told about.
+       Fix: after each sense action discovers a new object, re-run shadow
+       analysis and inject new shadow boxels + blocks_view_at facts
+       before replanning.
+       Alternative: document as accepted single-layer-occlusion
+       simplification / future work (sufficient for tabletop scenes
+       without multi-layer occlusion).
 
 DEFERRABLE (Tier 4 — accepted simplifications, fidelity):
   #59  Objects fly away on first grasp — constraint-based grasping works
@@ -1316,9 +1328,11 @@ Priority order for remaining fixes (updated 2026-03-17):
     #76  Evaluation framework (PA-1) — metrics,          ~1-2 weeks
          baselines, batch runner, scene variation.
          Required for thesis Results section.
-    #81  Recursive object discovery (PA-2) — new         ~2-3 days
-         feature, or document as accepted
-         simplification / future work
+    #81  Recursive object discovery (PA-2) —              ~2-3 days
+         Shadow computation is one-shot; newly discovered
+         objects don't trigger re-analysis for second-layer
+         shadows.  Implement re-computation after sense, or
+         document as single-layer-occlusion simplification.
 
   TIER 4 — Deferrable (accepted simplifications, fidelity):
     #59  Friction-based grasping — fidelity improvement, not
