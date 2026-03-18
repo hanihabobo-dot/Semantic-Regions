@@ -435,7 +435,9 @@ class BoxelStreams:
         # position=[0,0,z] means no X/Y offset — directly above boxel center.
         # compute_kin_solution later adds this to boxel.center to get the
         # world-frame EE target position.
-        for z in self._GRASP_Z_OFFSETS:
+        offsets = list(self._GRASP_Z_OFFSETS)
+        random.shuffle(offsets)
+        for z in offsets:
             self._grasp_counter += 1
             grasp = Grasp(
                 position=np.array([0, 0, z]),
@@ -444,8 +446,6 @@ class BoxelStreams:
             )
             logger.debug("sample_grasp: %s -> %s (z=%.2f)", obj_id,
                          grasp.name, z)
-            # PDDLStream expects outputs wrapped in a tuple — one element
-            # per :outputs variable (here just ?g).
             yield (grasp,)
     
     def _euler_to_quat(self, roll: float, pitch: float, yaw: float) -> np.ndarray:
