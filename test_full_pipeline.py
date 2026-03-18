@@ -434,16 +434,17 @@ def main(gui=True, run_logger=None, scene_config=None):
                     break
 
                 target_pybullet_id = env.objects[target_name].object_id
-                occluder_pybullet_id = None
-                if shadow_boxel.created_by_boxel_id in boxel_to_pybullet:
-                    occluder_pybullet_id = boxel_to_pybullet[shadow_boxel.created_by_boxel_id]['pybullet_id']
+                occluder_pybullet_ids = set()
+                for blocker_bid in shadow_occluder_map.get(str(shadow_id), []):
+                    if blocker_bid in boxel_to_pybullet:
+                        occluder_pybullet_ids.add(boxel_to_pybullet[blocker_bid]['pybullet_id'])
                 shadow_occluder_id = shadow_boxel.created_by_boxel_id
 
                 sense_outcome, blocked_fraction = sense_shadow_raycasting(
                     env.camera_position,
                     shadow_boxel,
                     target_pybullet_id,
-                    occluder_pybullet_id,
+                    occluder_pybullet_ids,
                     robot_id=robot_id
                 )
 
@@ -602,7 +603,7 @@ def main(gui=True, run_logger=None, scene_config=None):
 
 
 def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
-                            occluder_pybullet_id=None, robot_id=None):
+                            occluder_pybullet_ids=None, robot_id=None):
     """
     Sense a shadow region using PyBullet ray-casting from the fixed camera.
 
@@ -620,8 +621,10 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
         camera_pos: Fixed camera position [x, y, z]
         shadow_boxel: BoxelData for the shadow region to sense
         target_pybullet_id: PyBullet body ID of the target object
-        occluder_pybullet_id: Optional PyBullet body ID of the occluder that
-            geometrically blocks this shadow
+        occluder_pybullet_ids: Optional set/list of PyBullet body IDs for ALL
+            objects that may block camera view to this shadow (audit #99).
+            Previously only the creating occluder was checked; now all
+            blockers from compute_shadow_blockers are accepted.
         robot_id: Optional PyBullet body ID of the robot.  If provided, rays
             hitting the robot arm are counted as blocked (audit #83).
 
@@ -666,7 +669,7 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
     for hit_obj_id, _link, _frac, _pos, _normal in results:
         if hit_obj_id == target_pybullet_id:
             return "found_target", 0.0
-        if (occluder_pybullet_id is not None) and (hit_obj_id == occluder_pybullet_id):
+        if occluder_pybullet_ids and (hit_obj_id in occluder_pybullet_ids):
             occluder_hits += 1
         elif (robot_id is not None) and (hit_obj_id == robot_id):
             robot_hits += 1
