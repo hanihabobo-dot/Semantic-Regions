@@ -1132,6 +1132,21 @@ Fix:   Accepted for thesis scope.  Document as known simplifications.
            separate ignored-body sets.
 
 ================================================================================
+98. CONSTRAINT PULLS OBJECT INTO PLANNED GRASP OFFSET  [DONE]
+================================================================================
+Where: test_full_pipeline.py execute_pick(), createConstraint call
+What:  createConstraint used the planned grasp.position offset as
+       parentFramePosition.  Position-control lag means the true EE pose
+       differs from the planned target, so the constraint solver applies a
+       corrective snap impulse — teleporting the object and scattering
+       neighbours.
+Fix:   DONE (2026-03-18).  Compute actual EE-to-object relative transform
+       at constraint time via getLinkState/getBasePositionAndOrientation +
+       invertTransform/multiplyTransforms.  Constraint now freezes the
+       current spatial relationship.
+Related: #59, #77 (friction grasping / object sizing).
+
+================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without redoing
@@ -1246,6 +1261,7 @@ ALREADY RESOLVED:
   #84  Magic number cleanup in execution (DONE — Tier 1, 2026-03-14).
   #80  Fake IK fallback removed (DONE — Tier 1, 2026-03-14).
   #83  Raycasting blind spot fixed (DONE — Tier 1, 2026-03-14).
+  #98  Constraint grasp offset (DONE — Tier 0, 2026-03-18).
 
 PDDL/PYTHON ALIGNMENT:
   PF-1 sense: MISMATCH (accepted #61) — optimistic + reactive replanning.
@@ -1308,6 +1324,8 @@ Verification logging workflow (archived #58):
 Priority order for remaining fixes (updated 2026-03-17):
 
   TIER 0 — PDDL-CRITICAL (highest priority — symbolic/physical desync):
+    #98  Constraint grasp offset — actual EE-to-object     DONE
+         transform instead of planned grasp.position.
     #95  Systemic PDDL state drift — the root             ~2-3 weeks
          architectural issue.  Symbolic and physical
          states diverge through 4 channels.  Fixing

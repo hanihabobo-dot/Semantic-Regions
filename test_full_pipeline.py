@@ -831,10 +831,24 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui):
     # Attach the object to the gripper with a fixed constraint.
     # This is a simulation simplification — real grippers use friction,
     # but constraints prevent physics-engine slip during fast motions.
+    #
+    # Compute the ACTUAL relative transform between EE and object at this
+    # instant rather than using the planned grasp.position offset — position-
+    # control lag means the true EE pose differs slightly, and using the
+    # planned offset causes a corrective snap impulse (audit #98).
     obj_id = env.objects[obj_name].object_id
+    ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
+    ee_world_pos, ee_world_orn = ee_state[0], ee_state[1]
+    obj_world_pos, obj_world_orn = p.getBasePositionAndOrientation(obj_id)
+    inv_ee_pos, inv_ee_orn = p.invertTransform(ee_world_pos, ee_world_orn)
+    parent_frame_pos, parent_frame_orn = p.multiplyTransforms(
+        inv_ee_pos, inv_ee_orn, obj_world_pos, obj_world_orn
+    )
     grasp_constraint_id = p.createConstraint(
         robot_id, END_EFFECTOR_LINK, obj_id, -1,
-        p.JOINT_FIXED, [0, 0, 0], grasp.position.tolist(), [0, 0, 0]
+        p.JOINT_FIXED, [0, 0, 0],
+        list(parent_frame_pos), [0, 0, 0],
+        parentFrameOrientation=list(parent_frame_orn)
     )
 
     move_robot_smooth(robot_id, lift_joints, gui)
