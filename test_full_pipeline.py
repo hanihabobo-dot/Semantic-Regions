@@ -27,7 +27,9 @@ import os
 import argparse
 import random
 
-# Add pddlstream to path (for WSL)
+# PDDLStream is an external library (not pip-installable) that lives in a
+# sibling directory.  We inject it into sys.path so its modules can be
+# imported like normal packages by our planner wrapper.
 PDDLSTREAM_PATH = os.environ.get(
     'PDDLSTREAM_PATH',
     os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'pddlstream_lib')
@@ -39,6 +41,14 @@ import numpy as np
 import pybullet as p
 import pybullet_data
 
+# --- Semantic Boxels modules ---
+# boxel_env: PyBullet world setup, camera, scene configs
+# boxel_data: Boxel types (OBJECT, SHADOW, FREE_SPACE) and registry
+# cell_merger: Merges adjacent free-space cells to reduce planner branching
+# pddlstream_planner: Wraps PDDLStream with our domain/problem definitions
+# streams: Data classes shared between planner and executor (RobotConfig, etc.)
+# robot_utils: Low-level Panda arm control (IK, gripper, smooth motion)
+# run_logger: Per-run artefact capture for reproducibility
 from boxel_env import (BoxelTestEnv, SceneConfig,
                        default_scene, mixed_shapes_scene, scalability_scene)
 from boxel_data import BoxelRegistry, BoxelType, create_boxel_registry_from_boxels
@@ -52,12 +62,20 @@ from run_logger import RunLogger
 
 class BeliefState:
     """
-    Tracks what the robot knows about object locations.
-    
-    For each shadow, tracks:
-    - unknown: Haven't sensed yet
-    - not_here: Sensed, object not found
-    - found: Sensed, object found here
+    Epistemic model of the robot's partial observability.
+
+    The robot cannot see through occluders, so it doesn't know which shadow
+    hides the target.  This class tracks what has been learned through
+    sensing actions, enabling the replanning loop to avoid re-exploring
+    already-checked shadows.
+
+    Lifecycle per shadow:
+      unknown  ─── sense ───► not_here  (target absent → eliminate)
+                         └──► found     (target present → goal reached)
+
+    ``occluders_moved`` records physical relocations so the planner can
+    emit correct ``obj_at_boxel`` facts for objects that are no longer at
+    their original positions.
     """
     def __init__(self, shadows: list, target: str):
         self.target = target
@@ -119,6 +137,14 @@ def main(gui=True, run_logger=None, scene_config=None):
     # =========================================================
     # PHASE 2: Boxel Calculation (fast, no visualization)
     # =========================================================
+    # Perception pipeline:
+    #   1. Camera observation → occupied boxels (objects + shadows they cast)
+    #   2. Free-space generation → fills unoccupied table surface with boxels
+    #   3. Cell merging → collapses adjacent free-space cells into fewer,
+    #      larger boxels so the planner's search space stays tractable
+    # The combined set gives the planner a complete spatial model of the
+    # table surface: where objects are, where shadows are, and where
+    # the robot can safely place things.
     print("\n--- Phase 2: Calculating Boxels ---")
     obs = env.get_camera_observation()
     all_known = obs.boxels
@@ -130,12 +156,20 @@ def main(gui=True, run_logger=None, scene_config=None):
     # =========================================================
     # PHASE 3: Create Registry
     # =========================================================
+    # The registry is the single source of truth for spatial reasoning.
+    # It assigns stable IDs, classifies boxels by type, and records
+    # parent relationships (which occluder created which shadow).
+    # Both the PDDL planner and the execution layer reference the same
+    # registry, ensuring symbolic names map to consistent geometry.
     print("\n--- Phase 3: Creating BoxelRegistry ---")
     registry = create_boxel_registry_from_boxels(all_boxels, env.table_surface_height)
     registry.save_to_json("boxel_data.json")
     if run_logger:
         run_logger.save_artefact("boxel_data.json")
     
+    # Extract the two categories the planner cares about:
+    # - shadows: regions that might hide the target (must be sensed)
+    # - occluders: objects blocking those shadows (must be relocated first)
     shadows = [b.id for b in registry.boxels.values() if b.boxel_type == BoxelType.SHADOW]
     occluders = [b.id for b in registry.boxels.values() if b.boxel_type == BoxelType.OBJECT]
     print(f"  {len(registry.boxels)} boxels, {len(shadows)} shadows, {len(occluders)} occluders")
@@ -151,12 +185,18 @@ def main(gui=True, run_logger=None, scene_config=None):
     # =========================================================
     # PHASE 4: Hidden Object Scenario (ORACLE ONLY)
     # =========================================================
+    # This phase establishes ground truth that the ROBOT does NOT have
+    # access to.  We use AABB containment (is the target inside a shadow
+    # volume?) to verify the scene is valid — at least one target must be
+    # genuinely occluded.  The robot only discovers this through sensing.
     print("\n--- Phase 4: Hidden Object Scenario ---")
     
     all_targets = [name for name in env.objects.keys() if name.startswith("target")]
     
-    # Determine which targets are actually inside shadow regions
-    # by checking if each target's position falls within a shadow boxel's AABB.
+    # AABB containment test: a target is "in" a shadow if its position
+    # falls within the shadow boxel's axis-aligned bounding box.
+    # This is an oracle check — it uses the simulator's ground-truth
+    # positions that the robot cannot directly observe.
     target_to_shadow = {}
     for tname in all_targets:
         tpos = np.array(env.objects[tname].position)
@@ -172,6 +212,8 @@ def main(gui=True, run_logger=None, scene_config=None):
         env.close()
         return False
     
+    # When multiple targets are hidden, pick one at random so evaluation
+    # runs aren't biased toward a particular spatial arrangement.
     target_name = random.choice(list(target_to_shadow.keys()))
     target_info = env.objects[target_name]
     oracle_hidden_shadow = target_to_shadow[target_name]
@@ -180,13 +222,17 @@ def main(gui=True, run_logger=None, scene_config=None):
     print(f"  ORACLE: Actually hidden in {oracle_hidden_shadow} (ground-truth AABB containment)")
     print(f"  Robot must search to find it!")
     
-    # Build comprehensive shadow → [blocker_ids] mapping via raycasting
-    # (audit #78).  Unlike the old approach that only recorded the creating
-    # occluder, this detects ALL objects that physically block the camera's
-    # line of sight to each shadow.
+    # Build shadow → [blocker_ids] mapping via raycasting (audit #78).
+    # A shadow can be blocked by MORE than just the object that created it
+    # (e.g. a second occluder drifts into the line of sight after spawning).
+    # Raycasting from the camera through each shadow volume catches all
+    # actual blockers, not just the geometrically-derived creator.
     shadow_occluder_map = compute_shadow_blockers(
         env.camera_position, registry, shadows, occluders, env
     )
+    # Fallback: if raycasting found no blockers for a shadow (can happen
+    # when the occluder sits exactly at a ray grid boundary), use the
+    # parent relationship recorded during boxel creation.
     for shadow_id in shadows:
         if shadow_id not in shadow_occluder_map or not shadow_occluder_map[shadow_id]:
             shadow_boxel = registry.get_boxel(shadow_id)
@@ -197,8 +243,10 @@ def main(gui=True, run_logger=None, scene_config=None):
             else:
                 print(f"  WARNING: Shadow {shadow_id} has no linked occluder — skipping")
     
-    # Create mapping from boxel IDs to PyBullet object names and IDs
-    # Boxel IDs are like "obj_000", PyBullet names are like "occluder_1"
+    # Bridge between the symbolic (PDDL) and physical (PyBullet) worlds.
+    # The planner reasons about boxel IDs like "obj_000"; execution needs
+    # PyBullet body IDs and names like "occluder_1".  This mapping lets the
+    # action dispatcher translate plan parameters into simulator calls.
     boxel_to_pybullet = {}
     for boxel in registry.boxels.values():
         if boxel.object_name and boxel.object_name in env.objects:
@@ -213,10 +261,16 @@ def main(gui=True, run_logger=None, scene_config=None):
     # =========================================================
     # PHASE 5: Planning with Replanning Loop
     # =========================================================
+    # Core idea: plan optimistically (assume target is in the first shadow),
+    # execute until a sense action reveals new information, then replan with
+    # updated beliefs.  This is a sense-plan-act loop with lazy replanning.
     print("\n--- Phase 5: Planning with Replanning ---")
     
-    # Build bidirectional name→body-ID mapping so streams can exclude the
-    # grasped object from collision checks during compute_kin / plan_motion.
+    # Collision-aware planning needs to know which PyBullet bodies are
+    # movable objects (to exclude the grasped object from self-collision)
+    # vs. immovable support surfaces (always present in collision checks).
+    # Both human-readable names ("occluder_1") and boxel IDs ("obj_000")
+    # map to the same body ID, so streams can look up either form.
     object_body_ids = {}
     for name, obj_info in env.objects.items():
         if name not in ("plane", "table", "robot"):
@@ -230,6 +284,11 @@ def main(gui=True, run_logger=None, scene_config=None):
         env.objects["table"].object_id,
     })
 
+    # Initialise belief (all shadows unknown) and the planner.
+    # The planner is stateless between calls — all context it needs
+    # (known-empty shadows, moved occluders, current config) is passed
+    # in each plan() call so replanning always starts from scratch with
+    # the latest world state.
     belief = BeliefState(shadows, target_name)
     planner = PDDLStreamPlanner(registry, robot_id=robot_id,
                                  shadow_occluder_map=shadow_occluder_map,
@@ -237,6 +296,7 @@ def main(gui=True, run_logger=None, scene_config=None):
                                  object_body_ids=object_body_ids,
                                  support_body_ids=support_body_ids)
     
+    # Export the initial PDDL problem for debugging / reproducibility.
     problem_path = planner.export_problem_pddl(
         target_objects=[target_name],
         goal=('holding', target_name)
@@ -249,19 +309,22 @@ def main(gui=True, run_logger=None, scene_config=None):
     boxel_centers = {b.id: b.center for b in registry.boxels.values()}
     
     plan_count = 0
-    # Reactive replanning loop (see CODEBASE_AUDIT #61, PA-5):
-    # The PDDL sense action is optimistic — it assumes the target will be
-    # found.  When sensing reveals "not found" or "still blocked," the
-    # execution loop breaks out and replans with updated belief state
-    # (known_empty_shadows).  Each replan eliminates one shadow candidate,
-    # so worst-case N replans for N shadows.  Budget allows multiple
-    # occluder relocations per shadow (4 attempts * shadows + 1 final pick).
+    # --- Reactive replanning loop ---
+    # Design: the PDDL sense action is OPTIMISTIC — it assumes the
+    # target will be found.  When execution reveals otherwise (empty or
+    # still-blocked), we break out of the current plan and replan with
+    # the updated belief.  This is cheaper than encoding every possible
+    # sensing outcome in PDDL.
+    #
+    # Termination: each replan eliminates at least one shadow (or retries
+    # a blocked one up to 3 times), so worst case is bounded.  Budget:
+    # 4 attempts per shadow + 1 final pick.
     max_replans = 4 * len(shadows) + 1
-    grasp_constraint_id = None
-    exit_reason = None
-    current_config = planner.home_config
-    # Track repeated "still_blocked" outcomes per shadow to detect the
-    # infinite-replan pattern described in audit #78(c).
+    grasp_constraint_id = None       # set during pick, cleared after place
+    exit_reason = None               # tracks why the loop ended for Phase 6
+    current_config = planner.home_config  # robot's last known joint config
+    # Detect infinite-replan loops: if sensing the same shadow stays
+    # "still_blocked" 3+ times, give up on it (audit #78c).
     blocked_counts = {}  # shadow_id → consecutive-block count
     
     while not belief.is_target_found() and plan_count < max_replans:
@@ -300,7 +363,10 @@ def main(gui=True, run_logger=None, scene_config=None):
         for i, action in enumerate(plan):
             print(f"  {i+1}. {action[0]}")
         
-        # Reject plans containing heuristic (kinematically invalid) configs
+        # Safety gate: during planning, streams may emit "heuristic"
+        # configs (e.g. boxel-center approximations) when no robot_id is
+        # available.  These are geometrically reasonable but not IK-valid,
+        # so executing them would drive the real arm to arbitrary poses.
         for action in plan:
             for param in action[1:]:
                 if isinstance(param, RobotConfig) and param.is_heuristic:
@@ -310,7 +376,11 @@ def main(gui=True, run_logger=None, scene_config=None):
                         f"Ensure BoxelStreams has a valid robot_id."
                     )
 
-        # Execute plan actions one by one
+        # --- Action dispatcher ---
+        # Each PDDL action maps to a physical execution routine.  The
+        # loop breaks early on two conditions:
+        #   • sense reveals new info → replan with updated belief
+        #   • IK failure → replan from current config
         for i, action in enumerate(plan):
             action_name = action[0]
             params = action[1:]
@@ -318,14 +388,20 @@ def main(gui=True, run_logger=None, scene_config=None):
             print(f"\n  Executing: {action_name}")
             
             if action_name == 'move':
+                # MOVE: follow a collision-free trajectory from q1 to q2.
+                # The trajectory was computed by the plan_motion stream
+                # using RRT; we replay its waypoints with smooth
+                # interpolation for visual fidelity and physics stability.
                 q1, q2, dest_boxel_id, traj = params
                 print(f"    Moving to {dest_boxel_id} ({len(traj.waypoints)} waypoints)...")
 
                 for wp in traj.waypoints[1:]:
                     move_robot_smooth(robot_id, wp.joint_positions,
                                       gui, steps=30)
-                # Track actual joint state, not the plan's q2, so that
-                # subsequent actions and replans see the true config
+                # Read the arm's true joint state after motion completes.
+                # Position control can undershoot the IK target; if we
+                # used the planned q2 directly, errors would accumulate
+                # across chained actions and confuse the next replan
                 # (audit #86).
                 actual_joints = np.array(
                     [p.getJointState(robot_id, i)[0] for i in range(7)]
@@ -337,12 +413,17 @@ def main(gui=True, run_logger=None, scene_config=None):
                 print(f"    -> Arrived at {dest_boxel_id}")
                     
             elif action_name == 'sense':
+                # SENSE: cast rays from the fixed camera through the
+                # shadow volume to determine what's inside.
+                # Three possible outcomes drive the control flow:
+                #   found_target  → belief updated, plan continues to pick
+                #   clear_but_empty → shadow eliminated, break to replan
+                #   still_blocked → occluder not fully cleared, break to replan
                 obj, shadow_id = params
                 print(f"    Sensing {shadow_id} (fixed camera)...")
 
-                # Move the arm to home before sensing so it doesn't
-                # occlude the camera's line of sight to the shadow
-                # region (audit #79).
+                # Retract arm to home so it doesn't block the camera's
+                # line of sight to the shadow region (audit #79).
                 home_joints = planner.home_config.joint_positions
                 move_robot_smooth(robot_id, home_joints, gui, steps=40)
                 current_config = planner.home_config
@@ -366,15 +447,22 @@ def main(gui=True, run_logger=None, scene_config=None):
                     robot_id=robot_id
                 )
 
+                # --- Interpret sensing result ---
                 if sense_outcome == "found_target":
+                    # Success: remaining plan actions will pick the target.
                     belief.mark_sensed(str(shadow_id), found=True)
                     print(f"    *** TARGET FOUND in {shadow_id}! (ray-cast) ***")
                 elif sense_outcome == "clear_but_empty":
+                    # Shadow is visible but target isn't there — eliminate
+                    # this shadow and replan to try the next one.
                     belief.mark_sensed(str(shadow_id), found=False)
                     print(f"    Target NOT in {shadow_id} (ray-cast: view clear but no target hit)")
                     print(f"    -> REPLANNING with updated belief...")
-                    break  # Exit action loop to replan
+                    break
                 else:
+                    # Occluder (or robot arm) still blocks the view.
+                    # Track repeated failures; after 3 attempts, assume
+                    # the shadow is unreachable and give up on it.
                     sid_str = str(shadow_id)
                     blocked_counts[sid_str] = blocked_counts.get(sid_str, 0) + 1
                     print(f"    View to {shadow_id} still blocked "
@@ -389,10 +477,17 @@ def main(gui=True, run_logger=None, scene_config=None):
                     break  # Exit action loop to replan
                     
             elif action_name == 'pick':
+                # PICK: approach → open gripper → lower to contact →
+                # close gripper → attach via constraint → lift.
+                # Uses the object's CURRENT simulator position (not the
+                # boxel center from planning) to handle any drift.
                 obj, boxel_id, grasp, config = params
                 obj_str = str(obj)
                 print(f"    Picking {obj_str} from {boxel_id}...")
 
+                # Resolve symbolic name → PyBullet object.  The target
+                # isn't in boxel_to_pybullet (it's hidden), so we
+                # handle it as a special case.
                 if obj_str in boxel_to_pybullet:
                     pick_obj_name = boxel_to_pybullet[obj_str]['name']
                     pick_pos = np.array(env.objects[pick_obj_name].position)
@@ -413,11 +508,19 @@ def main(gui=True, run_logger=None, scene_config=None):
                 print(f"    *** {pick_obj_name} PICKED UP! ***")
 
             elif action_name == 'place':
+                # PLACE: approach above destination → lower to contact →
+                # open gripper → release constraint → settle → retreat.
+                # After placing, we refresh all object positions from the
+                # simulator so subsequent actions and replans use up-to-date
+                # geometry.
                 obj, boxel_id, grasp, config = params
                 obj_str = str(obj)
                 boxel_id_str = str(boxel_id)
                 print(f"    Placing {obj_str} at {boxel_id_str}...")
 
+                # Resolve destination: prefer boxel center (for free-space
+                # targets); fall back to the object's recorded position
+                # (for placing onto another object's boxel).
                 if boxel_id_str in boxel_centers:
                     place_pos = boxel_centers[boxel_id_str]
                 elif boxel_id_str in boxel_to_pybullet:
@@ -435,12 +538,17 @@ def main(gui=True, run_logger=None, scene_config=None):
                 current_config = place_result
                 grasp_constraint_id = None
 
+                # Refresh positions after the physics settle step inside
+                # execute_place — objects may have shifted slightly.
                 env.update_object_positions()
                 for bid, binfo in boxel_to_pybullet.items():
                     bname = binfo['name']
                     if bname in env.objects:
                         binfo['position'] = np.array(env.objects[bname].position)
 
+                # Record the relocation in belief state so the planner
+                # knows this occluder is no longer blocking its original
+                # shadow — it will emit the correct obj_at_boxel facts.
                 if obj_str in boxel_to_pybullet:
                     placed_obj_name = boxel_to_pybullet[obj_str]['name']
                     belief.mark_occluder_moved(obj_str, boxel_id_str)
@@ -449,8 +557,11 @@ def main(gui=True, run_logger=None, scene_config=None):
                     print(f"    *** {obj_str} PLACED at {boxel_id_str}! ***")
     
     # =========================================================
-    # PHASE 6: Results
+    # PHASE 6: Results & Cleanup
     # =========================================================
+    # Classify outcome and report metrics.  The exit_reason set during
+    # the loop tells us exactly why we stopped: target found, all shadows
+    # exhausted, planner failure, or replan budget exceeded.
     print("\n" + "=" * 60)
     if belief.is_target_found():
         print(f"SUCCESS!")
@@ -473,6 +584,8 @@ def main(gui=True, run_logger=None, scene_config=None):
         print(f"  Plans executed: {plan_count}")
     print("=" * 60)
     
+    # Keep the GUI visible briefly so the user can inspect the final
+    # state, then tear down the simulation cleanly.
     if gui:
         import time
         print("\nWindow closing in 4 seconds...")
@@ -578,6 +691,10 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
     as a blocker for that shadow.  This replaces the old one-to-one
     shadow_occluder_map that only tracked the creating occluder (audit #78).
 
+    Why not just use the parent relationship?  Because after objects are
+    relocated, a DIFFERENT object may now block the camera's view of a
+    shadow that was originally created by something else.
+
     Args:
         camera_pos: Camera position [x, y, z].
         registry: BoxelRegistry with all boxels.
@@ -588,6 +705,8 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
     Returns:
         Dict mapping shadow_id → list of blocker object boxel IDs.
     """
+    # Reverse lookup: PyBullet body ID → boxel ID, so we can identify
+    # which symbolic object a ray hit.
     pybullet_to_boxel = {}
     for obj_bid in object_ids:
         obj_boxel = registry.get_boxel(obj_bid)
@@ -605,6 +724,9 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
 
         blocker_set = set()
         min_c, max_c = sb.min_corner, sb.max_corner
+        # Single Z slice at the shadow midpoint — coarser than
+        # sense_shadow_raycasting because we only need to identify
+        # WHICH objects block, not whether the target is visible.
         z_mid = (min_c[2] + max_c[2]) / 2.0
         n = 5
 
@@ -668,18 +790,25 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui):
     lift_height = 0.25
     approach_dir = np.array([0.0, 0.0, 1.0])
 
+    # Compute the three end-effector waypoints relative to the object's
+    # CURRENT position (not the boxel center used during planning).
+    # grasp.position is the EE-to-object offset from the grasp sampler.
     contact_ee = obj_pos + grasp.position
     approach_ee = contact_ee + approach_dir * approach_height
     lift_ee = contact_ee + approach_dir * lift_height
 
+    # Solve IK for all three waypoints independently.  Each call resets
+    # the arm to a rest pose seed for deterministic results regardless
+    # of current joint state (see robot_utils.solve_ik).
     pc = env.client_id
     approach_joints = solve_ik(robot_id, approach_ee, grasp.orientation, pc)
     contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc)
     lift_joints = solve_ik(robot_id, lift_ee, grasp.orientation, pc)
 
-    # Abort if any critical waypoint IK fails — silently falling back to
-    # config.joint_positions caused the robot to skip approach/lift and
-    # smash into objects (audit #82).
+    # IK failure triage: contact is mandatory (can't pick without reaching
+    # the object); approach and lift are nice-to-have with graceful
+    # fallbacks.  Aborting on contact failure triggers a replan rather
+    # than driving the arm to an arbitrary configuration (audit #82).
     if contact_joints is None:
         print(f"    ERROR: IK failed for pick contact of {obj_name} — aborting")
         return None, None
@@ -692,12 +821,16 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui):
               f"using approach config as fallback")
         lift_joints = approach_joints
 
+    # Execute the pick sequence: approach → open → descend → close → attach → lift
     move_robot_smooth(robot_id, approach_joints, gui)
     open_gripper(robot_id, gui)
 
     move_robot_smooth(robot_id, contact_joints, gui)
     close_gripper(robot_id, gui)
 
+    # Attach the object to the gripper with a fixed constraint.
+    # This is a simulation simplification — real grippers use friction,
+    # but constraints prevent physics-engine slip during fast motions.
     obj_id = env.objects[obj_name].object_id
     grasp_constraint_id = p.createConstraint(
         robot_id, END_EFFECTOR_LINK, obj_id, -1,
@@ -746,6 +879,8 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     retreat_height = 0.25
     approach_dir = np.array([0.0, 0.0, 1.0])
 
+    # Mirror of execute_pick's waypoint computation, but targeting the
+    # destination boxel center instead of the object's current position.
     contact_ee = place_pos + grasp.position
     approach_ee = contact_ee + approach_dir * approach_height
     retreat_ee = contact_ee + approach_dir * retreat_height
@@ -755,8 +890,8 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc)
     retreat_joints = solve_ik(robot_id, retreat_ee, grasp.orientation, pc)
 
-    # Abort if contact IK fails — silently falling back caused collisions
-    # (audit #82).
+    # Same IK failure triage as execute_pick — contact is mandatory,
+    # approach/retreat have fallbacks.
     if contact_joints is None:
         print(f"    ERROR: IK failed for place contact of {obj_name} — aborting")
         return None
@@ -769,16 +904,20 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
               f"using approach config as fallback")
         retreat_joints = approach_joints
 
+    # Execute the place sequence: approach → lower → release → settle → retreat
     move_robot_smooth(robot_id, approach_joints, gui)
 
     move_robot_smooth(robot_id, contact_joints, gui)
 
     open_gripper(robot_id, gui)
 
+    # Remove the fixed constraint so the object responds to gravity
+    # and rests on the table surface.
     if grasp_constraint_id is not None:
         p.removeConstraint(grasp_constraint_id)
 
-    # 30 steps ≈ 0.125 s — let the placed object settle before retreating.
+    # 30 steps ≈ 0.125 s — let the placed object settle before retreating
+    # so it reaches a stable resting pose and doesn't tip over.
     for _ in range(30):
         p.stepSimulation()
 
@@ -798,6 +937,11 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
 
 
 if __name__ == "__main__":
+    # CLI interface supporting three scene presets:
+    #   default     — hand-crafted scene with cubes (deterministic)
+    #   mixed       — diverse shapes, seeded for reproducibility
+    #   scalability — random placement with configurable counts,
+    #                 used for batch evaluation across many seeds
     parser = argparse.ArgumentParser(description='Full PDDLStream Pipeline with Replanning')
     parser.add_argument('--no-gui', action='store_true', help='Run without GUI')
     parser.add_argument('--log-level', choices=['quiet', 'normal', 'verbose'],
@@ -815,6 +959,9 @@ if __name__ == "__main__":
                         help='Random seed (scalability/mixed scenes)')
     args = parser.parse_args()
 
+    # Lazy scene construction — each builder captures CLI args and
+    # returns a SceneConfig when called, so only the selected scene
+    # pays the cost of object placement computation.
     scene_builders = {
         'default': lambda: default_scene(),
         'mixed': lambda: mixed_shapes_scene(seed=args.seed),
@@ -826,6 +973,8 @@ if __name__ == "__main__":
     }
     scene_cfg = scene_builders[args.scene]()
 
+    # RunLogger captures all artefacts (PDDL files, boxel data, logs)
+    # regardless of console verbosity for post-mortem analysis.
     logger = RunLogger(verbosity=args.log_level)
     try:
         success = main(gui=not args.no_gui, run_logger=logger,
