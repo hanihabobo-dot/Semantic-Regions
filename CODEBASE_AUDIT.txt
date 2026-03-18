@@ -530,6 +530,9 @@ Impact: HIGH — causes the pipeline to loop forever on scenes where a
        a corner case: in the current 3-occluder scene, it happens
        whenever the target is behind the occluder whose shadow is also
        blocked by another occluder from the camera's perspective.
+Related: #99 — the execution/sensing side (sense_shadow_raycasting) was
+       still checking only ONE occluder until #99 extended it to accept
+       the full blocker set from shadow_occluder_map.
 
 ================================================================================
 79. ROBOT ARM BLOCKS SENSING DURING EXECUTION  [DONE]
@@ -598,6 +601,8 @@ What:  `sense_shadow_raycasting` only checks if rays hit the target or the
 Fix:   DONE — sense_shadow_raycasting now accepts robot_id parameter; rays
        hitting the robot arm are counted as blocked and produce "still_blocked"
        outcome instead of false "clear_but_empty".
+Related: #99 — same function later extended to check ALL blockers (not just
+       the creating occluder) via set membership.
 
 ================================================================================
 84. INCOMPLETE MAGIC NUMBER CLEANUP  [DONE]
@@ -1145,6 +1150,11 @@ Fix:   DONE (2026-03-18).  Compute actual EE-to-object relative transform
        invertTransform/multiplyTransforms.  Constraint now freezes the
        current spatial relationship.
 Related: #59, #77 (friction grasping / object sizing).
+NOTE:  getLinkState indices [0]/[1] return CoM frame, not URDF link frame.
+       createConstraint parentFramePosition is relative to the URDF link
+       frame (indices [4]/[5]).  Should also pass computeForwardKinematics=True.
+       Low priority — CoM and link frame may coincide for the Panda EE link,
+       but strictly incorrect.  Fix when convenient.
 
 ================================================================================
 101. DETERMINISTIC SHADOW SELECTION — NO EXPLORATION DIVERSITY  [DONE]
@@ -1160,6 +1170,33 @@ Fix:   DONE (2026-03-18).  random.shuffle(init) before returning from
        _GRASP_Z_OFFSETS per call so grasp height order varies.
 Impact: Low-risk, high-value — same facts/grasps produced, only evaluation
         order changes.
+
+================================================================================
+99. SINGLE-OCCLUDER SENSING — FALSE NEGATIVES  [DONE]
+================================================================================
+Where: test_full_pipeline.py sense_shadow_raycasting(), sense action handler
+What:  sense_shadow_raycasting accepted a single occluder_pybullet_id and only
+       counted rays hitting that one object as "blocked".  Rays hitting ANY
+       OTHER object (not the target, not the robot) were silently ignored.
+       If a non-creating object blocked the camera's view, those ray hits
+       fell through all conditions and the function returned clear_but_empty
+       instead of still_blocked — a false negative that wrongly eliminated
+       shadows that actually contained the target.
+
+       Issue #78 fixed the PLANNING side (compute_shadow_blockers finds ALL
+       blockers, _build_init emits blocks_view_at for every blocker-shadow
+       pair).  But the EXECUTION/SENSING side still only checked one occluder,
+       leaving planner and sensor with inconsistent multi-blocker views.
+
+Fix:   DONE (2026-03-18).  Two changes:
+       (a) sense_shadow_raycasting: parameter changed from
+           occluder_pybullet_id (single int) to occluder_pybullet_ids
+           (set of ints).  Ray-hit check changed from == to set membership.
+       (b) Call site: builds occluder_pybullet_ids from ALL blockers in
+           shadow_occluder_map (which was already upgraded by #78) instead
+           of only the creating occluder from shadow_boxel.created_by_boxel_id.
+Impact: Completes multi-blocker support started by #78.  Low risk — set
+        membership is a superset of the old single-ID check.
 
 ================================================================================
 FOR LATER
@@ -1336,13 +1373,16 @@ Verification logging workflow (archived #58):
     wsl bash -lc "... python3 -u test_full_pipeline.py --no-gui" 2>&1 |
       Tee-Object -FilePath .\logs\manual_run.log
 
-Priority order for remaining fixes (updated 2026-03-17):
+Priority order for remaining fixes (updated 2026-03-18):
 
   TIER 0 — PDDL-CRITICAL (highest priority — symbolic/physical desync):
     #98  Constraint grasp offset — actual EE-to-object     DONE
          transform instead of planned grasp.position.
     #101 Deterministic shadow selection — shuffle init     DONE
          facts and grasp offsets for exploration diversity.
+    #99  Single-occluder sensing false negatives —          DONE
+         sense_shadow_raycasting now checks ALL blockers
+         from shadow_occluder_map, not just the creator.
     #95  Systemic PDDL state drift — the root             ~2-3 weeks
          architectural issue.  Symbolic and physical
          states diverge through 4 channels.  Fixing
