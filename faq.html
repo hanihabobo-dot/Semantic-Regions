@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Semantic Boxels &mdash; FAQ</title>
+  <style>
+    :root {
+      --bg: #0e1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --text-muted: #8b949e;
+      --heading: #e6edf3;
+      --accent: #58a6ff;
+      --accent-dim: #1f3a5f;
+      --code-bg: #1c2128;
+      --tag-bg: #1f2937;
+      --tag-text: #7ee787;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    header h1 {
+      font-size: 2rem;
+      color: var(--heading);
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    header .doc-links {
+      margin-top: 1rem;
+      font-size: 0.85rem;
+    }
+
+    header .doc-links a {
+      color: var(--accent);
+      text-decoration: none;
+      margin: 0 0.5rem;
+    }
+
+    header .doc-links a:hover { text-decoration: underline; }
+
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem 2rem;
+      margin-bottom: 3rem;
+    }
+
+    .toc h2 {
+      font-size: 1rem;
+      color: var(--heading);
+      margin-bottom: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .toc ol {
+      padding-left: 1.25rem;
+    }
+
+    .toc li {
+      margin-bottom: 0.35rem;
+    }
+
+    .toc a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.92rem;
+    }
+
+    .toc a:hover { text-decoration: underline; }
+
+    .faq-item {
+      margin-bottom: 2.5rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .faq-question {
+      background: var(--surface);
+      padding: 1.25rem 1.5rem;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      user-select: none;
+    }
+
+    .faq-question:hover { background: #1c2230; }
+
+    .faq-question .q-number {
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+      margin-top: 0.15rem;
+    }
+
+    .faq-question h3 {
+      color: var(--heading);
+      font-size: 1.05rem;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .faq-question .toggle {
+      color: var(--text-muted);
+      font-size: 1.2rem;
+      flex-shrink: 0;
+      transition: transform 0.2s;
+      margin-top: 0.1rem;
+    }
+
+    .faq-item.open .faq-question .toggle {
+      transform: rotate(45deg);
+    }
+
+    .faq-answer {
+      display: none;
+      padding: 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .faq-item.open .faq-answer { display: block; }
+
+    .faq-answer p { margin-bottom: 1rem; }
+    .faq-answer p:last-child { margin-bottom: 0; }
+
+    .faq-answer h4 {
+      color: var(--heading);
+      font-size: 0.95rem;
+      margin: 1.5rem 0 0.5rem;
+    }
+
+    .faq-answer h4:first-child { margin-top: 0; }
+
+    .faq-answer ul, .faq-answer ol {
+      padding-left: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .faq-answer li { margin-bottom: 0.35rem; }
+
+    code {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      background: var(--code-bg);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.88em;
+      color: #e6edf3;
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+      line-height: 1.6;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      border-radius: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+    }
+
+    th {
+      background: var(--surface);
+      color: var(--heading);
+      font-weight: 600;
+    }
+
+    .tag {
+      display: inline-block;
+      background: var(--tag-bg);
+      color: var(--tag-text);
+      font-size: 0.75rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 3px;
+      margin-left: 0.5rem;
+      vertical-align: middle;
+    }
+
+    .file-ref {
+      color: var(--accent);
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 0.88em;
+    }
+
+    .callout {
+      background: var(--accent-dim);
+      border-left: 3px solid var(--accent);
+      padding: 0.75rem 1rem;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <header>
+      <h1>Semantic Boxels &mdash; FAQ</h1>
+      <p>Frequently asked questions about the codebase, architecture, and design decisions.</p>
+      <div class="doc-links">
+        Related:
+        <a href="README.md">README</a> &middot;
+        <a href="CODEBASE_AUDIT.txt">Codebase Audit</a> &middot;
+        <a href="pddl/domain_pddlstream.pddl">PDDL Domain</a> &middot;
+        Project Wiki (see repository Wiki tab)
+      </div>
+    </header>
+
+    <!-- ============================================================ -->
+    <!-- TABLE OF CONTENTS                                            -->
+    <!-- ============================================================ -->
+    <nav class="toc">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#q1">What does the IK + waypoint block in <code>execute_pick</code> do?</a></li>
+        <li><a href="#q2">What is inverse kinematics and how does <code>solve_ik</code> work?</a></li>
+        <li><a href="#q3">What is <code>move_robot_smooth()</code>, are there other move functions, and what is hardcoded?</a></li>
+        <li><a href="#q4">Why don&rsquo;t <code>pick</code> and <code>place</code> update <code>at_config</code> in the PDDL model?</a></li>
+      </ol>
+    </nav>
+
+    <!-- ============================================================ -->
+    <!-- Q1                                                           -->
+    <!-- ============================================================ -->
+    <div class="faq-item open" id="q1">
+      <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+        <span class="q-number">Q1</span>
+        <h3>What does the IK + waypoint block in <code>execute_pick</code> do?
+          <span class="tag">test_full_pipeline.py:675-678</span>
+        </h3>
+        <span class="toggle">+</span>
+      </div>
+      <div class="faq-answer">
+
+        <h4>The code in question</h4>
+<pre><code>pc = env.client_id
+approach_joints = solve_ik(robot_id, approach_ee, grasp.orientation, pc)
+contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc)
+lift_joints    = solve_ik(robot_id, lift_ee,     grasp.orientation, pc)</code></pre>
+
+        <h4>Line-by-line</h4>
+        <p><code>pc = env.client_id</code> &mdash; grabs the PyBullet physics client ID. PyBullet supports multiple simulation instances; the client ID tells every subsequent API call <em>which</em> instance to talk to.</p>
+
+        <p>The three <code>solve_ik()</code> calls compute <strong>inverse kinematics</strong> for the three key waypoints of a top-down pick motion:</p>
+
+        <table>
+          <tr><th>Variable</th><th>Target</th><th>Purpose</th></tr>
+          <tr>
+            <td><code>approach_joints</code></td>
+            <td><code>approach_ee</code> &mdash; 10&nbsp;cm above the object</td>
+            <td>Pre-grasp hover; clears scene objects while descending.</td>
+          </tr>
+          <tr>
+            <td><code>contact_joints</code></td>
+            <td><code>contact_ee</code> &mdash; the actual grasp point</td>
+            <td>Where the gripper makes contact and closes.</td>
+          </tr>
+          <tr>
+            <td><code>lift_joints</code></td>
+            <td><code>lift_ee</code> &mdash; 25&nbsp;cm above the object</td>
+            <td>Post-grasp lift; clears occluders for subsequent moves.</td>
+          </tr>
+        </table>
+
+        <p>Each call passes the robot body ID, a 3D target position (derived from the object&rsquo;s current position + grasp offset + vertical offset), the desired end-effector orientation, and the physics client ID.</p>
+
+        <p><code>solve_ik</code> (in <span class="file-ref">robot_utils.py:235</span>) uses <strong>null-space IK with a rest-pose seed</strong>: it temporarily resets the arm to a known rest configuration, solves IK, validates joint limits, and restores the original state. It returns a 7-element joint-angle array, or <code>None</code> if no valid solution exists.</p>
+
+        <p>The subsequent code handles failures &mdash; aborting if contact IK fails, falling back gracefully for approach/lift &mdash; then executes the pick sequence: approach &rarr; open gripper &rarr; contact &rarr; close gripper &rarr; attach &rarr; lift.</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Q2                                                           -->
+    <!-- ============================================================ -->
+    <div class="faq-item" id="q2">
+      <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+        <span class="q-number">Q2</span>
+        <h3>What is inverse kinematics and how does <code>solve_ik</code> work?
+          <span class="tag">robot_utils.py:235-312</span>
+        </h3>
+        <span class="toggle">+</span>
+      </div>
+      <div class="faq-answer">
+
+        <h4>The core problem</h4>
+        <p>The Panda arm has <strong>7 joints</strong> (shoulder, elbow, wrist, etc.). Together, their angles determine where the gripper ends up in 3D space.</p>
+        <ul>
+          <li><strong>Forward kinematics</strong> is straightforward: given 7 joint angles &rarr; compute gripper position. Pure geometry.</li>
+          <li><strong>Inverse kinematics (IK)</strong> is the reverse: given a desired gripper position + orientation &rarr; compute the 7 joint angles that reach it.</li>
+        </ul>
+        <p>IK is harder because there may be multiple solutions, no solution (out of reach), or &mdash; with 7 joints for 6 DOF &mdash; a redundant degree of freedom (the &ldquo;null space&rdquo;).</p>
+
+        <h4>Step 1 &mdash; Save and reset to a known pose</h4>
+        <p>The arm is temporarily set to <code>REST_POSES = [0, -0.785, 0, -2.356, 0, 1.571, 0.785]</code> (a neutral elbows-down configuration). This gives PyBullet&rsquo;s iterative solver a <strong>deterministic starting point</strong>. Without it, the solution would depend on the arm&rsquo;s current position, producing inconsistent results.</p>
+
+        <h4>Step 2 &mdash; Call PyBullet&rsquo;s IK solver</h4>
+<pre><code>joint_positions = p.calculateInverseKinematics(
+    robot_id, END_EFFECTOR_LINK,
+    target_pos.tolist(), orn_list,
+    lowerLimits=JOINT_LIMITS_LOW.tolist(),
+    upperLimits=JOINT_LIMITS_HIGH.tolist(),
+    jointRanges=JOINT_RANGES.tolist(),
+    restPoses=REST_POSES,
+    maxNumIterations=100,
+    residualThreshold=1e-4,
+    physicsClientId=physics_client,
+)</code></pre>
+        <p>PyBullet runs up to 100 iterations of a numerical optimizer, adjusting joint angles to minimize the distance between the current gripper position and the target. The <strong>null-space bias</strong> (<code>restPoses</code>) prefers solutions closest to the rest pose, avoiding contorted configurations.</p>
+
+        <h4>Step 3 &mdash; Validate the result</h4>
+        <p>The solver can slightly overshoot physical joint limits. Solutions within 0.1&nbsp;rad (~5.7&deg;) are clipped to valid range; anything beyond is rejected (<code>return None</code>).</p>
+
+        <h4>Step 4 &mdash; Restore original arm state</h4>
+        <p>The arm is put back to where it was. The solve was a mathematical query &mdash; it must not physically move the robot as a side effect.</p>
+
+        <div class="callout">
+          The output is either a <code>numpy</code> array of 7 joint angles (radians), or <code>None</code> if unreachable. Those angles are then fed to <code>move_robot_smooth()</code> to physically drive the arm.
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Q3                                                           -->
+    <!-- ============================================================ -->
+    <div class="faq-item" id="q3">
+      <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+        <span class="q-number">Q3</span>
+        <h3>What is <code>move_robot_smooth()</code>, are there other move functions, and what is hardcoded?
+          <span class="tag">robot_utils.py:314-339</span>
+        </h3>
+        <span class="toggle">+</span>
+      </div>
+      <div class="faq-answer">
+
+        <h4>What it does</h4>
+        <p><code>move_robot_smooth()</code> is a <strong>low-level joint-space interpolator</strong>. It drives the arm from its current joint angles to a target set of 7 angles by:</p>
+        <ol>
+          <li>Reading the current 7 joint angles</li>
+          <li>Linearly interpolating over <code>steps</code> increments (<code>alpha</code> from 1/steps to 1.0)</li>
+          <li>Commanding all 7 joints to the interpolated position via PyBullet&rsquo;s position controller</li>
+          <li>Stepping the physics simulation once per increment</li>
+          <li>Optionally sleeping for real-time visualization (120&nbsp;Hz)</li>
+        </ol>
+        <p>It&rsquo;s a &ldquo;go from A to B in a straight line through joint space&rdquo; primitive &mdash; <strong>no collision awareness, no path planning</strong>.</p>
+
+        <h4>Hardcoded values</h4>
+        <table>
+          <tr><th>Value</th><th>Where</th><th>Meaning</th></tr>
+          <tr><td><code>range(7)</code></td><td>lines 327, 332</td><td>Number of arm joints &mdash; Panda-specific (7-DOF)</td></tr>
+          <tr><td><code>240</code> N&middot;m</td><td>line 336</td><td>Motor force &mdash; Panda&rsquo;s peak joint torque</td></tr>
+          <tr><td><code>60</code></td><td>line 315 (default)</td><td>Interpolation steps &mdash; 0.25&nbsp;s at 240&nbsp;Hz sim rate</td></tr>
+          <tr><td><code>1/120</code></td><td>line 339</td><td>GUI sleep interval &mdash; 120&nbsp;FPS display rate</td></tr>
+        </table>
+        <p>The <code>7</code> and <code>240</code> tie this function to the Franka Emika Panda. Swapping in a different robot would require changing both. See <a href="CODEBASE_AUDIT.txt">CODEBASE_AUDIT #97</a> for the broader coupling discussion.</p>
+
+        <h4>Two levels of motion in the codebase</h4>
+
+        <p><strong>1. <code>move_robot_smooth()</code></strong> &mdash; execution-time primitive (<span class="file-ref">robot_utils.py</span>)</p>
+        <p>The fast, straight-line interpolator described above. Knows nothing about obstacles. Executes <em>one segment</em> of motion.</p>
+
+        <p><strong>2. <code>plan_motion()</code></strong> &mdash; planning-time path planner (<span class="file-ref">streams.py:483</span>)</p>
+        <p>The <em>smart</em> motion function. A PDDLStream stream that:</p>
+        <ul>
+          <li>Tries a <strong>direct (linear) path</strong> and checks for collisions</li>
+          <li>If blocked, runs <strong>bidirectional RRT-Connect</strong> to find a collision-free path</li>
+          <li>Applies <strong>shortcut smoothing</strong> (75 iterations)</li>
+          <li>Outputs a <code>Trajectory</code> &mdash; an ordered list of <code>RobotConfig</code> waypoints</li>
+        </ul>
+
+        <h4>How they work together</h4>
+<pre><code>plan_motion()         &rarr; produces Trajectory (list of waypoints)
+      &darr;
+test_full_pipeline.py &rarr; iterates over traj.waypoints
+      &darr;
+move_robot_smooth()   &rarr; executes ONE waypoint-to-waypoint segment</code></pre>
+        <p>Pick/place functions skip <code>plan_motion</code> entirely &mdash; they compute IK waypoints directly and feed them to <code>move_robot_smooth()</code>, relying on approach/lift heights to stay clear of obstacles.</p>
+
+        <h4>Removed functions</h4>
+        <p><code>move_robot_to_pos()</code> and <code>compute_ik()</code> were removed in favour of the cleaner separation: <code>solve_ik()</code> for computing joint angles, <code>move_robot_smooth()</code> for executing them. See <a href="CODEBASE_AUDIT.txt">CODEBASE_AUDIT resolved items</a>.</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Q4                                                           -->
+    <!-- ============================================================ -->
+    <div class="faq-item" id="q4">
+      <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+        <span class="q-number">Q4</span>
+        <h3>Why don&rsquo;t <code>pick</code> and <code>place</code> update <code>at_config</code> in the PDDL model?
+          <span class="tag">domain_pddlstream.pddl:169-176</span>
+        </h3>
+        <span class="toggle">+</span>
+      </div>
+      <div class="faq-answer">
+
+        <h4>Short answer</h4>
+        <p><strong>No &mdash; this is not standard practice.</strong> In a textbook PDDL TAMP system you would normally update <code>at_config</code> after every action that moves the robot. This is a deliberate simplification with real trade-offs.</p>
+
+        <h4>What &ldquo;correct&rdquo; PDDL would look like</h4>
+        <p>A faithful model would add a post-action config parameter:</p>
+<pre><code>(:action pick
+  :parameters (?o ?b ?g ?q ?q_post)
+  :precondition (and
+    (at_config ?q)
+    (kin_solution ?o ?b ?g ?q)
+    ;; ...
+  )
+  :effect (and
+    (holding ?o)
+    (not (handempty))
+    (not (obj_at_boxel ?o ?b))
+    (at_config ?q_post)       ;; where the robot ACTUALLY ends up
+    (not (at_config ?q))      ;; no longer at the pick config
+  ))</code></pre>
+        <p>This would require an additional stream to compute <code>?q_post</code> (the lift configuration).</p>
+
+        <h4>Why this project doesn&rsquo;t do that</h4>
+        <p>Two safety nets make it work in practice:</p>
+        <ol>
+          <li><strong>Execution-side tracking</strong> &mdash; after every action, Python reads the robot&rsquo;s actual joint state from PyBullet (<code>p.getJointState</code>) and stores it in <code>current_config</code>. On replan, this real config is passed to the planner.</li>
+          <li><strong>Replanning frequency</strong> &mdash; the reactive loop replans after almost every sense action (and on IK failures), so the stale <code>at_config</code> rarely persists long enough to cause problems.</li>
+        </ol>
+
+        <h4>When it CAN break</h4>
+        <p>If the planner chains <code>pick &rarr; move</code> in a single plan, the <code>move</code> action&rsquo;s precondition <code>(at_config ?q_pick)</code> is symbolically satisfied, but the robot is physically at <code>post_pick_lift</code>. The trajectory was planned from the wrong starting point, causing:</p>
+        <ol>
+          <li><strong>Arm jerk</strong> &mdash; the position controller jumps to catch up with waypoints planned from a different config</li>
+          <li><strong>Invalid collision checks</strong> &mdash; <code>plan_motion</code> validated the path from <code>q_pick</code>, but the actual starting config was never checked</li>
+          <li><strong>Physical collisions</strong> &mdash; the trajectory may pass through obstacles when starting from the true post-action config</li>
+        </ol>
+
+        <h4>The proper fix</h4>
+        <p>Two approaches are documented in <a href="CODEBASE_AUDIT.txt">CODEBASE_AUDIT #62, #95</a>:</p>
+        <ol>
+          <li><strong>Decompose pick/place into sub-actions</strong> &mdash; <code>approach</code>, <code>grasp</code>, <code>lift</code>, each with their own <code>at_config</code> updates and streams. Textbook-correct but increases planning complexity.</li>
+          <li><strong>Execution-time state reconciliation</strong> &mdash; before each action, re-derive configs from the actual physical state rather than trusting the plan&rsquo;s symbolic parameters.</li>
+        </ol>
+
+        <div class="callout">
+          This is a <strong>documented architectural debt</strong>, not something you&rsquo;d normally accept in a production TAMP system. It works here because replanning catches the drift before it accumulates. See <a href="CODEBASE_AUDIT.txt">CODEBASE_AUDIT #62, #95(a)(i)-(iii)</a> and <a href="pddl/domain_pddlstream.pddl">domain_pddlstream.pddl</a> lines 169&ndash;181.
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- FOOTER                                                       -->
+    <!-- ============================================================ -->
+    <footer>
+      <p>Semantic Boxels &mdash; FAQ &middot; Auto-generated from developer Q&amp;A session</p>
+      <p>
+        <a href="README.md" style="color: var(--accent); text-decoration: none;">README</a> &middot;
+        <a href="CODEBASE_AUDIT.txt" style="color: var(--accent); text-decoration: none;">Audit</a> &middot;
+        <a href="pddl/domain_pddlstream.pddl" style="color: var(--accent); text-decoration: none;">PDDL Domain</a>
+      </p>
+    </footer>
+
+  </div>
+</body>
+</html>
