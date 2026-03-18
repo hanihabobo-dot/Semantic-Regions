@@ -24,6 +24,7 @@ PDDLSTREAM_PATH = os.environ.get(
 if PDDLSTREAM_PATH not in sys.path:
     sys.path.insert(0, PDDLSTREAM_PATH)
 
+import random
 import numpy as np
 from typing import List, Tuple, Optional, Dict, Any, Union
 
@@ -337,6 +338,7 @@ class PDDLStreamPlanner:
         init.append(('at_config', current_config))
         init.append(('handempty',))
 
+        random.shuffle(init)
         return init
 
     def plan(self,

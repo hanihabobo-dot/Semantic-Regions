@@ -1147,6 +1147,21 @@ Fix:   DONE (2026-03-18).  Compute actual EE-to-object relative transform
 Related: #59, #77 (friction grasping / object sizing).
 
 ================================================================================
+101. DETERMINISTIC SHADOW SELECTION — NO EXPLORATION DIVERSITY  [DONE]
+================================================================================
+Where: pddlstream_planner.py _build_init(), streams.py sample_grasp()
+What:  FastDownward's deterministic tie-breaking always explores shadows in the
+       same order.  PDDLStream's lazy streams always try the same grasp height
+       first.  Together, replanning repeatedly attempts the same shadow with the
+       same grasp — no diversity across replans.
+Fix:   DONE (2026-03-18).  random.shuffle(init) before returning from
+       _build_init() randomizes init-fact order so FD's tie-breaking explores
+       different shadows.  sample_grasp() now copies and shuffles
+       _GRASP_Z_OFFSETS per call so grasp height order varies.
+Impact: Low-risk, high-value — same facts/grasps produced, only evaluation
+        order changes.
+
+================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without redoing
@@ -1326,6 +1341,8 @@ Priority order for remaining fixes (updated 2026-03-17):
   TIER 0 — PDDL-CRITICAL (highest priority — symbolic/physical desync):
     #98  Constraint grasp offset — actual EE-to-object     DONE
          transform instead of planned grasp.position.
+    #101 Deterministic shadow selection — shuffle init     DONE
+         facts and grasp offsets for exploration diversity.
     #95  Systemic PDDL state drift — the root             ~2-3 weeks
          architectural issue.  Symbolic and physical
          states diverge through 4 channels.  Fixing
