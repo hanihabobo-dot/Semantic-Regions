@@ -7,7 +7,7 @@ Updated: 2026-03-22 (latest — #102-#105 from supervisor meeting; #86 archived;
 Resolved issues archived to archive/CODEBASE_AUDIT_RESOLVED.txt.
 
 ================================================================================
-44. SHADOWS NOT RECOMPUTED AFTER OCCLUDER RELOCATION — STALE REGISTRY
+44. SHADOWS NOT RECOMPUTED AFTER OCCLUDER RELOCATION — STALE REGISTRY  [DONE]
 ================================================================================
 Where: test_full_pipeline.py, boxel_data.py
 What:  After relocating an occluder (via pick-and-place), the BoxelRegistry
@@ -31,6 +31,14 @@ Fix:   After relocating, either:
            ID compensates). Document this as a known simplification.
        See #104 for the broader post-action re-evaluation requirement
        (free/occupied/shadow + re-merge), which subsumes this issue.
+
+Resolved: Accepted simplification (option c).  The stale shadow AABB is
+       functionally safe for pick-and-place: the occluder is physically
+       removed, rays pass through empty space, and the target is detected
+       by PyBullet body ID.  The place handler in test_full_pipeline.py
+       documents this explicitly (lines 562-576).  Full shadow recomputation
+       will be implemented as part of #104 (post-action re-boxelization),
+       which subsumes this issue entirely.
 
 ================================================================================
 59. OBJECTS FLY AWAY ON FIRST GRASP — CONSTRAINT-BASED GRASPING IS THE PROBLEM
@@ -1085,7 +1093,7 @@ TIER 0 — PDDL-CRITICAL (symbolic/physical desync):
   #95  Systemic PDDL state drift (4 drift channels)     ~2-3 weeks
   #93  Hidden sub-actions in sense/pick/place             ~1-2 weeks
   #104 Post-action boxel state not re-evaluated           ~3-5 days
-  #44  Stale shadow registry after relocation             ~2-3 days
+  #44  Stale shadow registry after relocation             [DONE — accepted simplification, subsumed by #104]
   #73  Stale shadow_occluder_map on replan                [DONE]
 
 TIER 3 — THESIS-CRITICAL (days-weeks):
