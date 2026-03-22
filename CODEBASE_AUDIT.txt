@@ -2,21 +2,8 @@
 CODEBASE AUDIT — OPEN ISSUES
 ================================================================================
 Date: 2026-02-25 (original audit, merged from 3 audit passes)
-Updated: 2026-03-13 (#61 accepted as deviation; archived #64, #65, #70-#72, #74, #75)
-Updated: 2026-03-17 (#55 partially done; #56 partially done; #87-#92 dead code
-         inventory added; CODEBASE POLICY section added)
-Updated: 2026-03-17 (#95 systemic PDDL state drift added; PDDL issues
-         promoted to Tier 0 — highest priority)
-Updated: 2026-03-17 (#97 streams coupling/limitations moved from inline
-         code comments to audit; Tier 4 — accepted simplification)
-Updated: 2026-03-22 (#102-#105 added from supervisor meeting; discussion
-         notes section added; boxel merge/split design, free-space
-         placement, post-action re-evaluation)
-Updated: 2026-03-22 (audit validation pass — archived 14 verified DONE items
-         to archive/CODEBASE_AUDIT_RESOLVED.txt; fixed #86 sense exception;
-         corrected convexity citation ambiguity in #103; fixed speaker
-         attribution in discussion notes; added observability to #103 summary;
-         added stronger active-voxel rejection quotes)
+Updated: 2026-03-22 (latest — #102-#105 from supervisor meeting; #86 archived;
+         inline ARCHIVED blocks removed; SUMMARY condensed)
 Resolved issues archived to archive/CODEBASE_AUDIT_RESOLVED.txt.
 
 ================================================================================
@@ -88,14 +75,6 @@ Fix:   Replace constraint-based grasping with FRICTION-BASED grasping:
        Depends on #77 (object graspability): current object dimensions
        exceed or match the Panda's 0.08 m max finger opening, so friction-
        based grasping cannot work without resizing.  See #77.
-
-================================================================================
-ARCHIVED (verified 2026-03-22 → archive/CODEBASE_AUDIT_RESOLVED.txt):
-  #60  Simulation flickering (DONE — RenderingLock)
-  #61  Sense action deviation (ACCEPTED — optimistic + replanning)
-  #67  Targets-only-in-shadows assumption (DONE — observed_clear_regions)
-  #69  Magic numbers (DONE — justification comments added)
-================================================================================
 
 ================================================================================
 55. HARDCODED SCENE — NO SCENARIO VARIATION  [PARTIALLY DONE]
@@ -255,7 +234,7 @@ PF-5. compute-kin stream — HIDDEN SIDE-CHANNEL
         share Python objects by design) but invisible to formal analysis.
 
 ================================================================================
-73. shadow_occluder_map GOES STALE ON REPLAN — blocks_view_at MAY BE WRONG
+73. shadow_occluder_map GOES STALE ON REPLAN — blocks_view_at MAY BE WRONG  [DONE]
 ================================================================================
 Where: test_full_pipeline.py lines 185-189,
        pddlstream_planner.py _build_init() lines 292-300
@@ -279,6 +258,11 @@ What:  shadow_occluder_map is built once from the registry before the
        Current impact: LOW because the derived predicates compensate.
        But the stale data structure is architecturally fragile and
        should be documented or refreshed on replan.
+
+Fixed: Place handler in test_full_pipeline.py now re-runs
+       compute_shadow_blockers() after every place action and updates
+       planner.shadow_occluder_map.  Incorrect comment claiming the map
+       was already refreshed has been corrected.
 
 ================================================================================
 76. PA-1 SEVERITY UNDERRATED — EVALUATION FRAMEWORK IS CRITICAL
@@ -347,17 +331,6 @@ Impact: LOW for the architecture — only object spawn parameters change.
        is addressed.
 
 ================================================================================
-ARCHIVED (verified 2026-03-22 → archive/CODEBASE_AUDIT_RESOLVED.txt):
-  #78  Incomplete view-blocking model (DONE — compute_shadow_blockers)
-  #79  Robot arm blocks sensing (DONE — retract to home before raycast)
-  #80  Fake IK fallback removed (DONE — _heuristic_ik deleted, ValueError guard)
-  #82  Silent IK failures (DONE — abort and replan on failure)
-  #83  Raycasting blind spot (DONE — robot_id parameter, count robot hits)
-  #84  Magic number cleanup execution (DONE — justification comments added)
-  #85  Dead/commented push code (DONE — removed from streams/domain/stream PDDL)
-================================================================================
-
-================================================================================
 81. MISSING RECURSIVE OBJECT DISCOVERY (PA-2)
 ================================================================================
 Where: free_space.py
@@ -365,31 +338,6 @@ What:  The proposal explicitly claims that free space partitioning will
        recursively discover new objects and repeat the bounding process. The
        implementation is just a standard, single-pass octree subdivision that
        never detects new objects.
-
-================================================================================
-86. PDDL STATE DRIFT AFTER PICK/PLACE (PF-2/PF-3)  [DONE — sense exception]
-================================================================================
-Where: domain_pddlstream.pddl
-What:  `pick` and `place` are modeled in PDDL as single-configuration
-       instantaneous actions. However, the Python execution moves through a
-       multi-step sequence and leaves the robot at a lift/retreat configuration.
-       The PDDL state does not update `at_config` to reflect this drift, causing
-       the symbolic state to desync from the physical state.
-
-Fix:   DONE for move/pick/place — execution reads the actual PyBullet joint
-       state (p.getJointState) after move, pick, and place actions and stores
-       it in current_config.  This ensures replanning uses the robot's true
-       configuration.  The PDDL model's accepted simplification (not
-       updating at_config in pick/place) is compensated by this execution-
-       side tracking.
-
-       EXCEPTION: the sense handler (test_full_pipeline.py:427-429) sets
-       current_config = planner.home_config after moving the arm to home,
-       rather than reading p.getJointState.  This is LOW RISK because the
-       robot physically IS at the home configuration after move_robot_smooth,
-       but it is architecturally inconsistent with the claim that actual
-       joint state is always read.  Should use p.getJointState for
-       consistency.
 
 ================================================================================
 87. DEAD METHODS AND PROPERTIES — NEVER CALLED FROM ROOT CODE
@@ -881,14 +829,6 @@ Fix:   Accepted for thesis scope.  Document as known simplifications.
            separate ignored-body sets.
 
 ================================================================================
-ARCHIVED (verified 2026-03-22 → archive/CODEBASE_AUDIT_RESOLVED.txt):
-  #98  Constraint grasp offset (DONE — actual EE-to-object transform)
-       NOTE: getLinkState CoM vs URDF link frame mismatch remains (low priority).
-  #99  Single-occluder sensing (DONE — occluder_pybullet_ids set)
-  #101 Deterministic shadow selection (DONE — shuffle init + grasp offsets)
-================================================================================
-
-================================================================================
 102. PLACE TARGET SELECTION RANDOM — NO FITNESS CHECK
 ================================================================================
 Where: test_full_pipeline.py execute_place(),
@@ -1138,304 +1078,35 @@ FOR LATER
   evaluation if time permits.  See discussion notes §7.
 
 ================================================================================
-SUMMARY (updated 2026-03-22, #102-#105 added from supervisor meeting)
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-03-22)
 ================================================================================
 
-PDDL-CRITICAL (Tier 0 — PDDL/physical state desync, highest priority):
-  #95  SYSTEMIC PDDL STATE DRIFT — symbolic/physical desync across
-       all actions.  Consolidated issue: the PDDL symbolic state and
-       PyBullet physical state diverge through 4 channels (robot config
-       drift, hidden moves, stale shadow geometry, stale blocks_view_at).
-       Root architectural issue underlying #44, #73, #86, #93.
-  #93  Actions are not generic — hidden sub-actions embedded in
-       execution.  sense contains a hidden move; pick contains 3
-       hidden moves + 3 IK solves + gripper control + constraint
-       weld; place contains 3 hidden moves + 3 IK solves + gripper
-       control + constraint removal + physics settling.  The planner
-       cannot reason about these sub-actions.  Fixing requires PDDL
-       domain decomposition (approach/grasp/lift as separate actions).
-  #44  Stale shadow registry after occluder relocation — BoxelRegistry
-       never recomputed.  Shadow AABBs describe pre-relocation geometry.
-       Raycasting by body ID compensates but the data is structurally
-       wrong.
-  #73  shadow_occluder_map goes stale on replan — blocks_view_at facts
-       reference original occluder positions.  Derived predicates
-       compensate but the data structure is fragile.
-  #104 Post-action boxel state not re-evaluated — after pick-and-place,
-       free/occupied/shadow labels are stale, merge structure is stale.
-       Broader than #44/#73: covers full boxel partition refresh +
-       re-merge.  Blocks correct placement reasoning (#102, #105).
+TIER 0 — PDDL-CRITICAL (symbolic/physical desync):
+  #95  Systemic PDDL state drift (4 drift channels)     ~2-3 weeks
+  #93  Hidden sub-actions in sense/pick/place             ~1-2 weeks
+  #104 Post-action boxel state not re-evaluated           ~3-5 days
+  #44  Stale shadow registry after relocation             ~2-3 days
+  #73  Stale shadow_occluder_map on replan                [DONE]
 
-QUICK WINS (Tier 1 — ALL DONE, archived 2026-03-22):
-  #85  Dead / commented code pollution (push action).                  ARCHIVED
-  #84  Incomplete magic number cleanup in execution code.              ARCHIVED
-  #80  Fake IK fallback allows garbage data — lock down or remove.     ARCHIVED
-  #83  Blind spot in raycasting (robot arm ignored).                   ARCHIVED
+TIER 3 — THESIS-CRITICAL (days-weeks):
+  #76  No evaluation framework (PA-1)                     ~1-2 weeks
+  #103 Boxel merge condition incomplete                   ~2-3 days
+  #81  Recursive object discovery (PA-2)                  ~2-3 days
+  #102 Place target selection — no fitness check          ~1-2 days
+  #105 Multi-boxel free space placement                   ~1 week
+  #55  Hardcoded scene [PARTIALLY DONE]
+  #56  Dead computation [PARTIALLY DONE]
 
-HIGH VALUE FIXES (Tier 2 — ALL DONE, archived 2026-03-22):
-  #79  Robot arm blocks sensing during execution.                      ARCHIVED
-  #78  Incomplete view-blocking model (compute_shadow_blockers).       ARCHIVED
-  #82  Silent IK failures in execution (abort and replan).             ARCHIVED
-  #86  PDDL state drift after pick/place (DONE — sense exception).
-  #67  _build_init() assumption (observed_clear_regions param).        ARCHIVED
+TIER 4 — DEFERRABLE:
+  #59+#77  Constraint grasping / object sizing (supervisors confirmed)
+  #97  Streams not generic (Panda/PyBullet coupling)
 
-THESIS-CRITICAL (Tier 3 — days/weeks):
-  #55  Hardcoded scene — PARTIALLY DONE.  SceneConfig, mixed_shapes,
-       scalability presets, and CLI flags implemented.  Still needs
-       batch evaluation runner (#76).
-  #76  No evaluation framework (PA-1) — thesis cannot have a Results
-       section without metrics, baselines, or scene variation.
-  #81  Missing recursive object discovery (PA-2).
-       Shadow computation is one-shot at scene init: the overhead camera
-       sees object A, computes shadow S1 behind it.  If a previously
-       unknown object B is discovered inside S1 (after moving A), B may
-       itself occlude further regions — but the system does NOT recompute
-       shadows for newly discovered objects.  The planner can only reason
-       about shadows already in the BoxelRegistry; it cannot deduce
-       shadows it was never told about.
-       Fix: after each sense action discovers a new object, re-run shadow
-       analysis and inject new shadow boxels + blocks_view_at facts
-       before replanning.
-       Alternative: document as accepted single-layer-occlusion
-       simplification / future work (sufficient for tabletop scenes
-       without multi-layer occlusion).
-  #102 Place target selection random — no fitness check.      ~1-2 days
-       Add size precondition (boxel ≥ object) and adjacency
-       preference.  Needed for correct placement behaviour.
-  #103 Boxel merge condition incomplete — missing logical     ~2-3 days
-       property equivalence + observability check.  Merge only
-       when same blocks_view_to set, same observability status
-       (both visible or both in shadow), and convex (but see
-       convexity caveat in #103).  Agreed in supervisor meeting.
-       Prerequisite for correct free-space merging.
-  #105 Multi-boxel free space placement not supported.        ~1 week
-       Largely mitigated if #103 is done (free boxels merge
-       into large regions).  Full multi-boxel support is
-       alternative if merge doesn't suffice.
+TIER 5 — DEAD CODE INVENTORY (documented, no action): #87-#92, #94
 
-DEFERRABLE (Tier 4 — accepted simplifications, fidelity):
-  #59  Objects fly away on first grasp — constraint-based grasping works
-  +#77  functionally; friction grasping is a fidelity improvement.
-       Depends on #77 (object dimensions exceed gripper capacity).
-       CONFIRMED DEFERRABLE by supervisors (2026-03-22): "we don't
-       really care about that.  Grasping is a different issue."  This
-       is a rearrangement problem, not a grasping problem.
-  #97  Streams not generic — tightly coupled to Panda/PyBullet/tabletop.
-       Accepted for thesis scope; would need abstraction layers (IK
-       solver interface, collision checker interface, geometry-aware
-       grasping) to generalise beyond the current scenario.
+DECISION NEEDED:
+  #96  Personal information in git history
 
-DEAD CODE — DOCUMENTED, PRESERVED (Tier 5 — no action needed):
-  #87  Dead methods/properties across codebase (~160 lines).
-       Tracked for awareness; preserved per codebase policy.
-  #88  Unused imports (7 import statements across 3 files).
-  #89  Unused function parameters (config in execute_pick/place).
-  #90  Visualization intentionally disabled — BoxelVisualizer unused.
-       Disabled by explicit decision; preserved for re-enabling.
-  #91  Dead CameraObservation fields (rgb_image, depth_image,
-       point_cloud always None).  Interface reserved for future use.
-  #92  RunLogger context manager never used (style inconsistency).
-  #94  Dead heuristic config rejection loop (lines 300-308).
-       Checks for is_heuristic=True on configs that can no longer be
-       produced.  Unreachable since #80 removed _heuristic_ik.
-
-ACCEPTED DEVIATIONS (documented, no further code changes needed):
-  #61  Optimistic sensing + reactive replanning instead of conditional
-       effects.  PDDLStream cannot do contingent planning; replanning is
-       standard TAMP practice.  Documented in domain PDDL and code.
-
-ALREADY RESOLVED (archived 2026-03-22 → archive/CODEBASE_AUDIT_RESOLVED.txt):
-  #56  Dead computation (PARTIALLY DONE — calls removed, bodies remain; #87).
-  #55  Scene parameterization (PARTIALLY DONE — needs eval runner; Tier 3).
-  #60  Simulation flickering (DONE — RenderingLock).              ARCHIVED
-  #61  Sense action deviation (ACCEPTED — optimistic + replanning). ARCHIVED
-  #67  Targets-only-in-shadows assumption (DONE).                  ARCHIVED
-  #69  Magic numbers (DONE — justification comments).              ARCHIVED
-  #78  View-blocking model (DONE — compute_shadow_blockers).       ARCHIVED
-  #79  Robot arm blocks sensing (DONE).                            ARCHIVED
-  #80  Fake IK fallback removed (DONE).                            ARCHIVED
-  #82  Silent IK failures (DONE — abort and replan).               ARCHIVED
-  #83  Raycasting blind spot (DONE — robot_id parameter).          ARCHIVED
-  #84  Magic number cleanup execution (DONE).                      ARCHIVED
-  #85  Dead/commented push code (DONE — removed).                  ARCHIVED
-  #86  PDDL state drift (DONE — sense exception; see #86 above).
-  #98  Constraint grasp offset (DONE — actual EE transform).       ARCHIVED
-  #99  Single-occluder sensing (DONE — set membership).            ARCHIVED
-  #101 Deterministic shadow selection (DONE — shuffle).            ARCHIVED
-
-PDDL/PYTHON ALIGNMENT:
-  PF-1 sense: MISMATCH (accepted #61) — optimistic + reactive replanning.
-  PF-2 pick: MISMATCH (documented) — Python does multi-waypoint execution;
-       PDDL models as instantaneous.  at_config drift accepted (#62).
-  PF-3 place: MISMATCH (documented) — same as PF-2.
-  PF-4 move: CONSISTENT.
-  PF-5 compute-kin stream: hidden side-channel (ignored_body_ids).
-
-PROPOSAL ALIGNMENT:
-  PA-1 No evaluation framework (Section 5) — MISSING. CRITICAL (#76).
-  PA-2 No recursive object discovery (Section 4.2) — MISSING.
-  PA-3 K-literal design differs (Section 4.4.1) — documented deviation.
-  PA-4 Fixed camera for sensing (Section 4.4.2) — accepted simplification.
-  PA-5 No conditional sensing outcomes (Section 4.4.2) — ACCEPTED (#61).
-  PA-6 Only top-down grasps — limits evaluation scenarios.
-
-The PLANNING ARCHITECTURE models spatial capabilities:
-  - Occluder relocation via pick → move → place (archived #53)
-  - Push action commented out (superseded by pick-and-place)
-  - Derived predicates for visibility (view_clear) still work — placing an
-    occluder in free space removes blocks_view, just as push did
-  - Verification via sense: tri-state in execution (found / clear_but_empty
-    / still_blocked); PDDL is optimistic, replanning handles failures (#61)
-  - Sensing uses fixed camera correctly (archived #36)
-  - KIF fluents are sound but use single-predicate simplification (PA-3)
-
-The EXECUTION follows the plan:
-  - Move execution follows trajectory waypoints with collision-free
-    paths (archived #5, #52)
-  - Pick execution uses plan grasp; contact IK re-derived from actual
-    obj_pos at execution time (archived #7, #57)
-  - Place execution same pattern (archived #7, #57)
-  - Collision checks exclude grasped object via ignored_body_ids (archived #57)
-  - move_robot_to_pos() and compute_ik() removed — solve_ik() replaces them
-  - Post-pick/place config tracked by execution loop; PDDL model does
-    not update at_config — accepted simplification, documented (#62)
-
-AUDIT INTEGRITY NOTES (second-pass cross-check):
-  - [DONE] items (#5, #7, #52, #53, #54, #57, #58) verified as genuinely
-    implemented and archived to CODEBASE_AUDIT_RESOLVED.txt on 2026-03-13.
-  - #64, #65, #70, #71, #72, #74, #75 fixed and archived on 2026-03-13.
-  - #68 dead code list was incomplete; 5 additional dead functions added.
-  - #69 magic number table was incomplete; ~12 additional constants added.
-  - No fabricated fixes found — the audit does not inflate progress.
-
-AUDIT INTEGRITY NOTES (third-pass validation, 2026-03-22):
-  - 14 [DONE]/[ACCEPTED] items (#60, #61, #67, #69, #78-#85, #98, #99, #101)
-    verified against actual codebase and archived.  13 fully verified; #86
-    corrected (sense handler uses home_config not getJointState).
-  - Transcript citations cross-checked against 2026-03-22 supervisor meeting:
-    (a) Convexity in #103 merge condition: audit cited as "AGREED" but
-        supervisor later questioned feasibility.  Corrected to note ambiguity.
-    (b) Push critique quote attributed to "the meeting" — corrected to
-        "the student" (Speaker 3 in transcript).
-    (c) Active voxel (Approach 2) framed as "interesting future work" —
-        supervisors gave stronger rejection ("don't think about that").
-        Corrected with actual quotes.
-    (d) #103 tier summary omitted observability condition — corrected to
-        include "same observability status" requirement.
-  - Archive file restored from git history (commit 744785d^, untracked
-    2026-03-17).  New items appended.
-
-Environment note: the default shell is PowerShell (not bash). Heredocs,
-  `&&` chaining, and `cd /d` do not work. See .cursor/rules/powershell-shell.mdc.
-
-Verification logging workflow (archived #58):
-  Built-in logging replaces the manual Tee-Object workflow.  Every run
-  auto-creates logs/run_<timestamp>/ with full output + input artefacts.
-  - Default:  python3 test_full_pipeline.py
-  - Verbose:  python3 test_full_pipeline.py --log-level verbose
-  - Headless: python3 test_full_pipeline.py --log-level verbose --no-gui
-  Legacy manual capture still works if needed:
-    wsl bash -lc "... python3 -u test_full_pipeline.py --no-gui" 2>&1 |
-      Tee-Object -FilePath .\logs\manual_run.log
-
-Priority order for remaining fixes (updated 2026-03-22):
-
-  TIER 0 — PDDL-CRITICAL (highest priority — symbolic/physical desync):
-    #98  Constraint grasp offset                           ARCHIVED
-    #101 Deterministic shadow selection                    ARCHIVED
-    #99  Single-occluder sensing false negatives            ARCHIVED
-    #95  Systemic PDDL state drift — the root             ~2-3 weeks
-         architectural issue.  Symbolic and physical
-         states diverge through 4 channels.  Fixing
-         requires PDDL domain faithfulness + registry
-         refresh + execution-time state reconciliation.
-    #93  Actions not generic — hidden sub-actions in       ~1-2 weeks
-         sense/pick/place execution.  Fixing requires
-         PDDL domain decomposition (approach/grasp/lift
-         as separate actions with own streams).
-    #44  Stale shadow registry after relocation —          ~2-3 days
-         recompute BoxelRegistry (or affected shadows
-         only) after every occluder pick-and-place.
-    #73  Stale shadow_occluder_map on replan —             ~1 day
-         refresh blocks_view_at facts from current
-         physical state before each replan.
-    #104 Post-action boxel state not re-evaluated —        ~3-5 days
-         full free/occupied/shadow refresh + re-merge
-         after every pick-and-place.  Broader than
-         #44/#73; prerequisite for #102 and #105.
-
-  TIER 1 — Quick wins (ALL DONE, archived 2026-03-22):
-    #85  Delete dead/commented push code                 ARCHIVED
-    #84  Comment remaining magic numbers                 ARCHIVED
-    #80  Lock down / remove fake IK fallback             ARCHIVED
-    #83  Fix raycasting blind spot (count robot hits)    ARCHIVED
-
-  TIER 2 — Medium effort, high value (ALL DONE, archived 2026-03-22):
-    #79  Move arm out of the way before sensing          ARCHIVED
-    #78  Fix view-blocking model                         ARCHIVED
-    #82  Handle IK failures properly (abort/replan)      ARCHIVED
-    #86  Verify/fix PDDL state drift after pick/place    DONE (sense exception)
-    #67  Fix targets-only-in-shadows assumption           ARCHIVED
-
-  TIER 3 — Large effort, thesis-critical (days-weeks):
-    #55  Parameterize scene — PARTIALLY DONE.
-         SceneConfig + presets exist; needs evaluation runner (#76).
-    #76  Evaluation framework (PA-1) — metrics,          ~1-2 weeks
-         baselines, batch runner, scene variation.
-         Required for thesis Results section.
-    #81  Recursive object discovery (PA-2) —              ~2-3 days
-         Shadow computation is one-shot; newly discovered
-         objects don't trigger re-analysis for second-layer
-         shadows.  Implement re-computation after sense, or
-         document as single-layer-occlusion simplification.
-    #102 Place target selection random — no fitness         ~1-2 days
-         check.  Add size precondition and adjacency
-         preference.  Depends on #104 (correct partition).
-    #103 Boxel merge condition — add logical property       ~2-3 days
-         equivalence + observability check.  Merge only when
-         same blocks_view_to set AND same observability status
-         (both visible or both in shadow).  Agreed 2026-03-22.
-         Prerequisite for correct free-space merging (#105).
-    #105 Multi-boxel free space placement — largely         ~1 week
-         mitigated by #103.  Full support is alternative.
-
-  TIER 4 — Deferrable (accepted simplifications, fidelity):
-    #59  Friction-based grasping — fidelity improvement, not
-    +#77 correctness fix. Constraint grasping works functionally.
-         Depends on #77 (object resizing). Fix together if pursued.
-    #97  Streams not generic — Panda/PyBullet/tabletop coupling.
-         Accepted for thesis scope.
-
-  TIER 5 — Dead code inventory (documented, preserved per policy):
-    #87  Dead methods/properties (~160 lines across 5 files)
-    #88  Unused imports (7 statements across 3 files)
-    #89  Unused parameters (config in execute_pick/place)
-    #90  Visualization disabled (intentional; ~145 lines dormant)
-    #91  Dead CameraObservation fields (interface reserved)
-    #92  RunLogger context manager unused (style inconsistency)
-    #94  Dead heuristic config rejection loop (unreachable since #80)
-
-  Already resolved (see archive/CODEBASE_AUDIT_RESOLVED.txt for full text):
-    #56  Dead computation (PARTIALLY DONE — calls removed, bodies remain; #87)
-    #60  Simulation flickering (DONE — RenderingLock)               ARCHIVED
-    #61  Sense action deviation (ACCEPTED — optimistic + replan)    ARCHIVED
-    #67  Targets-only-in-shadows (DONE)                             ARCHIVED
-    #69  Magic numbers (DONE — justification comments)              ARCHIVED
-    #78  View-blocking model (DONE)                                 ARCHIVED
-    #79  Robot arm blocks sensing (DONE)                            ARCHIVED
-    #80  Fake IK fallback removed (DONE)                            ARCHIVED
-    #82  Silent IK failures (DONE)                                  ARCHIVED
-    #83  Raycasting blind spot (DONE)                               ARCHIVED
-    #84  Magic number cleanup execution (DONE)                      ARCHIVED
-    #85  Dead/commented push code (DONE)                            ARCHIVED
-    #98  Constraint grasp offset (DONE)                             ARCHIVED
-    #99  Single-occluder sensing (DONE)                             ARCHIVED
-    #101 Deterministic shadow selection (DONE)                      ARCHIVED
-
-Proposal alignment work (PA-1 through PA-6) and PDDL/Python alignment
-(PF-1 through PF-5) are tracked in their respective sections above and
-must be addressed or explicitly documented as accepted deviations before
-thesis submission.
+Resolved issues: see archive/CODEBASE_AUDIT_RESOLVED.txt.
 
 ================================================================================
 DISCUSSION NOTES — 2026-03-22
