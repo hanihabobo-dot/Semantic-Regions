@@ -2,43 +2,9 @@
 CODEBASE AUDIT — OPEN ISSUES
 ================================================================================
 Date: 2026-02-25 (original audit, merged from 3 audit passes)
-Updated: 2026-03-22 (latest — #102-#105 from supervisor meeting; #86 archived;
-         inline ARCHIVED blocks removed; SUMMARY condensed)
+Updated: 2026-03-22 (latest — archived #44, #73, #87-#92, #94 to resolved;
+         #102-#105 from supervisor meeting; SUMMARY cleaned up)
 Resolved issues archived to archive/CODEBASE_AUDIT_RESOLVED.txt.
-
-================================================================================
-44. SHADOWS NOT RECOMPUTED AFTER OCCLUDER RELOCATION — STALE REGISTRY  [DONE]
-================================================================================
-Where: test_full_pipeline.py, boxel_data.py
-What:  After relocating an occluder (via pick-and-place), the BoxelRegistry
-       is NOT updated. The shadow boxels (their AABBs, centers, extents)
-       still reflect the pre-relocation geometry. The sensing function
-       (sense_shadow_raycasting) uses the shadow boxel's AABB to determine
-       where to cast rays — but that AABB is for the old shadow, not the
-       actual post-relocation geometry.
-
-       With pick-and-place this is LESS CRITICAL than with push: since the
-       occluder is physically removed (picked up and placed elsewhere),
-       rays through the old shadow AABB will pass through empty space and
-       can detect the target. The stale AABB just means rays may cover a
-       slightly wrong area, but the target is detected by body ID, so any
-       ray that hits it works.
-
-Fix:   After relocating, either:
-       (a) Recompute shadows for the relocated occluder only (incremental).
-       (b) Re-run the full boxel computation (expensive but correct).
-       (c) Accept the stale AABB as good enough (target detection by body
-           ID compensates). Document this as a known simplification.
-       See #104 for the broader post-action re-evaluation requirement
-       (free/occupied/shadow + re-merge), which subsumes this issue.
-
-Resolved: Accepted simplification (option c).  The stale shadow AABB is
-       functionally safe for pick-and-place: the occluder is physically
-       removed, rays pass through empty space, and the target is detected
-       by PyBullet body ID.  The place handler in test_full_pipeline.py
-       documents this explicitly (lines 562-576).  Full shadow recomputation
-       will be implemented as part of #104 (post-action re-boxelization),
-       which subsumes this issue entirely.
 
 ================================================================================
 59. OBJECTS FLY AWAY ON FIRST GRASP — CONSTRAINT-BASED GRASPING IS THE PROBLEM
@@ -242,37 +208,6 @@ PF-5. compute-kin stream — HIDDEN SIDE-CHANNEL
         share Python objects by design) but invisible to formal analysis.
 
 ================================================================================
-73. shadow_occluder_map GOES STALE ON REPLAN — blocks_view_at MAY BE WRONG  [DONE]
-================================================================================
-Where: test_full_pipeline.py lines 185-189,
-       pddlstream_planner.py _build_init() lines 292-300
-
-What:  shadow_occluder_map is built once from the registry before the
-       first plan.  After an occluder is relocated via pick-and-place,
-       the map is NOT updated.  On subsequent replanning iterations,
-       _build_init() still emits:
-         (blocks_view_at old_occ old_occ shadow_id)
-       This says "when old_occ is at its original boxel, it blocks the
-       view to shadow_id".  The derived predicate blocks_view combines
-       this with obj_at_boxel — if the occluder was placed in free
-       space, obj_at_boxel(old_occ, old_occ) is false, so blocks_view
-       evaluates to false and the view is correctly classified as clear.
-
-       HOWEVER, if the planner generated a new blocks_view_at fact
-       that references the destination boxel (it doesn't — but if it
-       did, or if the PDDL model ever added view-blocking at the new
-       location), the stale map would miss it.
-
-       Current impact: LOW because the derived predicates compensate.
-       But the stale data structure is architecturally fragile and
-       should be documented or refreshed on replan.
-
-Fixed: Place handler in test_full_pipeline.py now re-runs
-       compute_shadow_blockers() after every place action and updates
-       planner.shadow_occluder_map.  Incorrect comment claiming the map
-       was already refreshed has been corrected.
-
-================================================================================
 76. PA-1 SEVERITY UNDERRATED — EVALUATION FRAMEWORK IS CRITICAL
 ================================================================================
 Where: CODEBASE_AUDIT.txt summary, PA-1
@@ -348,153 +283,6 @@ What:  The proposal explicitly claims that free space partitioning will
        never detects new objects.
 
 ================================================================================
-87. DEAD METHODS AND PROPERTIES — NEVER CALLED FROM ROOT CODE
-================================================================================
-Where: Multiple files (see table)
-What:  The following methods and properties are defined but have zero
-       callers in the root codebase.  Some had their call sites removed
-       during earlier cleanups (#56, #85) but the definitions were left.
-       Others were written speculatively and never wired in.
-
-       File                   Method / Property              Lines  Notes
-       ─────────────────────  ─────────────────────────────  ─────  ──────────────
-       boxel_data.py          compute_neighbors()             ~35   Call removed (#56)
-       boxel_data.py          _check_adjacency()              ~25   Helper for above
-       boxel_data.py          _opposite_direction()            ~8   Helper for above
-       boxel_data.py          load_from_json()                ~12   Only archive/ uses
-       boxel_env.py           _depth_buffer_to_meters()        ~4   Call removed (#56)
-       boxel_env.py           _depth_to_point_cloud()         ~22   Call removed (#56)
-       boxel_env.py           ObjectSpec.max_horizontal_width  ~4   Property, zero refs
-       free_space.py          clear_debug_items()             ~10   Never called
-       streams.py             _direction_to_quat()            ~30   Never called
-       streams.py             _rotation_matrix_to_quat()      ~30   Called only by above
-
-       boxel_data.py convenience getters (borderline — used only by
-       to_dict() for the JSON summary, no external callers):
-         get_object_boxels(), get_shadow_boxels(), get_free_space_boxels()
-
-       Instance attribute set but never read:
-         boxel_env.py  debug_camera_distance               Set in __init__
-         boxel_env.py  debug_camera_yaw                    Set in __init__
-         boxel_env.py  debug_camera_pitch                  Set in __init__
-         boxel_env.py  debug_camera_target                 Set in __init__
-
-       Total: ~160 lines of unreachable method bodies + 4 dead attributes.
-
-       Per codebase policy (see CODEBASE POLICY below), dead code is
-       preserved for reference and potential future use.  This issue
-       tracks it for documentation completeness, not as a cleanup task.
-
-================================================================================
-88. UNUSED IMPORTS ACROSS CODEBASE
-================================================================================
-Where: Multiple files (see table)
-What:  The following imports are present but the imported names are never
-       referenced in the file.
-
-       File                    Unused Import
-       ──────────────────────  ──────────────────────────────────────────
-       boxel_data.py           asdict (from dataclasses)
-       boxel_data.py           Set (from typing)
-       cell_merger.py          Set (from typing)
-       streams.py              Generator (from typing)
-       pddlstream_planner.py   from_fn (from pddlstream.language.generator)
-       pddlstream_planner.py   from_test (from pddlstream.language.generator)
-       pddlstream_planner.py   read (from pddlstream.utils) — shadowed by
-                                the local read_pddl_file(); never used
-
-       Impact: No runtime effect (unused imports cost a negligible amount
-       of import time).  Cosmetic cleanliness issue only.
-
-================================================================================
-89. UNUSED FUNCTION PARAMETERS — config IN execute_pick / execute_place
-================================================================================
-Where: test_full_pipeline.py execute_pick(), execute_place()
-What:  Both functions accept a `config` parameter (the plan's RobotConfig
-       from compute_kin_solution).  Neither function references it.  All
-       approach/contact/lift/retreat waypoints are re-derived from IK at
-       execution time using the object's actual position + grasp offset.
-
-       The parameter was originally used as a fallback ("if IK fails, use
-       the plan config"), but #82 changed the fallback to abort-and-replan
-       instead.  The parameter survived the refactor.
-
-       The caller still passes config from the plan:
-         execute_pick(robot_id, env, ..., grasp, config, gui)
-         execute_place(robot_id, env, ..., grasp, config, ..., gui)
-       but the value is silently ignored inside both functions.
-
-       Impact: Confusing to readers — the parameter signature suggests the
-       plan config influences execution, but it does not.
-
-================================================================================
-90. VISUALIZATION INTENTIONALLY DISABLED — UNUSED BoxelVisualizer INSTANCE
-================================================================================
-Where: boxel_env.py (line 319), visualization.py, test_full_pipeline.py (line 146)
-
-What:  BoxelVisualizer is imported and instantiated in BoxelTestEnv.__init__
-       (self.visualizer = BoxelVisualizer()), but none of its methods
-       (draw_boxels, clear_all) are called from root code.  The only call
-       site was intentionally commented out in test_full_pipeline.py:
-
-         # if gui:
-         #     ...
-         #     env.draw_boxels(all_boxels, duration=0)
-
-       This was disabled by explicit decision to simplify pipeline runs
-       and reduce visual noise during development.  The visualization
-       module (visualization.py, ~145 lines) remains fully functional
-       and can be re-enabled by uncommenting the call.
-
-       The entire visualization.py module, plus the BoxelVisualizer import
-       and self.visualizer attribute in boxel_env.py, are unreachable from
-       any currently-executed code path.
-
-Status: INTENTIONAL — not a bug.  Visualization is preserved for future
-       use and debugging.  See CODEBASE POLICY below.
-
-================================================================================
-91. DEAD CameraObservation FIELDS — rgb_image, depth_image, point_cloud
-================================================================================
-Where: boxel_types.py (CameraObservation), boxel_env.py get_camera_observation()
-
-What:  CameraObservation defines three optional fields:
-         rgb_image:   Optional[np.ndarray] = None
-         depth_image: Optional[np.ndarray] = None
-         point_cloud: Optional[np.ndarray] = None
-
-       get_camera_observation() never populates them — it returns a
-       CameraObservation with only visible_objects, object_poses, and
-       boxels set.  No code reads these fields.
-
-       The fields exist because the original implementation computed all
-       three (removed as part of #56).  The field declarations remain as
-       part of the dataclass definition.
-
-       Impact: No runtime cost (None is the default).  The fields reserve
-       the interface for future use (e.g. real perception integration).
-
-================================================================================
-92. RunLogger CONTEXT MANAGER PROTOCOL NEVER USED
-================================================================================
-Where: run_logger.py (lines 151-155), test_full_pipeline.py (lines 826-831)
-
-What:  RunLogger implements __enter__ and __exit__ for use as a context
-       manager ("with RunLogger(...) as logger:").  However, the actual
-       usage in test_full_pipeline.py creates the logger manually and
-       calls logger.close() in a finally block:
-
-         logger = RunLogger(verbosity=args.log_level)
-         try:
-             success = main(gui=not args.no_gui, run_logger=logger, ...)
-         finally:
-             logger.close()
-
-       The context manager protocol works correctly — it is simply not
-       used.  Both patterns are equivalent; this is a style inconsistency,
-       not a bug.
-
-================================================================================
 93. ACTIONS ARE NOT GENERIC — HIDDEN SUB-ACTIONS EMBEDDED IN EXECUTION
 ================================================================================
 Where: test_full_pipeline.py (sense handler, execute_pick, execute_place)
@@ -568,24 +356,6 @@ Fix:   To make actions truly generic, decompose each into sub-actions
        Cost: 3x more stream evaluations per pick/place, longer plans,
        and more complex domain.  The current hardcoded approach works
        functionally and is a common simplification in TAMP research.
-
-================================================================================
-94. DEAD DEFENSIVE CODE — HEURISTIC CONFIG REJECTION LOOP
-================================================================================
-Where: test_full_pipeline.py lines 300-308
-
-What:  After the planner returns a plan, a loop checks every action
-       parameter for RobotConfig objects with is_heuristic=True and
-       raises RuntimeError if found.
-
-       This check is dead: _heuristic_ik() was removed in #80, and
-       BoxelStreams raises ValueError if robot_id is None.  No code
-       path can produce a RobotConfig with is_heuristic=True.  The
-       condition can never trigger.
-
-       The loop runs on every plan (iterating all actions and all
-       params), imposing negligible but nonzero overhead per planning
-       cycle.
 
 ================================================================================
 95. SYSTEMIC PDDL STATE DRIFT — SYMBOLIC/PHYSICAL DESYNC ACROSS ACTIONS
@@ -685,9 +455,10 @@ COMMENTED-OUT CODE — DO NOT DELETE
 
 DEAD CODE — PRESERVED FOR FUTURE USE
        Dead methods, unused imports, and unreachable code paths documented
-       in issues #87–#92 are tracked for awareness but are NOT scheduled
-       for deletion.  They impose no runtime cost and may be needed for
-       future features (evaluation framework, real perception, etc.).
+       in issues #87–#92 (archived to CODEBASE_AUDIT_RESOLVED.txt) are
+       tracked for awareness but are NOT scheduled for deletion.  They
+       impose no runtime cost and may be needed for future features
+       (evaluation framework, real perception, etc.).
 
 WIKI — UPDATE AFTER EVERY CHANGE
        The project wiki lives in the GitHub wiki repo (pybullet.wiki.git),
@@ -1093,8 +864,6 @@ TIER 0 — PDDL-CRITICAL (symbolic/physical desync):
   #95  Systemic PDDL state drift (4 drift channels)     ~2-3 weeks
   #93  Hidden sub-actions in sense/pick/place             ~1-2 weeks
   #104 Post-action boxel state not re-evaluated           ~3-5 days
-  #44  Stale shadow registry after relocation             [DONE — accepted simplification, subsumed by #104]
-  #73  Stale shadow_occluder_map on replan                [DONE]
 
 TIER 3 — THESIS-CRITICAL (days-weeks):
   #76  No evaluation framework (PA-1)                     ~1-2 weeks
@@ -1109,12 +878,11 @@ TIER 4 — DEFERRABLE:
   #59+#77  Constraint grasping / object sizing (supervisors confirmed)
   #97  Streams not generic (Panda/PyBullet coupling)
 
-TIER 5 — DEAD CODE INVENTORY (documented, no action): #87-#92, #94
-
 DECISION NEEDED:
   #96  Personal information in git history
 
 Resolved issues: see archive/CODEBASE_AUDIT_RESOLVED.txt.
+Archived no-action items: #44, #73, #87-#92, #94 (see resolved archive).
 
 ================================================================================
 DISCUSSION NOTES — 2026-03-22
