@@ -547,9 +547,33 @@ def main(gui=True, run_logger=None, scene_config=None):
                     if bname in env.objects:
                         binfo['position'] = np.array(env.objects[bname].position)
 
+                # Rebuild shadow_occluder_map from current physics state so
+                # blocks_view_at facts reflect the relocated occluder's new
+                # position on the next replan (audit #73).
+                shadow_occluder_map = compute_shadow_blockers(
+                    env.camera_position, registry, shadows, occluders, env
+                )
+                planner.shadow_occluder_map = shadow_occluder_map
+
                 # Record the relocation in belief state so the planner
                 # knows this occluder is no longer blocking its original
                 # shadow — it will emit the correct obj_at_boxel facts.
+                #
+                # NOTE (audit #44 — accepted simplification): the BoxelRegistry
+                # is NOT recomputed here.  Shadow AABBs still describe the
+                # pre-relocation geometry.  This is functionally safe because:
+                # (a) sense_shadow_raycasting detects the target by PyBullet
+                #     body ID — any ray that hits the target works regardless
+                #     of whether the AABB is perfectly aligned.
+                # (b) The occluder has been physically removed from the shadow
+                #     region (picked up and placed elsewhere), so rays through
+                #     the old AABB pass through empty space.
+                # (c) shadow_occluder_map is refreshed after every place action
+                #     (audit #73 DONE), so blocks_view_at facts reflect the
+                #     current blocker positions on replan.
+                # Full shadow recomputation would require re-running the camera
+                # observation + free-space generation + cell merger pipeline,
+                # which is a significant cost for marginal accuracy gain.
                 if obj_str in boxel_to_pybullet:
                     placed_obj_name = boxel_to_pybullet[obj_str]['name']
                     belief.mark_occluder_moved(obj_str, boxel_id_str)
