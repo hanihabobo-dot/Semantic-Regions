@@ -12,6 +12,11 @@ Updated: 2026-03-17 (#97 streams coupling/limitations moved from inline
 Updated: 2026-03-22 (#102-#105 added from supervisor meeting; discussion
          notes section added; boxel merge/split design, free-space
          placement, post-action re-evaluation)
+Updated: 2026-03-22 (audit validation pass — archived 14 verified DONE items
+         to archive/CODEBASE_AUDIT_RESOLVED.txt; fixed #86 sense exception;
+         corrected convexity citation ambiguity in #103; fixed speaker
+         attribution in discussion notes; added observability to #103 summary;
+         added stronger active-voxel rejection quotes)
 Resolved issues archived to archive/CODEBASE_AUDIT_RESOLVED.txt.
 
 ================================================================================
@@ -85,153 +90,12 @@ Fix:   Replace constraint-based grasping with FRICTION-BASED grasping:
        based grasping cannot work without resizing.  See #77.
 
 ================================================================================
-60. SIMULATION-WIDE FLICKERING DURING PLANNING — RENDERING TOGGLE ARTIFACTS  [DONE]
+ARCHIVED (verified 2026-03-22 → archive/CODEBASE_AUDIT_RESOLVED.txt):
+  #60  Simulation flickering (DONE — RenderingLock)
+  #61  Sense action deviation (ACCEPTED — optimistic + replanning)
+  #67  Targets-only-in-shadows assumption (DONE — observed_clear_regions)
+  #69  Magic numbers (DONE — justification comments added)
 ================================================================================
-Where: robot_utils.py is_config_collision_free(), is_path_collision_free(),
-       solve_ik(); streams.py _pybullet_ik()
-
-What:  After the arm-flickering fix (wrapping resetJointState with
-       configureDebugVisualizer COV_ENABLE_RENDERING 0/1), the arm no
-       longer flickers, but the entire simulation now exhibits periodic
-       visual glitches — the scene briefly looks "weird" every couple of
-       seconds.
-
-       Root cause: the rendering toggle is called thousands of times per
-       planning cycle (once per is_path_collision_free call, once per
-       solve_ik/IK call).  Each enable→disable→enable cycle may force
-       an OpenGL buffer swap or partial frame render, producing a brief
-       flash.  The fix addressed per-call arm teleportation but introduced
-       a high-frequency global rendering toggle that has its own visual
-       side effects.
-
-Fix:   IMPLEMENTED — reference-counted RenderingLock (robot_utils.py).
-       The first acquire (0→1) disables rendering; the last release (1→0)
-       re-enables it.  All four toggle sites (is_config_collision_free,
-       is_path_collision_free, solve_ik, _pybullet_ik) now use
-       RenderingLock instead of raw configureDebugVisualizer calls.
-       test_full_pipeline.py wraps planner.plan() with an outer
-       RenderingLock — the inner locks nest harmlessly via the reference
-       count, so rendering is toggled exactly TWICE per planning phase
-       (once off, once on) regardless of how many IK/collision calls occur.
-       Standalone calls outside planning still work: the lock auto-toggles
-       when the counter transitions 0→1 or 1→0.
-
-================================================================================
-61. SENSE ACTION DEVIATES FROM PROPOSAL — NO CONDITIONAL EFFECTS  [ACCEPTED]
-================================================================================
-Where: pddl/domain_pddlstream.pddl (sense action),
-       test_full_pipeline.py (sense execution + replan loop),
-       proposal Section 4.4.2 (Listing 2)
-
-What:  The PDDL sense action unconditionally adds (obj_at_boxel ?o ?region)
-       and (obj_pose_known ?o).  It assumes the target will always be found
-       ("optimistic").  The proposal's conditional design with
-       stream_get_sensing_outcome and (when found/not_found ...) branches
-       is not implemented.  Instead, the execution loop detects sensing
-       failures and replans with updated belief (known_empty_shadows).
-
-Status: ACCEPTED DEVIATION — documented in PDDL domain file and code.
-
-Justification:
-       (a) PDDLStream + FastDownward cannot do contingent planning.
-           Branching on observation outcomes requires a contingent planner
-           (POND, CLG), which is outside PDDLStream's architecture.  The
-           proposal's conditional-effect design cannot be implemented
-           within the chosen planning framework without fundamental changes.
-       (b) Optimistic planning with replanning on failure is a standard
-           TAMP pattern under partial observability (Garrett et al., 2020;
-           Kaelbling & Lozano-Pérez, 2013).  PDDLStream's adaptive
-           algorithm is itself built around optimistic assumptions.
-       (c) For N shadow candidates, reactive replanning converges in at
-           most N replan cycles (one per empty shadow).  Belief state
-           propagates correctly: known_empty_shadows carry over, so each
-           replan searches strictly fewer candidates.
-       (d) The execution loop bounds the search: max_replans = 4*N + 1.
-
-Limitation:
-       The planner cannot optimize search ORDER within a single plan.
-       A contingent planner could reason about most-likely-first strategies.
-       For the current uniform-prior tabletop scenario this does not affect
-       completeness or practical efficiency.
-
-================================================================================
-67. _build_init() HARDCODES ASSUMPTION THAT TARGETS ARE ONLY IN SHADOWS  [DONE]
-================================================================================
-Where: pddlstream_planner.py _build_init(), lines 269-286
-
-What:  For every OBJECT boxel (line 280-281) and every FREE_SPACE boxel
-       (lines 285-286), the code adds:
-         (obj_at_boxel_KIF target boxel_id)
-       This means "we know the target is NOT in this boxel" — because
-       obj_at_boxel is not also added.  Only shadow boxels are left as
-       "unknown" (no KIF fact emitted unless in known_empty_shadows).
-
-       This hardcodes the assumption that targets can ONLY be hidden in
-       shadow regions.  The proposal's formulation is more general — a
-       target could be anywhere the robot hasn't looked.  The current
-       implementation precludes scenarios where a target is on an open
-       part of the table but the robot doesn't know which one it is.
-
-Fix:   DONE — _build_init() now takes an optional observed_clear_regions
-       parameter.  When None (default), all object/free-space boxels are
-       treated as observed (preserving current behavior for the fixed
-       overhead camera scenario).  When an explicit set is provided, only
-       those regions get KIF facts.  The assumption is documented in the
-       docstring with guidance for extending to partial-coverage sensors.
-
-Impact: Low for the current hidden-object scenario (targets are always
-       behind occluders by construction).  But this prevents extending
-       the system to more general search tasks without reworking _build_init.
-
-================================================================================
-69. MAGIC NUMBERS WITHOUT JUSTIFICATION  [DONE]
-================================================================================
-Where: Multiple files (see table below)
-
-What:  Hardcoded values with no comments explaining their origin, rationale,
-       or link to tuning decisions / citations.
-
-       File                  Line   Value         Context
-       ────────────────────  ─────  ────────────  ─────────────────────────────
-       streams.py            144    100           ik_max_iterations
-       streams.py            145    1e-4          ik_residual_threshold
-       streams.py            217    0.4, -0.4...  _IK_SEED_OFFSETS (7 vectors)
-       streams.py            417    0.05/0.10/15  _GRASP_Z_OFFSETS
-       streams.py            473    2000          RRT_MAX_ITERATIONS
-       streams.py            474    0.2           RRT_STEP_SIZE (rad)
-       streams.py            475    0.05          RRT_GOAL_BIAS
-       streams.py            476    8             RRT_EDGE_CHECKS
-       streams.py            477    50            RRT_CONNECT_ATTEMPTS
-       streams.py            478    75            SMOOTH_ATTEMPTS
-       free_space.py         24     0.035         min_resolution (m)
-       test_full_pipeline.py 115    50            settling steps
-       test_full_pipeline.py 460    0.04          sensing z offset
-       test_full_pipeline.py 462    0.33, 0.67    sensing z fractions
-       test_full_pipeline.py 466    7             sensing ray grid density (n)
-       robot_utils.py        289    240           arm motor force
-       robot_utils.py        301    50            gripper motor force
-       boxel_env.py          177    0.15          occluder size (m)
-       boxel_env.py          203    0.08          target size (m)
-       boxel_env.py           93    9.81          gravity (was 9.8, corrected)
-       boxel_env.py          169    10            settling steps in _setup_scene
-       shadow_calculator.py   93    5.0           max ray distance (m)
-       shadow_calculator.py  273    0.001         MIN_EXTENT (m)
-       shadow_calculator.py  293    1e-4          downstream tolerance
-       boxel_data.py         378    0.01          surface Z tolerance
-       cell_merger.py         23    1e-4          merge tolerance
-       free_space.py          41    0.5           workspace height above table (m)
-       robot_utils.py     283-4    0.1           joint limit tolerance in IK
-       test_full_pipeline.py 248    4*shadows+1   max replans formula
-       test_full_pipeline.py 620    30            settling sim steps after place
-
-       For a thesis, every non-trivial constant should have a comment
-       explaining: (a) where the value came from, (b) sensitivity, and
-       (c) whether it was tuned empirically or taken from a reference.
-
-       The RRT parameters are reasonable defaults from the literature but
-       should cite Kuffner & LaValle 2000 and note any modifications.
-       The IK seed offsets appear hand-tuned and should document the
-       tuning process.
 
 ================================================================================
 55. HARDCODED SCENE — NO SCENARIO VARIATION  [PARTIALLY DONE]
@@ -483,89 +347,15 @@ Impact: LOW for the architecture — only object spawn parameters change.
        is addressed.
 
 ================================================================================
-78. INCOMPLETE VIEW-BLOCKING MODEL — PIPELINE LOOPS FOREVER ON SOME SHADOWS  [DONE]
+ARCHIVED (verified 2026-03-22 → archive/CODEBASE_AUDIT_RESOLVED.txt):
+  #78  Incomplete view-blocking model (DONE — compute_shadow_blockers)
+  #79  Robot arm blocks sensing (DONE — retract to home before raycast)
+  #80  Fake IK fallback removed (DONE — _heuristic_ik deleted, ValueError guard)
+  #82  Silent IK failures (DONE — abort and replan on failure)
+  #83  Raycasting blind spot (DONE — robot_id parameter, count robot hits)
+  #84  Magic number cleanup execution (DONE — justification comments added)
+  #85  Dead/commented push code (DONE — removed from streams/domain/stream PDDL)
 ================================================================================
-Where: pddlstream_planner.py _build_init() lines 291-303,
-       test_full_pipeline.py lines 181-188 (shadow_occluder_map),
-       boxel_env.py generate_boxels()
-
-What:  The blocks_view_at facts in the planner init state only model
-       the CREATING occluder for each shadow (from shadow_occluder_map).
-       But the camera's line of sight to a shadow can be blocked by ANY
-       object in the scene — not just the one that geometrically cast
-       the shadow.
-
-       Observed failure (run_2026-03-14_16-10-02):
-         - shadow_001 is created by occluder_3 (obj_004).
-         - shadow_occluder_map records: shadow_001 → obj_004.
-         - Plan #3 correctly picks up occluder_3 and places it in free space.
-         - But occluder_1 (at [0.5, 0.2, z]) physically sits between the
-           camera and shadow_001. It blocks 55% of sensing rays.
-         - The planner's view_clear(shadow_001) derived predicate evaluates
-           to TRUE because obj_004 was moved — but occluder_1 was never
-           modeled in blocks_view_at for shadow_001.
-         - Plans #4-#10 all generate move → sense → pick, sensing keeps
-           reporting "still_blocked (55%)", and the loop repeats until
-           the replan limit is hit.
-
-       Two sub-problems:
-       (a) blocks_view_at only records the creating occluder, not all
-           objects that physically obstruct the camera → shadow corridor.
-       (b) occluder_1 is visible but does NOT appear in the boxel registry
-           as an OBJECT boxel (its shadow falls off the table or is too
-           small). Without an OBJECT boxel, the planner cannot plan to
-           move it. Even if blocks_view_at included it, there would be
-           no (Obj occluder_1) or (obj_at_boxel occluder_1 ...) facts.
-
-Fix:   DONE — (a) compute_shadow_blockers() in test_full_pipeline.py
-       uses camera raycasting to find ALL objects blocking each shadow.
-       shadow_occluder_map is now Dict[shadow_id, List[blocker_ids]].
-       _build_init() in pddlstream_planner.py emits blocks_view_at for
-       every (blocker, shadow) pair.
-       (b) Verified: generate_boxels() → create_boxel_registry_from_boxels
-       preserves all visible objects as OBJECT boxels regardless of
-       whether they cast shadows.
-       (c) Execution loop tracks blocked_counts per shadow; after 3
-       consecutive "still_blocked" outcomes on the same shadow, marks
-       it as empty and moves on.
-
-Impact: HIGH — causes the pipeline to loop forever on scenes where a
-       non-creating object blocks a shadow's view corridor. This is not
-       a corner case: in the current 3-occluder scene, it happens
-       whenever the target is behind the occluder whose shadow is also
-       blocked by another occluder from the camera's perspective.
-Related: #99 — the execution/sensing side (sense_shadow_raycasting) was
-       still checking only ONE occluder until #99 extended it to accept
-       the full blocker set from shadow_occluder_map.
-
-================================================================================
-79. ROBOT ARM BLOCKS SENSING DURING EXECUTION  [DONE]
-================================================================================
-Where: domain_pddlstream.pddl (sense action), test_full_pipeline.py
-What:  The PDDL `sense` action lacks an `at_config` precondition to ensure the
-       robot is out of the way before sensing. Consequently, the planner schedules
-       the `move` to the target's pick configuration *before* the `sense` action.
-       The robot arm is physically inside the shadow during the camera raycast,
-       occluding the target it is trying to find.
-
-Fix:   DONE — Execution-side fix: the sense handler now moves the robot arm
-       to home configuration before raycasting (test_full_pipeline.py).
-       current_config is updated to track the move.
-
-================================================================================
-80. FAKE IK FALLBACK ALLOWS GARBAGE DATA  [DONE]
-================================================================================
-Where: streams.py (_heuristic_ik)
-What:  `_heuristic_ik` is a fake IK stub that simply adds linear offsets to the
-       home configuration's joint angles. While marked as heuristic, it does not
-       compute real kinematics and produces physically invalid configurations. If
-       the robot ID is missing, this allows garbage data to flow completely
-       through the pipeline.
-
-Fix:   DONE — _heuristic_ik removed entirely. BoxelStreams constructor now
-       raises ValueError if robot_id is None (no allow_heuristic escape hatch).
-       compute_kin_solution logs and yields nothing when robot_id is missing.
-       pddlstream_planner.py allow_heuristic parameter removed.
 
 ================================================================================
 81. MISSING RECURSIVE OBJECT DISCOVERY (PA-2)
@@ -577,65 +367,7 @@ What:  The proposal explicitly claims that free space partitioning will
        never detects new objects.
 
 ================================================================================
-82. SILENT IK FAILURES IN EXECUTION  [DONE]
-================================================================================
-Where: test_full_pipeline.py (execute_pick, execute_place)
-What:  If `solve_ik` fails for the approach or lift/retreat waypoints, the code
-       prints a warning and silently falls back to `config.joint_positions` (the
-       actual contact point). This causes the robot to smash directly into the
-       object or table without an approach trajectory, continuing execution in an
-       invalid physical state.
-
-Fix:   DONE — execute_pick() and execute_place() now abort (return None)
-       when the contact-point IK fails.  The execution loop detects the
-       failure and breaks to trigger replanning.  Approach/retreat
-       fallbacks only use the contact config (never the plan config),
-       which is a safe degradation.
-
-================================================================================
-83. BLIND SPOT IN RAYCASTING (ROBOT ARM IGNORED)  [DONE]
-================================================================================
-Where: test_full_pipeline.py (sense_shadow_raycasting)
-What:  `sense_shadow_raycasting` only checks if rays hit the target or the
-       occluder. If rays hit the robot arm (which is currently inside the shadow
-       due to Issue #79), it ignores them and silently returns `clear_but_empty`.
-       This creates false negatives where the robot thinks the shadow is empty
-       just because its own arm was in the way.
-
-Fix:   DONE — sense_shadow_raycasting now accepts robot_id parameter; rays
-       hitting the robot arm are counted as blocked and produce "still_blocked"
-       outcome instead of false "clear_but_empty".
-Related: #99 — same function later extended to check ALL blockers (not just
-       the creating occluder) via set membership.
-
-================================================================================
-84. INCOMPLETE MAGIC NUMBER CLEANUP  [DONE]
-================================================================================
-Where: test_full_pipeline.py
-What:  The audit claims Issue #69 (Magic Numbers) is "DONE", but the execution
-       code is still full of unexplained constants that are critical to
-       success/failure: `approach_height = 0.10`, `lift_height = 0.25`,
-       `z_levels` offsets (`+0.04`, `0.33`, `0.67`), and ray grid density `n = 7`.
-       None of these are tied to the proposal or justified in comments.
-
-Fix:   DONE — Added justification comments for approach_height (0.10 m) and
-       lift_height/retreat_height (0.25 m) in execute_pick() and execute_place().
-       z_levels and n=7 were already commented in the #69 fix.
-
-================================================================================
-85. DEAD / COMMENTED CODE POLLUTION  [DONE]
-================================================================================
-Where: streams.py, domain_pddlstream.pddl
-What:  `sample_push_config` and the `push` PDDL action are commented out but
-       left polluting the codebase. They should be removed if superseded by
-       pick-and-place.
-
-Fix:   DONE — Removed commented-out sample_push_config (streams.py),
-       push action + push_solution/occluder_at predicates (domain_pddlstream.pddl),
-       and sample-push-config stream (stream.pddl).
-
-================================================================================
-86. PDDL STATE DRIFT AFTER PICK/PLACE (PF-2/PF-3)  [DONE]
+86. PDDL STATE DRIFT AFTER PICK/PLACE (PF-2/PF-3)  [DONE — sense exception]
 ================================================================================
 Where: domain_pddlstream.pddl
 What:  `pick` and `place` are modeled in PDDL as single-configuration
@@ -644,12 +376,20 @@ What:  `pick` and `place` are modeled in PDDL as single-configuration
        The PDDL state does not update `at_config` to reflect this drift, causing
        the symbolic state to desync from the physical state.
 
-Fix:   DONE — Execution code now reads the actual PyBullet joint state
-       (p.getJointState) after every move/pick/place action and stores it
-       in current_config.  This ensures replanning uses the robot's true
+Fix:   DONE for move/pick/place — execution reads the actual PyBullet joint
+       state (p.getJointState) after move, pick, and place actions and stores
+       it in current_config.  This ensures replanning uses the robot's true
        configuration.  The PDDL model's accepted simplification (not
        updating at_config in pick/place) is compensated by this execution-
        side tracking.
+
+       EXCEPTION: the sense handler (test_full_pipeline.py:427-429) sets
+       current_config = planner.home_config after moving the arm to home,
+       rather than reading p.getJointState.  This is LOW RISK because the
+       robot physically IS at the home configuration after move_robot_smooth,
+       but it is architecturally inconsistent with the claim that actual
+       joint state is always read.  Should use p.getJointState for
+       consistency.
 
 ================================================================================
 87. DEAD METHODS AND PROPERTIES — NEVER CALLED FROM ROOT CODE
@@ -1141,66 +881,12 @@ Fix:   Accepted for thesis scope.  Document as known simplifications.
            separate ignored-body sets.
 
 ================================================================================
-98. CONSTRAINT PULLS OBJECT INTO PLANNED GRASP OFFSET  [DONE]
+ARCHIVED (verified 2026-03-22 → archive/CODEBASE_AUDIT_RESOLVED.txt):
+  #98  Constraint grasp offset (DONE — actual EE-to-object transform)
+       NOTE: getLinkState CoM vs URDF link frame mismatch remains (low priority).
+  #99  Single-occluder sensing (DONE — occluder_pybullet_ids set)
+  #101 Deterministic shadow selection (DONE — shuffle init + grasp offsets)
 ================================================================================
-Where: test_full_pipeline.py execute_pick(), createConstraint call
-What:  createConstraint used the planned grasp.position offset as
-       parentFramePosition.  Position-control lag means the true EE pose
-       differs from the planned target, so the constraint solver applies a
-       corrective snap impulse — teleporting the object and scattering
-       neighbours.
-Fix:   DONE (2026-03-18).  Compute actual EE-to-object relative transform
-       at constraint time via getLinkState/getBasePositionAndOrientation +
-       invertTransform/multiplyTransforms.  Constraint now freezes the
-       current spatial relationship.
-Related: #59, #77 (friction grasping / object sizing).
-NOTE:  getLinkState indices [0]/[1] return CoM frame, not URDF link frame.
-       createConstraint parentFramePosition is relative to the URDF link
-       frame (indices [4]/[5]).  Should also pass computeForwardKinematics=True.
-       Low priority — CoM and link frame may coincide for the Panda EE link,
-       but strictly incorrect.  Fix when convenient.
-
-================================================================================
-101. DETERMINISTIC SHADOW SELECTION — NO EXPLORATION DIVERSITY  [DONE]
-================================================================================
-Where: pddlstream_planner.py _build_init(), streams.py sample_grasp()
-What:  FastDownward's deterministic tie-breaking always explores shadows in the
-       same order.  PDDLStream's lazy streams always try the same grasp height
-       first.  Together, replanning repeatedly attempts the same shadow with the
-       same grasp — no diversity across replans.
-Fix:   DONE (2026-03-18).  random.shuffle(init) before returning from
-       _build_init() randomizes init-fact order so FD's tie-breaking explores
-       different shadows.  sample_grasp() now copies and shuffles
-       _GRASP_Z_OFFSETS per call so grasp height order varies.
-Impact: Low-risk, high-value — same facts/grasps produced, only evaluation
-        order changes.
-
-================================================================================
-99. SINGLE-OCCLUDER SENSING — FALSE NEGATIVES  [DONE]
-================================================================================
-Where: test_full_pipeline.py sense_shadow_raycasting(), sense action handler
-What:  sense_shadow_raycasting accepted a single occluder_pybullet_id and only
-       counted rays hitting that one object as "blocked".  Rays hitting ANY
-       OTHER object (not the target, not the robot) were silently ignored.
-       If a non-creating object blocked the camera's view, those ray hits
-       fell through all conditions and the function returned clear_but_empty
-       instead of still_blocked — a false negative that wrongly eliminated
-       shadows that actually contained the target.
-
-       Issue #78 fixed the PLANNING side (compute_shadow_blockers finds ALL
-       blockers, _build_init emits blocks_view_at for every blocker-shadow
-       pair).  But the EXECUTION/SENSING side still only checked one occluder,
-       leaving planner and sensor with inconsistent multi-blocker views.
-
-Fix:   DONE (2026-03-18).  Two changes:
-       (a) sense_shadow_raycasting: parameter changed from
-           occluder_pybullet_id (single int) to occluder_pybullet_ids
-           (set of ints).  Ray-hit check changed from == to set membership.
-       (b) Call site: builds occluder_pybullet_ids from ALL blockers in
-           shadow_occluder_map (which was already upgraded by #78) instead
-           of only the creating occluder from shadow_boxel.created_by_boxel_id.
-Impact: Completes multi-blocker support started by #78.  Low risk — set
-        membership is a superset of the old single-ID check.
 
 ================================================================================
 102. PLACE TARGET SELECTION RANDOM — NO FITNESS CHECK
@@ -1248,7 +934,12 @@ What:  The current boxel merge logic only checks whether the merge of
        meeting (2026-03-22), two additional conditions are required:
 
          Two adjacent boxels should be merged if and only if:
-           (a) Their merge produces a convex result (existing check), AND
+           (a) Their merge produces a convex result (existing check —
+               NOTE: the supervisor observed that "a merging operation
+               definitely does not produce convex boxes" and that forcing
+               convexity is "kind of a difficult problem."  This condition
+               may need revisiting; it was acknowledged as pre-existing
+               but not firmly re-agreed as a going-forward requirement), AND
            (b) They have IDENTICAL logical properties in the symbolic
                domain — specifically, they block the view to exactly the
                same set of target objects (same blocks_view_at facts), AND
@@ -1475,18 +1166,18 @@ PDDL-CRITICAL (Tier 0 — PDDL/physical state desync, highest priority):
        Broader than #44/#73: covers full boxel partition refresh +
        re-merge.  Blocks correct placement reasoning (#102, #105).
 
-QUICK WINS (Tier 1 — under 30 min each):
-  #85  Dead / commented code pollution (push action).                  DONE
-  #84  Incomplete magic number cleanup in execution code.              DONE
-  #80  Fake IK fallback allows garbage data — lock down or remove.     DONE
-  #83  Blind spot in raycasting (robot arm ignored).                   DONE
+QUICK WINS (Tier 1 — ALL DONE, archived 2026-03-22):
+  #85  Dead / commented code pollution (push action).                  ARCHIVED
+  #84  Incomplete magic number cleanup in execution code.              ARCHIVED
+  #80  Fake IK fallback allows garbage data — lock down or remove.     ARCHIVED
+  #83  Blind spot in raycasting (robot arm ignored).                   ARCHIVED
 
-HIGH VALUE FIXES (Tier 2 — hours, fix real failures):
-  #79  Robot arm blocks sensing during execution.                      DONE
-  #78  Incomplete view-blocking model (compute_shadow_blockers).       DONE
-  #82  Silent IK failures in execution (abort and replan).             DONE
-  #86  PDDL state drift after pick/place (read actual joint state).    DONE
-  #67  _build_init() assumption (observed_clear_regions param).        DONE
+HIGH VALUE FIXES (Tier 2 — ALL DONE, archived 2026-03-22):
+  #79  Robot arm blocks sensing during execution.                      ARCHIVED
+  #78  Incomplete view-blocking model (compute_shadow_blockers).       ARCHIVED
+  #82  Silent IK failures in execution (abort and replan).             ARCHIVED
+  #86  PDDL state drift after pick/place (DONE — sense exception).
+  #67  _build_init() assumption (observed_clear_regions param).        ARCHIVED
 
 THESIS-CRITICAL (Tier 3 — days/weeks):
   #55  Hardcoded scene — PARTIALLY DONE.  SceneConfig, mixed_shapes,
@@ -1512,9 +1203,11 @@ THESIS-CRITICAL (Tier 3 — days/weeks):
        Add size precondition (boxel ≥ object) and adjacency
        preference.  Needed for correct placement behaviour.
   #103 Boxel merge condition incomplete — missing logical     ~2-3 days
-       property equivalence.  Merge only when same
-       blocks_view_to set + convex.  Agreed in supervisor
-       meeting.  Prerequisite for correct free-space merging.
+       property equivalence + observability check.  Merge only
+       when same blocks_view_to set, same observability status
+       (both visible or both in shadow), and convex (but see
+       convexity caveat in #103).  Agreed in supervisor meeting.
+       Prerequisite for correct free-space merging.
   #105 Multi-boxel free space placement not supported.        ~1 week
        Largely mitigated if #103 is done (free boxels merge
        into large regions).  Full multi-boxel support is
@@ -1551,24 +1244,24 @@ ACCEPTED DEVIATIONS (documented, no further code changes needed):
        effects.  PDDLStream cannot do contingent planning; replanning is
        standard TAMP practice.  Documented in domain PDDL and code.
 
-ALREADY RESOLVED:
-  #56  Dead computation: point cloud and compute_neighbors()
-       (PARTIALLY DONE — calls removed, method bodies remain; see #87).
-  #55  Scene parameterization (PARTIALLY DONE — infrastructure exists,
-       needs evaluation runner; see Tier 3).
-  #60  Simulation flickering during planning (DONE — RenderingLock).
-  #69  ~30 magic numbers — justification comments added (DONE; see #84
-       for remaining gaps in execution code).
-  #79  Robot arm blocks sensing (DONE — Tier 2, 2026-03-14).
-  #78  Incomplete view-blocking model (DONE — Tier 2, 2026-03-14).
-  #82  Silent IK failures in execution (DONE — Tier 2, 2026-03-14).
-  #86  PDDL state drift (DONE — Tier 2, 2026-03-14).
-  #67  Targets-only-in-shadows assumption (DONE — Tier 2, 2026-03-14).
-  #85  Dead/commented push code (DONE — Tier 1, 2026-03-14).
-  #84  Magic number cleanup in execution (DONE — Tier 1, 2026-03-14).
-  #80  Fake IK fallback removed (DONE — Tier 1, 2026-03-14).
-  #83  Raycasting blind spot fixed (DONE — Tier 1, 2026-03-14).
-  #98  Constraint grasp offset (DONE — Tier 0, 2026-03-18).
+ALREADY RESOLVED (archived 2026-03-22 → archive/CODEBASE_AUDIT_RESOLVED.txt):
+  #56  Dead computation (PARTIALLY DONE — calls removed, bodies remain; #87).
+  #55  Scene parameterization (PARTIALLY DONE — needs eval runner; Tier 3).
+  #60  Simulation flickering (DONE — RenderingLock).              ARCHIVED
+  #61  Sense action deviation (ACCEPTED — optimistic + replanning). ARCHIVED
+  #67  Targets-only-in-shadows assumption (DONE).                  ARCHIVED
+  #69  Magic numbers (DONE — justification comments).              ARCHIVED
+  #78  View-blocking model (DONE — compute_shadow_blockers).       ARCHIVED
+  #79  Robot arm blocks sensing (DONE).                            ARCHIVED
+  #80  Fake IK fallback removed (DONE).                            ARCHIVED
+  #82  Silent IK failures (DONE — abort and replan).               ARCHIVED
+  #83  Raycasting blind spot (DONE — robot_id parameter).          ARCHIVED
+  #84  Magic number cleanup execution (DONE).                      ARCHIVED
+  #85  Dead/commented push code (DONE — removed).                  ARCHIVED
+  #86  PDDL state drift (DONE — sense exception; see #86 above).
+  #98  Constraint grasp offset (DONE — actual EE transform).       ARCHIVED
+  #99  Single-occluder sensing (DONE — set membership).            ARCHIVED
+  #101 Deterministic shadow selection (DONE — shuffle).            ARCHIVED
 
 PDDL/PYTHON ALIGNMENT:
   PF-1 sense: MISMATCH (accepted #61) — optimistic + reactive replanning.
@@ -1615,6 +1308,23 @@ AUDIT INTEGRITY NOTES (second-pass cross-check):
   - #69 magic number table was incomplete; ~12 additional constants added.
   - No fabricated fixes found — the audit does not inflate progress.
 
+AUDIT INTEGRITY NOTES (third-pass validation, 2026-03-22):
+  - 14 [DONE]/[ACCEPTED] items (#60, #61, #67, #69, #78-#85, #98, #99, #101)
+    verified against actual codebase and archived.  13 fully verified; #86
+    corrected (sense handler uses home_config not getJointState).
+  - Transcript citations cross-checked against 2026-03-22 supervisor meeting:
+    (a) Convexity in #103 merge condition: audit cited as "AGREED" but
+        supervisor later questioned feasibility.  Corrected to note ambiguity.
+    (b) Push critique quote attributed to "the meeting" — corrected to
+        "the student" (Speaker 3 in transcript).
+    (c) Active voxel (Approach 2) framed as "interesting future work" —
+        supervisors gave stronger rejection ("don't think about that").
+        Corrected with actual quotes.
+    (d) #103 tier summary omitted observability condition — corrected to
+        include "same observability status" requirement.
+  - Archive file restored from git history (commit 744785d^, untracked
+    2026-03-17).  New items appended.
+
 Environment note: the default shell is PowerShell (not bash). Heredocs,
   `&&` chaining, and `cd /d` do not work. See .cursor/rules/powershell-shell.mdc.
 
@@ -1631,13 +1341,9 @@ Verification logging workflow (archived #58):
 Priority order for remaining fixes (updated 2026-03-22):
 
   TIER 0 — PDDL-CRITICAL (highest priority — symbolic/physical desync):
-    #98  Constraint grasp offset — actual EE-to-object     DONE
-         transform instead of planned grasp.position.
-    #101 Deterministic shadow selection — shuffle init     DONE
-         facts and grasp offsets for exploration diversity.
-    #99  Single-occluder sensing false negatives —          DONE
-         sense_shadow_raycasting now checks ALL blockers
-         from shadow_occluder_map, not just the creator.
+    #98  Constraint grasp offset                           ARCHIVED
+    #101 Deterministic shadow selection                    ARCHIVED
+    #99  Single-occluder sensing false negatives            ARCHIVED
     #95  Systemic PDDL state drift — the root             ~2-3 weeks
          architectural issue.  Symbolic and physical
          states diverge through 4 channels.  Fixing
@@ -1658,18 +1364,18 @@ Priority order for remaining fixes (updated 2026-03-22):
          after every pick-and-place.  Broader than
          #44/#73; prerequisite for #102 and #105.
 
-  TIER 1 — Quick wins (ALL DONE as of 2026-03-14):
-    #85  Delete dead/commented push code                 DONE
-    #84  Comment remaining magic numbers                 DONE
-    #80  Lock down / remove fake IK fallback             DONE
-    #83  Fix raycasting blind spot (count robot hits)    DONE
+  TIER 1 — Quick wins (ALL DONE, archived 2026-03-22):
+    #85  Delete dead/commented push code                 ARCHIVED
+    #84  Comment remaining magic numbers                 ARCHIVED
+    #80  Lock down / remove fake IK fallback             ARCHIVED
+    #83  Fix raycasting blind spot (count robot hits)    ARCHIVED
 
-  TIER 2 — Medium effort, high value (ALL DONE as of 2026-03-14):
-    #79  Move arm out of the way before sensing          DONE
-    #78  Fix view-blocking model                         DONE
-    #82  Handle IK failures properly (abort/replan)      DONE
-    #86  Verify/fix PDDL state drift after pick/place    DONE
-    #67  Fix targets-only-in-shadows assumption           DONE
+  TIER 2 — Medium effort, high value (ALL DONE, archived 2026-03-22):
+    #79  Move arm out of the way before sensing          ARCHIVED
+    #78  Fix view-blocking model                         ARCHIVED
+    #82  Handle IK failures properly (abort/replan)      ARCHIVED
+    #86  Verify/fix PDDL state drift after pick/place    DONE (sense exception)
+    #67  Fix targets-only-in-shadows assumption           ARCHIVED
 
   TIER 3 — Large effort, thesis-critical (days-weeks):
     #55  Parameterize scene — PARTIALLY DONE.
@@ -1686,7 +1392,9 @@ Priority order for remaining fixes (updated 2026-03-22):
          check.  Add size precondition and adjacency
          preference.  Depends on #104 (correct partition).
     #103 Boxel merge condition — add logical property       ~2-3 days
-         equivalence check.  Agreed in 2026-03-22 meeting.
+         equivalence + observability check.  Merge only when
+         same blocks_view_to set AND same observability status
+         (both visible or both in shadow).  Agreed 2026-03-22.
          Prerequisite for correct free-space merging (#105).
     #105 Multi-boxel free space placement — largely         ~1 week
          mitigated by #103.  Full support is alternative.
@@ -1707,11 +1415,22 @@ Priority order for remaining fixes (updated 2026-03-22):
     #92  RunLogger context manager unused (style inconsistency)
     #94  Dead heuristic config rejection loop (unreachable since #80)
 
-  Already resolved:
-    #56  Dead computation (PARTIALLY DONE — calls removed, method
-         bodies remain; see #87)
-    #60  Simulation flickering (DONE — RenderingLock)
-    #69  Magic numbers (DONE — justification comments added)
+  Already resolved (see archive/CODEBASE_AUDIT_RESOLVED.txt for full text):
+    #56  Dead computation (PARTIALLY DONE — calls removed, bodies remain; #87)
+    #60  Simulation flickering (DONE — RenderingLock)               ARCHIVED
+    #61  Sense action deviation (ACCEPTED — optimistic + replan)    ARCHIVED
+    #67  Targets-only-in-shadows (DONE)                             ARCHIVED
+    #69  Magic numbers (DONE — justification comments)              ARCHIVED
+    #78  View-blocking model (DONE)                                 ARCHIVED
+    #79  Robot arm blocks sensing (DONE)                            ARCHIVED
+    #80  Fake IK fallback removed (DONE)                            ARCHIVED
+    #82  Silent IK failures (DONE)                                  ARCHIVED
+    #83  Raycasting blind spot (DONE)                               ARCHIVED
+    #84  Magic number cleanup execution (DONE)                      ARCHIVED
+    #85  Dead/commented push code (DONE)                            ARCHIVED
+    #98  Constraint grasp offset (DONE)                             ARCHIVED
+    #99  Single-occluder sensing (DONE)                             ARCHIVED
+    #101 Deterministic shadow selection (DONE)                      ARCHIVED
 
 Proposal alignment work (PA-1 through PA-6) and PDDL/Python alignment
 (PF-1 through PF-5) are tracked in their respective sections above and
@@ -1732,8 +1451,8 @@ KEY DECISIONS AND DESIGN NOTES
 1. PICK-AND-PLACE REPLACES PUSH
    - Push actions were dropped because the placement target was effectively
      hard-coded, meaning the solution was partially embedded in the PDDL action
-     model rather than being discovered by the planner.  As stated in the
-     meeting: "the somewhere is hardcoded and the problem was the solution was
+     model rather than being discovered by the planner.  As stated by the
+     student: "the somewhere is hardcoded and the problem was the solution was
      almost modeled in the PDDL actions, which is something we didn't want."
    - Pick and place makes the target boxel an explicit action parameter, so the
      planner can genuinely decide where to move an object.
@@ -1766,7 +1485,12 @@ KEY DECISIONS AND DESIGN NOTES
 
 3. BOXEL MERGING — CORRECT MERGE CONDITION (AGREED)  →  #103
    Two adjacent boxels should be merged if and only if:
-     (a) Their merge would produce a convex result (existing constraint), AND
+     (a) Their merge would produce a convex result (existing constraint —
+         NOTE: the supervisor later noted that "a merging operation
+         definitely does not produce convex boxes" and forcing convexity
+         is "kind of a difficult problem."  The student's pre-existing
+         convexity rule was acknowledged but not firmly re-endorsed for
+         the new merge condition.  May need revisiting.), AND
      (b) They have identical logical properties in the symbolic domain —
          concretely, they block the view to exactly the same set of target
          objects.
@@ -1883,7 +1607,7 @@ KEY DECISIONS AND DESIGN NOTES
    - Supervisor: "you plan and then after doing one action we re-boxelize
      or whatever you want to call it and then replan."
 
-   APPROACH 2 (DEFERRED — interesting future work):
+   APPROACH 2 (DEFERRED — supervisors rejected for current scope):
    - Model merge and split as explicit PDDL actions with PDDLStream streams.
    - Uses "active boxel" / representative concept: a base grid of smallest
      boxels, with some marked "active" as representatives of merged groups.
@@ -1896,6 +1620,12 @@ KEY DECISIONS AND DESIGN NOTES
    - Decision: "maybe we can keep this as an interesting idea, but for now
      just stick to the simpler first approach."  "It always makes sense to
      start with the simple one."
+   - When the student asked to keep the active voxel idea in limited form,
+     supervisors explicitly rejected it:
+       Supervisor 2: "No, I don't think so."
+       Supervisor 2: "Don't think about that."
+     This indicates active voxels are NOT just deferred — they were actively
+     discouraged for the current work scope.
    - Possible future comparison: "ideally at the end we could compare the
      two, but I wonder whether this is actually achievable."
 
