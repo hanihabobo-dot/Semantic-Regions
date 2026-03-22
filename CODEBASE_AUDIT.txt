@@ -1245,15 +1245,19 @@ Where: cell_merger.py, boxel_data.py
 
 What:  The current boxel merge logic only checks whether the merge of
        two adjacent boxels produces a CONVEX result.  Per the supervisor
-       meeting (2026-03-22), a second condition is required:
+       meeting (2026-03-22), two additional conditions are required:
 
          Two adjacent boxels should be merged if and only if:
            (a) Their merge produces a convex result (existing check), AND
            (b) They have IDENTICAL logical properties in the symbolic
                domain — specifically, they block the view to exactly the
-               same set of target objects (same blocks_view_at facts).
+               same set of target objects (same blocks_view_at facts), AND
+           (c) They have the same observability status — BOTH are currently
+               observable (visible to the camera) OR BOTH are completely
+               in a shadow region.  Supervisor: "these boxels should either
+               both be visible currently or neither of them is observable."
 
-       Rationale (supervisor): "you should merge all the boxes that have
+       Rationale (supervisor): "you should merge all the boxels that have
        the same properties, meaning they block the same other objects.
        What you don't want is to merge two boxes where one blocks the
        view to some object where the other one doesn't."  Merging boxels
@@ -1266,19 +1270,30 @@ What:  The current boxel merge logic only checks whether the merge of
        Merging same-property boxels maximises free space for motion
        planning while preserving symbolic correctness.
 
+       Merge ORDER: supervisor specified "if you look from the camera,
+       you basically start merging in the back and go forward."  Boxels
+       in front of an object will not merge because some block the object
+       and some don't.
+
        Consequence: boxels near occlusion boundaries will naturally stay
        small because they have differing blocks-view-to properties.  This
        is acceptable — the supervisor acknowledged "the boxes will
        generally just stay rather small, probably" and this was deemed
        a correct trade-off.
 
+       This merge condition applies BOTH to initial boxelization AND to
+       post-action re-merge (#104).
+
 Fix:   In cell_merger.py, before merging two candidate boxels:
-       (a) Look up the blocks_view_at fact set for each boxel (which
+       (a) Check observability: both observable or both in shadow.
+       (b) Look up the blocks_view_at fact set for each boxel (which
            targets does this boxel's camera corridor obstruct?).
-       (b) Only proceed with the merge if both sets are identical.
-       (c) The merged boxel inherits the common property set.
+       (c) Only proceed with the merge if both sets are identical.
+       (d) The merged boxel inherits the common property set.
        Requires passing the shadow/blocking information into the merger,
        or computing it as a post-merge validation step.
+       Process back-to-front (far from camera first) per supervisor
+       guidance.
 
 ================================================================================
 104. POST-ACTION BOXEL STATE NOT RE-EVALUATED — STALE PARTITION
@@ -1313,7 +1328,15 @@ What:  After a pick-and-place action changes the physical scene, the
        - Fail to use newly available free space.
        - Plan sense actions for shadows that no longer exist.
 
-Fix:   After each pick-and-place action (before replanning):
+       Splitting (inverse of merging): when an object is placed into a
+       free boxel, that boxel must be split into the part occupied by the
+       object and the remaining free part.  The existing initial octree
+       splitting logic can be partially reused.
+
+Fix:   STRATEGY (agreed in meeting):
+       Phase 1 (naive, implement first): full re-boxelization after every
+       action that changes the scene.  Supervisors: "for now, I would
+       just do it every time."
        (a) Re-evaluate each boxel's occupancy status against the current
            physical state (check PyBullet body positions vs boxel AABBs).
        (b) Recompute shadow regions for any relocated occluders.
@@ -1323,9 +1346,19 @@ Fix:   After each pick-and-place action (before replanning):
        (e) Feed the updated BoxelRegistry into _build_init() for the
            next planning cycle.
 
-       Alternative (cheaper): only recompute the boxels affected by the
-       relocated object — the source boxel (now free) and the destination
-       boxel (now occupied).  See FOR LATER: incremental recomputation.
+       CRITICAL: observation history (which boxels have been sensed /
+       known-empty) MUST survive re-boxelization.  Supervisor: "the only
+       thing that you need to be [aware] of is which boxes have you
+       already observed?  That information needs to be [preserved]."
+       The merge logic should produce the same result as re-boxelizing
+       from scratch — "logically, if you do just boxelization from
+       scratch, the result should be the same."
+
+       Phase 2 (optimisation, later): only recompute the boxels affected
+       by the relocated object — the source boxel (now free) and the
+       destination boxel (now occupied).  See FOR LATER: incremental
+       recomputation.  "a naive implementation that should work, but
+       maybe slow" — incremental is the optimisation.
 
 Related: #44 (stale shadow AABBs), #73 (stale shadow_occluder_map),
          #95 (systemic PDDL state drift — this is another drift channel)
@@ -1361,17 +1394,29 @@ What:  The place action targets a SINGLE boxel.  If no single free boxel
        occlusion boundaries stay small (where placement would be
        problematic anyway).
 
-Fix:   Preferred: implement #103 (correct merge condition) thoroughly.
+Fix:   AGREED APPROACH: multi-variant place actions (supervisor meeting).
+       Have multiple variants of the place action in the PDDL domain:
+         - place-in-1-boxel (current — object fits in one boxel)
+         - place-in-2-boxels (object spans two adjacent free boxels)
+         - place-in-N-boxels (generalised for larger objects)
+       Each variant has:
+         - Precondition: all target boxels are adjacent and FREE.
+         - PDDLStream certifier: verifies the object's bounding box fits
+           in the union of the target boxels.
+       Supervisor: "you can have multiple variants of the place action.
+       The first one would occupy one boxel and the second [two]."
+       This resolves the conflict between fine-grained discretization
+       (needed for view-blocking accuracy) and placement (needs large
+       enough regions): "if you do that, then you can always keep the
+       finest discretization that keeps the logical state."
+
+       SUPPORTING: implement #103 (correct merge condition) thoroughly.
        Free boxels with identical logical properties (typically all
        "blocks nothing") will merge into large contiguous regions.
        The minimum boxel size floor (#69, free_space.py min_resolution)
        already filters very small cells during octree subdivision.
-
-       Alternative (more complex): allow the place action to target a
-       SET of adjacent free boxels, with a stream that certifies the
-       union contains the object's bounding box and none of the member
-       boxels are occupied.  This adds significant PDDL complexity
-       (variable-arity arguments or composite region objects).
+       Between merging and multi-variant place, most scenes should be
+       covered.
 
 Related: #102 (target boxel fitness), #103 (merge condition)
 
@@ -1393,6 +1438,13 @@ FOR LATER
   corridor, observe immediately and place the object back in its original
   location rather than in a different free boxel.  Raised in 2026-03-22
   meeting as an open question — not yet decided.
+- APPROACH 2: PDDL-level merge/split with active/representative boxels.
+  Model merge and split as explicit PDDL actions with PDDLStream streams.
+  Base grid of smallest boxels, some "active" as representatives of merged
+  groups.  Would allow the planner to compute complete multi-step plans
+  without replanning.  Deferred in favour of simpler Approach 1 (opaque
+  re-boxelization + replan).  Could serve as a comparison baseline for
+  evaluation if time permits.  See discussion notes §7.
 
 ================================================================================
 SUMMARY (updated 2026-03-22, #102-#105 added from supervisor meeting)
@@ -1472,6 +1524,9 @@ DEFERRABLE (Tier 4 — accepted simplifications, fidelity):
   #59  Objects fly away on first grasp — constraint-based grasping works
   +#77  functionally; friction grasping is a fidelity improvement.
        Depends on #77 (object dimensions exceed gripper capacity).
+       CONFIRMED DEFERRABLE by supervisors (2026-03-22): "we don't
+       really care about that.  Grasping is a different issue."  This
+       is a rearrangement problem, not a grasping problem.
   #97  Streams not generic — tightly coupled to Panda/PyBullet/tabletop.
        Accepted for thesis scope; would need abstraction layers (IK
        solver interface, collision checker interface, geometry-aware
@@ -1715,7 +1770,7 @@ KEY DECISIONS AND DESIGN NOTES
      (b) They have identical logical properties in the symbolic domain —
          concretely, they block the view to exactly the same set of target
          objects.
-   Supervisor rationale: "you should merge all the boxes that have the same
+   Supervisor rationale: "you should merge all the boxels that have the same
    properties, meaning they block the same other objects.  What you don't want
    is to merge two boxes where one blocks the view to some object where the
    other one doesn't.  This should be separate because then you can decide
@@ -1725,6 +1780,21 @@ KEY DECISIONS AND DESIGN NOTES
    Consequence: boxels near occlusion boundaries will naturally stay small.
    Supervisor acknowledged this: "the boxes will generally just stay rather
    small, probably."
+
+   REFINED MERGE CONDITION (later in discussion):
+   Supervisor added a visibility/observability requirement:
+     (c) Both boxels should either BOTH be currently observable (visible to the
+         camera) or NEITHER should be observable (both fully in a shadow
+         region).  "these boxels should either both be visible currently or
+         neither of them is observable.  They're completely in the shadow
+         region or not at all."
+   Combined with (b): "for the other boxels, these boxels should block the
+   same boxels, so meaning the shadow is the same."
+   Merge ORDER: "if you look from the camera, you basically start merging in
+   the back and go forward, and for example when there's an object, then all
+   the boxes in front of that object will not be merged because they have
+   different [properties], because some of them block the objects, some don't."
+   This applies both to initial boxelization AND to post-action re-merge.
 
 4. FREE-SPACE REASONING ACROSS MULTIPLE BOXELS  →  #105
    - An object need not fit inside a single boxel to be placeable there; it is
@@ -1741,6 +1811,20 @@ KEY DECISIONS AND DESIGN NOTES
      properties (typically "blocks nothing") will merge into large regions,
      largely resolving this issue without explicit multi-boxel placement logic.
 
+   MULTI-VARIANT PLACE ACTIONS (concrete approach agreed):
+   Supervisor proposed having multiple variants of the place action:
+     - place-in-1-boxel (current)
+     - place-in-2-boxels (object spans two adjacent free boxels)
+     - place-in-N-boxels (generalised)
+   Each variant has a precondition that the target boxels are adjacent, and
+   a PDDLStream certifier that verifies the object fits in the union.
+   Supervisor: "you can have multiple variants of the place action.  The first
+   one would occupy one boxel and the second [occupies two]."
+   This resolves the conflict between fine-grained discretization (needed for
+   accurate view-blocking) and placement (needs large enough regions):
+   "if you do that, then you can always keep the finest discretization that
+   keeps the logical state."  See #105.
+
 5. RE-SPLITTING / RE-EVALUATION AFTER ENVIRONMENT CHANGE  →  #104
    - After a pick-and-place action the BoxelRegistry is not updated: boxels
      that were "occupied" may now be "free" and vice versa.
@@ -1752,18 +1836,153 @@ KEY DECISIONS AND DESIGN NOTES
      merge condition from #103) so the symbolic state stays consistent.
    - Until implemented, the planner operates on a stale boxel partition.
 
+   RE-BOXELIZATION STRATEGY (agreed):
+   - For now: full re-boxelization after every action that changes the scene.
+     Supervisor: "for now, I would just do it every time."
+   - CRITICAL: observation history (which boxels have been observed/sensed)
+     must survive re-boxelization.  Supervisor: "the only thing that you need
+     to be [aware] of is which boxes have you already observed?  That
+     information needs to be [preserved]."
+   - The merge logic should produce the same result as re-boxelizing from
+     scratch: "logically, if you do just boxelization from scratch, the result
+     should be the same if you do this multiple times."
+   - Incremental merge/split of only affected boxels is an optimization for
+     later — "a naive implementation that should work, but maybe slow."
+
+   SPLITTING is the inverse of merging:
+   - When an object is placed into a free boxel, that boxel must be split
+     into: (a) the part occupied by the object, and (b) the remaining free
+     part.  Supervisor: "if you move an object into another boxel, then you
+     need to split that boxel into the part where the object is and then the
+     part where [it isn't]."
+   - The existing initial octree splitting logic can be partially reused.
+
 6. TARGET BOXEL FITNESS AND ADJACENCY  →  #102
    - The place action must check that the target boxel is large enough to
      contain the object being placed.
    - Supervisor suggested adjacency preference: "just pick the first adjacent
      boxel that's big enough" rather than placing across the entire workspace.
+   - By definition, if boxels are part of the same merged boxel, the planner
+     doesn't care about exact placement within it — the motion planner picks
+     any valid configuration.  Supervisor: "if they are part of the same boxel,
+     then it should not matter to the planner where exactly the object is
+     within that boxel."
+
+7. TWO ARCHITECTURAL APPROACHES — DECISION: START SIMPLE
+   The meeting identified two distinct approaches for handling boxel
+   merge/split in the planning framework:
+
+   APPROACH 1 (CHOSEN — simpler):
+   - Boxelization is an opaque Python-side operation, NOT modeled in PDDL.
+   - After each action that changes the scene: re-boxelize → replan.
+   - The planner uses the first action(s) from the plan, then re-boxelizes
+     and replans because the boxel state will have changed.
+   - Advantage: simpler implementation, reuses existing merge logic.
+   - Disadvantage: forced replanning after every scene-changing action because
+     the planner cannot predict the post-action boxel state.  Risk of loops.
+   - Supervisor: "you plan and then after doing one action we re-boxelize
+     or whatever you want to call it and then replan."
+
+   APPROACH 2 (DEFERRED — interesting future work):
+   - Model merge and split as explicit PDDL actions with PDDLStream streams.
+   - Uses "active boxel" / representative concept: a base grid of smallest
+     boxels, with some marked "active" as representatives of merged groups.
+     Inactive boxels are subsumed by active ones.
+   - Advantage: the planner can compute complete multi-step plans without
+     replanning — "you can just continue planning" because "the planner
+     knows what the result is."
+   - Disadvantage: more PDDL actions (merge/split), longer plan horizons,
+     more stream sampling.  "you probably need to sample a lot more."
+   - Decision: "maybe we can keep this as an interesting idea, but for now
+     just stick to the simpler first approach."  "It always makes sense to
+     start with the simple one."
+   - Possible future comparison: "ideally at the end we could compare the
+     two, but I wonder whether this is actually achievable."
+
+8. THE MERGE TRADE-OFF — CONSTRUCTED EXAMPLES
+   Supervisor constructed two examples showing the fundamental conflict:
+
+   EXAMPLE A (aggressive merge causes failure):
+   - A block in the middle, free space around it, target behind it.
+   - If all free space is merged into one large boxel, placing the block
+     "in free space" still blocks the view in the PDDL model (because the
+     entire boxel is modeled as occupied after placement).
+   - "your plan will tell you, if you move that box to that free space, it
+     will still block the view to the box in the very back.  So that's not
+     actually a solution."
+   - Conclusion: "that's kind of an argument against merging free space no
+     matter the properties."
+
+   EXAMPLE B (fine-grained prevents placement):
+   - A large block needs to be moved, but no single boxel is large enough.
+   - "there's no other boxel that's large enough to actually take this box.
+     Then there's no way to move it."
+   - Conclusion: multi-boxel placement (§4 above) resolves this.
+
+   RESOLUTION: Keep fine-grained discretization per logical properties
+   (avoids Example A) + multi-variant place actions spanning multiple
+   boxels (avoids Example B).  This was the agreed approach.
+
+9. GRASPING EXPLICITLY DEPRIORITIZED
+   Both supervisors stated that grasping quality is NOT the focus:
+   - "We don't really care about that."
+   - "Grasping is a different issue."
+   - "A lot of manipulation papers that don't care about the grasping part
+     — more about general rearrangement — do not care about the grasping."
+   - As long as "somewhat reasonable motion plans and somewhat reasonable
+     movements" are produced, the constraint-based approach is acceptable
+     for the thesis.
+   - This is explicitly a REARRANGEMENT problem, not a grasping problem.
+   - Implication for #59 (friction grasping) and #77 (object sizing):
+     these are Tier 4 deferrable, confirmed by supervisors.
+   - Focus should be on the boxelization/merge/split logic discussed above.
+
+10. CONSTRAINT ATTACHMENT FIX (relates to #98)
+    - Supervisors observed objects flying around during pick and diagnosed the
+      cause: the constraint moves the object to the gripper surface instead of
+      attaching at the current relative position.
+    - Correct approach: "you bring the gripper close, you attach it with a
+      constraint, and then it moves with the gripper."  The object should NOT
+      move when the constraint is created.
+    - Note: #98 (DONE, 2026-03-18) already addressed this by computing the
+      actual EE-to-object relative transform at constraint creation time.
+
+11. REPLANNING STRATEGY WITH APPROACH 1
+    - With the chosen approach, replanning is needed when boxel conditions
+      change (i.e., after actions that alter the scene).
+    - Supervisor ideal: "if you have a sound abstraction, sound logical model,
+      then you should be able to exactly predict the effects of the action.
+      So there's no need to replan anything."  This is what Approach 2 would
+      achieve.
+    - Practical reality (Approach 1): re-boxelization changes the state space,
+      invalidating the remaining plan.  Must replan.
+    - Risk: "you need to be really careful to avoid loops" when doing
+      replan-after-every-action.
+    - Current lack of conditional effects in FastDownward forces optimistic
+      planning + replanning on failure regardless (see #61).
+
+12. PRIORITY GUIDANCE FROM SUPERVISORS
+    - Immediate focus: the boxelization/merge/split logic discussed (§3-§5,
+      §7-§8 above).  NOT grasping quality.
+    - Supervisor: "I think it might make more sense to focus on the things
+      we discussed today."
+    - Supervisor: "most of what you have is actually sound.  It's just about
+      the merging and splitting logic that maybe it's a bit different.  And
+      especially what do you do after actually performing an action."
+    - "you can kind of use most of the logic that you already have.  Just
+      need to think about which boxels to merge, which boxels to split."
 
 ACTION ITEMS FROM MEETING
   [ ] #102 — Enforce target-boxel size precondition in place action.
-  [ ] #103 — Implement logical property equivalence check in boxel merge.
-  [ ] #104 — Implement post-action boxel re-evaluation (free/occupied/shadow)
-      and re-merge pass using the agreed merge condition.
-  [ ] #105 — Ensure free-space merge produces large enough regions for
-      placement; consider multi-boxel placement if needed.
+  [ ] #103 — Implement logical property equivalence check in boxel merge,
+      including the visibility/observability condition (both observable or
+      both in shadow) and the blocks-same-objects condition.
+  [ ] #104 — Implement post-action full re-boxelization (naive first), with
+      observation history preserved across re-boxelizations.  Incremental
+      merge/split as later optimisation.
+  [ ] #105 — Implement multi-variant place actions (place-in-1, place-in-2,
+      etc.) with adjacency precondition and fitness stream/certifier.
   [ ] Decide and document whether mid-pick sensing (pick-observe-replace)
       is an intended capability.
+  [ ] Consider Approach 2 (PDDL-level merge/split with active boxels) as
+      future work / comparison baseline if time permits.
