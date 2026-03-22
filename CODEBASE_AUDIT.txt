@@ -9,7 +9,9 @@ Updated: 2026-03-17 (#95 systemic PDDL state drift added; PDDL issues
          promoted to Tier 0 — highest priority)
 Updated: 2026-03-17 (#97 streams coupling/limitations moved from inline
          code comments to audit; Tier 4 — accepted simplification)
-
+Updated: 2026-03-22 (#102-#105 added from supervisor meeting; discussion
+         notes section added; boxel merge/split design, free-space
+         placement, post-action re-evaluation)
 Resolved issues archived to archive/CODEBASE_AUDIT_RESOLVED.txt.
 
 ================================================================================
@@ -35,6 +37,8 @@ Fix:   After relocating, either:
        (b) Re-run the full boxel computation (expensive but correct).
        (c) Accept the stale AABB as good enough (target detection by body
            ID compensates). Document this as a known simplification.
+       See #104 for the broader post-action re-evaluation requirement
+       (free/occupied/shadow + re-merge), which subsumes this issue.
 
 ================================================================================
 59. OBJECTS FLY AWAY ON FIRST GRASP — CONSTRAINT-BASED GRASPING IS THE PROBLEM
@@ -1199,18 +1203,199 @@ Impact: Completes multi-blocker support started by #78.  Low risk — set
         membership is a superset of the old single-ID check.
 
 ================================================================================
+102. PLACE TARGET SELECTION RANDOM — NO FITNESS CHECK
+================================================================================
+Where: test_full_pipeline.py execute_place(),
+       pddlstream_planner.py _build_init(),
+       domain_pddlstream.pddl (place action)
+
+What:  The place action currently selects a random free boxel as the
+       destination without checking whether the boxel is large enough to
+       contain the placed object.  The speaker confirmed in the 2026-03-22
+       meeting: "it picks a random free boxel so far and just puts it
+       there so it doesn't check whether it would fit."
+
+       Two sub-problems:
+       (a) No size precondition: the PDDL place action has no predicate
+           requiring that the target boxel's extents exceed the object's
+           bounding box.  The planner can (and does) generate plans that
+           place an object in a boxel smaller than the object.
+       (b) No adjacency preference: the supervisor suggested preferring
+           an adjacent free boxel ("just pick the first adjacent boxel
+           that's big enough").  Currently placement has no spatial
+           locality — the object may be placed across the table from its
+           original position, which is suboptimal for plan quality and
+           unnecessary for clearing a view corridor.
+
+Fix:   (a) Add a stream or derived predicate that certifies
+           (boxel_fits ?obj ?boxel) — true iff boxel extents ≥ object
+           bounding box in all three axes.  Add this as a precondition
+           to the place action.
+       (b) Optionally add a cost heuristic that prefers adjacent free
+           boxels over distant ones (lower action cost for closer boxels).
+       (c) See #105 for multi-boxel placement if no single boxel is
+           large enough.
+
+Related: #105 (multi-boxel free space placement)
+
+================================================================================
+103. BOXEL MERGE CONDITION INCOMPLETE — MISSING LOGICAL PROPERTY EQUIVALENCE
+================================================================================
+Where: cell_merger.py, boxel_data.py
+
+What:  The current boxel merge logic only checks whether the merge of
+       two adjacent boxels produces a CONVEX result.  Per the supervisor
+       meeting (2026-03-22), a second condition is required:
+
+         Two adjacent boxels should be merged if and only if:
+           (a) Their merge produces a convex result (existing check), AND
+           (b) They have IDENTICAL logical properties in the symbolic
+               domain — specifically, they block the view to exactly the
+               same set of target objects (same blocks_view_at facts).
+
+       Rationale (supervisor): "you should merge all the boxes that have
+       the same properties, meaning they block the same other objects.
+       What you don't want is to merge two boxes where one blocks the
+       view to some object where the other one doesn't."  Merging boxels
+       with different logical properties produces a boxel whose symbolic
+       meaning is undefined — the PDDL state cannot correctly represent
+       what it blocks.
+
+       Design principle agreed in meeting: "constrain the motion plan as
+       little as possible while still keeping a consistent logical state."
+       Merging same-property boxels maximises free space for motion
+       planning while preserving symbolic correctness.
+
+       Consequence: boxels near occlusion boundaries will naturally stay
+       small because they have differing blocks-view-to properties.  This
+       is acceptable — the supervisor acknowledged "the boxes will
+       generally just stay rather small, probably" and this was deemed
+       a correct trade-off.
+
+Fix:   In cell_merger.py, before merging two candidate boxels:
+       (a) Look up the blocks_view_at fact set for each boxel (which
+           targets does this boxel's camera corridor obstruct?).
+       (b) Only proceed with the merge if both sets are identical.
+       (c) The merged boxel inherits the common property set.
+       Requires passing the shadow/blocking information into the merger,
+       or computing it as a post-merge validation step.
+
+================================================================================
+104. POST-ACTION BOXEL STATE NOT RE-EVALUATED — STALE PARTITION
+================================================================================
+Where: test_full_pipeline.py (execution loop),
+       boxel_data.py (BoxelRegistry),
+       cell_merger.py
+
+What:  After a pick-and-place action changes the physical scene, the
+       boxel partition (which boxels are free, occupied, or shadow) is
+       NOT recomputed.  The speaker confirmed: "once the environment
+       changes, I keep working on the assumption that I have still have
+       these exact same splitting, so free and not free, but maybe some
+       of the boxes that were labeled as not free are now free, and vice
+       versa."
+
+       This is a BROADER issue than #44 (stale shadow AABBs) and #73
+       (stale blocks_view_at facts).  The full problem:
+       (a) Boxels labelled OCCUPIED may now be FREE (the object was
+           picked up and moved elsewhere).
+       (b) Boxels labelled FREE may now be OCCUPIED (an object was
+           placed there).
+       (c) Shadow regions may have changed (the occluder moved, so the
+           shadow it cast no longer exists or has a different shape).
+       (d) The merge structure is stale — newly-free boxels should be
+           merged with adjacent free boxels (per the merge condition
+           in #103), and newly-occupied boxels should be split from
+           their free neighbours.
+
+       The planner operates on this stale partition, which means it may:
+       - Try to place objects in boxels that are no longer free.
+       - Fail to use newly available free space.
+       - Plan sense actions for shadows that no longer exist.
+
+Fix:   After each pick-and-place action (before replanning):
+       (a) Re-evaluate each boxel's occupancy status against the current
+           physical state (check PyBullet body positions vs boxel AABBs).
+       (b) Recompute shadow regions for any relocated occluders.
+       (c) Re-run the merge pass using the correct merge condition (#103)
+           so the symbolic state stays consistent.
+       (d) Rebuild shadow_occluder_map (addresses #73).
+       (e) Feed the updated BoxelRegistry into _build_init() for the
+           next planning cycle.
+
+       Alternative (cheaper): only recompute the boxels affected by the
+       relocated object — the source boxel (now free) and the destination
+       boxel (now occupied).  See FOR LATER: incremental recomputation.
+
+Related: #44 (stale shadow AABBs), #73 (stale shadow_occluder_map),
+         #95 (systemic PDDL state drift — this is another drift channel)
+
+================================================================================
+105. MULTI-BOXEL FREE SPACE PLACEMENT NOT SUPPORTED
+================================================================================
+Where: pddlstream_planner.py, streams.py compute_kin_solution(),
+       domain_pddlstream.pddl (place action)
+
+What:  The place action targets a SINGLE boxel.  If no single free boxel
+       is large enough to contain the object, the planner has no way to
+       reason about placing the object across multiple adjacent free
+       boxels — even if together they form a sufficiently large region.
+
+       The speaker raised this in the 2026-03-22 meeting: "I might also
+       have a bunch of small boxels that combined can actually be a free
+       space.  And I also need to reason about that."  After merging,
+       corner regions may have leftover small boxels that individually
+       are too small, but collectively provide valid placement space.
+
+       The supervisor suggested two approaches:
+       (a) Merge all free boxels (per the merge condition in #103) into
+           the largest possible free regions BEFORE planning.  Then each
+           merged region is a single boxel that may be large enough.
+       (b) Introduce a minimum boxel size equal to the smallest object
+           the system handles — boxels smaller than this are irrelevant
+           for placement reasoning and can be ignored.
+
+       If (a) is implemented correctly (with #103's merge condition),
+       this issue is largely mitigated: free boxels with the same logical
+       properties get merged into large regions, and only boxels at
+       occlusion boundaries stay small (where placement would be
+       problematic anyway).
+
+Fix:   Preferred: implement #103 (correct merge condition) thoroughly.
+       Free boxels with identical logical properties (typically all
+       "blocks nothing") will merge into large contiguous regions.
+       The minimum boxel size floor (#69, free_space.py min_resolution)
+       already filters very small cells during octree subdivision.
+
+       Alternative (more complex): allow the place action to target a
+       SET of adjacent free boxels, with a stream that certifies the
+       union contains the object's bounding box and none of the member
+       boxels are occupied.  This adds significant PDDL complexity
+       (variable-arity arguments or composite region objects).
+
+Related: #102 (target boxel fitness), #103 (merge condition)
+
+================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without redoing
   everything from scratch). After picking and placing an occluder, only the
-  affected shadows and free-space cells need recomputation.
+  affected shadows and free-space cells need recomputation.  See #104 for
+  the full re-evaluation requirement; this item is about the INCREMENTAL
+  optimisation (recompute only affected boxels, not the entire registry).
 - Physics-based pushing as an alternative to pick-and-place for objects that
   are too large or heavy to grasp. Requires collision-free motion planning
   (#5) and a force/velocity controller. Currently all push logic is
-  commented out, not deleted — can be revived if needed.
+  commented out, not deleted — can be revived if needed.  The supervisor
+  confirmed push is semantically equivalent to pick-and-place as long as
+  the target is an explicit action parameter.
+- Pick-observe-replace strategy: after picking an object to clear a view
+  corridor, observe immediately and place the object back in its original
+  location rather than in a different free boxel.  Raised in 2026-03-22
+  meeting as an open question — not yet decided.
 
 ================================================================================
-SUMMARY (updated 2026-03-17, PDDL issues promoted to Tier 0)
+SUMMARY (updated 2026-03-22, #102-#105 added from supervisor meeting)
 ================================================================================
 
 PDDL-CRITICAL (Tier 0 — PDDL/physical state desync, highest priority):
@@ -1233,6 +1418,10 @@ PDDL-CRITICAL (Tier 0 — PDDL/physical state desync, highest priority):
   #73  shadow_occluder_map goes stale on replan — blocks_view_at facts
        reference original occluder positions.  Derived predicates
        compensate but the data structure is fragile.
+  #104 Post-action boxel state not re-evaluated — after pick-and-place,
+       free/occupied/shadow labels are stale, merge structure is stale.
+       Broader than #44/#73: covers full boxel partition refresh +
+       re-merge.  Blocks correct placement reasoning (#102, #105).
 
 QUICK WINS (Tier 1 — under 30 min each):
   #85  Dead / commented code pollution (push action).                  DONE
@@ -1267,6 +1456,17 @@ THESIS-CRITICAL (Tier 3 — days/weeks):
        Alternative: document as accepted single-layer-occlusion
        simplification / future work (sufficient for tabletop scenes
        without multi-layer occlusion).
+  #102 Place target selection random — no fitness check.      ~1-2 days
+       Add size precondition (boxel ≥ object) and adjacency
+       preference.  Needed for correct placement behaviour.
+  #103 Boxel merge condition incomplete — missing logical     ~2-3 days
+       property equivalence.  Merge only when same
+       blocks_view_to set + convex.  Agreed in supervisor
+       meeting.  Prerequisite for correct free-space merging.
+  #105 Multi-boxel free space placement not supported.        ~1 week
+       Largely mitigated if #103 is done (free boxels merge
+       into large regions).  Full multi-boxel support is
+       alternative if merge doesn't suffice.
 
 DEFERRABLE (Tier 4 — accepted simplifications, fidelity):
   #59  Objects fly away on first grasp — constraint-based grasping works
@@ -1373,7 +1573,7 @@ Verification logging workflow (archived #58):
     wsl bash -lc "... python3 -u test_full_pipeline.py --no-gui" 2>&1 |
       Tee-Object -FilePath .\logs\manual_run.log
 
-Priority order for remaining fixes (updated 2026-03-18):
+Priority order for remaining fixes (updated 2026-03-22):
 
   TIER 0 — PDDL-CRITICAL (highest priority — symbolic/physical desync):
     #98  Constraint grasp offset — actual EE-to-object     DONE
@@ -1398,6 +1598,10 @@ Priority order for remaining fixes (updated 2026-03-18):
     #73  Stale shadow_occluder_map on replan —             ~1 day
          refresh blocks_view_at facts from current
          physical state before each replan.
+    #104 Post-action boxel state not re-evaluated —        ~3-5 days
+         full free/occupied/shadow refresh + re-merge
+         after every pick-and-place.  Broader than
+         #44/#73; prerequisite for #102 and #105.
 
   TIER 1 — Quick wins (ALL DONE as of 2026-03-14):
     #85  Delete dead/commented push code                 DONE
@@ -1423,6 +1627,14 @@ Priority order for remaining fixes (updated 2026-03-18):
          objects don't trigger re-analysis for second-layer
          shadows.  Implement re-computation after sense, or
          document as single-layer-occlusion simplification.
+    #102 Place target selection random — no fitness         ~1-2 days
+         check.  Add size precondition and adjacency
+         preference.  Depends on #104 (correct partition).
+    #103 Boxel merge condition — add logical property       ~2-3 days
+         equivalence check.  Agreed in 2026-03-22 meeting.
+         Prerequisite for correct free-space merging (#105).
+    #105 Multi-boxel free space placement — largely         ~1 week
+         mitigated by #103.  Full support is alternative.
 
   TIER 4 — Deferrable (accepted simplifications, fidelity):
     #59  Friction-based grasping — fidelity improvement, not
@@ -1450,3 +1662,108 @@ Proposal alignment work (PA-1 through PA-6) and PDDL/Python alignment
 (PF-1 through PF-5) are tracked in their respective sections above and
 must be addressed or explicitly documented as accepted deviations before
 thesis submission.
+
+================================================================================
+DISCUSSION NOTES — 2026-03-22
+Topic: Pick-and-Place Design, Boxel Merging/Splitting, Free-Space Reasoning
+================================================================================
+
+CONTEXT
+  Supervisor meeting covering the transition from push-based to pick-and-place
+  actions, plus the design of boxel merging/splitting logic.
+
+KEY DECISIONS AND DESIGN NOTES
+
+1. PICK-AND-PLACE REPLACES PUSH
+   - Push actions were dropped because the placement target was effectively
+     hard-coded, meaning the solution was partially embedded in the PDDL action
+     model rather than being discovered by the planner.  As stated in the
+     meeting: "the somewhere is hardcoded and the problem was the solution was
+     almost modeled in the PDDL actions, which is something we didn't want."
+   - Pick and place makes the target boxel an explicit action parameter, so the
+     planner can genuinely decide where to move an object.
+   - Supervisor confirmed this resolves the main concern with the previous
+     version: "that was the main issue I had with the previous version.  So
+     now you can actually learn because you move the box to a different [place]."
+   - Current implementation: grasping is constraint-based (object attached to
+     arm via createConstraint — "it will just get sucked into the end"); the
+     target is currently a random free boxel — fitness checks (size, adjacency)
+     are not yet enforced.  See #102.
+   - Push could still be used as the underlying motion primitive — the semantic
+     distinction is that the target is an explicit parameter, not the mechanism.
+     ("how you actually implement the action, it's a different sort")
+
+2. SENSING WHILE HOLDING AN OBJECT
+   - Sensing is still performed during pick-and-place sequences; raycasting
+     through the shadow region is done, and if the view is blocked by the arm
+     the robot replans.
+   - Open question raised by supervisor: after picking up a box (to see what's
+     behind it), the robot could in principle observe immediately and put the
+     object back — without needing to place it somewhere else.  ("you picked up
+     the box because you wanted to see a box behind that box.  So now you
+     picked it up.  So in principle, you could already see and then just put
+     it back.")
+   - Current behaviour: if the arm still blocks the view after pick, a replan
+     occurs.  If the view is clear, the system can observe.  This is not
+     explicitly exploited as a "pick-observe-replace" strategy.
+   - Decision: not yet resolved — needs documentation on whether mid-pick
+     sensing is an intended capability or an accidental side effect.
+
+3. BOXEL MERGING — CORRECT MERGE CONDITION (AGREED)  →  #103
+   Two adjacent boxels should be merged if and only if:
+     (a) Their merge would produce a convex result (existing constraint), AND
+     (b) They have identical logical properties in the symbolic domain —
+         concretely, they block the view to exactly the same set of target
+         objects.
+   Supervisor rationale: "you should merge all the boxes that have the same
+   properties, meaning they block the same other objects.  What you don't want
+   is to merge two boxes where one blocks the view to some object where the
+   other one doesn't.  This should be separate because then you can decide
+   whether you want to block the view or not."
+   Design principle: "constrain the motion plan as little as possible while
+   still keeping a consistent logical state."
+   Consequence: boxels near occlusion boundaries will naturally stay small.
+   Supervisor acknowledged this: "the boxes will generally just stay rather
+   small, probably."
+
+4. FREE-SPACE REASONING ACROSS MULTIPLE BOXELS  →  #105
+   - An object need not fit inside a single boxel to be placeable there; it is
+     valid to place an object spanning several adjacent FREE boxels as long as
+     it does not intersect any non-free boxel.
+   - One approach: merge all free boxels that satisfy the merge condition above
+     into larger free regions, then check containment of the object's bounding
+     box against those merged regions.
+   - A minimum boxel size equal to the smallest object the system handles is a
+     natural floor; boxels smaller than this can be ignored for placement
+     reasoning.  Supervisor: "a reasonable minimal size is the size of the
+     smallest objects that you realistically deal with."
+   - If merge condition (#103) is implemented fully, free boxels with identical
+     properties (typically "blocks nothing") will merge into large regions,
+     largely resolving this issue without explicit multi-boxel placement logic.
+
+5. RE-SPLITTING / RE-EVALUATION AFTER ENVIRONMENT CHANGE  →  #104
+   - After a pick-and-place action the BoxelRegistry is not updated: boxels
+     that were "occupied" may now be "free" and vice versa.
+   - Related to existing #44 (stale shadow registry) and #73 (stale
+     shadow_occluder_map), but broader — covers the full free/occupied/shadow
+     re-evaluation cycle plus re-merge.
+   - Required work: after each place action, recompute which boxels are free /
+     occupied / shadow-blocked, and re-run the merge step (with the correct
+     merge condition from #103) so the symbolic state stays consistent.
+   - Until implemented, the planner operates on a stale boxel partition.
+
+6. TARGET BOXEL FITNESS AND ADJACENCY  →  #102
+   - The place action must check that the target boxel is large enough to
+     contain the object being placed.
+   - Supervisor suggested adjacency preference: "just pick the first adjacent
+     boxel that's big enough" rather than placing across the entire workspace.
+
+ACTION ITEMS FROM MEETING
+  [ ] #102 — Enforce target-boxel size precondition in place action.
+  [ ] #103 — Implement logical property equivalence check in boxel merge.
+  [ ] #104 — Implement post-action boxel re-evaluation (free/occupied/shadow)
+      and re-merge pass using the agreed merge condition.
+  [ ] #105 — Ensure free-space merge produces large enough regions for
+      placement; consider multi-boxel placement if needed.
+  [ ] Decide and document whether mid-pick sensing (pick-observe-replace)
+      is an intended capability.
