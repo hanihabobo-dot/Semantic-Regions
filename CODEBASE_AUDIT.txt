@@ -2,689 +2,586 @@
 CODEBASE AUDIT — OPEN ISSUES
 ================================================================================
 Date: 2026-02-25 (original audit, merged from 3 audit passes)
-Updated: 2026-03-24 (archived #59, #77, #96, #97, PA-3/4/5/6, PF-1/4/5, and
-         DISCUSSION NOTES 2026-03-22 to archive/CODEBASE_AUDIT_DEFERRED.txt;
-         previously: 2026-03-22 archived #44, #73, #87-#92, #94)
-Resolved issues archived to archive/CODEBASE_AUDIT_RESOLVED.txt.
-Deferred/background items in archive/CODEBASE_AUDIT_DEFERRED.txt.
+Restructured: 2026-03-24
+
+  All open issues renumbered #1–#13 in priority order.
+  Mapping from old numbers:
+    #1  ← old #106    #5  ← old #107    #9  ← old #76a    #13 ← old #81
+    #2  ← old #103    #6  ← old #105    #10 ← old #76b
+    #3  ← old #93a    #7  ← old #93b    #11 ← old #76c
+    #4  ← old #104    #8  ← old #93c    #12 ← old #76d
+
+  Structural changes:
+  - Old #95 (systemic PDDL state drift) dissolved — it was a meta-issue
+    whose 4 drift channels are now tracked by #3, #4, #7, #8 and
+    already-resolved old #86, #62, #73, #44.
+  - Old #93 split into #3 (sense), #7 (pick), #8 (place).
+  - Old #76 split into #9–#12 (metrics, baselines, scalability).
+  - PA-1/PA-2 merged into #9/#13; PF-2/PF-3 merged into #7/#8.
+
+Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
+Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
 
 ================================================================================
-PROPOSAL ALIGNMENT GAPS
+META-ISSUE DISSOLUTION: old #95 (Systemic PDDL State Drift)
 ================================================================================
-These are features described in the proposal that have no corresponding
-implementation.  They are not code bugs — they are missing functionality
-that the thesis promises.  Active items only; accepted deviations (PA-3
-through PA-6) are in archive/CODEBASE_AUDIT_DEFERRED.txt.
+Old #95 described 4 drift channels between PDDL symbolic state and
+PyBullet physical state.  Not independently fixable — each channel is
+addressed by a specific issue:
 
-PA-1. No evaluation framework (proposal Section 5)
-      The proposal defines metrics (success rate, planning time, plan cost,
-      scalability) and three baselines (uniform voxelization, fixed semantic
-      regions, POMDP-based TAMP). None exist in the codebase. There is no
-      benchmarking code, no baseline implementations, no metric collection,
-      no experiment runner.  See #76.
+  (a) Robot config drift after pick/place:
+      old #86 [DONE], old #62 [ACCEPTED], #7/#8 [OPEN]
+  (b) Hidden move in sense:
+      #3 [OPEN]
+  (c) Stale shadow geometry after occluder relocation:
+      old #44 [ACCEPTED], #4 [OPEN]
+  (d) Stale blocks_view_at facts:
+      old #73 [DONE]
 
-PA-2. No recursive object discovery in free space (proposal Section 4.2)
-      The proposal says: "If new objects are found within a partition, the
-      process repeats: bound the biggest object and define its occluded
-      space." The actual FreeSpaceGenerator does a single-pass octree that
-      marks cells as FREE or OCCUPIED. It never detects new objects inside
-      partitions — all objects are detected upfront by oracle_detect_objects.
-      See #81.
-
-================================================================================
-PDDL ACTION / PYTHON FUNCTION ALIGNMENT
-================================================================================
-Cross-reference of PDDL actions against Python execution code.
-Active mismatches only; accepted/consistent entries (PF-1, PF-4, PF-5) are
-in archive/CODEBASE_AUDIT_DEFERRED.txt.
-
-PF-2. pick — PDDL vs Python MISMATCH (scope)
-      PDDL (domain lines 161-179): Single config ?q.  Instantaneous.
-        Does not update at_config.
-      Python (execute_pick, lines 492-560): 4-step sequence (open gripper,
-        approach, contact, close, attach constraint, lift).  Re-derives
-        contact IK from actual obj_pos at execution time.  Leaves robot
-        at lift config, not pick config.
-      Mismatch: Python does MORE than PDDL describes (re-solve IK, create
-        constraint, multi-waypoint motion).  PDDL model does not capture
-        the post-pick config drift.  See #93, #95.
-
-PF-3. place — PDDL vs Python MISMATCH (scope)
-      Same pattern as PF-2.  PDDL models single-config instantaneous action.
-      Python executes approach → contact → release → settle → retreat.
-      Post-place config differs from PDDL's ?q.  See #93, #95.
-
-================================================================================
-76. PA-1 SEVERITY UNDERRATED — EVALUATION FRAMEWORK IS CRITICAL
-================================================================================
-Where: CODEBASE_AUDIT.txt summary, PA-1
-
-What:  PA-1 (no evaluation framework) is listed under "PROPOSAL ALIGNMENT
-       GAPS" alongside minor design deviations.  For a thesis, this is a
-       CRITICAL gap — the thesis cannot have a Results / Evaluation section
-       without benchmarking code, metric collection, scene variation, and
-       at least one baseline comparison.
-
-       Specifically missing (per proposal Section 5):
-       - No success rate measurement across multiple runs
-       - No planning time collection or analysis
-       - No plan cost / quality metrics
-       - No scalability test (varying occluder count, scene complexity)
-       - No baseline: uniform voxelization
-       - No baseline: fixed semantic regions
-       - No baseline: POMDP comparison (even simplified)
-       - No experiment runner / batch evaluation script
-
-       Now the sole CRITICAL issue — #61 (conditional sensing) has been
-       resolved as an accepted deviation.  This directly blocks thesis
-       completion.
-
-================================================================================
-81. MISSING RECURSIVE OBJECT DISCOVERY (PA-2)
-================================================================================
-Where: free_space.py
-What:  The proposal explicitly claims that free space partitioning will
-       recursively discover new objects and repeat the bounding process. The
-       implementation is just a standard, single-pass octree subdivision that
-       never detects new objects.
-
-================================================================================
-93. ACTIONS ARE NOT GENERIC — HIDDEN SUB-ACTIONS EMBEDDED IN EXECUTION
-================================================================================
-Where: test_full_pipeline.py (sense handler, execute_pick, execute_place)
-
-What:  PDDL actions are modeled as atomic operations, but their Python
-       execution handlers secretly perform operations that belong to
-       OTHER action types.  The planner cannot reason about, plan for,
-       or optimize these hidden sub-actions.
-
-       sense handler (lines 340-345):
-         Contains a hidden MOVE: moves the arm to home configuration
-         before raycasting.  The planner doesn't know sensing requires
-         the arm to be out of the way — it has no (at_config ?q_home)
-         precondition on the sense action.  This was added as a
-         workaround for #79 (arm blocking camera), but embedding a
-         move inside sense violates action atomicity.
-
-       execute_pick (lines 630-714):
-         Contains 3 hidden MOVEs (approach, descend to contact, lift),
-         3 hidden IK SOLVES (re-deriving geometry the planner never
-         planned), a GRIPPER_OPEN, a GRIPPER_CLOSE, and a CONSTRAINT
-         WELD (p.createConstraint).  The PDDL pick action is a single
-         instantaneous operation; the Python handler is a 6-step
-         choreographed sequence.
-
-       execute_place (lines 717-789):
-         Contains 3 hidden MOVEs (approach, descend, retreat), 3 hidden
-         IK SOLVES, a GRIPPER_OPEN, a CONSTRAINT REMOVAL, and 30 hidden
-         PHYSICS STEPS for object settling.  Same atomicity violation
-         as pick.
-
-       Complete inventory of hidden sub-actions:
-         sense:  1 move
-         pick:   3 moves, 3 IK solves, 1 open_gripper, 1 close_gripper,
-                 1 createConstraint
-         place:  3 moves, 3 IK solves, 1 open_gripper,
-                 1 removeConstraint, 30 stepSimulation
-
-       Consequences:
-       (a) The planner cannot optimize the approach/retreat motions or
-           detect collisions on them — they are invisible to the
-           symbolic search.
-       (b) The execution-time IK solves (solve_ik in execute_pick/place)
-           can fail, producing None.  These failures are handled by
-           abort-and-replan (#82), but the planner has no awareness
-           that its "valid" plan might fail at execution.
-       (c) The hidden move in sense causes PDDL state drift — the robot
-           moves to home but the PDDL state still says (at_config ?q)
-           from the last move action.  Compensated by current_config
-           tracking (#86) but architecturally unsound.
-       (d) The approach/retreat heights (0.10 m, 0.25 m) are hardcoded
-           constants that the planner never validates for collisions.
-
-       Related audit entries:
-         #79  Arm blocks sensing — the hidden move was the workaround
-         #82  Silent IK failures — hidden IK solves can fail
-         #86  PDDL state drift — hidden moves cause drift
-         PF-2 pick PDDL/Python mismatch (documented)
-         PF-3 place PDDL/Python mismatch (documented)
-
-Fix:   To make actions truly generic, decompose each into sub-actions
-       in the PDDL domain:
-       (a) sense: add (at_config ?q_home) precondition, or add a
-           separate prepare_sense action that moves the arm home.
-       (b) pick: decompose into approach(?o ?b ?g ?q_approach),
-           grasp(?o), lift(?o ?q_lift) — each with their own
-           compute-kin stream calls and plan-motion trajectories.
-       (c) place: decompose into approach(?o ?b ?g ?q_approach),
-           release(?o), retreat(?q_retreat).
-       Cost: 3x more stream evaluations per pick/place, longer plans,
-       and more complex domain.  The current hardcoded approach works
-       functionally and is a common simplification in TAMP research.
-
-================================================================================
-95. SYSTEMIC PDDL STATE DRIFT — SYMBOLIC/PHYSICAL DESYNC ACROSS ACTIONS
-================================================================================
-Where: domain_pddlstream.pddl (all actions),
-       test_full_pipeline.py (sense handler, execute_pick, execute_place),
-       pddlstream_planner.py (_build_init),
-       boxel_data.py (BoxelRegistry)
-
-What:  The PDDL symbolic state and the PyBullet physical state diverge
-       systematically during plan execution.  This is not a single bug —
-       it is a structural pattern affecting every action that modifies
-       the world.  Four distinct drift channels have been identified:
-
-       (a) ROBOT CONFIG DRIFT (pick/place) — #86, PF-2, PF-3
-           PDDL pick/place are modeled as instantaneous single-config
-           actions.  Python execution performs multi-waypoint sequences
-           (approach → contact → lift/retreat) and leaves the robot at a
-           post-action configuration that PDDL never learns about.  After
-           pick, PDDL says (at_config ?q_pick) while the robot is at
-           post_pick_lift.  After place, PDDL says (at_config ?q_place)
-           while the robot is at post_place_retreat.
-           Mitigation: execution reads actual p.getJointState and passes
-           it to the planner on replan (#86 DONE).  Drift still exists
-           WITHIN a single plan — if the plan chains pick → move, the
-           move starts from the wrong config in the symbolic model.
-
-       (b) HIDDEN MOVE IN SENSE — #93, #79
-           The sense handler secretly moves the robot to home before
-           raycasting (workaround for #79).  PDDL has no at_config
-           precondition or effect on sense — the symbolic state still
-           records (at_config ?q) from the previous move action.
-           Mitigation: current_config updated in execution loop.  Same
-           within-plan drift as (a).
-
-       (c) STALE SHADOW GEOMETRY — #44
-           After an occluder is relocated via pick-and-place, the
-           BoxelRegistry is NOT recomputed.  Shadow boxel AABBs still
-           describe the pre-relocation geometry.  Sensing uses these
-           stale AABBs to target raycasts.
-           Mitigation: target detection is by PyBullet body ID, so any
-           ray that hits the target works regardless of AABB accuracy.
-           Fragile if the scene changes more substantially.
-
-       (d) STALE BLOCKS_VIEW_AT FACTS — #73
-           shadow_occluder_map is built once before the first plan.
-           After occluder relocation, _build_init() still emits
-           blocks_view_at facts for the original occluder positions.
-           Mitigation: derived predicate blocks_view checks
-           obj_at_boxel, which IS updated — so the stale facts are
-           functionally dead.  But the data structure is fragile:
-           any extension that references blocks_view_at directly
-           (rather than through the derived predicate) would break.
-
-       Systemic consequences:
-       - Within a single plan, the symbolic and physical states are
-         out of sync after every non-move action.  If the planner
-         generates plans with pick → move or sense → pick sequences,
-         the move/pick operates on a config the robot is NOT at.
-       - The execution-side mitigations (#86 current_config tracking)
-         only take effect on REPLAN — they cannot fix drift within
-         a single plan's action sequence.
-       - The stale geometry data (#44, #73) accumulates across replans
-         because the registry is never refreshed.
-
-       This is the root architectural issue underlying #44, #73, #86,
-       and #93.  Fixing it properly requires either:
-       (a) Making the PDDL model faithful — decompose pick/place into
-           sub-actions, add at_config to sense, update registry on
-           replan.  This is the #93 fix plus registry refresh.
-       (b) Adding execution-time state reconciliation — before each
-           action in a plan, re-derive configs from the actual physical
-           state rather than trusting the plan's symbolic parameters.
-       (c) Both: faithful PDDL model + execution-time validation.
-
-Related: #44, #73, #86 (DONE), #93, PF-2, PF-3
+When #3, #4, and optionally #7/#8 are complete, all channels are
+addressed.
 
 ================================================================================
 CODEBASE POLICY
 ================================================================================
 
 COMMENTED-OUT CODE — DO NOT DELETE
-       Commented-out code (e.g. visualization calls, disabled features,
-       archived logic) is preserved intentionally.  It serves as inline
-       documentation of previous approaches, quick-enable toggles for
-       debugging, and reference for future re-implementation.
-
-       Examples of intentionally preserved commented-out code:
-       - test_full_pipeline.py line 146: draw_boxels call (disabled to
-         simplify pipeline runs; re-enable for visual debugging)
-       - archive/ folder: entire previous implementations kept for
-         reference
-
-       Rule: NEVER delete commented-out code without explicit approval.
-       If code is truly obsolete, move it to archive/ rather than
-       deleting it.
+       Commented-out code is preserved intentionally as inline
+       documentation, quick-enable toggles, and reference for
+       re-implementation.
+       Rule: NEVER delete without explicit approval.  Move to archive/.
 
 DEAD CODE — PRESERVED FOR FUTURE USE
-       Dead methods, unused imports, and unreachable code paths documented
-       in issues #87–#92 (archived to CODEBASE_AUDIT_RESOLVED.txt) are
-       tracked for awareness but are NOT scheduled for deletion.  They
-       impose no runtime cost and may be needed for future features
-       (evaluation framework, real perception, etc.).
+       Dead methods/imports documented in old #87–#92 (resolved archive)
+       are NOT scheduled for deletion.  No runtime cost; may be needed
+       for evaluation framework, real perception, etc.
 
 WIKI — UPDATE AFTER EVERY CHANGE
-       The project wiki lives in the GitHub wiki repo (pybullet.wiki.git),
-       NOT in the main repository.  After any code change that affects
-       architecture, data structures, algorithms, PDDL domain, execution
-       pipeline, or design decisions, the corresponding wiki page(s) MUST
-       be updated to stay in sync.
-
-       Wiki repo: see the Wiki tab in the repository hosting platform.
+       Project wiki: pybullet.wiki.git (GitHub wiki repo, not main repo).
        Local clone: ../pybullet.wiki/
-
-       Pages and what triggers an update:
-         Architecture_Overview     — new/removed modules, changed data flow
-         Core_Data_Structures      — new/changed dataclasses, types, enums
-         Scene_Environment         — camera, objects, scene presets
-         Spatial_Reasoning         — shadow calc, octree, cell merger
-         Planning_System           — _build_init, streams, replanning
-         Robot_Control_and_Streams — IK, collision, motion planning, grasps
-         Execution_Pipeline        — action handlers, sensing, replanning
-         PDDL_Domain_Reference    — predicates, actions, streams
-         Design_Decisions          — new accepted deviations or rationale
-         Known_Issues_and_Roadmap  — resolved/new audit issues
+       Update after any change to architecture, data structures,
+       algorithms, PDDL domain, execution pipeline, or design decisions.
 
 ARCHIVE — TRACKED AND PUSHED
-       The archive/ folder contains superseded implementations and audit
-       history preserved for reference.  It IS tracked by git.  It MUST
-       NOT contain personal information (user paths, names, credentials).
+       archive/ contains superseded implementations and audit history.
+       Tracked by git.  Must NOT contain personal information.
 
 WSL VIRTUAL ENVIRONMENT — DO NOT DELETE
-       wsl_env/ is the WSL Python virtual environment required to run
-       the project (PDDLStream, PyBullet, numpy).  It is gitignored
-       (local only, not committed) and CANNOT be restored from git
-       history.  Deleting it breaks the entire pipeline — run_boxels,
-       test_full_pipeline.py, and all planning/execution depend on it.
+       wsl_env/ is the WSL Python venv (gitignored, local only).
+       Deleting it breaks the entire pipeline.
+       Recreate: python3 -m venv wsl_env && pip install numpy pybullet
 
-       If accidentally deleted, recreate from WSL:
-         cd /mnt/c/Users/.../Semantic_Boxels
-         python3 -m venv wsl_env
-         source wsl_env/bin/activate
-         pip install numpy pybullet
 
-       Rule: NEVER delete wsl_env/ during cleanup.  It is not junk.
+################################################################################
+#                                                                              #
+#                     OPEN ISSUES — #1 through #13                             #
+#                                                                              #
+################################################################################
+
 
 ================================================================================
-102. [DONE] PLACE TARGET SELECTION — FITNESS CHECK ADDED
+#1. EXECUTION SUB-MOVES ARE COLLISION-BLIND
 ================================================================================
-Where: domain_pddlstream.pddl, stream.pddl, streams.py, pddlstream_planner.py
+Priority: TIER 0 — Start here (most self-contained)
+Where:    test_full_pipeline.py (execute_pick ~line 782, execute_place ~line 894)
+          robot_utils.py (move_robot_smooth)
+Depends:  None
+Effort:   1-2 days
 
-What:  The place action previously selected any free boxel without checking
-       whether it was large enough for the object.
+What:  The sub-moves inside execute_pick (approach, descend-to-contact,
+       lift) and execute_place (approach, descend, retreat) all use
+       move_robot_smooth(), which is purely linear joint-space
+       interpolation with NO collision checking.
 
-Fixed: Sub-problem (a) — size precondition:
-       - Added (boxel_fits ?o ?b) predicate to domain_pddlstream.pddl
-       - Added test-boxel-fits stream in stream.pddl (test stream, not
-         generator — cheap dictionary lookup + numpy comparison)
-       - Implemented test_boxel_fits() in BoxelStreams (streams.py):
-         compares axis-aligned extents on all 3 axes
-       - Registered in _get_stream_map() via from_test()
-       The planner now only considers free boxels whose extents >= the
-       object's extents.  If no boxel is large enough, the planner
-       correctly returns "no plan" instead of an invalid placement.
+       The PDDL planner calls plan_motion() (full RRT-Connect collision
+       checking) only for the symbolic move action.  Everything inside
+       execute_pick/execute_place runs blind at execution time.
 
-Deferred: Sub-problem (b) — adjacency preference.  neighbor_ids is
-       currently unpopulated in practice and depends on #103 (merge
-       condition).  Will be addressed as a cost heuristic after #103.
+       Consequence: the robot collides with other objects during
+       approach/retreat.  The hardcoded heights (approach 0.10 m,
+       lift/retreat 0.25 m) are never validated against the scene.
+       This is the observed failure: "robot struggles with move to
+       place path."
 
-Related: #105 (multi-boxel free space placement), #103 (merge condition)
+Fix:   ONE COMMIT — replace move_robot_smooth() calls with
+       collision-aware motion:
+       (a) In execute_pick: for the approach and lift segments, call
+           BoxelStreams.plan_motion() or is_path_collision_free() to
+           get a collision-free trajectory, then follow its waypoints.
+       (b) In execute_place: same for approach and retreat segments.
+       (c) Pass ignored_body_ids (grasped object during pick approach;
+           none during retreat) matching what plan_motion already does
+           for the PDDL move action.
+       The descend-to-contact segment can remain linear (short vertical
+       move in collision with the target object by design).
 
-================================================================================
-103. BOXEL MERGE CONDITION INCOMPLETE — MISSING LOGICAL PROPERTY EQUIVALENCE
-================================================================================
-Where: cell_merger.py, boxel_data.py
+       Reuses existing RRT/collision infrastructure with minimal new
+       code and NO PDDL domain changes.
 
-What:  The current boxel merge logic only checks whether the merge of
-       two adjacent boxels produces a CONVEX result.  Per the supervisor
-       meeting (2026-03-22), two additional conditions are required:
+Related: #7/#8 (full PDDL decomposition is the long-term fix)
 
-         Two adjacent boxels should be merged if and only if:
-           (a) Their merge produces a convex result (existing check —
-               NOTE: the supervisor observed that "a merging operation
-               definitely does not produce convex boxes" and that forcing
-               convexity is "kind of a difficult problem."  This condition
-               may need revisiting; it was acknowledged as pre-existing
-               but not firmly re-agreed as a going-forward requirement), AND
-           (b) They have IDENTICAL logical properties in the symbolic
-               domain — specifically, they block the view to exactly the
-               same set of target objects (same blocks_view_at facts), AND
-           (c) They have the same observability status — BOTH are currently
-               observable (visible to the camera) OR BOTH are completely
-               in a shadow region.  Supervisor: "these boxels should either
-               both be visible currently or neither of them is observable."
-
-       Rationale (supervisor): "you should merge all the boxels that have
-       the same properties, meaning they block the same other objects.
-       What you don't want is to merge two boxes where one blocks the
-       view to some object where the other one doesn't."  Merging boxels
-       with different logical properties produces a boxel whose symbolic
-       meaning is undefined — the PDDL state cannot correctly represent
-       what it blocks.
-
-       Design principle agreed in meeting: "constrain the motion plan as
-       little as possible while still keeping a consistent logical state."
-       Merging same-property boxels maximises free space for motion
-       planning while preserving symbolic correctness.
-
-       Merge ORDER: supervisor specified "if you look from the camera,
-       you basically start merging in the back and go forward."  Boxels
-       in front of an object will not merge because some block the object
-       and some don't.
-
-       Consequence: boxels near occlusion boundaries will naturally stay
-       small because they have differing blocks-view-to properties.  This
-       is acceptable — the supervisor acknowledged "the boxes will
-       generally just stay rather small, probably" and this was deemed
-       a correct trade-off.
-
-       This merge condition applies BOTH to initial boxelization AND to
-       post-action re-merge (#104).
-
-Fix:   In cell_merger.py, before merging two candidate boxels:
-       (a) Check observability: both observable or both in shadow.
-       (b) Look up the blocks_view_at fact set for each boxel (which
-           targets does this boxel's camera corridor obstruct?).
-       (c) Only proceed with the merge if both sets are identical.
-       (d) The merged boxel inherits the common property set.
-       Requires passing the shadow/blocking information into the merger,
-       or computing it as a post-merge validation step.
-       Process back-to-front (far from camera first) per supervisor
-       guidance.
 
 ================================================================================
-104. POST-ACTION BOXEL STATE NOT RE-EVALUATED — STALE PARTITION
+#2. BOXEL MERGE CONDITION INCOMPLETE
 ================================================================================
-Where: test_full_pipeline.py (execution loop),
-       boxel_data.py (BoxelRegistry),
-       cell_merger.py
+Priority: TIER 0 — Prerequisite for #4 and #6
+Where:    cell_merger.py, boxel_data.py
+Depends:  None
+Effort:   2-3 days
 
-What:  After a pick-and-place action changes the physical scene, the
-       boxel partition (which boxels are free, occupied, or shadow) is
-       NOT recomputed.  The speaker confirmed: "once the environment
-       changes, I keep working on the assumption that I have still have
-       these exact same splitting, so free and not free, but maybe some
-       of the boxes that were labeled as not free are now free, and vice
-       versa."
+What:  The current merge logic only checks whether two adjacent free
+       boxels produce a CONVEX result.  Per the supervisor meeting
+       (2026-03-22), two additional conditions are required:
 
-       This is a BROADER issue than #44 (stale shadow AABBs) and #73
-       (stale blocks_view_at facts).  The full problem:
-       (a) Boxels labelled OCCUPIED may now be FREE (the object was
-           picked up and moved elsewhere).
-       (b) Boxels labelled FREE may now be OCCUPIED (an object was
-           placed there).
-       (c) Shadow regions may have changed (the occluder moved, so the
-           shadow it cast no longer exists or has a different shape).
-       (d) The merge structure is stale — newly-free boxels should be
-           merged with adjacent free boxels (per the merge condition
-           in #103), and newly-occupied boxels should be split from
-           their free neighbours.
+       Two adjacent boxels should be merged if and only if:
+         (a) Convex result (existing check — may need revisiting per
+             supervisor's observation that "a merging operation
+             definitely does not produce convex boxes"), AND
+         (b) IDENTICAL logical properties — they block the view to
+             exactly the same set of target objects (same
+             blocks_view_at facts), AND
+         (c) Same observability status — BOTH currently observable OR
+             BOTH completely in a shadow region.
 
-       The planner operates on this stale partition, which means it may:
-       - Try to place objects in boxels that are no longer free.
-       - Fail to use newly available free space.
-       - Plan sense actions for shadows that no longer exist.
+       Merge ORDER: back-to-front (far from camera first), per
+       supervisor guidance.
 
-       Splitting (inverse of merging): when an object is placed into a
-       free boxel, that boxel must be split into the part occupied by the
-       object and the remaining free part.  The existing initial octree
-       splitting logic can be partially reused.
+       Consequence of not merging correctly: boxels with different
+       logical properties get merged, producing boxels whose symbolic
+       meaning is undefined — PDDL state cannot correctly represent
+       what they block.
 
-Fix:   STRATEGY (agreed in meeting):
-       Phase 1 (naive, implement first): full re-boxelization after every
-       action that changes the scene.  Supervisors: "for now, I would
-       just do it every time."
-       (a) Re-evaluate each boxel's occupancy status against the current
-           physical state (check PyBullet body positions vs boxel AABBs).
-       (b) Recompute shadow regions for any relocated occluders.
-       (c) Re-run the merge pass using the correct merge condition (#103)
-           so the symbolic state stays consistent.
-       (d) Rebuild shadow_occluder_map (addresses #73).
-       (e) Feed the updated BoxelRegistry into _build_init() for the
-           next planning cycle.
+Fix:   ONE COMMIT — in cell_merger.py merge_free_space():
+       (a) Accept shadow/blocking information as parameters (which
+           targets does each boxel's camera corridor obstruct).
+       (b) Before merging two candidates, check:
+           - Both observable or both in shadow
+           - Both have identical blocks_view_at target sets
+       (c) Process candidates back-to-front.
+       (d) Merged boxel inherits the common property set.
 
-       CRITICAL: observation history (which boxels have been sensed /
-       known-empty) MUST survive re-boxelization.  Supervisor: "the only
-       thing that you need to be [aware] of is which boxes have you
-       already observed?  That information needs to be [preserved]."
-       The merge logic should produce the same result as re-boxelizing
-       from scratch — "logically, if you do just boxelization from
-       scratch, the result should be the same."
+Related: #4 (re-boxelization depends on correct merge condition),
+         #6 (multi-boxel placement depends on correct merging)
 
-       Phase 2 (optimisation, later): only recompute the boxels affected
-       by the relocated object — the source boxel (now free) and the
-       destination boxel (now occupied).  See FOR LATER: incremental
-       recomputation.  "a naive implementation that should work, but
-       maybe slow" — incremental is the optimisation.
-
-Related: #44 (stale shadow AABBs), #73 (stale shadow_occluder_map),
-         #95 (systemic PDDL state drift — this is another drift channel)
 
 ================================================================================
-105. MULTI-BOXEL FREE SPACE PLACEMENT NOT SUPPORTED
+#3. SENSE ACTION HIDDEN MOVE — NO at_config PRECONDITION
 ================================================================================
-Where: pddlstream_planner.py, streams.py compute_kin_solution(),
-       domain_pddlstream.pddl (place action)
+Priority: TIER 0 — Quick PDDL consistency fix
+Where:    domain_pddlstream.pddl (sense action, ~line 128),
+          test_full_pipeline.py (sense handler, ~line 425)
+Depends:  None
+Effort:   1-2 days
 
-What:  The place action targets a SINGLE boxel.  If no single free boxel
-       is large enough to contain the object, the planner has no way to
-       reason about placing the object across multiple adjacent free
-       boxels — even if together they form a sufficiently large region.
+What:  The sense handler secretly moves the robot to home
+       configuration before raycasting (workaround for old #79: arm
+       blocking camera).  The PDDL sense action has NO at_config
+       precondition — the planner does not know sensing requires the
+       arm to be out of the way.
 
-       The speaker raised this in the 2026-03-22 meeting: "I might also
-       have a bunch of small boxels that combined can actually be a free
-       space.  And I also need to reason about that."  After merging,
-       corner regions may have leftover small boxels that individually
-       are too small, but collectively provide valid placement space.
+       This causes PDDL state drift: after sense, the robot is
+       physically at home but PDDL still records (at_config ?q) from
+       the last move action.  If the planner chains sense -> pick,
+       the pick starts from the wrong config in the symbolic model.
 
-       The supervisor suggested two approaches:
-       (a) Merge all free boxels (per the merge condition in #103) into
-           the largest possible free regions BEFORE planning.  Then each
-           merged region is a single boxel that may be large enough.
-       (b) Introduce a minimum boxel size equal to the smallest object
-           the system handles — boxels smaller than this are irrelevant
-           for placement reasoning and can be ignored.
+Fix:   ONE COMMIT — choose one approach:
 
-       If (a) is implemented correctly (with #103's merge condition),
-       this issue is largely mitigated: free boxels with the same logical
-       properties get merged into large regions, and only boxels at
-       occlusion boundaries stay small (where placement would be
-       problematic anyway).
+       OPTION A (minimal): Add (at_config ?q_home) as a precondition
+       to the sense action in domain_pddlstream.pddl.  Emit
+       (at_config q_home) in _build_init() when the robot starts at
+       home.  The planner will generate move -> sense sequences when
+       the robot is not at home.  Remove the hidden move from the
+       sense handler (the planner now handles it explicitly).
 
-Fix:   AGREED APPROACH: multi-variant place actions (supervisor meeting).
-       Have multiple variants of the place action in the PDDL domain:
-         - place-in-1-boxel (current — object fits in one boxel)
-         - place-in-2-boxels (object spans two adjacent free boxels)
-         - place-in-N-boxels (generalised for larger objects)
-       Each variant has:
-         - Precondition: all target boxels are adjacent and FREE.
-         - PDDLStream certifier: verifies the object's bounding box fits
-           in the union of the target boxels.
-       Supervisor: "you can have multiple variants of the place action.
-       The first one would occupy one boxel and the second [two]."
-       This resolves the conflict between fine-grained discretization
-       (needed for view-blocking accuracy) and placement (needs large
-       enough regions): "if you do that, then you can always keep the
-       finest discretization that keeps the logical state."
+       OPTION B (pragmatic): Add a prepare_sense action that moves
+       the robot to home.  The sense action requires (at_config
+       ?q_home) as a precondition.  prepare_sense's effect sets
+       at_config to q_home.  More explicit but adds a PDDL action.
 
-       SUPPORTING: implement #103 (correct merge condition) thoroughly.
-       Free boxels with identical logical properties (typically all
-       "blocks nothing") will merge into large contiguous regions.
-       The minimum boxel size floor (#69, free_space.py min_resolution)
-       already filters very small cells during octree subdivision.
-       Between merging and multi-variant place, most scenes should be
-       covered.
+       OPTION A is recommended — simpler, and move already exists.
 
-Related: #102 (target boxel fitness), #103 (merge condition)
+Related: old #79 [DONE] (arm blocks sensing), old #86 [DONE] (config
+         tracking on replan)
+
+
+================================================================================
+#4. POST-ACTION RE-BOXELIZATION — STALE PARTITION
+================================================================================
+Priority: TIER 1
+Where:    test_full_pipeline.py (execution loop),
+          boxel_data.py (BoxelRegistry),
+          cell_merger.py
+Depends:  #2 (merge condition must be correct before re-merging)
+Effort:   3-5 days
+
+What:  After a pick-and-place action, the boxel partition is NOT
+       recomputed.  Stale data includes:
+       (a) OCCUPIED boxels that are now FREE (object picked up)
+       (b) FREE boxels that are now OCCUPIED (object placed there)
+       (c) Shadow regions that changed (occluder moved)
+       (d) Merge structure is stale (needs re-merge with #2 rules)
+
+       The planner operates on this stale partition, causing it to:
+       - Try placing in no-longer-free boxels
+       - Miss newly available free space
+       - Plan sense actions for shadows that no longer exist
+
+Fix:   ONE COMMIT — implement full re-boxelization (naive first):
+       (a) After each scene-changing action (place), re-evaluate every
+           boxel's occupancy status against current PyBullet state.
+       (b) Recompute shadow regions for relocated occluders.
+       (c) Re-run the merge pass using the correct merge condition
+           from #2.
+       (d) Rebuild shadow_occluder_map.
+       (e) Feed updated BoxelRegistry into _build_init() for next
+           planning cycle.
+
+       CRITICAL: observation history (which boxels have been
+       sensed / known-empty) MUST survive re-boxelization.
+
+       Incremental recomputation is in FOR LATER.
+
+Related: old #44 [ACCEPTED] (stale shadow AABBs — subsumed by this),
+         old #73 [DONE] (stale shadow_occluder_map — extended by this)
+
+
+================================================================================
+#5. PLACEMENT DESTINATION MAY RE-BLOCK THE CLEARED VIEW CORRIDOR
+================================================================================
+Priority: TIER 1 — Needs design decision before implementation
+Where:    domain_pddlstream.pddl (place action),
+          pddlstream_planner.py (_build_init, _get_stream_map),
+          streams.py (BoxelStreams)
+Depends:  None (but benefits from #2 and #4)
+Effort:   2-3 days (after design is decided)
+
+What:  The place action requires only that the destination is free and
+       large enough (is_free_space + boxel_fits).  It does NOT check
+       whether placing the occluder at the destination re-blocks the
+       view corridor the plan just cleared.
+
+       Example: occluder blocks shadow_007.  Planner places occluder
+       at a free boxel that is ALSO in the camera LOS cone to
+       shadow_007.  After place, view is still blocked — the plan
+       accomplishes nothing.
+
+       Two sub-problems:
+       (a) Destination re-blocks the SAME shadow (primary case).
+       (b) Destination blocks ANY shadow (stricter, may be too
+           conservative).
+
+Fix:   ONE COMMIT — candidate approaches (design decision needed):
+
+       OPTION A — Test stream: test-place-clears-view(?o ?dest ?shadow)
+       returns True iff placing ?o at ?dest does NOT block ?shadow.
+       Add as precondition on place.
+
+       OPTION B — Pre-computed safe set: at problem build time, for
+       each free boxel compute whether it lies in any LOS cone.  Emit
+       (no_view_block ?b) facts.  Place requires (no_view_block ?b).
+
+       OPTION C — Explicit placement-region set: pre-approved "safe
+       placement" boxels (outside all camera cones) as init facts.
+
+Related: #2, #4, #6
+
+
+================================================================================
+#6. MULTI-BOXEL FREE SPACE PLACEMENT
+================================================================================
+Priority: TIER 1 — Depends on #2 for correct merging
+Where:    domain_pddlstream.pddl, stream.pddl, streams.py,
+          pddlstream_planner.py
+Depends:  #2 (correct merge condition reduces need for multi-boxel)
+Effort:   ~1 week
+
+What:  The place action targets a SINGLE boxel.  If no single free
+       boxel is large enough, the planner cannot reason about placing
+       across multiple adjacent free boxels.
+
+       After merging with correct #2 condition, free boxels with
+       identical properties merge into large regions, largely
+       mitigating this.  Multi-boxel placement is needed only for
+       objects at occlusion boundaries where boxels stay small.
+
+Fix:   ONE COMMIT — multi-variant place actions (agreed in meeting):
+       (a) Add place-in-2-boxels action to domain_pddlstream.pddl:
+           precondition requires both target boxels are adjacent
+           and FREE; PDDLStream certifier verifies object fits in
+           the union.
+       (b) Add corresponding stream in stream.pddl.
+       (c) Implement adjacency + union-fitness test in streams.py.
+       (d) Optionally generalise to place-in-N-boxels.
+
+       If #2 merging works well, this may become unnecessary for
+       the thesis scenarios.  Implement only if testing reveals
+       placement failures due to boxel size.
+
+Related: #2 (merge condition)
+
+
+================================================================================
+#7. PICK ACTION — PDDL/PYTHON SCOPE MISMATCH
+================================================================================
+Priority: TIER 2 — PDDL redesign, optional for thesis
+Where:    domain_pddlstream.pddl (pick action, ~line 178),
+          stream.pddl, streams.py, test_full_pipeline.py (execute_pick)
+Depends:  None (but #1 provides a lighter-weight mitigation)
+Effort:   ~1 week
+
+What:  The PDDL pick action is modeled as an instantaneous single-
+       config operation.  The Python execute_pick() is a 6-step
+       choreographed sequence:
+         1. open_gripper
+         2. move to approach (IK solved at execution time)
+         3. descend to contact (plan config)
+         4. close_gripper
+         5. createConstraint (weld object to gripper)
+         6. lift (IK solved at execution time)
+
+       Hidden sub-actions the planner cannot reason about:
+         3 moves, 3 IK solves, 1 open_gripper, 1 close_gripper,
+         1 createConstraint
+
+       Consequences:
+       - Planner cannot detect collisions on approach/retreat (#1
+         provides a lighter-weight fix for this)
+       - Execution-time IK solves can fail (handled by abort-and-
+         replan, but planner has no awareness)
+       - Post-pick config differs from PDDL's ?q (accepted
+         simplification — old #62)
+
+Fix:   ONE COMMIT — decompose pick into PDDL sub-actions:
+       (a) approach_pick(?o ?b ?g ?q_approach)
+       (b) grasp(?o ?g)
+       (c) lift(?o ?q_lift)
+
+       Each sub-action has its own preconditions and effects,
+       including at_config updates.  Stream evaluations ~3x per pick.
+
+       NOTE: #1 (collision-aware sub-moves) is the pragmatic fix.
+       This full decomposition is architecturally correct but optional
+       for thesis scope.
+
+Related: #1 (lighter-weight collision fix), #8 (same pattern for place)
+
+
+================================================================================
+#8. PLACE ACTION — PDDL/PYTHON SCOPE MISMATCH
+================================================================================
+Priority: TIER 2 — PDDL redesign, optional for thesis
+Where:    domain_pddlstream.pddl (place action, ~line 205),
+          stream.pddl, streams.py,
+          test_full_pipeline.py (execute_place)
+Depends:  None (but #1 provides a lighter-weight mitigation)
+Effort:   ~1 week
+
+What:  Same pattern as #7.  The PDDL place action is instantaneous
+       single-config.  The Python execute_place() is a 6-step
+       sequence:
+         1. move to approach (IK solved at execution time)
+         2. descend to contact (plan config)
+         3. open_gripper
+         4. removeConstraint
+         5. 30 stepSimulation (settling)
+         6. retreat (IK solved at execution time)
+
+       Hidden sub-actions:
+         3 moves, 3 IK solves, 1 open_gripper, 1 removeConstraint,
+         30 stepSimulation
+
+Fix:   ONE COMMIT — decompose place into PDDL sub-actions:
+       (a) approach_place(?o ?b ?g ?q_approach)
+       (b) release(?o ?b)
+       (c) retreat(?q_retreat)
+
+       Same reasoning as #7: #1 is the pragmatic fix; this is the
+       architecturally correct long-term solution.
+
+Related: #1, #7
+
+
+================================================================================
+#9. EVALUATION — METRIC COLLECTION AND EXPERIMENT RUNNER
+================================================================================
+Priority: TIER 3 — Thesis-critical, independent of code fixes
+Where:    New module(s); integrates with test_full_pipeline.py
+Depends:  None (can be built on current pipeline)
+Effort:   3-5 days
+
+What:  The thesis proposal (Section 5) defines metrics and baselines
+       that have no implementation.  Without benchmarking code, the
+       thesis cannot have a Results/Evaluation section.
+
+       This covers the core infrastructure:
+       - Success rate measurement across multiple runs
+       - Planning time collection and analysis
+       - Plan cost / quality metrics (number of actions, total time)
+       - Experiment runner / batch evaluation script
+       - Results output (CSV/JSON) for analysis
+
+       Scene variation infrastructure already exists (old #55 DONE):
+       SceneConfig, scalability_scene(), CLI --scene/--n-occluders/
+       --n-targets/--seed.  The experiment runner wires these up.
+
+Fix:   ONE COMMIT — create evaluation module:
+       (a) Add eval_runner.py that accepts scene configs and seed
+           ranges, runs test_full_pipeline.main() per config,
+           collects metrics, outputs structured results.
+       (b) Add metric hooks in test_full_pipeline.py (timing around
+           planner.plan(), action execution, total pipeline).
+
+Related: #10, #11, #12 (baselines and analysis depend on this)
+
+
+================================================================================
+#10. EVALUATION BASELINE — UNIFORM VOXELIZATION
+================================================================================
+Priority: TIER 3 — Thesis baseline
+Where:    New module or configuration; integrates with eval_runner
+Depends:  #9 (experiment runner to collect metrics)
+Effort:   3-5 days
+
+What:  The proposal defines "uniform voxelization" as a baseline:
+       the workspace is divided into equal-sized voxels with no
+       semantic awareness (no shadow/object/free distinction).  The
+       planner uses the same PDDL domain but with uniform grid cells
+       instead of semantically-derived boxels.
+
+Fix:   ONE COMMIT — implement uniform voxelization baseline:
+       (a) Add a uniform grid generator (fixed cell size, no octree,
+           no shadow computation) as an alternative to the current
+           FreeSpaceGenerator + shadow_calculator pipeline.
+       (b) Wire into the experiment runner as --baseline uniform.
+       (c) Run same scenes/seeds as the semantic boxel approach and
+           compare metrics.
+
+
+================================================================================
+#11. EVALUATION BASELINE — FIXED SEMANTIC REGIONS
+================================================================================
+Priority: TIER 3 — Thesis baseline
+Where:    New module or configuration; integrates with eval_runner
+Depends:  #9 (experiment runner)
+Effort:   3-5 days
+
+What:  The proposal defines "fixed semantic regions" as a baseline:
+       pre-defined spatial regions (e.g., table quadrants or fixed
+       grid sectors) with manually assigned semantic labels.  No
+       dynamic shadow computation or adaptive boxelization.
+
+Fix:   ONE COMMIT — implement fixed regions baseline:
+       (a) Define a set of fixed rectangular regions covering the
+           workspace (e.g., 4x4 grid with manual labels).
+       (b) Wire into experiment runner as --baseline fixed-regions.
+       (c) Compare against semantic boxels on same scenes.
+
+
+================================================================================
+#12. EVALUATION — SCALABILITY ANALYSIS
+================================================================================
+Priority: TIER 3 — Thesis evaluation
+Where:    eval_runner configuration; uses scalability_scene()
+Depends:  #9 (experiment runner)
+Effort:   2-3 days
+
+What:  The proposal requires scalability testing: varying the number
+       of occluders and targets to measure how planning time, success
+       rate, and plan quality scale with scene complexity.
+
+Fix:   ONE COMMIT — add scalability test configuration:
+       (a) Define a matrix of scene parameters (n_occluders: 1-6,
+           n_targets: 1-3, seeds: 5-10 per config).
+       (b) Run via experiment runner, collect metrics.
+       (c) Generate scalability plots (planning time vs scene size,
+           success rate vs scene size).
+
+       scalability_scene() preset already exists (old #55 DONE) —
+       this wires it into systematic evaluation.
+
+
+================================================================================
+#13. RECURSIVE OBJECT DISCOVERY IN FREE SPACE
+================================================================================
+Priority: TIER 3 — Proposal alignment, nice-to-have
+Where:    free_space.py (FreeSpaceGenerator)
+Depends:  None
+Effort:   2-3 days
+
+What:  The proposal (Section 4.2) says: "If new objects are found
+       within a partition, the process repeats: bound the biggest
+       object and define its occluded space."
+
+       The actual FreeSpaceGenerator does a single-pass octree that
+       marks cells as FREE or OCCUPIED.  It never detects new objects
+       inside partitions — all objects are detected upfront by
+       oracle_detect_objects.
+
+       For the current tabletop scenario with a fixed overhead camera,
+       all objects ARE detected upfront, so this gap is not triggered.
+       It would matter for partial-coverage sensors or objects hidden
+       inside containers.
+
+Fix:   ONE COMMIT — add recursive discovery pass:
+       (a) After initial octree subdivision, for each OCCUPIED cell,
+           check if it contains objects not yet in the registry.
+       (b) If new objects found, create object/shadow boxels for them
+           and repeat subdivision.
+       (c) Terminate when no new objects are discovered.
+
+       Alternatively, document as an accepted simplification for the
+       fixed-camera scenario and note as future work in the thesis.
+
+Related: #4 (re-boxelization could trigger re-discovery)
+
 
 ================================================================================
 FOR LATER
 ================================================================================
-- Incremental boxel recomputation after occluder relocation (without redoing
-  everything from scratch). After picking and placing an occluder, only the
-  affected shadows and free-space cells need recomputation.  See #104 for
-  the full re-evaluation requirement; this item is about the INCREMENTAL
-  optimisation (recompute only affected boxels, not the entire registry).
-- Physics-based pushing as an alternative to pick-and-place for objects that
-  are too large or heavy to grasp. Requires collision-free motion planning
-  (#5) and a force/velocity controller. Currently all push logic is
-  commented out, not deleted — can be revived if needed.  The supervisor
-  confirmed push is semantically equivalent to pick-and-place as long as
-  the target is an explicit action parameter.
+- Incremental boxel recomputation after occluder relocation (without
+  redoing everything from scratch).  See #4 for the full re-evaluation
+  requirement; this is about the INCREMENTAL optimisation.
+- Physics-based pushing as an alternative to pick-and-place for objects
+  too large or heavy to grasp.  Push logic is commented out, not deleted.
 - Pick-observe-replace strategy: after picking an object to clear a view
   corridor, observe immediately and place the object back in its original
-  location rather than in a different free boxel.  Raised in 2026-03-22
-  meeting as an open question — not yet decided.
+  location.  Open question from 2026-03-22 meeting.
 - APPROACH 2: PDDL-level merge/split with active/representative boxels.
-  Model merge and split as explicit PDDL actions with PDDLStream streams.
-  Base grid of smallest boxels, some "active" as representatives of merged
-  groups.  Would allow the planner to compute complete multi-step plans
-  without replanning.  Deferred in favour of simpler Approach 1 (opaque
-  re-boxelization + replan).  Could serve as a comparison baseline for
-  evaluation if time permits.  See DISCUSSION NOTES §7 in deferred archive.
+  Deferred in favour of simpler Approach 1 (opaque re-boxelization +
+  replan).  Could serve as a comparison baseline if time permits.
+- POMDP comparison baseline: significant effort, only viable if time
+  permits after core evaluation (#9–#12) is complete.
 
 ================================================================================
-106. EXECUTION SUB-MOVES ARE COLLISION-BLIND
-================================================================================
-Where: test_full_pipeline.py (execute_pick, execute_place),
-       robot_utils.py (move_robot_smooth)
-
-What:  The three hidden sub-moves inside execute_pick (approach, descend to
-       contact, lift) and the three inside execute_place (approach, descend,
-       retreat) are all executed via move_robot_smooth(), which is purely
-       linear joint-space interpolation with no collision checking.  The
-       existing collision infrastructure (is_path_collision_free, RRT-Connect
-       in BoxelStreams) is never called for any of these segments.
-
-       The PDDL planner calls plan_motion() — which does full RRT-Connect
-       collision checking — only for the symbolic move action.  Everything
-       inside execute_pick/execute_place is invisible to the planner and
-       runs blind at execution time.
-
-       Consequence: the robot can and does collide with other objects during
-       approach, descend, or retreat.  The approach/retreat heights (0.10 m,
-       0.25 m in execute_place lines 919-920, same in execute_pick) are
-       hardcoded constants that are never validated against the actual scene.
-       This is the observed execution failure mode: "the robot struggles with
-       the move to place path."
-
-       This is a consequence of the hidden sub-action architecture described
-       in #93, but it has a lighter-weight mitigation that does not require
-       full PDDL decomposition (see Fix below).
-
-Fix:   Without restructuring the PDDL domain (the full #93 fix):
-       (a) Replace the three move_robot_smooth() calls in execute_pick and
-           execute_place with collision-aware motion using the existing
-           plan_motion() stream or is_path_collision_free directly.
-       (b) For the approach and retreat segments (arm moving with/without
-           grasped object), call BoxelStreams.plan_motion() to get a
-           collision-free trajectory, then follow its waypoints instead
-           of linear interpolation.
-       (c) Pass the appropriate ignored_body_ids (grasped object during
-           approach; none during retreat) so the check mirrors what
-           plan_motion already does for the PDDL move action.
-       This would reuse existing infrastructure with minimal new code and
-       without changing the PDDL domain.  The full #93 fix (PDDL
-       decomposition) remains the architecturally correct long-term solution.
-
-Related: #93 (hidden sub-actions), #95 (PDDL state drift), PF-2, PF-3
-
-================================================================================
-107. PLACEMENT DESTINATION MAY STILL BLOCK THE CLEARED VIEW CORRIDOR
-================================================================================
-Where: domain_pddlstream.pddl (place action),
-       pddlstream_planner.py (_build_init, _get_stream_map),
-       streams.py (BoxelStreams)
-
-What:  The place action currently requires only that the destination boxel
-       is free and large enough (is_free_space + boxel_fits from #102).
-       It does NOT require that placing the occluder at the destination
-       leaves the view corridor clear.  The planner can generate a valid
-       plan that moves an occluder from its original boxel to a different
-       free boxel that is ALSO in the camera's line of sight to the same
-       shadow — meaning the placement accomplishes nothing: the view is
-       still blocked after the action, sense is still impossible, and the
-       planner will fail or loop.
-
-       Example: occluder at obj_003 blocks view to shadow_007.  Planner
-       places occluder at free_boxel_012, which is also in the LOS cone
-       from the camera to shadow_007.  After place, view_blocked(shadow_007)
-       is still true — the plan is semantically useless.
-
-       The blocks_view_at static geometry facts describe which (object, boxel)
-       pairs block which shadows.  These are emitted for the original boxel
-       positions only.  The planner has no stream or predicate that evaluates
-       whether the DESTINATION boxel would create a NEW blocks_view_at fact.
-
-       Two sub-problems:
-       (a) No precondition certifying the destination does not re-block any
-           shadow the occluder was originally blocking (the primary case:
-           "clear the view I was blocking").
-       (b) No precondition certifying the destination does not block ANY
-           shadow at all (the stricter case: don't create new occlusions).
-           Sub-problem (b) is likely too conservative for small free boxels
-           that are geometrically outside all camera cones, but is the
-           correct goal for a clean re-boxelization (#104).
-
-Fix:   Needs detailed design discussion before implementation.  Candidate
-       approaches:
-
-       (a) Test stream test-place-clears-view(?o ?dest ?shadow):
-           A PDDLStream test stream with inputs (?o ?dest ?shadow) that
-           returns True iff placing ?o at ?dest does NOT block view to
-           ?shadow (i.e. the dest boxel is geometrically outside the
-           camera-to-shadow cone).  Add as a precondition on place:
-           (not (place_blocks_view ?o ?dest)) certified by the stream.
-           Requires the stream to evaluate camera cone geometry at
-           planning time.
-
-       (b) Pre-computed no-block set in _build_init():
-           At problem build time, for each free boxel, compute whether
-           it lies within any LOS cone and emit (no_view_block ?b) facts.
-           The place action requires (no_view_block ?b).  Simpler than
-           a stream but bakes in a static assumption that cones do not
-           change during a plan.
-
-       (c) Explicit placement-region set:
-           The planner is given a pre-approved set of "safe placement"
-           boxels (outside all camera cones) as init facts.  Placement is
-           restricted to this set.  Most conservative and simplest to
-           implement; requires a camera-cone membership test at init time.
-
-       The right design, test stream structure, and whether to handle
-       sub-problem (b) alongside (a) needs to be decided before coding.
-       See also #103 (merge condition uses same LOS geometry) and #104
-       (re-boxelization rebuilds the safe set after each action).
-
-Related: #102 (boxel_fits precondition — now done), #103, #104, #105
-
-================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-03-24)
+SUMMARY — OPEN ISSUES BY PRIORITY
 ================================================================================
 
-TIER 0 — PDDL-CRITICAL (symbolic/physical desync):
-  #95  Systemic PDDL state drift (4 drift channels)     ~2-3 weeks
-  #93  Hidden sub-actions in sense/pick/place             ~1-2 weeks
-  #104 Post-action boxel state not re-evaluated           ~3-5 days
+Each issue is one commit.  Dependencies listed; work within a tier can
+be parallelized where no dependency exists.
 
-TIER 3 — THESIS-CRITICAL (days-weeks):
-  #76  No evaluation framework (PA-1)                     ~1-2 weeks
-  #103 Boxel merge condition incomplete                   ~2-3 days
-  #81  Recursive object discovery (PA-2)                  ~2-3 days
-  #105 Multi-boxel free space placement                   ~1 week
-  #106 Execution sub-moves collision-blind                ~1-2 days
-  #107 Placement may re-block cleared view corridor       ~needs design
+TIER 0 — ACTIONABLE NOW (no dependencies):
+  #1   Execution sub-moves collision-blind                ~1-2 days
+  #2   Boxel merge condition incomplete                   ~2-3 days
+  #3   Sense hidden move (add at_config precondition)     ~1-2 days
 
-TIER 4 — DEFERRABLE (supervisor-confirmed, see deferred archive):
-  #59+#77  Constraint grasping / object sizing
-  #97      Streams not generic (Panda/PyBullet coupling)
+TIER 1 — DEPENDS ON TIER 0:
+  #4   Post-action re-boxelization              depends #2  ~3-5 days
+  #5   Placement re-blocks view corridor        needs design ~2-3 days
+  #6   Multi-boxel free space placement         depends #2  ~1 week
 
-DECISION NEEDED (see deferred archive):
-  #96  Personal information in git history
+TIER 2 — PDDL REDESIGN (optional for thesis):
+  #7   Pick PDDL decomposition into sub-actions             ~1 week
+  #8   Place PDDL decomposition into sub-actions            ~1 week
 
-Resolved issues: see archive/CODEBASE_AUDIT_RESOLVED.txt.
-Archived no-action items: #44, #73, #87-#92, #94 (see resolved archive).
-Deferred/background: #55, #56, #59, #77, #96, #97, PA-3/4/5/6, PF-1/4/5, DISCUSSION
-  NOTES 2026-03-22 (see archive/CODEBASE_AUDIT_DEFERRED.txt).
+TIER 3 — THESIS EVALUATION (independent of code fixes):
+  #9   Metric collection + experiment runner                ~3-5 days
+  #10  Baseline: uniform voxelization           depends #9  ~3-5 days
+  #11  Baseline: fixed semantic regions         depends #9  ~3-5 days
+  #12  Scalability analysis                     depends #9  ~2-3 days
+  #13  Recursive object discovery                           ~2-3 days
+
+Total: 13 open issues
+Estimated effort: ~7-10 weeks sequential; less with parallelism
+
+Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
+Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
