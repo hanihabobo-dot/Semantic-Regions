@@ -7,6 +7,10 @@ Source: CODEBASE_AUDIT.txt (open issues file)
 Contents of this file:
   - DEFERRED scene infrastructure (#55): parameterization is done, no batch
     evaluation runner needed until #76 scaffolding exists.
+  - DEFERRED dead method bodies (#56): _depth_buffer_to_meters,
+    _depth_to_point_cloud, compute_neighbors and helpers are preserved per
+    codebase policy (no runtime cost; may be revived for real perception or
+    evaluation adjacency scoring).
   - TIER 4 DEFERRABLE issues (#59, #77, #97): supervisor-confirmed, not needed
     for thesis completion.
   - DECISION NEEDED issue (#96): pending decision, not blocking any code work.
@@ -17,6 +21,30 @@ Contents of this file:
   - DISCUSSION NOTES 2026-03-22: full meeting transcript from supervisor session.
     Key decisions from this meeting are captured as open issues #102-#105 in
     CODEBASE_AUDIT.txt; this is the raw source transcript.
+
+================================================================================
+56. DEAD COMPUTATION — POINT CLOUD AND NEIGHBORS NEVER USED  [PARTIALLY DONE, DEFERRED]
+================================================================================
+Archived: 2026-03-24 — dead method bodies preserved per codebase policy; no
+runtime cost; may be revived for real perception or evaluation adjacency scoring.
+
+Where: boxel_env.py (_depth_buffer_to_meters, _depth_to_point_cloud),
+       boxel_data.py (compute_neighbors, _check_adjacency, _opposite_direction)
+
+What:  The hot paths are already fixed:
+       (a) get_camera_observation() no longer computes RGB/depth/point cloud.
+       (b) compute_neighbors() is no longer called from
+           create_boxel_registry_from_boxels().
+
+       Remaining dead code (no callers, preserved intentionally):
+       - boxel_env.py: _depth_buffer_to_meters() (~15 lines),
+         _depth_to_point_cloud() (~13 lines)
+       - boxel_data.py: compute_neighbors() (~65 lines),
+         _check_adjacency(), _opposite_direction()
+
+       Per codebase policy these are NOT deleted — they document previous
+       approaches and could be re-enabled for a real perception pipeline
+       or for compute_neighbors() to support adjacency scoring in #103.
 
 ================================================================================
 55. HARDCODED SCENE — NO SCENARIO VARIATION  [INFRASTRUCTURE DONE, DEFERRED]

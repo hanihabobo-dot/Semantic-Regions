@@ -9,30 +9,6 @@ Resolved issues archived to archive/CODEBASE_AUDIT_RESOLVED.txt.
 Deferred/background items in archive/CODEBASE_AUDIT_DEFERRED.txt.
 
 ================================================================================
-56. DEAD COMPUTATION — POINT CLOUD AND NEIGHBORS NEVER USED  [PARTIALLY DONE]
-================================================================================
-Where: boxel_env.py get_camera_observation(), boxel_data.py compute_neighbors()
-What:  (a) Every get_camera_observation() call generates an RGB image,
-       depth image, and point cloud. None are used by the planner or
-       execution — only the boxels list is consumed. The point cloud
-       computation is wasted work.
-       (b) BoxelRegistry.compute_neighbors() runs O(n²) adjacency checks
-       and populates neighbor_ids on every boxel. No code ever reads
-       these relationships. They're serialized to JSON and ignored.
-
-Fix:   PARTIALLY DONE —
-       (a) get_camera_observation() no longer computes RGB, depth, or
-       point cloud — it only returns visible_objects, object_poses,
-       and boxels.  HOWEVER, the method bodies _depth_buffer_to_meters()
-       and _depth_to_point_cloud() (~28 lines) are still defined in
-       boxel_env.py with no callers in root code.  See #87.
-       (b) compute_neighbors() is no longer called from
-       create_boxel_registry_from_boxels().  HOWEVER, the method body
-       (~65 lines) plus helpers _check_adjacency() and
-       _opposite_direction() remain in boxel_data.py with no callers
-       in root code.  See #87.
-
-================================================================================
 PROPOSAL ALIGNMENT GAPS
 ================================================================================
 These are features described in the proposal that have no corresponding
@@ -595,7 +571,6 @@ TIER 3 — THESIS-CRITICAL (days-weeks):
   #81  Recursive object discovery (PA-2)                  ~2-3 days
   #102 Place target selection — no fitness check          ~1-2 days
   #105 Multi-boxel free space placement                   ~1 week
-  #56  Dead computation [PARTIALLY DONE]
 
 TIER 4 — DEFERRABLE (supervisor-confirmed, see deferred archive):
   #59+#77  Constraint grasping / object sizing
@@ -606,5 +581,5 @@ DECISION NEEDED (see deferred archive):
 
 Resolved issues: see archive/CODEBASE_AUDIT_RESOLVED.txt.
 Archived no-action items: #44, #73, #87-#92, #94 (see resolved archive).
-Deferred/background: #55, #59, #77, #96, #97, PA-3/4/5/6, PF-1/4/5, DISCUSSION
+Deferred/background: #55, #56, #59, #77, #96, #97, PA-3/4/5/6, PF-1/4/5, DISCUSSION
   NOTES 2026-03-22 (see archive/CODEBASE_AUDIT_DEFERRED.txt).
