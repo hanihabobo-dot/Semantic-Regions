@@ -1,0 +1,1749 @@
+================================================================================
+CODEBASE AUDIT — RESOLVED ISSUES
+================================================================================
+Date: 2026-02-25 (original audit, merged from 3 audit passes)
+Archived: 2026-03-13 (added #64, #70, #71, #72, #74, #75)
+Archived: 2026-03-22 (added #60, #61, #67, #69, #78-#85, #98, #99, #101;
+         verified against codebase during audit validation pass)
+
+These issues have been fixed, reclassified as not-an-issue, or corrected.
+The active audit with remaining open issues is in CODEBASE_AUDIT.txt.
+
+================================================================================
+1. OBJECT HIDING — FAKE ORACLE  [DONE]
+================================================================================
+Where: test_full_pipeline.py lines 141-144
+What:  The target is randomly assigned to a shadow via random.randint().
+       It has no relation to where the object actually is in the PyBullet scene.
+       Sensing (line 285) is a string comparison, not actual perception.
+
+Fix:   Determine which shadow a target is actually inside by checking if the
+       target's position falls within a shadow boxel's AABB. Replace the oracle
+       with ground-truth geometry from the scene.
+
+Fixed: Random oracle replaced with AABB containment check. Each target's
+       position is tested against every shadow boxel's min_corner/max_corner.
+       Only targets that are geometrically inside a shadow are eligible.
+       If no target is inside any shadow, the scenario exits gracefully.
+
+================================================================================
+2. SENSING — STRING COMPARISON, NO PERCEPTION  [DONE]
+================================================================================
+Where: test_full_pipeline.py line 285
+What:  found = (str(shadow_id) == oracle_hidden_shadow)
+       No ray-casting, no camera rendering, no visibility check.
+
+Fixed: String comparison replaced with PyBullet ray-casting via
+       sense_shadow_raycasting(). Rays originate from the fixed scene camera
+       (the actual perception sensor) and target a 7x7 XY grid at 3 Z levels
+       within the shadow volume. If any ray hits the target's PyBullet body,
+       sensing reports found=True.
+
+================================================================================
+3. PUSH — TELEPORTATION WITH HARDCODED DIRECTION  [DONE]
+================================================================================
+Where: test_full_pipeline.py lines 237-239
+What:  The occluder is teleported +0.3 in X using p.resetBasePositionAndOrientation().
+       Direction is always +X regardless of camera/shadow geometry.
+
+Fixed: Hardcoded +0.3 X replaced with compute_push_displacement(). The push
+       direction is now computed perpendicular to the camera->shadow viewing
+       line (in the XY plane). The push distance is the occluder's projected
+       half-width along the perpendicular + 10cm clearance margin. Teleportation
+       is retained as the motion mechanism.
+
+================================================================================
+4. STREAMS — RETURN STRING NAMES, NO GEOMETRY  [DONE]
+================================================================================
+Where: pddlstream_planner.py lines 87-127
+What:  All stream generators yield only string names like "q_push_obj_002_5".
+       No actual IK computation, no joint angles, no end-effector poses.
+       The streams in streams.py already have partial implementations with real
+       IK, but pddlstream_planner.py does NOT use them. See #20 for wiring.
+
+================================================================================
+8. MOVE ACTION — NO BOXEL REFERENCE  [DONE]
+================================================================================
+Where: pddl/domain_pddlstream.pddl lines 102-115
+
+Fixed: Added (config_for_boxel ?q ?b) predicate. Move action is now
+       move(?q1, ?q2, ?b, ?t) with precondition (config_for_boxel ?q2 ?b).
+       Execution uses the ?b parameter directly.
+
+================================================================================
+9. PLACE ACTION — NO DESTINATION CONSTRAINT  [DONE]
+================================================================================
+Where: pddl/domain_pddlstream.pddl lines 144-161
+
+Fixed: Added (is_free_space ?b) as a precondition to the place action.
+
+================================================================================
+10. SHADOW-OCCLUDER MAPPING — ROUND-ROBIN ASSIGNMENT  [DONE]
+================================================================================
+Where: test_full_pipeline.py lines 152-154
+
+Fixed: Round-robin replaced with registry lookup using created_by_boxel_id.
+       Each shadow now maps to the occluder that actually casts it.
+
+================================================================================
+BUG FIX: REPLANNING INIT STATE  [DONE]
+================================================================================
+Where: pddlstream_planner.py create_problem(), line 175
+
+Fixed: Added (occluder_aside occ_id) to init for already-moved occluders.
+
+================================================================================
+BUG FIX: EXECUTION — BELIEF, OFFSETS, FAILED PUSH  [DONE]
+================================================================================
+Where: test_full_pipeline.py
+
+Fixed: (1) belief.mark_occluder_moved() only after successful push.
+       (2) Move uses boxel-type-dependent offsets.
+       (3) On push failure, break to replan instead of continue.
+
+================================================================================
+11. NO PROBLEM FILE — BUILT IN PYTHON, LEGACY ARTIFACTS LINGER  [DONE]
+================================================================================
+Where: pddlstream_planner.py create_problem(), pddl/ directory
+
+Fixed: Moved unused PDDL files to archive/pddl/. Added export_problem_pddl()
+       for debugging. pddl/ now contains only runtime files.
+
+================================================================================
+13. TWO DIVERGED VERSIONS OF BoxelTestEnv  [DONE]
+================================================================================
+Where: boxel_test_env.py and boxel_env.py
+
+Fixed: Kept boxel_env.py (modular version) as sole BoxelTestEnv. Archived
+       boxel_test_env.py. Unified Boxel class in boxel_types.py. Also fixes #40.
+
+================================================================================
+14. OBSOLETE EXECUTOR / PROBLEM GENERATOR / HIDDEN OBJECT SCENARIO  [DONE]
+================================================================================
+Where: executor.py, problem_generator.py, hidden_object_scenario.py
+
+Fixed: Moved all three files to archive/.
+
+================================================================================
+15. PDDL FACT GENERATOR USES WRONG PREDICATES  [DONE]
+================================================================================
+Where: boxel_data.py lines 283-337
+
+Fixed: Rewrote generate_pddl_facts() to use exact predicates from
+       domain_pddlstream.pddl. Removed all 9 wrong predicates.
+
+================================================================================
+16. REACHABILITY / OBSERVABILITY — NEVER COMPUTED, ALWAYS TRUE  [DONE]
+================================================================================
+Where: boxel_data.py lines 69-71
+
+Fixed: Removed both fields entirely from BoxelData.
+
+================================================================================
+17. SCENE IS FULLY HARDCODED  [NOT AN ISSUE — BY DESIGN]
+================================================================================
+The fixed scene composition is intentional. No randomization wanted.
+
+================================================================================
+18. TABLE BOUNDS DUPLICATED ACROSS FILES  [DONE]
+================================================================================
+Where: test_full_pipeline.py, boxel_test_env.py
+
+Fixed: Table bounds now defined once in BoxelTestEnv._setup_scene() and
+       passed to all consumers.
+
+================================================================================
+19. STALE FILES AND SCRATCH SCRIPTS  [DONE]
+================================================================================
+Where: Multiple files in project root and temp/
+
+Fixed: Deleted temp/. Moved 7 stale files to archive/.
+
+================================================================================
+21. compute_push_displacement — DUMMY FALLBACK RETURNS [0.3, 0, 0]  [DONE]
+================================================================================
+Where: test_full_pipeline.py
+
+Fixed: All three dummy returns replaced with return None. Caller's
+       existing None check triggers replan correctly.
+
+================================================================================
+22. push_aside — SILENT SKIP WHEN OCCLUDER NOT IN MAPPING  [DONE]
+================================================================================
+Where: test_full_pipeline.py lines 245-279
+
+Fixed: Added else branch that prints ERROR and breaks to replan.
+
+================================================================================
+23. push_aside COLLISION CHECK INCOMPLETE  [NOT AN ISSUE]
+================================================================================
+Where: test_full_pipeline.py compute_push_displacement()
+What:  Hidden targets missing from collision check because generate_boxels()
+       only processes visible objects.
+
+NOT AN ISSUE: The robot operates under partial observability. Hidden targets
+are unknown to the robot. Including them in collision checks would give the
+robot oracle knowledge it shouldn't have. If a push displaces a hidden target,
+that's a consequence of partial observability + teleportation, not a bug.
+
+================================================================================
+24. GOAL PARSING IS STRING-BASED AND BRITTLE  [DONE]
+================================================================================
+Where: pddlstream_planner.py create_problem()
+
+Fixed: plan() and create_problem() now accept goal as a tuple directly.
+       String parsing removed entirely.
+
+================================================================================
+25. OBJECT POSITIONS NEVER UPDATED AFTER PHYSICS SETTLING  [DONE]
+================================================================================
+Where: boxel_test_env.py, test_full_pipeline.py
+
+Fixed: Added update_object_positions() to BoxelTestEnv. Called after settling,
+       after push physics, and before pick.
+
+================================================================================
+27. max_replans — MAGIC HEURISTIC, NO GUARANTEE  [DONE]
+================================================================================
+Where: test_full_pipeline.py line 205
+
+Fixed: Increased to 2 * len(shadows) + 1. Added comment documenting formula.
+       Fixed failure reporting to distinguish limit vs exhaustion.
+
+================================================================================
+28. TARGETS GENERATE SHADOWS — is_occluder NEVER CHECKED  [AUDIT CORRECTION]
+================================================================================
+CORRECTION: Targets DO cast shadow boxels. The is_occluder field is never
+checked during shadow calculation. Acceptable as modeling simplification.
+
+================================================================================
+29. STREAM PDDL MISMATCH — obj_graspable PREDICATE  [DONE]
+================================================================================
+Where: pddl/stream.pddl, streams.py
+
+Fixed: obj_graspable is NOT needed. Removed get_stream_definitions() dead code
+       from streams.py. Fixed sample_grasp() docstring.
+
+================================================================================
+30. config.py DEAD — HARDCODED USER-SPECIFIC PATHS  [NOT AN ISSUE]
+================================================================================
+The hardcoded WSL path is intentional for single-developer project.
+
+================================================================================
+33. BoxelData HAS 5 UNUSED BELIEF-STATE FIELDS  [DONE]
+================================================================================
+Where: boxel_data.py lines 62-66
+
+Fixed: Removed all five fields from BoxelData. Belief tracking remains
+       in BeliefState class.
+
+================================================================================
+34. REPLANNING ALWAYS ASSUMES ROBOT IS AT q_home  [DONE]
+================================================================================
+Where: test_full_pipeline.py, pddlstream_planner.py
+
+Fixed: Added current_config tracking. Updated after each move action.
+       Passed to planner.plan() on every call.
+
+================================================================================
+35. push_aside REDUNDANTLY MOVES THE ROBOT  [DONE]
+================================================================================
+Where: test_full_pipeline.py line 257
+
+Fixed: Removed move_robot_to_pos call from push_aside execution.
+       Move action handles all positioning.
+
+================================================================================
+37. NO open_gripper BEFORE PICK  [DONE]
+================================================================================
+Where: test_full_pipeline.py execute_pick()
+
+Fixed: Added open_gripper() call before lowering to grasp.
+
+================================================================================
+38. p.createConstraint IN PICK IS NEVER CLEANED UP  [DONE]
+================================================================================
+Where: test_full_pipeline.py line 487
+
+Fixed: execute_pick() returns constraint ID. Caller stores it and calls
+       p.removeConstraint() after the run completes.
+
+================================================================================
+39. oracle_detect_objects HAS REDUNDANT DISTANCE CHECK  [DONE]
+================================================================================
+Where: boxel_test_env.py, boxel_env.py
+
+Fixed: Removed secondary center-to-center distance check. hit_fraction < 0.95
+       is sufficient and correct.
+
+================================================================================
+40. boxel_env.py MISSING update_object_positions()  [DONE]
+================================================================================
+Resolved as part of #13 unification.
+
+================================================================================
+42. PDDL PREDICATE is_occluder MISNAMES WHAT IT MEANS  [DONE]
+================================================================================
+Where: domain_pddlstream.pddl, stream.pddl, pddlstream_planner.py, boxel_data.py
+
+Fixed: Renamed (is_occluder ?b) to (is_object ?b) in all six locations.
+
+================================================================================
+43. push_aside TELEPORTATION RESETS ORIENTATION TO IDENTITY  [DONE]
+================================================================================
+Where: test_full_pipeline.py line 268-269
+
+Fixed: Current orientation read and preserved during teleportation.
+
+================================================================================
+45. KEYBOARD INTERRUPT SILENTLY SWALLOWED  [DONE]
+================================================================================
+Where: test_full_pipeline.py
+
+Fixed: Replaced with timed exit (4-second countdown). No interrupt handling needed.
+
+================================================================================
+46. UNUSED IMPORTS  [DONE]
+================================================================================
+Where: test_full_pipeline.py
+
+Fixed: Removed unused BoxelStreams import.
+
+================================================================================
+31. DEAD CODE AND DUPLICATE UTILITIES  [DONE]
+================================================================================
+Where: Multiple files
+
+Fixed: Created robot_utils.py as the single source of truth for all Panda
+       constants (ARM_JOINT_INDICES, END_EFFECTOR_LINK, FINGER_JOINTS,
+       JOINT_LIMITS_LOW/HIGH, JOINT_RANGES, REST_POSES) using the precise
+       datasheet values from streams.py. Moved compute_ik, move_robot_smooth,
+       move_robot_to_pos, open_gripper, close_gripper into robot_utils.py.
+       Updated streams.py and test_full_pipeline.py to import from
+       robot_utils — removed all duplicate definitions. The rounded
+       joint-limit values in test_full_pipeline.py (-2.9 vs -2.8973, etc.)
+       are now replaced by the precise Panda spec values everywhere.
+
+       Note: compute_ik and move_robot_to_pos are interim — they exist
+       because execution currently recomputes IK from hardcoded offsets
+       instead of using plan parameters (#6). Once #20 wires BoxelStreams
+       into the planner and #6 makes execution use plan configs, these
+       two functions become unnecessary. The permanent utilities are
+       move_robot_smooth (motor interpolation), open_gripper, close_gripper.
+
+================================================================================
+12. VISIBILITY CHECK — ALWAYS RETURNS TRUE (STUB)  [RESOLVED — no longer applicable]
+================================================================================
+Where: streams.py (formerly lines 475-488)
+What:  test_visibility() always returned True regardless of inputs.
+       This was the stream-level visibility test for sensing configs.
+
+Resolved: test_visibility() and the sensing_config stream were removed
+       as part of #36. Sensing uses the fixed scene camera, not a
+       robot-positioned viewpoint, so there is no robot config whose
+       visibility needs testing. View clearance is tracked by the
+       view_clear predicate in the PDDL domain and will be verified
+       by sense execution once #32 is properly fixed.
+
+================================================================================
+20. BoxelStreams CLASS IS NEVER USED BY THE PLANNER  [DONE]
+================================================================================
+Where: streams.py (BoxelStreams class, ~490 lines), pddlstream_planner.py
+What:  pddlstream_planner.py defines its OWN stub generators that produce
+       string names (_gen_push_config, _gen_sensing_config, etc.).
+       The real BoxelStreams class in streams.py (with actual IK via
+       PyBullet, proper viewpoint sampling, grasp generation) is NEVER
+       connected to the planner.
+
+       This is the ROOT CAUSE of issue #4 — streams produce strings
+       BECAUSE the planner uses its own stubs instead of BoxelStreams.
+
+Fixed: Wired BoxelStreams into pddlstream_planner.py's _get_stream_map().
+       (1) PDDLStreamPlanner.__init__ now creates a BoxelStreams instance
+       (accepts robot_id + physics_client) and exposes home_config.
+       (2) _get_stream_map() delegates directly to BoxelStreams methods:
+           sample_push_config, sample_grasp, plan_motion, compute_kin_solution.
+       (3) Removed all four stub generators (_gen_push_config, _gen_grasp,
+           _gen_motion, _gen_kin_solution) and their counters.
+       (4) Made Trajectory and Grasp hashable (__hash__/__eq__ by name) —
+           PDDLStream stores stream outputs as atoms requiring hashability.
+       (5) Added __repr__ to RobotConfig, Trajectory, Grasp for clean
+           plan output (shows name instead of full data).
+       (6) test_full_pipeline.py updated: passes physics_client=env.client_id
+           to the planner; uses planner.home_config as initial current_config;
+           move handler keeps q2 as RobotConfig (not str) so replanning
+           receives real geometric data for the robot's current configuration.
+       (7) All public planner methods accept RobotConfig or string for
+           current_config (backward compatible; defaults to home_config).
+       Result: plan actions now carry real IK-solved joint configurations,
+       actual grasp poses, and interpolated trajectories. Execution still
+       uses hardcoded offsets (#6, #7) but the plan data is geometrically
+       valid. When #6/#7 are fixed, execution can use plan params directly.
+
+================================================================================
+26. heuristic_ik() — MEANINGLESS FAKE IK FALLBACK  [DONE]
+================================================================================
+Where: streams.py lines 268-285
+What:  When robot_id is None (no PyBullet robot loaded),
+       _compute_sensing_ik() falls back to _heuristic_ik() which
+       produces "plausible-looking" joint configs by:
+         offset = (ee_pos - [0.5, 0, 0.5]) * 0.5
+         perturb home config by offset * 0.3
+
+       These are NOT inverse kinematics — they are random perturbations
+       of the home pose. The resulting configurations have no relationship
+       to the requested end-effector position. They exist only to let
+       tests run without a robot, but they could silently corrupt
+       results if used when a robot IS expected.
+
+Fixed: (1) Added is_heuristic flag to RobotConfig (default False). Configs
+       from _heuristic_ik() are marked is_heuristic=True so downstream
+       code can detect and reject them when real IK is expected.
+       (2) BoxelStreams.__init__ logs a WARNING when robot_id is None,
+       alerting early that all IK will use the heuristic fallback.
+       (3) _heuristic_ik() logs a WARNING on every call with the
+       requested ee_pos, making it impossible to miss silently.
+       (4) Docstring rewritten to honestly describe what the function
+       does (arbitrary perturbation, NOT inverse kinematics).
+
+================================================================================
+32. PDDL DOMAIN MODELS SOLUTION, NOT ROBOT CAPABILITIES  [DONE — all 3 phases]
+================================================================================
+Where: pddl/domain_pddlstream.pddl, test_full_pipeline.py, stream.pddl
+
+  PHASE 1 — Track occluder positions:  [DONE]
+       _build_init() now adds (obj_at_boxel ?occ ?occ) for every
+       OBJECT boxel not in moved_occluders. generate_pddl_facts()
+       updated to match.
+
+  PHASE 2 — Rewrite push as spatial + derived predicates:  [DONE]
+       Push is now push(?obj ?b_from ?b_to ?q_start ?q_end ?traj)
+       with purely spatial effects (obj moves, config updates).
+       blocks_view and view_clear are derived predicates computed
+       from obj_at_boxel + static blocks_view_at geometry facts.
+       Push stream outputs destination + configs + trajectory.
+       Stream domain uses is_object (static) for both inputs;
+       the push action precondition (obj_at_boxel ?obj ?b_from)
+       enforces the fluent constraint at plan time.
+
+  PHASE 3 — Move verification from push to sense:  [DONE]
+       Removed verify_push_cleared_view() from push execution. Push
+       now only moves the occluder physically and updates state.
+       Sensing now owns verification with three outcomes:
+         - found_target
+         - clear_but_empty
+         - still_blocked
+       If still_blocked, belief state keeps the shadow as unknown
+       (not "not_here"), preventing false negative observations and
+       belief corruption after insufficient pushes.
+
+================================================================================
+36. sense_shadow IGNORES ROBOT POSITION — USES FIXED CAMERA  [DONE]
+================================================================================
+Where: test_full_pipeline.py lines 324-338
+What:  The PDDL plan moves the robot to a sensing config before sensing:
+         1. move(q, q_sense, shadow_boxel, traj)
+         2. sense_shadow(obj, shadow, occ, q_sense)
+
+       But sense_shadow_raycasting() casts rays from the FIXED camera
+       position (env.camera_position), not from the robot's end-effector
+       or any config-dependent viewpoint. The robot's actual position has
+       zero effect on sensing.
+
+Fixed: Removed the sensing_config stream and robot-config dependency from
+       the sense action entirely. We use a fixed scene camera, so the plan
+       should not pretend the robot needs to be positioned for sensing.
+       (1) domain_pddlstream.pddl: sense action now takes (?o ?region)
+           instead of (?o ?region ?q). Removed (at_config ?q),
+           (sensing_config ?region ?q) preconditions. Removed
+           sensing_config predicate.
+       (2) stream.pddl: removed sample-sensing-config stream.
+       (3) pddlstream_planner.py: removed _gen_sensing_config generator
+           and its stream-map entry.
+       (4) test_full_pipeline.py: sense dispatch unpacks 2 params
+           instead of 3.
+       (5) streams.py: removed sample_sensing_config() and
+           test_visibility() (both were dead code for the fixed-camera
+           architecture). Updated module docstring.
+       The planner will no longer generate move-to-sense steps. Plans
+       become: push ÔåÆ sense ÔåÆ move-to-pick ÔåÆ pick (was: push ÔåÆ
+       move-to-sense ÔåÆ sense ÔåÆ move-to-pick ÔåÆ pick).
+
+================================================================================
+41. NO VERIFICATION THAT PUSH CLEARED LINE OF SIGHT  [DONE via #32 Phase 3]
+================================================================================
+Where: test_full_pipeline.py lines 259-288
+What:  After pushing an occluder (teleportation + 30 physics steps), the
+       code proceeds to the next action without verifying that camera
+       rays can now penetrate the shadow region. If the push displacement
+       was insufficient, or physics settling moved the occluder back
+       partially, the subsequent sense_shadow will fail to detect the
+       target even if it IS there.
+
+Fixed: Removed push-time view verification from push execution.
+       Verification moved into sense_shadow_raycasting(), which now
+       reports tri-state outcomes:
+         - found_target
+         - clear_but_empty
+         - still_blocked
+       When still_blocked, replanning occurs without marking the
+       shadow empty. This keeps sensing semantics aligned with the
+       planner and avoids hardcoded "sense-after-push" behavior.
+
+================================================================================
+47. PUSH STREAM DOMAIN USES is_object AS HACK TO BIND ?b_from  [DONE]
+================================================================================
+Where: pddl/stream.pddl, pddlstream_planner.py, streams.py
+What:  The push stream's domain condition was:
+         (and (is_object ?obj) (is_object ?b_from))
+       ?b_from is a LOCATION (the boxel where the object sits), not an
+       object. Using is_object exploited the coincidence that occluders
+       initially sit at their own object-typed boxels. This caused:
+         - Semantically wrong: a location is not "an object."
+         - Over-instantiates the stream for all object├ùobject pairs.
+         - Breaks if an occluder is pushed to a non-object boxel and
+           needs to be pushed again from there.
+
+Fixed: Introduced a static predicate (occluder_at ?occ ?b) that mirrors
+       each occluder's current position. The stream domain is now:
+         (and (is_object ?obj) (occluder_at ?obj ?b_from))
+
+       Why not obj_at_boxel directly? PDDLStream strips fluent predicates
+       (those in action effects) from stream domains. Using obj_at_boxel
+       causes KeyError: '?b_from' because the Instantiator can't bind it
+       after stripping.
+
+       Why not :fluents (obj_at_boxel)? compile_fluent_streams() enforces
+       that fluent stream outputs cannot appear in action effects. Push
+       stream outputs (?b_to, ?q_start, ?q_end, ?traj) all appear in
+       push action effects — blocked by design.
+
+       The static predicate approach:
+       (1) domain_pddlstream.pddl: added (occluder_at ?o ?b) predicate.
+       (2) pddlstream_planner.py _build_init(): emits (occluder_at occ loc)
+           for each occluder — at original boxel or at moved destination
+           (from #48's moved_occluders dict).
+       (3) stream.pddl: push stream domain changed to (occluder_at ?obj ?b_from).
+       (4) Removed b_from != occluder_id guard from generators in both
+           pddlstream_planner.py and streams.py — the domain now guarantees
+           only valid (occluder, location) pairs reach the generator.
+
+       Result: semantically correct binding, no over-instantiation
+       (evaluations dropped from 237 to 183 in test), works with moved
+       occluder destinations from #48. Limitation: occluder_at is static
+       per planning call, so re-pushing the same occluder twice within
+       a single plan is not supported — the replanning loop handles this.
+
+================================================================================
+48. MOVED OCCLUDERS VANISH FROM PLANNER STATE  [DONE]
+================================================================================
+Where: test_full_pipeline.py (BeliefState), pddlstream_planner.py (_build_init)
+What:  BeliefState.mark_occluder_moved() only records WHICH occluder was
+       moved (adds ID to a set), not WHERE it was moved to. When
+       replanning, _build_init() skips (obj_at_boxel occ occ) for moved
+       occluders (line 292-293) but has no destination to add instead.
+       The occluder has no position in the planner state — it effectively
+       disappears.
+
+       Consequence: the planner cannot push a moved occluder again. This
+       is correct for the current scenario (once moved, view_clear is
+       derived as true, so no second push is needed). But it prevents
+       multi-push scenarios where an occluder must be pushed incrementally
+       or re-pushed after drifting back (see #45).
+
+       Interacts with #47: even if the destination were tracked, the
+       is_object hack in the stream domain would prevent binding ?b_from
+       to a non-object boxel like push_dest_obj_007_14.
+
+Fixed: (1) BeliefState.occluders_moved changed from set to dict
+       mapping {occluder_id: destination_boxel_id}.
+       (2) mark_occluder_moved(occluder_id, destination) now stores the
+       destination (symbolic name "pushed_{occ_id}").
+       (3) unmark_occluder_moved uses dict.pop() instead of set.discard().
+       (4) All planner interfaces (plan, create_problem, export_problem_pddl,
+       _build_init) updated: moved_occluders is now Dict[str, str].
+       (5) _build_init() emits (obj_at_boxel occ dest) and (Boxel dest) for
+       moved occluders instead of omitting them entirely.
+       The occluder now has a valid position in the planner's world model.
+       Since no (blocks_view_at occ dest shadow) exists for the destination,
+       the derived view_clear predicate correctly evaluates to true.
+       Note: re-pushing from the new destination still requires #47
+       (fluent streams) so the push stream can bind ?b_from to dest.
+
+================================================================================
+49. STREAM IK FAILS ON REPLAN — PLANNER TIMES OUT  [DONE]
+================================================================================
+Where: streams.py (_pybullet_ik), test_full_pipeline.py (replanning loop)
+What:  When the target is NOT behind the first pushed occluder, Plan #1
+       succeeds (pushes, senses, finds nothing). Plan #2 then times out
+       (60s) because stream sampling produces almost nothing — evaluations
+       only increase from 183 to 185 (2 new atoms vs 15 in Plan #1).
+
+       Root cause has two parts:
+
+       (1) SEED DEPENDENCY: PyBullet's calculateInverseKinematics() uses
+       the robot's CURRENT joint state as its iterative solver seed.
+       After Plan #1 moves the robot (move_robot_to_pos in execution),
+       the joints are far from REST_POSES. On Plan #2, every IK call
+       in _pybullet_ik() starts from this displaced configuration,
+       converging to solutions that violate joint limits (filtered out)
+       or not converging at all. Plan #1 works because the robot starts
+       at REST_POSES (a good seed).
+
+       (2) NO NULL-SPACE PARAMETERS: _pybullet_ik() in streams.py calls
+       calculateInverseKinematics without lowerLimits, upperLimits,
+       jointRanges, or restPoses. Compare with compute_ik() in
+       robot_utils.py (used by execution), which provides all four —
+       making it much more robust. The stream IK is the simple variant;
+       the execution IK is the null-space variant. They should match.
+
+       Evidence: Plan #2 output shows sample_time: 0.028s (generators
+       fast but empty), search_time: 59.97s (planner retrying with no
+       new atoms). 4 skeletons found (one per occluder) but 0 solutions.
+
+Fixed: (a) _pybullet_ik() now saves the robot's current joint state,
+       resets all arm joints to REST_POSES (providing a consistent seed),
+       runs IK, then restores the original state in a finally block.
+       This makes stream IK results independent of where plan execution
+       left the robot.
+       (b) calculateInverseKinematics call now includes lowerLimits,
+       upperLimits, jointRanges, and restPoses — matching compute_ik()
+       in robot_utils.py. The null-space parameters bias solutions toward
+       the rest configuration, dramatically improving convergence.
+       (c) Added JOINT_RANGES to the imports from robot_utils.
+       Result: Plan #2 now finds solutions in ~19s with 212 evaluations
+       (was: timeout at 60s with 185 evaluations). Multi-shadow scenarios
+       work — tested with target behind the second occluder pushed.
+
+================================================================================
+50. PUSH IS TELEPORTATION — ROBOT ARM NEVER TOUCHES THE OBJECT
+    [SUPERSEDED — push replaced by pick-and-place (#53)]
+================================================================================
+Where: test_full_pipeline.py push execution
+What:  Push execution called p.resetBasePositionAndOrientation() to teleport
+       the occluder. The robot arm was never involved.
+
+Superseded: The entire push pipeline is being replaced by pick-and-place
+       (#53). The robot picks up the occluder, moves to a free-space boxel,
+       and places it there. No teleportation, no contact physics uncertainty.
+       Push action, stream, and execution are commented out.
+
+================================================================================
+51. PUSH STREAM SAMPLES ARBITRARY DIRECTIONS, NOT REAL DESTINATIONS
+    [SUPERSEDED — push replaced by pick-and-place (#53)]
+================================================================================
+Where: streams.py sample_push_config()
+What:  sample_push_config() tried 4 cardinal directions at hardcoded offsets,
+       invented fake destination names, and had no knowledge of free-space
+       boxels or view corridors.
+
+Superseded: With push removed (#53), the push stream is commented out.
+       Occluder relocation uses the existing sample_grasp and
+       compute_kin_solution streams, which already produce valid geometry.
+
+================================================================================
+45. OCCLUDER POSITION DESYNCS AFTER FAILED PUSH
+    [SUPERSEDED — push replaced by pick-and-place (#53)]
+================================================================================
+Where: test_full_pipeline.py (push execution + replanning loop)
+What:  Push teleported the occluder physically but didn't always update
+       symbolic state, causing position desync between PyBullet and the
+       planner's world model.
+
+Superseded: Pick-and-place is deterministic — the robot places the
+       occluder exactly where the planner says. No teleportation drift,
+       no partial pushes, no desync.
+
+================================================================================
+46. PLANNER CANNOT DETECT PHYSICALLY CLEAR VIEWS
+    [SUPERSEDED — push replaced by pick-and-place (#53)]
+================================================================================
+Where: pddlstream_planner.py (_build_init), test_full_pipeline.py
+What:  After failed push attempts, the planner's symbolic state still showed
+       views as blocked even when they were physically clear. The planner
+       looped endlessly on stale symbolic state.
+
+Superseded: With pick-and-place, the occluder is either at its original
+       boxel or at the free-space destination. There is no partial/failed
+       displacement — either the pick succeeded and the place happened, or
+       replanning handles the failure cleanly.
+
+================================================================================
+53. REPLACE PUSH WITH PICK-AND-PLACE FOR OCCLUDER RELOCATION  [DONE]
+================================================================================
+Where: pddl/domain_pddlstream.pddl, pddl/stream.pddl, streams.py,
+       pddlstream_planner.py, test_full_pipeline.py
+
+Fixed: All three parts implemented:
+
+  PART 1 — Make occluders graspable:
+       _build_init() now emits (Obj occ_id) and (obj_at_boxel_KIF occ_id boxel)
+       for each OBJECT boxel. The planner can now generate pick ÔåÆ move ÔåÆ place
+       plans for occluders using the same streams as targets. (occluder_at)
+       predicate removed — it was only needed for the push stream domain.
+
+  PART 2 — Push commented out:
+       (a) domain_pddlstream.pddl: push action commented out, push_solution
+           and occluder_at predicates commented out.
+       (b) stream.pddl: sample-push-config stream commented out.
+       (c) pddlstream_planner.py: 'sample-push-config' removed from stream map.
+       (d) streams.py: sample_push_config() commented out.
+       (e) test_full_pipeline.py: push execution branch removed,
+           compute_push_displacement() removed.
+
+  PART 3 — Place execution added:
+       execute_place() function added (lower, open gripper, release constraint,
+       lift). Place dispatch branch in execution loop resolves destination from
+       boxel_centers, calls execute_place(), updates env positions and belief.
+       Pick dispatch generalized to work with any object (not just targets).
+       Sense handler simplified — occluder moved-state now tracked by place
+       branch, not sense.
+
+================================================================================
+52. MOVE EXECUTION IGNORES PLAN CONFIGS — RE-DERIVES IK FROM HARDCODED OFFSETS  [DONE]
+================================================================================
+Where: test_full_pipeline.py move execution (~lines 271-277)
+
+Fixed: Move execution now calls move_robot_smooth(robot_id, q2.joint_positions, gui)
+       directly with the plan's IK-solved config. Removed:
+       - Boxel center lookup (boxel_to_pybullet / boxel_centers)
+       - Hardcoded Cartesian offsets ([0,-0.3,0.2] and [0,0,0.15])
+       - move_robot_to_pos() call (which re-ran IK from scratch)
+       - Unused compute_ik import
+
+       The robot now drives to the exact joint configuration that
+       compute_kin_solution() solved during planning. The trajectory
+       parameter (traj) is unpacked but not yet executed waypoint-by-
+       waypoint — since plan_motion() currently produces linear
+       interpolation (#5), and move_robot_smooth() also interpolates
+       linearly, the result is equivalent. When real motion planning
+       is added (#5), execution should iterate through traj.waypoints.
+
+       move_robot_to_pos() and compute_ik() have since been removed
+       from robot_utils.py as part of #7.  solve_ik() replaced them.
+
+================================================================================
+7. PICK/PLACE — HARDCODED OFFSETS, IGNORES PLAN GRASP, MAGIC ATTACHMENT  [DONE]
+================================================================================
+Where: test_full_pipeline.py execute_pick(), execute_place()
+
+Fixed: Part A resolved — plan's grasp + config now drive execution:
+
+       execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui):
+         Three grasp-derived waypoints replace hardcoded offsets:
+           - contact_ee = obj_pos + grasp.position (plan's IK config)
+           - approach_ee = contact_ee + [0,0,0.10] (IK via solve_ik)
+           - lift_ee = contact_ee + [0,0,0.25] (IK via solve_ik)
+         Contact uses move_robot_smooth(config.joint_positions) — the
+         plan's IK-solved config, not re-derived IK. Approach and lift
+         use solve_ik() with the grasp's orientation, so all waypoints
+         adapt when sample_grasp is expanded to non-top-down grasps.
+         p.createConstraint now uses grasp.position for the parent-frame
+         offset (was hardcoded [0,0,0.05]).
+
+       execute_place(robot_id, env, obj_name, place_pos, grasp, config,
+                     grasp_constraint_id, gui):
+         Same pattern: approach, contact (plan config), retreat — all
+         derived from grasp + place_pos.
+
+       robot_utils.py cleanup:
+         - compute_ik() removed (was simpler IK without seed reset)
+         - move_robot_to_pos() removed (was compute_ik + move_robot_smooth)
+         - solve_ik() added: null-space IK with rest-pose seed reset,
+           matching BoxelStreams._pybullet_ik() in streams.py. Used for
+           approach/lift/retreat waypoints only — contact uses plan config.
+
+       Part B (constraint-based grasping) accepted as simulation
+       simplification — unchanged.
+
+================================================================================
+5. MOTION PLANNING — LINEAR INTERPOLATION, NO COLLISION CHECKING  [DONE]
+================================================================================
+Where: streams.py plan_motion(), robot_utils.py, test_full_pipeline.py
+
+Fixed: Replaced linear interpolation with collision-aware motion planning:
+
+       robot_utils.py — two new utilities:
+         is_config_collision_free(): saves robot state, sets query joints,
+         runs performCollisionDetection + getContactPoints, restores state.
+         Filters adjacent-link self-contacts (_PANDA_IGNORED_SELF_PAIRS),
+         base-link ground contact, and caller-specified ignored bodies.
+         is_path_collision_free(): samples n_checks configs along a
+         straight-line edge and delegates to is_config_collision_free().
+
+       streams.py — plan_motion() rewritten with three-tier strategy:
+         (a) If robot_id is None (heuristic mode), linear interpolation
+             as before — no physics to check against.
+         (b) Direct path: check the straight line from q1 to q2.  If
+             collision-free, return the linear trajectory (fast path —
+             covers the common case where the arm swings through open
+             space).
+         (c) RRT-Connect (Kuffner & LaValle, 2000): bidirectional tree
+             search with 0.2 rad/joint step size, 2000 max iterations,
+             5% goal bias.  Connect phase greedily extends toward the
+             other tree's new node.  Path is smoothed with 75 rounds of
+             random shortcut attempts (pick two non-adjacent waypoints,
+             replace with direct edge if collision-free).
+         If RRT-Connect fails, the stream yields nothing — PDDLStream
+         retries with different bindings or reports planning failure.
+
+       test_full_pipeline.py — move execution updated:
+         Now iterates through traj.waypoints[1:] (skipping the start
+         config) and calls move_robot_smooth() per waypoint with 30
+         steps per segment.  Previously jumped directly to q2, ignoring
+         the trajectory.
+
+================================================================================
+54. ORACLE VISIBILITY — SINGLE RAY WITH MAGIC THRESHOLD  [DONE]
+================================================================================
+Where: boxel_env.py oracle_detect_objects()
+
+Fixed: Replaced single center-ray + magic 0.95 threshold with multi-ray
+       AABB visibility check:
+
+       For each object, 8 rays are cast from the camera to the object's
+       AABB corners (all combinations of min/max x, y, z).  The object
+       is visible if ANY ray's first hit body matches the object's body
+       ID — no threshold.
+
+       This resolves all three problems:
+       (a) Partial visibility is detected: if even one corner of the
+           object peeks out from behind an occluder, that corner ray
+           hits the object and it is classified as visible.
+       (b) The 0.95 magic threshold is removed entirely.  Visibility is
+           determined by a clean body-ID check (does the ray hit the
+           object before hitting anything else?).
+       (c) The oracle is now geometrically correct — it tests actual
+           line-of-sight from the camera to the object's spatial extent,
+           not just its center point.
+
+       Uses p.rayTestBatch() for efficiency (single batch call per object
+       instead of 8 sequential p.rayTest() calls).
+
+       Only affects the initial scene observation (which targets are
+       visible vs hidden).  The sensing action uses
+       sense_shadow_raycasting() with its own 7x7x3 ray grid — unchanged.
+
+================================================================================
+57. PICK CONFIGS COLLIDE WITH GRASPED OBJECT — PLANNER TIMES OUT  [DONE]
+================================================================================
+Where: streams.py compute_kin_solution(), plan_motion(), _rrt_connect(),
+       _try_connect(), _smooth_path()
+       robot_utils.py is_config_collision_free(), is_path_collision_free()
+       pddlstream_planner.py PDDLStreamPlanner.__init__()
+       test_full_pipeline.py execute_pick(), execute_place()
+
+What:  Two related bugs prevented the pipeline from producing any plan:
+
+       (A) Planning: compute_kin_solution() returned IK configs that placed
+       the gripper at the object (boxel.center + grasp.position). These
+       configs are necessarily in collision with the grasped object.
+       plan_motion() then rejected them ("goal config q_pick_obj_005_2 in
+       collision") because it had no way to know the grasped object should
+       be excluded.  PDDLStream retried with different skeletons, all
+       failed, and the planner timed out at 60s.  This was the root cause
+       of "ERROR: No plan found!" and the robot appearing to freeze.
+
+       (B) Execution: execute_pick() and execute_place() used
+       config.joint_positions (computed at planning time for boxel.center)
+       directly for the contact waypoint. If the object drifted between
+       planning and execution (gravity/simulation settling), the robot
+       would reach for the wrong position.
+
+Fixed: (A) Grasped-object exclusion — Added ignored_body_ids field to
+       RobotConfig (frozenset of PyBullet body IDs to exclude from
+       collision checks).  compute_kin_solution() resolves the grasped
+       object's body ID via object_body_ids mapping threaded from
+       test_full_pipeline.py ÔåÆ PDDLStreamPlanner ÔåÆ BoxelStreams.
+       Collision validation is deferred to plan_motion(), which unions
+       both endpoints' ignored_body_ids and passes them to all collision
+       checks (endpoint, direct-path, RRT-Connect, shortcut smoothing).
+
+       (B) Execution-time IK — execute_pick() and execute_place() now
+       re-derive contact IK from actual obj_pos + grasp.position via
+       solve_ik(), falling back to config.joint_positions if IK fails.
+
+       (C) IK diversity — _pybullet_ik() accepts an optional seed
+       parameter.  compute_kin_solution() iterates 8 seeds (REST_POSES
+       + 7 perturbations via _IK_SEED_OFFSETS), yielding distinct
+       RobotConfig solutions.  Different seeds steer PyBullet's
+       iterative IK solver into different local minima, producing arm
+       configurations that avoid obstacles the default solution hits.
+
+       (D) Grasp diversity — sample_grasp() yields 3 grasps per object
+       at Z offsets 0.05, 0.10, 0.15 m above center.  Higher grasps
+       give the arm more room to avoid table/adjacent collisions.
+
+       (E) Gripper collision tolerance — _PANDA_GRIPPER_LINKS
+       (links 6-11: wrist flange through fingertips) defined in
+       robot_utils.py.  is_config_collision_free() accepts
+       allow_gripper_collisions flag; when True, collisions between
+       gripper links and environment bodies are ignored.  Enabled for
+       all pick/place endpoint checks and RRT path samples, since the
+       gripper must operate in cluttered space near objects.
+
+       (F) Support surface tolerance — support_body_ids (plane + table)
+       threaded from test_full_pipeline.py through to BoxelStreams.
+       plan_motion() includes support_body_ids in the ignored set for
+       ALL collision checks, preventing false collisions with the table's
+       collision geometry that the arm must operate above.
+
+       (G) RRT parameter propagation — allow_gripper_collisions and
+       support_body_ids are threaded through _rrt_connect(),
+       _try_connect(), _smooth_path(), is_path_collision_free(), and
+       is_config_collision_free().  RRT path checks now use the same
+       relaxed rules as endpoint checks for pick/place motions.
+
+       (H) Planner timeout increased from 60s to 120s to give PDDLStream
+       more time to explore alternative skeletons.
+
+       Result: Pipeline completes end-to-end (~42s planning).  Robot
+       picks occluder, places in free space, navigates to shadow, senses
+       target, and picks it.  Single plan, no replanning needed.
+
+================================================================================
+58. PIPELINE LOGGING — TIMESTAMPED OUTPUT, VERBOSITY CONTROL  [DONE]
+================================================================================
+Where: run_logger.py (new), test_full_pipeline.py, streams.py
+
+What:  Terminal output was frequently truncated, making it impossible
+       to debug planner failures.  No persistent logging existed.
+
+Fixed: Created run_logger.py with RunLogger service:
+       - Tees all stdout to a timestamped log file via _TeeStream
+         (captures PDDLStream print output that bypasses Python logging)
+       - Configures Python logging with:
+         * File handler: always DEBUG level (captures everything)
+         * Console handler: respects --log-level (quiet/normal/verbose)
+       - Each run creates logs/run_<timestamp>/ with:
+         * run_<timestamp>.log — full output
+         * boxel_data.json — scene snapshot
+         * problem_initial.pddl — PDDL problem
+       - RunLogger.save_artefact() copies input files for reproducibility
+
+       test_full_pipeline.py:
+         --log-level argument (quiet | normal | verbose, default normal)
+         RunLogger initialized before main(), closed in finally block
+         Artefacts saved after boxel computation and problem export
+
+       streams.py:
+         Debug logging added to compute_kin_solution (target pos, IK
+         result, ignored body), plan_motion (ignored body set, collision
+         details), sample_grasp, and _rrt_connect (periodic progress
+         every 500 iterations).
+
+       Usage:
+         python3 test_full_pipeline.py --log-level verbose
+         python3 test_full_pipeline.py --log-level verbose --no-gui
+
+================================================================================
+65. solve_ik() SWALLOWS ALL EXCEPTIONS SILENTLY  [DONE]
+================================================================================
+Where: robot_utils.py solve_ik()
+
+What:  Two problems:
+       (a) The except clause caught all exceptions and returned None
+           without any logging — silently hiding bugs, assertion errors,
+           or PyBullet crashes.
+       (b) The `saved` variable (joint states for restore) was assigned
+           outside the try block.  If p.getJointState() raised during the
+           list comprehension, `saved` was never defined, and the finally
+           block raised NameError trying to iterate over it — masking the
+           original exception and preventing cleanup.
+
+Fixed: (a) Added logger.warning() in the except clause (matches the
+           pattern in streams.py _pybullet_ik).
+       (b) Initialized saved = None before the try block, moved the
+           getJointState comprehension inside try, and added
+           "if saved is not None:" guard in finally — matching the
+           safe pattern already used in _pybullet_ik (streams.py line 248).
+
+================================================================================
+64. SHADOW RAYCAST USES WRONG RAY ORIGINS — ray_starts VARIABLE UNUSED  [DONE]
+================================================================================
+Where: shadow_calculator.py, line 92 vs line 102
+
+What:  ray_starts = [cam_pos] * len(corners) was computed but never passed
+       to p.rayTestBatch(). Rays started from object corners instead of the
+       camera position. The corner-outward method is a valid approximation
+       for shadow extent on the tabletop scene.
+
+Fixed: Removed the unused ray_starts variable. Added a comment documenting
+       that the corner-outward ray method is intentional (rays trace shadow
+       boundary outward from the occluder's back face, not camera-through-
+       corner projection). Commit 8b58b6f.
+
+================================================================================
+70. boxel_facts.pddl — ORPHANED FILE AT PROJECT ROOT  [DONE]
+================================================================================
+Where: boxel_facts.pddl (project root)
+
+What:  Orphaned PDDL file never generated or referenced by any active code.
+
+Fixed: Moved to archive/. Commit 89efda8.
+
+================================================================================
+71. MISLEADING DOCSTRINGS — FILES CLAIM config.py IS USED  [DONE]
+================================================================================
+Where: test_full_pipeline.py line 22-23, pddlstream_planner.py line 13-14
+
+What:  Both docstrings falsely claimed "PDDLStream path is resolved
+       automatically via config.py". Neither file imports config.py.
+
+Fixed: Removed the false claims from both docstrings. The hardcoded
+       PDDLSTREAM_PATH is now the documented source of truth. Commit 54744bd.
+
+================================================================================
+72. compute_kin_solution NAMES ALL CONFIGS q_pick_* — EVEN FOR PLACE  [DONE]
+================================================================================
+Where: streams.py compute_kin_solution()
+
+What:  All RobotConfig names used "q_pick_" prefix regardless of whether
+       the config would be used for pick or place actions.
+
+Fixed: Renamed to "q_kin_{obj_id}_{counter}" to avoid implying action
+       type. Commit 68556bb.
+
+================================================================================
+74. MODULE DOCSTRING LISTS DEAD STREAM AS ACTIVE  [DONE]
+================================================================================
+Where: streams.py lines 12-13
+
+What:  Module docstring listed sample_push_config as an active stream,
+       but it was commented out since #53.
+
+Fixed: Removed the dead stream reference from the docstring. Commit 54d855d.
+
+================================================================================
+75. CameraObservation.boxels TYPE ANNOTATION INCONSISTENT WITH DEFAULT  [DONE]
+================================================================================
+Where: boxel_types.py line 82
+
+What:  Type annotation said List[Boxel] but default value was None.
+
+Fixed: Changed to Optional[List[Boxel]] = None. Commit 1e08918.
+
+================================================================================
+63. HEURISTIC IK FALLBACK REACHABLE IN PRODUCTION — NO GUARD AT EXECUTION  [DONE]
+================================================================================
+Where: streams.py BoxelStreams.__init__(), pddlstream_planner.py
+       PDDLStreamPlanner.__init__(), test_planner()
+
+What:  _heuristic_ik() produces kinematically invalid configs when
+       robot_id is None.  No guard prevented these from reaching execution.
+
+Fixed: BoxelStreams.__init__() now raises ValueError if robot_id is None
+       unless allow_heuristic=True is explicitly passed.  The parameter
+       is threaded through PDDLStreamPlanner.  Only test_planner() (the
+       symbolic-only test) passes allow_heuristic=True.  The production
+       pipeline (test_full_pipeline.py) does not opt in, so any accidental
+       robot_id=None fails immediately with a clear error. Commit 74cb345.
+
+================================================================================
+62. PDDL-EXECUTION CONFIG STATE DRIFT — pick/place DON'T UPDATE at_config
+    [ACCEPTED SIMPLIFICATION — DOCUMENTED]
+================================================================================
+Where: pddl/domain_pddlstream.pddl (pick, place actions),
+       test_full_pipeline.py execute_pick(), execute_place()
+
+What:  pick/place PDDL actions do not update at_config in their effects.
+       After pick, the PDDL state still says the robot is at the pick
+       config, but physically it is at the lift position.
+
+Resolved: Accepted as a modeling simplification and documented:
+       (a) PDDL domain: comments added to pick and place actions
+           explaining the simplification and why it is safe.
+       (b) The reactive replanning loop re-initializes at_config from
+           the robot's actual joint state before every new plan, so
+           drift does not accumulate across plans.
+       (c) Plans rarely chain pick ÔåÆ move without an intervening replan.
+       Adding post-action configs to PDDL would require additional
+       streams and complicate the model without practical benefit.
+
+================================================================================
+66. config.py EXISTS BUT IS NEVER IMPORTED — DEAD MODULE  [DONE]
+================================================================================
+Where: config.py (project root)
+
+What:  config.py defined setup_pddlstream() but was never imported by any
+       active code. Both consumers hardcode the WSL path directly.
+
+Fixed: Moved to archive/config.py. The hardcoded PDDLSTREAM_PATH is the
+       intentional mechanism for a single-developer WSL project.
+
+================================================================================
+68. DEAD CODE — FUNCTIONS DEFINED BUT NEVER CALLED  [DONE]
+================================================================================
+Where: boxel_env.py, boxel_data.py, visualization.py, test_full_pipeline.py,
+       streams.py, boxel_types.py, config.py
+
+What:  15+ dead functions across active modules.
+
+Fixed: All dead functions removed:
+       - boxel_env.py: get_object_point_cloud, handle_keyboard_camera,
+         set_debug_camera, merge_free_space, draw_boxels,
+         clear_all_debug_items, _quaternion_to_rotation_matrix,
+         self.cell_merger instance, CellMerger import
+       - boxel_data.py: generate_pddl_facts, save_pddl_facts
+       - visualization.py: save_point_cloud_to_ply
+       - test_full_pipeline.py: BeliefState.unmark_occluder_moved
+       - streams.py: _compute_sensing_ik
+       - boxel_types.py: OctreeNode.intersect, OctreeNode.contains
+       - config.py: entire module moved to archive/ (#66)
+
+================================================================================
+ARCHIVED 2026-03-22 — Issues verified against codebase and moved from
+CODEBASE_AUDIT.txt during audit validation pass.
+================================================================================
+
+================================================================================
+60. SIMULATION-WIDE FLICKERING DURING PLANNING — RENDERING TOGGLE ARTIFACTS  [DONE]
+================================================================================
+Where: robot_utils.py is_config_collision_free(), is_path_collision_free(),
+       solve_ik(); streams.py _pybullet_ik()
+
+What:  After the arm-flickering fix (wrapping resetJointState with
+       configureDebugVisualizer COV_ENABLE_RENDERING 0/1), the arm no
+       longer flickers, but the entire simulation now exhibits periodic
+       visual glitches — the scene briefly looks "weird" every couple of
+       seconds.
+
+       Root cause: the rendering toggle is called thousands of times per
+       planning cycle (once per is_path_collision_free call, once per
+       solve_ik/IK call).  Each enable→disable→enable cycle may force
+       an OpenGL buffer swap or partial frame render, producing a brief
+       flash.  The fix addressed per-call arm teleportation but introduced
+       a high-frequency global rendering toggle that has its own visual
+       side effects.
+
+Fix:   IMPLEMENTED — reference-counted RenderingLock (robot_utils.py).
+       The first acquire (0→1) disables rendering; the last release (1→0)
+       re-enables it.  All four toggle sites (is_config_collision_free,
+       is_path_collision_free, solve_ik, _pybullet_ik) now use
+       RenderingLock instead of raw configureDebugVisualizer calls.
+       test_full_pipeline.py wraps planner.plan() with an outer
+       RenderingLock — the inner locks nest harmlessly via the reference
+       count, so rendering is toggled exactly TWICE per planning phase
+       (once off, once on) regardless of how many IK/collision calls occur.
+       Standalone calls outside planning still work: the lock auto-toggles
+       when the counter transitions 0→1 or 1→0.
+
+Verified: 2026-03-22 — RenderingLock class confirmed in robot_utils.py;
+       all four sites use `with RenderingLock(physics_client):`.
+
+================================================================================
+61. SENSE ACTION DEVIATES FROM PROPOSAL — NO CONDITIONAL EFFECTS  [ACCEPTED]
+================================================================================
+Where: pddl/domain_pddlstream.pddl (sense action),
+       test_full_pipeline.py (sense execution + replan loop),
+       proposal Section 4.4.2 (Listing 2)
+
+What:  The PDDL sense action unconditionally adds (obj_at_boxel ?o ?region)
+       and (obj_pose_known ?o).  It assumes the target will always be found
+       ("optimistic").  The proposal's conditional design with
+       stream_get_sensing_outcome and (when found/not_found ...) branches
+       is not implemented.  Instead, the execution loop detects sensing
+       failures and replans with updated belief (known_empty_shadows).
+
+Status: ACCEPTED DEVIATION — documented in PDDL domain file and code.
+
+Justification:
+       (a) PDDLStream + FastDownward cannot do contingent planning.
+           Branching on observation outcomes requires a contingent planner
+           (POND, CLG), which is outside PDDLStream's architecture.  The
+           proposal's conditional-effect design cannot be implemented
+           within the chosen planning framework without fundamental changes.
+       (b) Optimistic planning with replanning on failure is a standard
+           TAMP pattern under partial observability (Garrett et al., 2020;
+           Kaelbling & Lozano-Pérez, 2013).  PDDLStream's adaptive
+           algorithm is itself built around optimistic assumptions.
+       (c) For N shadow candidates, reactive replanning converges in at
+           most N replan cycles (one per empty shadow).  Belief state
+           propagates correctly: known_empty_shadows carry over, so each
+           replan searches strictly fewer candidates.
+       (d) The execution loop bounds the search: max_replans = 4*N + 1.
+
+Limitation:
+       The planner cannot optimize search ORDER within a single plan.
+       A contingent planner could reason about most-likely-first strategies.
+       For the current uniform-prior tabletop scenario this does not affect
+       completeness or practical efficiency.
+
+Verified: 2026-03-22 — domain PDDL has optimistic sense; execution loop
+       has tri-state replanning with known_empty_shadows propagation.
+
+================================================================================
+67. _build_init() HARDCODES ASSUMPTION THAT TARGETS ARE ONLY IN SHADOWS  [DONE]
+================================================================================
+Where: pddlstream_planner.py _build_init(), lines 269-286
+
+What:  For every OBJECT boxel (line 280-281) and every FREE_SPACE boxel
+       (lines 285-286), the code adds:
+         (obj_at_boxel_KIF target boxel_id)
+       This means "we know the target is NOT in this boxel" — because
+       obj_at_boxel is not also added.  Only shadow boxels are left as
+       "unknown" (no KIF fact emitted unless in known_empty_shadows).
+
+       This hardcodes the assumption that targets can ONLY be hidden in
+       shadow regions.  The proposal's formulation is more general — a
+       target could be anywhere the robot hasn't looked.  The current
+       implementation precludes scenarios where a target is on an open
+       part of the table but the robot doesn't know which one it is.
+
+Fix:   DONE — _build_init() now takes an optional observed_clear_regions
+       parameter.  When None (default), all object/free-space boxels are
+       treated as observed (preserving current behavior for the fixed
+       overhead camera scenario).  When an explicit set is provided, only
+       those regions get KIF facts.  The assumption is documented in the
+       docstring with guidance for extending to partial-coverage sensors.
+
+Impact: Low for the current hidden-object scenario (targets are always
+       behind occluders by construction).  But this prevents extending
+       the system to more general search tasks without reworking _build_init.
+
+Verified: 2026-03-22 — _build_init signature includes observed_clear_regions
+       with default None; logic confirmed in pddlstream_planner.py.
+
+================================================================================
+69. MAGIC NUMBERS WITHOUT JUSTIFICATION  [DONE]
+================================================================================
+Where: Multiple files (see table below)
+
+What:  Hardcoded values with no comments explaining their origin, rationale,
+       or link to tuning decisions / citations.
+
+       File                  Line   Value         Context
+       ────────────────────  ─────  ────────────  ─────────────────────────────
+       streams.py            144    100           ik_max_iterations
+       streams.py            145    1e-4          ik_residual_threshold
+       streams.py            217    0.4, -0.4...  _IK_SEED_OFFSETS (7 vectors)
+       streams.py            417    0.05/0.10/15  _GRASP_Z_OFFSETS
+       streams.py            473    2000          RRT_MAX_ITERATIONS
+       streams.py            474    0.2           RRT_STEP_SIZE (rad)
+       streams.py            475    0.05          RRT_GOAL_BIAS
+       streams.py            476    8             RRT_EDGE_CHECKS
+       streams.py            477    50            RRT_CONNECT_ATTEMPTS
+       streams.py            478    75            SMOOTH_ATTEMPTS
+       free_space.py         24     0.035         min_resolution (m)
+       test_full_pipeline.py 115    50            settling steps
+       test_full_pipeline.py 460    0.04          sensing z offset
+       test_full_pipeline.py 462    0.33, 0.67    sensing z fractions
+       test_full_pipeline.py 466    7             sensing ray grid density (n)
+       robot_utils.py        289    240           arm motor force
+       robot_utils.py        301    50            gripper motor force
+       boxel_env.py          177    0.15          occluder size (m)
+       boxel_env.py          203    0.08          target size (m)
+       boxel_env.py           93    9.81          gravity (was 9.8, corrected)
+       boxel_env.py          169    10            settling steps in _setup_scene
+       shadow_calculator.py   93    5.0           max ray distance (m)
+       shadow_calculator.py  273    0.001         MIN_EXTENT (m)
+       shadow_calculator.py  293    1e-4          downstream tolerance
+       boxel_data.py         378    0.01          surface Z tolerance
+       cell_merger.py         23    1e-4          merge tolerance
+       free_space.py          41    0.5           workspace height above table (m)
+       robot_utils.py     283-4    0.1           joint limit tolerance in IK
+       test_full_pipeline.py 248    4*shadows+1   max replans formula
+       test_full_pipeline.py 620    30            settling sim steps after place
+
+Fix:   DONE — Justification comments added for all listed constants.
+
+Verified: 2026-03-22 — Spot-checked ik_max_iterations, RRT params, and
+       min_resolution; all have justification comments in code.
+
+================================================================================
+78. INCOMPLETE VIEW-BLOCKING MODEL — PIPELINE LOOPS FOREVER ON SOME SHADOWS  [DONE]
+================================================================================
+Where: pddlstream_planner.py _build_init() lines 291-303,
+       test_full_pipeline.py lines 181-188 (shadow_occluder_map),
+       boxel_env.py generate_boxels()
+
+What:  The blocks_view_at facts in the planner init state only model
+       the CREATING occluder for each shadow (from shadow_occluder_map).
+       But the camera's line of sight to a shadow can be blocked by ANY
+       object in the scene — not just the one that geometrically cast
+       the shadow.
+
+       Observed failure (run_2026-03-14_16-10-02):
+         - shadow_001 is created by occluder_3 (obj_004).
+         - shadow_occluder_map records: shadow_001 → obj_004.
+         - Plan #3 correctly picks up occluder_3 and places it in free space.
+         - But occluder_1 (at [0.5, 0.2, z]) physically sits between the
+           camera and shadow_001. It blocks 55% of sensing rays.
+         - The planner's view_clear(shadow_001) derived predicate evaluates
+           to TRUE because obj_004 was moved — but occluder_1 was never
+           modeled in blocks_view_at for shadow_001.
+         - Plans #4-#10 all generate move → sense → pick, sensing keeps
+           reporting "still_blocked (55%)", and the loop repeats until
+           the replan limit is hit.
+
+       Two sub-problems:
+       (a) blocks_view_at only records the creating occluder, not all
+           objects that physically obstruct the camera → shadow corridor.
+       (b) occluder_1 is visible but does NOT appear in the boxel registry
+           as an OBJECT boxel (its shadow falls off the table or is too
+           small). Without an OBJECT boxel, the planner cannot plan to
+           move it. Even if blocks_view_at included it, there would be
+           no (Obj occluder_1) or (obj_at_boxel occluder_1 ...) facts.
+
+Fix:   DONE — (a) compute_shadow_blockers() in test_full_pipeline.py
+       uses camera raycasting to find ALL objects blocking each shadow.
+       shadow_occluder_map is now Dict[shadow_id, List[blocker_ids]].
+       _build_init() in pddlstream_planner.py emits blocks_view_at for
+       every (blocker, shadow) pair.
+       (b) Verified: generate_boxels() → create_boxel_registry_from_boxels
+       preserves all visible objects as OBJECT boxels regardless of
+       whether they cast shadows.
+       (c) Execution loop tracks blocked_counts per shadow; after 3
+       consecutive "still_blocked" outcomes on the same shadow, marks
+       it as empty and moves on.
+
+Impact: HIGH — causes the pipeline to loop forever on scenes where a
+       non-creating object blocks a shadow's view corridor. This is not
+       a corner case: in the current 3-occluder scene, it happens
+       whenever the target is behind the occluder whose shadow is also
+       blocked by another occluder from the camera's perspective.
+Related: #99 — the execution/sensing side (sense_shadow_raycasting) was
+       still checking only ONE occluder until #99 extended it to accept
+       the full blocker set from shadow_occluder_map.
+
+Verified: 2026-03-22 — compute_shadow_blockers() confirmed in
+       test_full_pipeline.py; uses p.rayTestBatch with multi-body mapping.
+
+================================================================================
+79. ROBOT ARM BLOCKS SENSING DURING EXECUTION  [DONE]
+================================================================================
+Where: domain_pddlstream.pddl (sense action), test_full_pipeline.py
+What:  The PDDL `sense` action lacks an `at_config` precondition to ensure the
+       robot is out of the way before sensing. Consequently, the planner schedules
+       the `move` to the target's pick configuration *before* the `sense` action.
+       The robot arm is physically inside the shadow during the camera raycast,
+       occluding the target it is trying to find.
+
+Fix:   DONE — Execution-side fix: the sense handler now moves the robot arm
+       to home configuration before raycasting (test_full_pipeline.py).
+       current_config is updated to track the move.
+
+Verified: 2026-03-22 — sense handler retracts to home at
+       test_full_pipeline.py:425-429.
+
+================================================================================
+80. FAKE IK FALLBACK ALLOWS GARBAGE DATA  [DONE]
+================================================================================
+Where: streams.py (_heuristic_ik)
+What:  `_heuristic_ik` is a fake IK stub that simply adds linear offsets to the
+       home configuration's joint angles. While marked as heuristic, it does not
+       compute real kinematics and produces physically invalid configurations. If
+       the robot ID is missing, this allows garbage data to flow completely
+       through the pipeline.
+
+Fix:   DONE — _heuristic_ik removed entirely. BoxelStreams constructor now
+       raises ValueError if robot_id is None (no allow_heuristic escape hatch).
+       compute_kin_solution logs and yields nothing when robot_id is missing.
+       pddlstream_planner.py allow_heuristic parameter removed.
+
+Verified: 2026-03-22 — no _heuristic_ik in codebase; BoxelStreams.__init__
+       raises ValueError when robot_id is None (streams.py:174-178).
+
+================================================================================
+82. SILENT IK FAILURES IN EXECUTION  [DONE]
+================================================================================
+Where: test_full_pipeline.py (execute_pick, execute_place)
+What:  If `solve_ik` fails for the approach or lift/retreat waypoints, the code
+       prints a warning and silently falls back to `config.joint_positions` (the
+       actual contact point). This causes the robot to smash directly into the
+       object or table without an approach trajectory, continuing execution in an
+       invalid physical state.
+
+Fix:   DONE — execute_pick() and execute_place() now abort (return None)
+       when the contact-point IK fails.  The execution loop detects the
+       failure and breaks to trigger replanning.  Approach/retreat
+       fallbacks only use the contact config (never the plan config),
+       which is a safe degradation.
+
+Verified: 2026-03-22 — execute_pick returns (None, None) on IK failure
+       (test_full_pipeline.py:830-832); caller breaks to replan.
+
+================================================================================
+83. BLIND SPOT IN RAYCASTING (ROBOT ARM IGNORED)  [DONE]
+================================================================================
+Where: test_full_pipeline.py (sense_shadow_raycasting)
+What:  `sense_shadow_raycasting` only checks if rays hit the target or the
+       occluder. If rays hit the robot arm (which is currently inside the shadow
+       due to Issue #79), it ignores them and silently returns `clear_but_empty`.
+       This creates false negatives where the robot thinks the shadow is empty
+       just because its own arm was in the way.
+
+Fix:   DONE — sense_shadow_raycasting now accepts robot_id parameter; rays
+       hitting the robot arm are counted as blocked and produce "still_blocked"
+       outcome instead of false "clear_but_empty".
+Related: #99 — same function later extended to check ALL blockers (not just
+       the creating occluder) via set membership.
+
+Verified: 2026-03-22 — robot_id parameter confirmed; robot hits counted as
+       blocked (test_full_pipeline.py:689-690).
+
+================================================================================
+84. INCOMPLETE MAGIC NUMBER CLEANUP  [DONE]
+================================================================================
+Where: test_full_pipeline.py
+What:  The audit claims Issue #69 (Magic Numbers) is "DONE", but the execution
+       code is still full of unexplained constants that are critical to
+       success/failure: `approach_height = 0.10`, `lift_height = 0.25`,
+       `z_levels` offsets (`+0.04`, `0.33`, `0.67`), and ray grid density `n = 7`.
+       None of these are tied to the proposal or justified in comments.
+
+Fix:   DONE — Added justification comments for approach_height (0.10 m) and
+       lift_height/retreat_height (0.25 m) in execute_pick() and execute_place().
+       z_levels and n=7 were already commented in the #69 fix.
+
+Verified: 2026-03-22 — approach_height / lift_height comments confirmed in
+       test_full_pipeline.py:801-808.
+
+================================================================================
+85. DEAD / COMMENTED CODE POLLUTION  [DONE]
+================================================================================
+Where: streams.py, domain_pddlstream.pddl
+What:  `sample_push_config` and the `push` PDDL action are commented out but
+       left polluting the codebase. They should be removed if superseded by
+       pick-and-place.
+
+Fix:   DONE — Removed commented-out sample_push_config (streams.py),
+       push action + push_solution/occluder_at predicates (domain_pddlstream.pddl),
+       and sample-push-config stream (stream.pddl).
+
+Verified: 2026-03-22 — no sample_push_config in streams.py, no :action push
+       in domain_pddlstream.pddl, no sample-push-config in stream.pddl.
+
+================================================================================
+98. CONSTRAINT PULLS OBJECT INTO PLANNED GRASP OFFSET  [DONE]
+================================================================================
+Where: test_full_pipeline.py execute_pick(), createConstraint call
+What:  createConstraint used the planned grasp.position offset as
+       parentFramePosition.  Position-control lag means the true EE pose
+       differs from the planned target, so the constraint solver applies a
+       corrective snap impulse — teleporting the object and scattering
+       neighbours.
+Fix:   DONE (2026-03-18).  Compute actual EE-to-object relative transform
+       at constraint time via getLinkState/getBasePositionAndOrientation +
+       invertTransform/multiplyTransforms.  Constraint now freezes the
+       current spatial relationship.
+Related: #59, #77 (friction grasping / object sizing).
+NOTE:  getLinkState indices [0]/[1] return CoM frame, not URDF link frame.
+       createConstraint parentFramePosition is relative to the URDF link
+       frame (indices [4]/[5]).  Should also pass computeForwardKinematics=True.
+       Low priority — CoM and link frame may coincide for the Panda EE link,
+       but strictly incorrect.  Fix when convenient.
+
+Verified: 2026-03-22 — getLinkState/invertTransform/multiplyTransforms
+       confirmed at test_full_pipeline.py:857-864.
+
+================================================================================
+101. DETERMINISTIC SHADOW SELECTION — NO EXPLORATION DIVERSITY  [DONE]
+================================================================================
+Where: pddlstream_planner.py _build_init(), streams.py sample_grasp()
+What:  FastDownward's deterministic tie-breaking always explores shadows in the
+       same order.  PDDLStream's lazy streams always try the same grasp height
+       first.  Together, replanning repeatedly attempts the same shadow with the
+       same grasp — no diversity across replans.
+Fix:   DONE (2026-03-18).  random.shuffle(init) before returning from
+       _build_init() randomizes init-fact order so FD's tie-breaking explores
+       different shadows.  sample_grasp() now copies and shuffles
+       _GRASP_Z_OFFSETS per call so grasp height order varies.
+Impact: Low-risk, high-value — same facts/grasps produced, only evaluation
+        order changes.
+
+Verified: 2026-03-22 — random.shuffle(init) at pddlstream_planner.py:341;
+       random.shuffle(offsets) at streams.py:438-439.
+
+================================================================================
+99. SINGLE-OCCLUDER SENSING — FALSE NEGATIVES  [DONE]
+================================================================================
+Where: test_full_pipeline.py sense_shadow_raycasting(), sense action handler
+What:  sense_shadow_raycasting accepted a single occluder_pybullet_id and only
+       counted rays hitting that one object as "blocked".  Rays hitting ANY
+       OTHER object (not the target, not the robot) were silently ignored.
+       If a non-creating object blocked the camera's view, those ray hits
+       fell through all conditions and the function returned clear_but_empty
+       instead of still_blocked — a false negative that wrongly eliminated
+       shadows that actually contained the target.
+
+       Issue #78 fixed the PLANNING side (compute_shadow_blockers finds ALL
+       blockers, _build_init emits blocks_view_at for every blocker-shadow
+       pair).  But the EXECUTION/SENSING side still only checked one occluder,
+       leaving planner and sensor with inconsistent multi-blocker views.
+
+Fix:   DONE (2026-03-18).  Two changes:
+       (a) sense_shadow_raycasting: parameter changed from
+           occluder_pybullet_id (single int) to occluder_pybullet_ids
+           (set of ints).  Ray-hit check changed from == to set membership.
+       (b) Call site: builds occluder_pybullet_ids from ALL blockers in
+           shadow_occluder_map (which was already upgraded by #78) instead
+           of only the creating occluder from shadow_boxel.created_by_boxel_id.
+Impact: Completes multi-blocker support started by #78.  Low risk — set
+        membership is a superset of the old single-ID check.
+
+Verified: 2026-03-22 — occluder_pybullet_ids parameter (set) confirmed;
+       call site builds set from shadow_occluder_map.
+
+================================================================================
+86. PDDL STATE DRIFT AFTER PICK/PLACE (PF-2/PF-3)  [DONE — sense exception]
+================================================================================
+Where: domain_pddlstream.pddl
+What:  `pick` and `place` are modeled in PDDL as single-configuration
+       instantaneous actions. However, the Python execution moves through a
+       multi-step sequence and leaves the robot at a lift/retreat configuration.
+       The PDDL state does not update `at_config` to reflect this drift, causing
+       the symbolic state to desync from the physical state.
+
+Fix:   DONE for move/pick/place — execution reads the actual PyBullet joint
+       state (p.getJointState) after move, pick, and place actions and stores
+       it in current_config.  This ensures replanning uses the robot's true
+       configuration.  The PDDL model's accepted simplification (not
+       updating at_config in pick/place) is compensated by this execution-
+       side tracking.
+
+       EXCEPTION: the sense handler (test_full_pipeline.py:427-429) sets
+       current_config = planner.home_config after moving the arm to home,
+       rather than reading p.getJointState.  This is LOW RISK because the
+       robot physically IS at the home configuration after move_robot_smooth,
+       but it is architecturally inconsistent with the claim that actual
+       joint state is always read.  Should use p.getJointState for
+       consistency.
+
+Verified: 2026-03-22 — move handler reads p.getJointState (line 406-408);
+       sense handler uses planner.home_config (line 429).  Exception confirmed.
+
+================================================================================
+ARCHIVED 2026-03-22 — Resolved issues (#44, #73) and no-action inventory
+(#87-#92, #94) moved from CODEBASE_AUDIT.txt during audit cleanup.
+================================================================================
+
+================================================================================
+44. SHADOWS NOT RECOMPUTED AFTER OCCLUDER RELOCATION — STALE REGISTRY  [DONE]
+================================================================================
+Where: test_full_pipeline.py, boxel_data.py
+What:  After relocating an occluder (via pick-and-place), the BoxelRegistry
+       is NOT updated. The shadow boxels (their AABBs, centers, extents)
+       still reflect the pre-relocation geometry. The sensing function
+       (sense_shadow_raycasting) uses the shadow boxel's AABB to determine
+       where to cast rays — but that AABB is for the old shadow, not the
+       actual post-relocation geometry.
+
+       With pick-and-place this is LESS CRITICAL than with push: since the
+       occluder is physically removed (picked up and placed elsewhere),
+       rays through the old shadow AABB will pass through empty space and
+       can detect the target. The stale AABB just means rays may cover a
+       slightly wrong area, but the target is detected by body ID, so any
+       ray that hits it works.
+
+Fix:   After relocating, either:
+       (a) Recompute shadows for the relocated occluder only (incremental).
+       (b) Re-run the full boxel computation (expensive but correct).
+       (c) Accept the stale AABB as good enough (target detection by body
+           ID compensates). Document this as a known simplification.
+       See #104 for the broader post-action re-evaluation requirement
+       (free/occupied/shadow + re-merge), which subsumes this issue.
+
+Resolved: Accepted simplification (option c).  The stale shadow AABB is
+       functionally safe for pick-and-place: the occluder is physically
+       removed, rays pass through empty space, and the target is detected
+       by PyBullet body ID.  The place handler in test_full_pipeline.py
+       documents this explicitly (lines 562-576).  Full shadow recomputation
+       will be implemented as part of #104 (post-action re-boxelization),
+       which subsumes this issue entirely.
+
+================================================================================
+73. shadow_occluder_map GOES STALE ON REPLAN — blocks_view_at MAY BE WRONG  [DONE]
+================================================================================
+Where: test_full_pipeline.py lines 185-189,
+       pddlstream_planner.py _build_init() lines 292-300
+
+What:  shadow_occluder_map is built once from the registry before the
+       first plan.  After an occluder is relocated via pick-and-place,
+       the map is NOT updated.  On subsequent replanning iterations,
+       _build_init() still emits:
+         (blocks_view_at old_occ old_occ shadow_id)
+       This says "when old_occ is at its original boxel, it blocks the
+       view to shadow_id".  The derived predicate blocks_view combines
+       this with obj_at_boxel — if the occluder was placed in free
+       space, obj_at_boxel(old_occ, old_occ) is false, so blocks_view
+       evaluates to false and the view is correctly classified as clear.
+
+       HOWEVER, if the planner generated a new blocks_view_at fact
+       that references the destination boxel (it doesn't — but if it
+       did, or if the PDDL model ever added view-blocking at the new
+       location), the stale map would miss it.
+
+       Current impact: LOW because the derived predicates compensate.
+       But the stale data structure is architecturally fragile and
+       should be documented or refreshed on replan.
+
+Fixed: Place handler in test_full_pipeline.py now re-runs
+       compute_shadow_blockers() after every place action and updates
+       planner.shadow_occluder_map.  Incorrect comment claiming the map
+       was already refreshed has been corrected.
+
+================================================================================
+87. DEAD METHODS AND PROPERTIES — NEVER CALLED FROM ROOT CODE  [NO ACTION]
+================================================================================
+Where: Multiple files (see table)
+What:  The following methods and properties are defined but have zero
+       callers in the root codebase.  Some had their call sites removed
+       during earlier cleanups (#56, #85) but the definitions were left.
+       Others were written speculatively and never wired in.
+
+       File                   Method / Property              Lines  Notes
+       ─────────────────────  ─────────────────────────────  ─────  ──────────────
+       boxel_data.py          compute_neighbors()             ~35   Call removed (#56)
+       boxel_data.py          _check_adjacency()              ~25   Helper for above
+       boxel_data.py          _opposite_direction()            ~8   Helper for above
+       boxel_data.py          load_from_json()                ~12   Only archive/ uses
+       boxel_env.py           _depth_buffer_to_meters()        ~4   Call removed (#56)
+       boxel_env.py           _depth_to_point_cloud()         ~22   Call removed (#56)
+       boxel_env.py           ObjectSpec.max_horizontal_width  ~4   Property, zero refs
+       free_space.py          clear_debug_items()             ~10   Never called
+       streams.py             _direction_to_quat()            ~30   Never called
+       streams.py             _rotation_matrix_to_quat()      ~30   Called only by above
+
+       boxel_data.py convenience getters (borderline — used only by
+       to_dict() for the JSON summary, no external callers):
+         get_object_boxels(), get_shadow_boxels(), get_free_space_boxels()
+
+       Instance attribute set but never read:
+         boxel_env.py  debug_camera_distance               Set in __init__
+         boxel_env.py  debug_camera_yaw                    Set in __init__
+         boxel_env.py  debug_camera_pitch                  Set in __init__
+         boxel_env.py  debug_camera_target                 Set in __init__
+
+       Total: ~160 lines of unreachable method bodies + 4 dead attributes.
+
+       Per codebase policy, dead code is preserved for reference and
+       potential future use.  This issue tracks it for documentation
+       completeness, not as a cleanup task.
+
+================================================================================
+88. UNUSED IMPORTS ACROSS CODEBASE  [NO ACTION]
+================================================================================
+Where: Multiple files (see table)
+What:  The following imports are present but the imported names are never
+       referenced in the file.
+
+       File                    Unused Import
+       ──────────────────────  ──────────────────────────────────────────
+       boxel_data.py           asdict (from dataclasses)
+       boxel_data.py           Set (from typing)
+       cell_merger.py          Set (from typing)
+       streams.py              Generator (from typing)
+       pddlstream_planner.py   from_fn (from pddlstream.language.generator)
+       pddlstream_planner.py   from_test (from pddlstream.language.generator)
+       pddlstream_planner.py   read (from pddlstream.utils) — shadowed by
+                                the local read_pddl_file(); never used
+
+       Impact: No runtime effect (unused imports cost a negligible amount
+       of import time).  Cosmetic cleanliness issue only.
+
+================================================================================
+89. UNUSED FUNCTION PARAMETERS — config IN execute_pick / execute_place  [NO ACTION]
+================================================================================
+Where: test_full_pipeline.py execute_pick(), execute_place()
+What:  Both functions accept a `config` parameter (the plan's RobotConfig
+       from compute_kin_solution).  Neither function references it.  All
+       approach/contact/lift/retreat waypoints are re-derived from IK at
+       execution time using the object's actual position + grasp offset.
+
+       The parameter was originally used as a fallback ("if IK fails, use
+       the plan config"), but #82 changed the fallback to abort-and-replan
+       instead.  The parameter survived the refactor.
+
+       The caller still passes config from the plan:
+         execute_pick(robot_id, env, ..., grasp, config, gui)
+         execute_place(robot_id, env, ..., grasp, config, ..., gui)
+       but the value is silently ignored inside both functions.
+
+       Impact: Confusing to readers — the parameter signature suggests the
+       plan config influences execution, but it does not.
+
+================================================================================
+90. VISUALIZATION INTENTIONALLY DISABLED — UNUSED BoxelVisualizer INSTANCE  [INTENTIONAL]
+================================================================================
+Where: boxel_env.py (line 319), visualization.py, test_full_pipeline.py (line 146)
+
+What:  BoxelVisualizer is imported and instantiated in BoxelTestEnv.__init__
+       (self.visualizer = BoxelVisualizer()), but none of its methods
+       (draw_boxels, clear_all) are called from root code.  The only call
+       site was intentionally commented out in test_full_pipeline.py:
+
+         # if gui:
+         #     ...
+         #     env.draw_boxels(all_boxels, duration=0)
+
+       This was disabled by explicit decision to simplify pipeline runs
+       and reduce visual noise during development.  The visualization
+       module (visualization.py, ~145 lines) remains fully functional
+       and can be re-enabled by uncommenting the call.
+
+       The entire visualization.py module, plus the BoxelVisualizer import
+       and self.visualizer attribute in boxel_env.py, are unreachable from
+       any currently-executed code path.
+
+Status: INTENTIONAL — not a bug.  Visualization is preserved for future
+       use and debugging.  See CODEBASE POLICY.
+
+================================================================================
+91. DEAD CameraObservation FIELDS — rgb_image, depth_image, point_cloud  [NO ACTION]
+================================================================================
+Where: boxel_types.py (CameraObservation), boxel_env.py get_camera_observation()
+
+What:  CameraObservation defines three optional fields:
+         rgb_image:   Optional[np.ndarray] = None
+         depth_image: Optional[np.ndarray] = None
+         point_cloud: Optional[np.ndarray] = None
+
+       get_camera_observation() never populates them — it returns a
+       CameraObservation with only visible_objects, object_poses, and
+       boxels set.  No code reads these fields.
+
+       The fields exist because the original implementation computed all
+       three (removed as part of #56).  The field declarations remain as
+       part of the dataclass definition.
+
+       Impact: No runtime cost (None is the default).  The fields reserve
+       the interface for future use (e.g. real perception integration).
+
+================================================================================
+92. RunLogger CONTEXT MANAGER PROTOCOL NEVER USED  [NO ACTION]
+================================================================================
+Where: run_logger.py (lines 151-155), test_full_pipeline.py (lines 826-831)
+
+What:  RunLogger implements __enter__ and __exit__ for use as a context
+       manager ("with RunLogger(...) as logger:").  However, the actual
+       usage in test_full_pipeline.py creates the logger manually and
+       calls logger.close() in a finally block:
+
+         logger = RunLogger(verbosity=args.log_level)
+         try:
+             success = main(gui=not args.no_gui, run_logger=logger, ...)
+         finally:
+             logger.close()
+
+       The context manager protocol works correctly — it is simply not
+       used.  Both patterns are equivalent; this is a style inconsistency,
+       not a bug.
+
+================================================================================
+94. DEAD DEFENSIVE CODE — HEURISTIC CONFIG REJECTION LOOP  [NO ACTION]
+================================================================================
+Where: test_full_pipeline.py lines 300-308
+
+What:  After the planner returns a plan, a loop checks every action
+       parameter for RobotConfig objects with is_heuristic=True and
+       raises RuntimeError if found.
+
+       This check is dead: _heuristic_ik() was removed in #80, and
+       BoxelStreams raises ValueError if robot_id is None.  No code
+       path can produce a RobotConfig with is_heuristic=True.  The
+       condition can never trigger.
+
+       The loop runs on every plan (iterating all actions and all
+       params), imposing negligible but nonzero overhead per planning
+       cycle.

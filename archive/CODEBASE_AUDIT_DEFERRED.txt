@@ -1,0 +1,603 @@
+================================================================================
+CODEBASE AUDIT — DEFERRED / BACKGROUND ITEMS
+================================================================================
+Archived: 2026-03-24
+Source: CODEBASE_AUDIT.txt (open issues file)
+
+Contents of this file:
+  - DEFERRED scene infrastructure (#55): parameterization is done, no batch
+    evaluation runner needed until #76 scaffolding exists.
+  - TIER 4 DEFERRABLE issues (#59, #77, #97): supervisor-confirmed, not needed
+    for thesis completion.
+  - DECISION NEEDED issue (#96): pending decision, not blocking any code work.
+  - Accepted proposal-alignment deviations (PA-3, PA-4, PA-5, PA-6): deviations
+    from the proposal that have been explicitly accepted with no fix required.
+  - No-action PDDL alignment notes (PF-1, PF-4, PF-5): consistent or
+    architecturally sound, nothing to do.
+  - DISCUSSION NOTES 2026-03-22: full meeting transcript from supervisor session.
+    Key decisions from this meeting are captured as open issues #102-#105 in
+    CODEBASE_AUDIT.txt; this is the raw source transcript.
+
+================================================================================
+55. HARDCODED SCENE — NO SCENARIO VARIATION  [INFRASTRUCTURE DONE, DEFERRED]
+================================================================================
+Archived: 2026-03-24 — infrastructure complete, no batch runner needed until
+#76 evaluation framework scaffolding exists.
+
+Where: boxel_env.py _create_occluders(), _create_targets(),
+       test_full_pipeline.py __main__ (CLI args)
+
+What:  Scene parameterization infrastructure is fully implemented:
+       - SceneConfig dataclass with ObjectSpec (supports BOX, CYLINDER,
+         SPHERE) and per-object size/color/mass/friction.
+       - Three preset scenes: default_scene() (original cubes),
+         mixed_shapes_scene() (cylinders, boxes, spheres),
+         scalability_scene() (random generation with configurable
+         n_occluders, n_targets, seed).
+       - CLI flags: --scene {default,mixed,scalability},
+         --n-occluders, --n-targets, --seed.
+       - _random_xy_positions() for rejection-sampled placement.
+       - BoxelTestEnv.__init__() and reset() accept scene_config.
+
+       Remaining gap: no batch evaluation runner wires up these presets
+       over multiple seeds to collect metrics.  This is a sub-task of #76
+       (evaluation framework) — once #76 scaffolding exists, hooking in
+       the scalability_scene preset is a one-day job.
+
+================================================================================
+59. OBJECTS FLY AWAY ON FIRST GRASP — CONSTRAINT-BASED GRASPING IS THE PROBLEM
+================================================================================
+TIER 4 — DEFERRABLE (supervisor-confirmed, 2026-03-22)
+Supervisors: "We don't really care about that." / "Grasping is a different issue."
+             "A lot of manipulation papers that don't care about the grasping
+              part — more about general rearrangement — do not care about grasping."
+             "As long as somewhat reasonable motion plans and somewhat reasonable
+              movements are produced, the constraint-based approach is acceptable."
+This is explicitly a REARRANGEMENT problem, not a grasping problem.
+
+Where: test_full_pipeline.py execute_pick() / execute_place(),
+       robot_utils.py close_gripper()
+
+What:  On the first pick action, surrounding objects visibly fly away from
+       the grasped object. The grasp itself also looks "supernatural" — the
+       object snaps to the gripper rather than being smoothly acquired.
+
+       ROOT CAUSE: execute_pick() uses p.createConstraint(JOINT_FIXED) to
+       "weld" the object to the end-effector.  This is not grasping — it is
+       a telekinetic attachment that bypasses contact physics entirely.  The
+       constraint solver fights the rigid-body simulator every stepSimulation
+       to maintain the weld, producing large corrective impulses that
+       propagate to adjacent objects via contact forces.
+
+       This is not a tuning problem (wrong offsets, missing orientations,
+       missing maxForce).  Even a perfectly parameterised JOINT_FIXED
+       constraint is still a magic weld: it can hold objects that don't fit
+       in the gripper, it ignores friction, it ignores gravity on the
+       grasped body, and it allows the gripper to remain open while the
+       object stays attached.  The snap-to-gripper visual artefact and the
+       neighbour-scattering impulse are inherent to this approach.
+
+Fix:   Replace constraint-based grasping with FRICTION-BASED grasping:
+       1. Remove p.createConstraint / p.removeConstraint from execute_pick
+          and execute_place.
+       2. Rely on close_gripper() finger contact + friction to hold the
+          object.  The gripper motors already apply 50 N per finger; with
+          a friction coefficient ≥ 0.5 the resulting friction force far
+          exceeds the weight of any scene object.
+       3. open_gripper() releases the object (no constraint to remove).
+       4. Adjust grasp Z offsets in sample_grasp() so the EE descends to
+          the object's center height (not above it).  The current offsets
+          (0.05–0.15 m above object center) place the fingers in the air
+          above the object — fine for a magic weld, useless for friction.
+       5. Set lateralFriction on object and gripper collision shapes to
+          ensure reliable grip.
+
+       Depends on #77 (object graspability): current object dimensions
+       exceed or match the Panda's 0.08 m max finger opening, so friction-
+       based grasping cannot work without resizing.  See #77.
+
+================================================================================
+77. OBJECT DIMENSIONS EXCEED GRIPPER CAPACITY — FRICTION GRASPING BLOCKED
+================================================================================
+TIER 4 — DEFERRABLE (supervisor-confirmed, 2026-03-22)
+Blocked by #59 fix; and #59 is itself deferred.
+
+Where: boxel_env.py _create_occluders(), _create_targets()
+
+What:  The Franka Panda parallel-jaw gripper has a maximum finger opening
+       of 0.08 m (0.04 m per finger).  For friction-based grasping the
+       object's graspable width must be strictly LESS than the max opening,
+       so the fingers can close around the object and apply normal force.
+
+       Current scene objects:
+         Occluders  0.15 m cubes  — 1.9× the max opening.  Physically
+                                    ungraspable by the Panda gripper.
+                                    The comment on boxel_env.py line 178
+                                    ("small enough for the Panda gripper
+                                    to grasp") is INCORRECT.
+         Targets    0.08 m cubes  — exactly AT the max opening.  Fingers
+                                    can barely touch the sides but have
+                                    zero squeeze margin; unreliable grip.
+
+       With the current constraint-based "grasping" (#59) this didn't
+       matter — the constraint can hold any object regardless of size.
+       Switching to friction-based grasping (the #59 fix) requires objects
+       that physically fit in the gripper.
+
+Fix:   Resize objects so their graspable width is < 0.08 m:
+       (a) Targets: reduce to ~0.05 m cubes.  Still hidden behind
+           occluders, easier to grasp with 0.03 m of finger margin.
+       (b) Occluders: change from cubes to tall narrow blocks
+           (e.g. 0.06 × 0.06 × 0.15 m).  The 0.06 m width fits in the
+           gripper; the 0.15 m height still occludes targets from the
+           overhead camera.  Alternatively, occluders could be cylinders
+           (diameter < 0.08 m) for even easier top-down grasping.
+       (c) Set lateralFriction on object and gripper collision shapes
+           (PyBullet default for createCollisionShape is 0.5; verify
+           it is sufficient, increase to ~1.0 if needed).
+
+Impact: LOW for the architecture — only object spawn parameters change.
+       HIGH for #59 — friction-based grasping cannot work until this
+       is addressed.
+
+================================================================================
+96. PERSONAL INFORMATION IN GIT HISTORY — DECISION NEEDED
+================================================================================
+STATUS: Pending decision — not blocking any code work.
+
+Where: git history (all commits prior to fb796fc)
+
+What:  The following files containing personal information (full name,
+       university, hardcoded user paths) were removed from the working
+       tree and HEAD in commit fb796fc, but they still exist in the git
+       history and can be recovered by anyone with access to the repo:
+
+       - SESSION_HANDOFF.md (full name, university, workspace path)
+       - progress_report.html (full name)
+       - proposal (full name, university)
+       - test_full_pipeline.py (hardcoded user path in older commits)
+       - pddlstream_planner.py (hardcoded user path in older commits)
+       - archive/test_wsl_pddlstream.py (hardcoded user path in older commits)
+
+       Scrubbing these from history requires git filter-branch or BFG
+       Repo-Cleaner.  Both rewrite ALL commit hashes, which:
+       (a) Breaks any existing branches, tags, or forks.
+       (b) Forces all collaborators to re-clone.
+       (c) Makes prior commit references in audit entries invalid.
+
+       If the repo is public, the information is already cached by GitHub
+       and possibly by third-party mirrors.  History rewriting only
+       prevents future access via the git repo itself.
+
+Fix:   DECISION NEEDED — choose one:
+       (a) Accept the risk.  The information is your name and a local
+           file path — not credentials or secrets.  No further action.
+       (b) Rewrite history with BFG Repo-Cleaner to strip the files
+           and path strings.  Force-push all branches.  Requires all
+           local clones to be re-created.
+       (c) Delete the repository and re-create it from the current HEAD
+           (nuclear option — clean history, but loses all prior commits).
+
+================================================================================
+97. STREAMS NOT GENERIC — TIGHTLY COUPLED TO PANDA/PYBULLET/TABLETOP
+================================================================================
+TIER 4 — DEFERRABLE ("Accepted for thesis scope")
+
+Where: streams.py (BoxelStreams class, sample_grasp, plan_motion,
+       compute_kin_solution)
+
+What:  All three streams and the BoxelStreams class itself are tightly
+       coupled to the specific hardware, simulator, and scenario:
+
+       Robot:
+         - Franka Panda 7-DOF (joint limits, IK seed offsets, REST_POSES
+           from robot_utils.py are all Panda-specific)
+         - IK seed perturbations in _IK_SEED_OFFSETS are hand-tuned for
+           the Panda's kinematic structure
+
+       Simulator:
+         - IK via p.calculateInverseKinematics (cannot swap in IKFast,
+           TracIK, or MoveIt without rewriting _pybullet_ik)
+         - Collision checking via p.getContactPoints (no abstraction for
+           FCL, Bullet standalone, or OMPL collision checkers)
+         - RRT-Connect implemented inline; a generic system would use
+           OMPL/MoveIt where you can swap RRT*, PRM, BIT*, etc.
+
+       Scenario:
+         - Boxel grid world (target poses derived from BoxelRegistry
+           centers; a generic stream would take an arbitrary world-frame
+           pose)
+         - Tabletop-only: support_body_ids hack ignores the table during
+           pick/place because the Panda is mounted ON the table — its
+           lower arm links overlap the table geometry in PyBullet, causing
+           false-positive collisions on nearly every config.  A ceiling-
+           or mobile-mounted robot would need different logic.
+         - RRT parameters (2000 iters, 0.2 rad step, 75 smooth) are tuned
+           for light tabletop clutter (2-4 objects); a cluttered shelf or
+           high-DOF dual-arm setup would need very different values.
+
+       sample_grasp limitations:
+         - Only produces top-down grasps at fixed Z-offsets (0.05, 0.10,
+           0.15 m above object center)
+         - No side grasps, angled approaches, or yaw rotation
+         - No X/Y offsets — always directly above the object center
+         - Ignores object geometry entirely (sphere, box, L-bracket all
+           get the same three grasps)
+         - Assumes the object is reachable from above (tabletop only)
+         - A generic version would sample grasp poses on the object
+           surface using shape info and evaluate grasp quality (force
+           closure, etc.)
+
+       plan_motion limitations:
+         - Single-motion design: the ignored-body union across both
+           endpoints can't distinguish transit (no object) from approach
+           (gripper entering clutter).  A decomposed transit+approach
+           architecture could restrict the ignore set to the approach
+           phase only.
+
+Fix:   Accepted for thesis scope.  Document as known simplifications.
+       If generalising beyond the Panda tabletop scenario:
+       (a) Abstract IK behind a solver interface (PyBullet, IKFast,
+           TracIK, MoveIt).
+       (b) Abstract collision checking behind a checker interface
+           (PyBullet, FCL, OMPL).
+       (c) Replace inline RRT with OMPL or MoveIt planning pipeline.
+       (d) Make sample_grasp geometry-aware (object mesh → grasp sampling).
+       (e) Decompose plan_motion into transit + approach phases with
+           separate ignored-body sets.
+
+================================================================================
+PROPOSAL ALIGNMENT — ACCEPTED DEVIATIONS (PA-3, PA-4, PA-5, PA-6)
+================================================================================
+These are deviations from the proposal that have been explicitly accepted
+with no fix required.  Kept here as thesis documentation context only.
+
+PA-3. K-literal design differs from proposal (proposal Section 4.4.1)
+      The proposal defines two predicates: obj_in_Boxel (K(p)) and
+      obj_not_in_Boxel (K(¬p)), with "possibly in" being the absence of
+      both. The implementation uses a single obj_at_boxel_KIF predicate:
+      present = "we know", absent = "unknown". This is a valid KIF
+      simplification (Bonet & Geffner style), but it deviates from the
+      proposal's two-predicate design without documenting the change.
+      STATUS: Accepted deviation — document in thesis as design choice.
+
+PA-4. Sensing uses fixed camera instead of robot-mounted sensor
+      The proposal's sense action uses stream_find_sensing_config to
+      compute a sensing pose. The implementation uses a fixed scene
+      camera. This is an accepted simplification for the tabletop
+      scenario — a fixed overhead camera is sufficient and avoids
+      the complexity of a separate sensing motion planner. Should be
+      documented as a deliberate design decision in the thesis.
+      STATUS: Accepted simplification — document in thesis.
+
+PA-5. No conditional sensing outcomes (proposal Section 4.4.2) — ACCEPTED
+      The proposal defines conditional effects for sense: (when found ...)
+      and (when not_found ...) using a stream_get_sensing_outcome stream.
+      The implementation uses optimistic single-outcome sensing with
+      reactive replanning on failure.  Accepted deviation: PDDLStream +
+      FastDownward cannot do contingent planning; optimistic planning with
+      replanning is a standard TAMP pattern.  See #61 for full justification.
+      STATUS: Accepted deviation (#61 closed).
+
+PA-6. Only top-down grasps — no grasp diversity
+      sample_grasp() generates only top-down grasps (Z-axis offsets at
+      0.05/0.10/0.15 m, fixed orientation pointing down).  No lateral
+      or angled grasps are considered.  Related to deferred #59/#77.
+      Supervisors: "We don't really care about that."
+      STATUS: Accepted for thesis scope (see #59 deferred rationale).
+
+================================================================================
+PDDL ALIGNMENT — NO-ACTION ENTRIES (PF-1, PF-4, PF-5)
+================================================================================
+PF-1. sense — PDDL vs Python MISMATCH (accepted, see #61)
+      PDDL: optimistic single-outcome (assumes found).
+      Python: tri-state (found / clear_but_empty / still_blocked) with
+        reactive replanning on failure.
+      Accepted deviation: contingent planning not available in PDDLStream;
+        optimistic sensing + replanning is functionally equivalent for the
+        tabletop scenario.  Documented in domain PDDL and code.
+      STATUS: Accepted (#61 closed).
+
+PF-4. move — CONSISTENT
+      PDDL (domain lines 138-155): Moves from ?q1 to ?q2 along trajectory ?t.
+        Updates at_config.
+      Python (test_full_pipeline.py lines 293-300): Iterates through
+        traj.waypoints[1:], calling move_robot_smooth() per waypoint.
+      Status: Consistent.  Trajectory is faithfully executed.  No action.
+
+PF-5. compute-kin stream — HIDDEN SIDE-CHANNEL
+      Stream PDDL (stream.pddl lines 35-40): Inputs (?o ?b ?g), outputs ?q.
+        Certifies Config, kin_solution, config_for_boxel.
+      Python (streams.py compute_kin_solution, lines 770-854): Yields
+        RobotConfig with ignored_body_ids (frozenset of body IDs to exclude
+        from collision checks).
+      Issue: ignored_body_ids is not visible in the PDDL declaration.
+        plan_motion() reads it from the Python RobotConfig object and uses
+        it to exclude the grasped object.  The symbolic planner has no
+        knowledge of this collision exclusion logic — it's a hidden Python
+        side-channel.  This is architecturally sound for PDDLStream (streams
+        share Python objects by design) but invisible to formal analysis.
+      STATUS: Architecturally sound.  No action needed.
+
+================================================================================
+DISCUSSION NOTES — 2026-03-22
+Topic: Pick-and-Place Design, Boxel Merging/Splitting, Free-Space Reasoning
+================================================================================
+NOTE: The key decisions from this meeting are captured as open issues
+#102, #103, #104, #105 in CODEBASE_AUDIT.txt.  This is the full source
+transcript preserved for reference.
+
+CONTEXT
+  Supervisor meeting covering the transition from push-based to pick-and-place
+  actions, plus the design of boxel merging/splitting logic.
+
+KEY DECISIONS AND DESIGN NOTES
+
+1. PICK-AND-PLACE REPLACES PUSH
+   - Push actions were dropped because the placement target was effectively
+     hard-coded, meaning the solution was partially embedded in the PDDL action
+     model rather than being discovered by the planner.  As stated by the
+     student: "the somewhere is hardcoded and the problem was the solution was
+     almost modeled in the PDDL actions, which is something we didn't want."
+   - Pick and place makes the target boxel an explicit action parameter, so the
+     planner can genuinely decide where to move an object.
+   - Supervisor confirmed this resolves the main concern with the previous
+     version: "that was the main issue I had with the previous version.  So
+     now you can actually learn because you move the box to a different [place]."
+   - Current implementation: grasping is constraint-based (object attached to
+     arm via createConstraint — "it will just get sucked into the end"); the
+     target is currently a random free boxel — fitness checks (size, adjacency)
+     are not yet enforced.  See #102.
+   - Push could still be used as the underlying motion primitive — the semantic
+     distinction is that the target is an explicit parameter, not the mechanism.
+     ("how you actually implement the action, it's a different sort")
+
+2. SENSING WHILE HOLDING AN OBJECT
+   - Sensing is still performed during pick-and-place sequences; raycasting
+     through the shadow region is done, and if the view is blocked by the arm
+     the robot replans.
+   - Open question raised by supervisor: after picking up a box (to see what's
+     behind it), the robot could in principle observe immediately and put the
+     object back — without needing to place it somewhere else.  ("you picked up
+     the box because you wanted to see a box behind that box.  So now you
+     picked it up.  So in principle, you could already see and then just put
+     it back.")
+   - Current behaviour: if the arm still blocks the view after pick, a replan
+     occurs.  If the view is clear, the system can observe.  This is not
+     explicitly exploited as a "pick-observe-replace" strategy.
+   - Decision: not yet resolved — needs documentation on whether mid-pick
+     sensing is an intended capability or an accidental side effect.
+
+3. BOXEL MERGING — CORRECT MERGE CONDITION (AGREED)  →  #103
+   Two adjacent boxels should be merged if and only if:
+     (a) Their merge would produce a convex result (existing constraint —
+         NOTE: the supervisor later noted that "a merging operation
+         definitely does not produce convex boxes" and forcing convexity
+         is "kind of a difficult problem."  The student's pre-existing
+         convexity rule was acknowledged but not firmly re-endorsed for
+         the new merge condition.  May need revisiting.), AND
+     (b) They have identical logical properties in the symbolic domain —
+         concretely, they block the view to exactly the same set of target
+         objects.
+   Supervisor rationale: "you should merge all the boxels that have the same
+   properties, meaning they block the same other objects.  What you don't want
+   is to merge two boxes where one blocks the view to some object where the
+   other one doesn't.  This should be separate because then you can decide
+   whether you want to block the view or not."
+   Design principle: "constrain the motion plan as little as possible while
+   still keeping a consistent logical state."
+   Consequence: boxels near occlusion boundaries will naturally stay small.
+   Supervisor acknowledged this: "the boxes will generally just stay rather
+   small, probably."
+
+   REFINED MERGE CONDITION (later in discussion):
+   Supervisor added a visibility/observability requirement:
+     (c) Both boxels should either BOTH be currently observable (visible to the
+         camera) or NEITHER should be observable (both fully in a shadow
+         region).  "these boxels should either both be visible currently or
+         neither of them is observable.  They're completely in the shadow
+         region or not at all."
+   Combined with (b): "for the other boxels, these boxels should block the
+   same boxels, so meaning the shadow is the same."
+   Merge ORDER: "if you look from the camera, you basically start merging in
+   the back and go forward, and for example when there's an object, then all
+   the boxes in front of that object will not be merged because they have
+   different [properties], because some of them block the objects, some don't."
+   This applies both to initial boxelization AND to post-action re-merge.
+
+4. FREE-SPACE REASONING ACROSS MULTIPLE BOXELS  →  #105
+   - An object need not fit inside a single boxel to be placeable there; it is
+     valid to place an object spanning several adjacent FREE boxels as long as
+     it does not intersect any non-free boxel.
+   - One approach: merge all free boxels that satisfy the merge condition above
+     into larger free regions, then check containment of the object's bounding
+     box against those merged regions.
+   - A minimum boxel size equal to the smallest object the system handles is a
+     natural floor; boxels smaller than this can be ignored for placement
+     reasoning.  Supervisor: "a reasonable minimal size is the size of the
+     smallest objects that you realistically deal with."
+   - If merge condition (#103) is implemented fully, free boxels with identical
+     properties (typically "blocks nothing") will merge into large regions,
+     largely resolving this issue without explicit multi-boxel placement logic.
+
+   MULTI-VARIANT PLACE ACTIONS (concrete approach agreed):
+   Supervisor proposed having multiple variants of the place action:
+     - place-in-1-boxel (current)
+     - place-in-2-boxels (object spans two adjacent free boxels)
+     - place-in-N-boxels (generalised)
+   Each variant has a precondition that the target boxels are adjacent, and
+   a PDDLStream certifier that verifies the object fits in the union.
+   Supervisor: "you can have multiple variants of the place action.  The first
+   one would occupy one boxel and the second [occupies two]."
+   This resolves the conflict between fine-grained discretization (needed for
+   accurate view-blocking) and placement (needs large enough regions):
+   "if you do that, then you can always keep the finest discretization that
+   keeps the logical state."  See #105.
+
+5. RE-SPLITTING / RE-EVALUATION AFTER ENVIRONMENT CHANGE  →  #104
+   - After a pick-and-place action the BoxelRegistry is not updated: boxels
+     that were "occupied" may now be "free" and vice versa.
+   - Related to existing #44 (stale shadow registry) and #73 (stale
+     shadow_occluder_map), but broader — covers the full free/occupied/shadow
+     re-evaluation cycle plus re-merge.
+   - Required work: after each place action, recompute which boxels are free /
+     occupied / shadow-blocked, and re-run the merge step (with the correct
+     merge condition from #103) so the symbolic state stays consistent.
+   - Until implemented, the planner operates on a stale boxel partition.
+
+   RE-BOXELIZATION STRATEGY (agreed):
+   - For now: full re-boxelization after every action that changes the scene.
+     Supervisor: "for now, I would just do it every time."
+   - CRITICAL: observation history (which boxels have been observed/sensed)
+     must survive re-boxelization.  Supervisor: "the only thing that you need
+     to be [aware] of is which boxes have you already observed?  That
+     information needs to be [preserved]."
+   - The merge logic should produce the same result as re-boxelizing from
+     scratch: "logically, if you do just boxelization from scratch, the result
+     should be the same if you do this multiple times."
+   - Incremental merge/split of only affected boxels is an optimization for
+     later — "a naive implementation that should work, but maybe slow."
+
+   SPLITTING is the inverse of merging:
+   - When an object is placed into a free boxel, that boxel must be split
+     into: (a) the part occupied by the object, and (b) the remaining free
+     part.  Supervisor: "if you move an object into another boxel, then you
+     need to split that boxel into the part where the object is and then the
+     part where [it isn't]."
+   - The existing initial octree splitting logic can be partially reused.
+
+6. TARGET BOXEL FITNESS AND ADJACENCY  →  #102
+   - The place action must check that the target boxel is large enough to
+     contain the object being placed.
+   - Supervisor suggested adjacency preference: "just pick the first adjacent
+     boxel that's big enough" rather than placing across the entire workspace.
+   - By definition, if boxels are part of the same merged boxel, the planner
+     doesn't care about exact placement within it — the motion planner picks
+     any valid configuration.  Supervisor: "if they are part of the same boxel,
+     then it should not matter to the planner where exactly the object is
+     within that boxel."
+
+7. TWO ARCHITECTURAL APPROACHES — DECISION: START SIMPLE
+   The meeting identified two distinct approaches for handling boxel
+   merge/split in the planning framework:
+
+   APPROACH 1 (CHOSEN — simpler):
+   - Boxelization is an opaque Python-side operation, NOT modeled in PDDL.
+   - After each action that changes the scene: re-boxelize → replan.
+   - The planner uses the first action(s) from the plan, then re-boxelizes
+     and replans because the boxel state will have changed.
+   - Advantage: simpler implementation, reuses existing merge logic.
+   - Disadvantage: forced replanning after every scene-changing action because
+     the planner cannot predict the post-action boxel state.  Risk of loops.
+   - Supervisor: "you plan and then after doing one action we re-boxelize
+     or whatever you want to call it and then replan."
+
+   APPROACH 2 (DEFERRED — supervisors rejected for current scope):
+   - Model merge and split as explicit PDDL actions with PDDLStream streams.
+   - Uses "active boxel" / representative concept: a base grid of smallest
+     boxels, with some marked "active" as representatives of merged groups.
+     Inactive boxels are subsumed by active ones.
+   - Advantage: the planner can compute complete multi-step plans without
+     replanning — "you can just continue planning" because "the planner
+     knows what the result is."
+   - Disadvantage: more PDDL actions (merge/split), longer plan horizons,
+     more stream sampling.  "you probably need to sample a lot more."
+   - Decision: "maybe we can keep this as an interesting idea, but for now
+     just stick to the simpler first approach."  "It always makes sense to
+     start with the simple one."
+   - When the student asked to keep the active voxel idea in limited form,
+     supervisors explicitly rejected it:
+       Supervisor 2: "No, I don't think so."
+       Supervisor 2: "Don't think about that."
+     This indicates active voxels are NOT just deferred — they were actively
+     discouraged for the current work scope.
+   - Possible future comparison: "ideally at the end we could compare the
+     two, but I wonder whether this is actually achievable."
+
+8. THE MERGE TRADE-OFF — CONSTRUCTED EXAMPLES
+   Supervisor constructed two examples showing the fundamental conflict:
+
+   EXAMPLE A (aggressive merge causes failure):
+   - A block in the middle, free space around it, target behind it.
+   - If all free space is merged into one large boxel, placing the block
+     "in free space" still blocks the view in the PDDL model (because the
+     entire boxel is modeled as occupied after placement).
+   - "your plan will tell you, if you move that box to that free space, it
+     will still block the view to the box in the very back.  So that's not
+     actually a solution."
+   - Conclusion: "that's kind of an argument against merging free space no
+     matter the properties."
+
+   EXAMPLE B (fine-grained prevents placement):
+   - A large block needs to be moved, but no single boxel is large enough.
+   - "there's no other boxel that's large enough to actually take this box.
+     Then there's no way to move it."
+   - Conclusion: multi-boxel placement (§4 above) resolves this.
+
+   RESOLUTION: Keep fine-grained discretization per logical properties
+   (avoids Example A) + multi-variant place actions spanning multiple
+   boxels (avoids Example B).  This was the agreed approach.
+
+9. GRASPING EXPLICITLY DEPRIORITIZED
+   Both supervisors stated that grasping quality is NOT the focus:
+   - "We don't really care about that."
+   - "Grasping is a different issue."
+   - "A lot of manipulation papers that don't care about the grasping part
+     — more about general rearrangement — do not care about the grasping."
+   - As long as "somewhat reasonable motion plans and somewhat reasonable
+     movements" are produced, the constraint-based approach is acceptable
+     for the thesis.
+   - This is explicitly a REARRANGEMENT problem, not a grasping problem.
+   - Implication for #59 (friction grasping) and #77 (object sizing):
+     these are Tier 4 deferrable, confirmed by supervisors.
+   - Focus should be on the boxelization/merge/split logic discussed above.
+
+10. CONSTRAINT ATTACHMENT FIX (relates to #98)
+    - Supervisors observed objects flying around during pick and diagnosed the
+      cause: the constraint moves the object to the gripper surface instead of
+      attaching at the current relative position.
+    - Correct approach: "you bring the gripper close, you attach it with a
+      constraint, and then it moves with the gripper."  The object should NOT
+      move when the constraint is created.
+    - Note: #98 (DONE, 2026-03-18) already addressed this by computing the
+      actual EE-to-object relative transform at constraint creation time.
+
+11. REPLANNING STRATEGY WITH APPROACH 1
+    - With the chosen approach, replanning is needed when boxel conditions
+      change (i.e., after actions that alter the scene).
+    - Supervisor ideal: "if you have a sound abstraction, sound logical model,
+      then you should be able to exactly predict the effects of the action.
+      So there's no need to replan anything."  This is what Approach 2 would
+      achieve.
+    - Practical reality (Approach 1): re-boxelization changes the state space,
+      invalidating the remaining plan.  Must replan.
+    - Risk: "you need to be really careful to avoid loops" when doing
+      replan-after-every-action.
+    - Current lack of conditional effects in FastDownward forces optimistic
+      planning + replanning on failure regardless (see #61).
+
+12. PRIORITY GUIDANCE FROM SUPERVISORS
+    - Immediate focus: the boxelization/merge/split logic discussed (§3-§5,
+      §7-§8 above).  NOT grasping quality.
+    - Supervisor: "I think it might make more sense to focus on the things
+      we discussed today."
+    - Supervisor: "most of what you have is actually sound.  It's just about
+      the merging and splitting logic that maybe it's a bit different.  And
+      especially what do you do after actually performing an action."
+    - "you can kind of use most of the logic that you already have.  Just
+      need to think about which boxels to merge, which boxels to split."
+
+ACTION ITEMS FROM MEETING (captured as open issues in CODEBASE_AUDIT.txt)
+  [x] #102 — Enforce target-boxel size precondition in place action.
+  [x] #103 — Implement logical property equivalence check in boxel merge,
+      including the visibility/observability condition (both observable or
+      both in shadow) and the blocks-same-objects condition.
+  [x] #104 — Implement post-action full re-boxelization (naive first), with
+      observation history preserved across re-boxelizations.  Incremental
+      merge/split as later optimisation.
+  [x] #105 — Implement multi-variant place actions (place-in-1, place-in-2,
+      etc.) with adjacency precondition and fitness stream/certifier.
+  [ ] Decide and document whether mid-pick sensing (pick-observe-replace)
+      is an intended capability.
+  [ ] Consider Approach 2 (PDDL-level merge/split with active boxels) as
+      future work / comparison baseline if time permits.
