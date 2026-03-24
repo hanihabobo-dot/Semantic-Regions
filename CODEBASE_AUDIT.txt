@@ -546,6 +546,121 @@ FOR LATER
   evaluation if time permits.  See DISCUSSION NOTES §7 in deferred archive.
 
 ================================================================================
+106. EXECUTION SUB-MOVES ARE COLLISION-BLIND
+================================================================================
+Where: test_full_pipeline.py (execute_pick, execute_place),
+       robot_utils.py (move_robot_smooth)
+
+What:  The three hidden sub-moves inside execute_pick (approach, descend to
+       contact, lift) and the three inside execute_place (approach, descend,
+       retreat) are all executed via move_robot_smooth(), which is purely
+       linear joint-space interpolation with no collision checking.  The
+       existing collision infrastructure (is_path_collision_free, RRT-Connect
+       in BoxelStreams) is never called for any of these segments.
+
+       The PDDL planner calls plan_motion() — which does full RRT-Connect
+       collision checking — only for the symbolic move action.  Everything
+       inside execute_pick/execute_place is invisible to the planner and
+       runs blind at execution time.
+
+       Consequence: the robot can and does collide with other objects during
+       approach, descend, or retreat.  The approach/retreat heights (0.10 m,
+       0.25 m in execute_place lines 919-920, same in execute_pick) are
+       hardcoded constants that are never validated against the actual scene.
+       This is the observed execution failure mode: "the robot struggles with
+       the move to place path."
+
+       This is a consequence of the hidden sub-action architecture described
+       in #93, but it has a lighter-weight mitigation that does not require
+       full PDDL decomposition (see Fix below).
+
+Fix:   Without restructuring the PDDL domain (the full #93 fix):
+       (a) Replace the three move_robot_smooth() calls in execute_pick and
+           execute_place with collision-aware motion using the existing
+           plan_motion() stream or is_path_collision_free directly.
+       (b) For the approach and retreat segments (arm moving with/without
+           grasped object), call BoxelStreams.plan_motion() to get a
+           collision-free trajectory, then follow its waypoints instead
+           of linear interpolation.
+       (c) Pass the appropriate ignored_body_ids (grasped object during
+           approach; none during retreat) so the check mirrors what
+           plan_motion already does for the PDDL move action.
+       This would reuse existing infrastructure with minimal new code and
+       without changing the PDDL domain.  The full #93 fix (PDDL
+       decomposition) remains the architecturally correct long-term solution.
+
+Related: #93 (hidden sub-actions), #95 (PDDL state drift), PF-2, PF-3
+
+================================================================================
+107. PLACEMENT DESTINATION MAY STILL BLOCK THE CLEARED VIEW CORRIDOR
+================================================================================
+Where: domain_pddlstream.pddl (place action),
+       pddlstream_planner.py (_build_init, _get_stream_map),
+       streams.py (BoxelStreams)
+
+What:  The place action currently requires only that the destination boxel
+       is free and large enough (is_free_space + boxel_fits from #102).
+       It does NOT require that placing the occluder at the destination
+       leaves the view corridor clear.  The planner can generate a valid
+       plan that moves an occluder from its original boxel to a different
+       free boxel that is ALSO in the camera's line of sight to the same
+       shadow — meaning the placement accomplishes nothing: the view is
+       still blocked after the action, sense is still impossible, and the
+       planner will fail or loop.
+
+       Example: occluder at obj_003 blocks view to shadow_007.  Planner
+       places occluder at free_boxel_012, which is also in the LOS cone
+       from the camera to shadow_007.  After place, view_blocked(shadow_007)
+       is still true — the plan is semantically useless.
+
+       The blocks_view_at static geometry facts describe which (object, boxel)
+       pairs block which shadows.  These are emitted for the original boxel
+       positions only.  The planner has no stream or predicate that evaluates
+       whether the DESTINATION boxel would create a NEW blocks_view_at fact.
+
+       Two sub-problems:
+       (a) No precondition certifying the destination does not re-block any
+           shadow the occluder was originally blocking (the primary case:
+           "clear the view I was blocking").
+       (b) No precondition certifying the destination does not block ANY
+           shadow at all (the stricter case: don't create new occlusions).
+           Sub-problem (b) is likely too conservative for small free boxels
+           that are geometrically outside all camera cones, but is the
+           correct goal for a clean re-boxelization (#104).
+
+Fix:   Needs detailed design discussion before implementation.  Candidate
+       approaches:
+
+       (a) Test stream test-place-clears-view(?o ?dest ?shadow):
+           A PDDLStream test stream with inputs (?o ?dest ?shadow) that
+           returns True iff placing ?o at ?dest does NOT block view to
+           ?shadow (i.e. the dest boxel is geometrically outside the
+           camera-to-shadow cone).  Add as a precondition on place:
+           (not (place_blocks_view ?o ?dest)) certified by the stream.
+           Requires the stream to evaluate camera cone geometry at
+           planning time.
+
+       (b) Pre-computed no-block set in _build_init():
+           At problem build time, for each free boxel, compute whether
+           it lies within any LOS cone and emit (no_view_block ?b) facts.
+           The place action requires (no_view_block ?b).  Simpler than
+           a stream but bakes in a static assumption that cones do not
+           change during a plan.
+
+       (c) Explicit placement-region set:
+           The planner is given a pre-approved set of "safe placement"
+           boxels (outside all camera cones) as init facts.  Placement is
+           restricted to this set.  Most conservative and simplest to
+           implement; requires a camera-cone membership test at init time.
+
+       The right design, test stream structure, and whether to handle
+       sub-problem (b) alongside (a) needs to be decided before coding.
+       See also #103 (merge condition uses same LOS geometry) and #104
+       (re-boxelization rebuilds the safe set after each action).
+
+Related: #102 (boxel_fits precondition — now done), #103, #104, #105
+
+================================================================================
 SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-03-24)
 ================================================================================
 
@@ -559,6 +674,8 @@ TIER 3 — THESIS-CRITICAL (days-weeks):
   #103 Boxel merge condition incomplete                   ~2-3 days
   #81  Recursive object discovery (PA-2)                  ~2-3 days
   #105 Multi-boxel free space placement                   ~1 week
+  #106 Execution sub-moves collision-blind                ~1-2 days
+  #107 Placement may re-block cleared view corridor       ~needs design
 
 TIER 4 — DEFERRABLE (supervisor-confirmed, see deferred archive):
   #59+#77  Constraint grasping / object sizing
