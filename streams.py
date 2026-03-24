@@ -394,6 +394,41 @@ class BoxelStreams:
         return None
 
     # =========================================================================
+    # TEST STREAM: Boxel Fitness Check
+    # =========================================================================
+    # Used as a precondition for place: ensures the destination free boxel
+    # is at least as large as the object's bounding box on all three axes.
+
+    def test_boxel_fits(self, obj_id: str, boxel_id: str) -> bool:
+        """
+        Test whether a free-space boxel is large enough to contain an object.
+
+        Compares axis-aligned extents (max_corner - min_corner) of both
+        boxels.  Returns True iff the free boxel's extent >= the object
+        boxel's extent on all three axes.
+
+        PDDLStream declaration (see pddl/stream.pddl):
+            (:stream test-boxel-fits
+              :inputs (?o ?b)
+              :domain (and (Obj ?o) (Boxel ?b) (is_free_space ?b))
+              :certified (boxel_fits ?o ?b))
+
+        Args:
+            obj_id: Boxel ID of the object being placed
+            boxel_id: Boxel ID of the candidate free-space destination
+
+        Returns:
+            True if the free boxel can contain the object, False otherwise
+        """
+        obj_boxel = self.registry.get_boxel(obj_id)
+        dest_boxel = self.registry.get_boxel(boxel_id)
+        if obj_boxel is None or dest_boxel is None:
+            return False
+        obj_extents = obj_boxel.max_corner - obj_boxel.min_corner
+        dest_extents = dest_boxel.max_corner - dest_boxel.min_corner
+        return bool(np.all(dest_extents >= obj_extents))
+
+    # =========================================================================
     # STREAM 1: Sample Grasp
     # =========================================================================
     # Called first during planning: "how can I grab this object?"
