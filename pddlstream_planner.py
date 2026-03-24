@@ -106,6 +106,7 @@ class PDDLStreamPlanner:
             'sample-grasp': from_gen_fn(self.streams.sample_grasp),
             'plan-motion': from_gen_fn(self.streams.plan_motion),
             'compute-kin': from_gen_fn(self.streams.compute_kin_solution),
+            'test-boxel-fits': from_test(self.streams.test_boxel_fits),
         }
     
     def create_problem(self, 

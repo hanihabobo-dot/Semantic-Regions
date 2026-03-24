@@ -55,6 +55,7 @@
     (motion ?q1 ?q2 ?t)           ; Trajectory ?t from ?q1 to ?q2
     (kin_solution ?o ?b ?g ?q)    ; Config ?q for picking ?o from ?b with ?g
     (config_for_boxel ?q ?b)      ; Config ?q targets boxel ?b (EE inside ?b)
+    (boxel_fits ?o ?b)            ; Free boxel ?b is large enough to contain ?o
   )
   
   ;; =========================================================================
@@ -211,6 +212,7 @@
       (holding ?o)
       (at_config ?q)
       (is_free_space ?b)
+      (boxel_fits ?o ?b)
       (kin_solution ?o ?b ?g ?q)
     )
     :effect (and

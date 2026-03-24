@@ -308,40 +308,29 @@ WSL VIRTUAL ENVIRONMENT — DO NOT DELETE
        Rule: NEVER delete wsl_env/ during cleanup.  It is not junk.
 
 ================================================================================
-102. PLACE TARGET SELECTION RANDOM — NO FITNESS CHECK
+102. [DONE] PLACE TARGET SELECTION — FITNESS CHECK ADDED
 ================================================================================
-Where: test_full_pipeline.py execute_place(),
-       pddlstream_planner.py _build_init(),
-       domain_pddlstream.pddl (place action)
+Where: domain_pddlstream.pddl, stream.pddl, streams.py, pddlstream_planner.py
 
-What:  The place action currently selects a random free boxel as the
-       destination without checking whether the boxel is large enough to
-       contain the placed object.  The speaker confirmed in the 2026-03-22
-       meeting: "it picks a random free boxel so far and just puts it
-       there so it doesn't check whether it would fit."
+What:  The place action previously selected any free boxel without checking
+       whether it was large enough for the object.
 
-       Two sub-problems:
-       (a) No size precondition: the PDDL place action has no predicate
-           requiring that the target boxel's extents exceed the object's
-           bounding box.  The planner can (and does) generate plans that
-           place an object in a boxel smaller than the object.
-       (b) No adjacency preference: the supervisor suggested preferring
-           an adjacent free boxel ("just pick the first adjacent boxel
-           that's big enough").  Currently placement has no spatial
-           locality — the object may be placed across the table from its
-           original position, which is suboptimal for plan quality and
-           unnecessary for clearing a view corridor.
+Fixed: Sub-problem (a) — size precondition:
+       - Added (boxel_fits ?o ?b) predicate to domain_pddlstream.pddl
+       - Added test-boxel-fits stream in stream.pddl (test stream, not
+         generator — cheap dictionary lookup + numpy comparison)
+       - Implemented test_boxel_fits() in BoxelStreams (streams.py):
+         compares axis-aligned extents on all 3 axes
+       - Registered in _get_stream_map() via from_test()
+       The planner now only considers free boxels whose extents >= the
+       object's extents.  If no boxel is large enough, the planner
+       correctly returns "no plan" instead of an invalid placement.
 
-Fix:   (a) Add a stream or derived predicate that certifies
-           (boxel_fits ?obj ?boxel) — true iff boxel extents ≥ object
-           bounding box in all three axes.  Add this as a precondition
-           to the place action.
-       (b) Optionally add a cost heuristic that prefers adjacent free
-           boxels over distant ones (lower action cost for closer boxels).
-       (c) See #105 for multi-boxel placement if no single boxel is
-           large enough.
+Deferred: Sub-problem (b) — adjacency preference.  neighbor_ids is
+       currently unpopulated in practice and depends on #103 (merge
+       condition).  Will be addressed as a cost heuristic after #103.
 
-Related: #105 (multi-boxel free space placement)
+Related: #105 (multi-boxel free space placement), #103 (merge condition)
 
 ================================================================================
 103. BOXEL MERGE CONDITION INCOMPLETE — MISSING LOGICAL PROPERTY EQUIVALENCE
@@ -569,7 +558,6 @@ TIER 3 — THESIS-CRITICAL (days-weeks):
   #76  No evaluation framework (PA-1)                     ~1-2 weeks
   #103 Boxel merge condition incomplete                   ~2-3 days
   #81  Recursive object discovery (PA-2)                  ~2-3 days
-  #102 Place target selection — no fitness check          ~1-2 days
   #105 Multi-boxel free space placement                   ~1 week
 
 TIER 4 — DEFERRABLE (supervisor-confirmed, see deferred archive):

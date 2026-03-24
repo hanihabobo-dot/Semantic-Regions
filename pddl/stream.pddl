@@ -16,6 +16,13 @@
     :certified (and (Trajectory ?t) (motion ?q1 ?q2 ?t))
   )
   
+  ;; Test whether a free boxel is large enough to contain an object
+  (:stream test-boxel-fits
+    :inputs (?o ?b)
+    :domain (and (Obj ?o) (Boxel ?b) (is_free_space ?b))
+    :certified (boxel_fits ?o ?b)
+  )
+  
   ;; Compute IK solution for picking
   (:stream compute-kin
     :inputs (?o ?b ?g)
