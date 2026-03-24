@@ -9,34 +9,6 @@ Resolved issues archived to archive/CODEBASE_AUDIT_RESOLVED.txt.
 Deferred/background items in archive/CODEBASE_AUDIT_DEFERRED.txt.
 
 ================================================================================
-55. HARDCODED SCENE — NO SCENARIO VARIATION  [PARTIALLY DONE]
-================================================================================
-Where: boxel_env.py _create_occluders(), _create_targets()
-What:  The scene has exactly 3 occluders and 4 targets at hardcoded
-       positions. Object sizes are fixed (0.15m cubes for occluders,
-       0.08m cubes for targets). There is no randomization, no
-       parameterization, no difficulty scaling. The proposal (Section 5)
-       says "We will vary the number of occluders and the complexity of
-       the scene to test scalability" but only one scene exists.
-
-Fix:   PARTIALLY DONE — Scene parameterization infrastructure implemented:
-       - SceneConfig dataclass with ObjectSpec (supports BOX, CYLINDER,
-         SPHERE) and per-object size/color/mass/friction.
-       - Three preset scenes: default_scene() (original cubes),
-         mixed_shapes_scene() (cylinders, boxes, spheres),
-         scalability_scene() (random generation with configurable
-         n_occluders, n_targets, seed).
-       - CLI flags: --scene {default,mixed,scalability},
-         --n-occluders, --n-targets, --seed.
-       - _random_xy_positions() for rejection-sampled placement.
-       - BoxelTestEnv.__init__() and reset() accept scene_config.
-
-       REMAINING: No batch evaluation runner uses these presets yet.
-       The infrastructure exists but is not wired into an experiment
-       framework (#76).  The default scene still uses 0.15 m occluder
-       cubes that exceed gripper capacity (see #77 in deferred archive).
-
-================================================================================
 56. DEAD COMPUTATION — POINT CLOUD AND NEIGHBORS NEVER USED  [PARTIALLY DONE]
 ================================================================================
 Where: boxel_env.py get_camera_observation(), boxel_data.py compute_neighbors()
@@ -626,7 +598,6 @@ TIER 3 — THESIS-CRITICAL (days-weeks):
   #81  Recursive object discovery (PA-2)                  ~2-3 days
   #102 Place target selection — no fitness check          ~1-2 days
   #105 Multi-boxel free space placement                   ~1 week
-  #55  Hardcoded scene [PARTIALLY DONE]
   #56  Dead computation [PARTIALLY DONE]
 
 TIER 4 — DEFERRABLE (supervisor-confirmed, see deferred archive):
@@ -638,5 +609,5 @@ DECISION NEEDED (see deferred archive):
 
 Resolved issues: see archive/CODEBASE_AUDIT_RESOLVED.txt.
 Archived no-action items: #44, #73, #87-#92, #94 (see resolved archive).
-Deferred/background: #59, #77, #96, #97, PA-3/4/5/6, PF-1/4/5, DISCUSSION
+Deferred/background: #55, #59, #77, #96, #97, PA-3/4/5/6, PF-1/4/5, DISCUSSION
   NOTES 2026-03-22 (see archive/CODEBASE_AUDIT_DEFERRED.txt).
