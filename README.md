@@ -17,7 +17,9 @@ python3 -u test_full_pipeline.py
 
 ## Documentation
 
-Detailed documentation is in the **project wiki** (see the Wiki tab in the repository):
+**[Project wiki (home)](https://git.rwth-aachen.de/hani.alassiri.alhabboub/pybullet/-/wikis/home)** — or open the **Wiki** tab in the repository.
+
+Detailed documentation lives there, including:
 
 | Page | What it covers |
 |------|---------------|
