@@ -66,6 +66,19 @@ ARCHIVE — TRACKED AND PUSHED
        archive/ contains superseded implementations and audit history.
        Tracked by git.  Must NOT contain personal information.
 
+PYBULLET GUI FREEZES DURING PLANNING — THIS IS NORMAL
+       The RenderingLock (robot_utils.py) disables COV_ENABLE_RENDERING
+       for the entire planning phase (test_full_pipeline.py ~line 346,
+       audit #60).  While planning runs (often 30-130 s), the PyBullet
+       window appears frozen — no zoom, pan, or rotation works.
+       The GUI unfreezes when planning finishes.
+       If planning takes very long, WSLg's Weston compositor may drop
+       the X11 connection, crashing the process with:
+         XIO: fatal IO error 11 (Resource temporarily unavailable) on X server ":0"
+       Fix: restart WSL (wsl --shutdown from PowerShell, then reopen
+       terminal).  Keyboard camera controls (R/F for zoom, WASD for
+       pan) also do not work while rendering is locked.
+
 WSL VIRTUAL ENVIRONMENT — DO NOT DELETE
        wsl_env/ is the WSL Python venv (gitignored, local only).
        Deleting it breaks the entire pipeline.

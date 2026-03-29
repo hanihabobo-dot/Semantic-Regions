@@ -550,9 +550,9 @@ def main(gui=True, run_logger=None, scene_config=None):
                 # Rebuild shadow_occluder_map from current physics state so
                 # blocks_view_at facts reflect the relocated occluder's new
                 # position on the next replan (audit #73).
-                shadow_occluder_map = compute_shadow_blockers(
-                    env.camera_position, registry, shadows, occluders, env
-                )
+                # shadow_occluder_map = compute_shadow_blockers(
+                #      env.camera_position, registry, shadows, occluders, env
+                # )
                 planner.shadow_occluder_map = shadow_occluder_map
 
                 # Record the relocation in belief state so the planner
