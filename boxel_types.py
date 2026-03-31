@@ -37,6 +37,7 @@ class Boxel:
     center: np.ndarray  # [x, y, z] center coordinates of the box in world frame
     extent: np.ndarray  # [x_half, y_half, z_half] half-dimensions (distance from center to edge)
     object_name: Optional[str] = None  # Name of the object this boxel bounds (if any)
+    label: Optional[str] = None  # Optional display name in simulation (e.g. registry id); see BoxelVisualizer
     is_occluded: bool = False  # Belief state: Is this boxel currently known to be occluded?
     is_shadow: bool = False  # Is this a shadow/occlusion region cast by another object?
     is_free: bool = False  # Is this boxel representing known free space?

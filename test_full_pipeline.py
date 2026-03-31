@@ -58,6 +58,7 @@ from streams import RobotConfig
 from robot_utils import (END_EFFECTOR_LINK, RenderingLock, solve_ik,
                          move_robot_smooth, open_gripper, close_gripper)
 from run_logger import RunLogger
+from visualization import BoxelVisualizer
 
 
 class BeliefState:
@@ -174,13 +175,9 @@ def main(gui=True, run_logger=None, scene_config=None):
     occluders = [b.id for b in registry.boxels.values() if b.boxel_type == BoxelType.OBJECT]
     print(f"  {len(registry.boxels)} boxels, {len(shadows)} shadows, {len(occluders)} occluders")
     
-    # Visualize all boxels at once (after calculations complete)
-    # if gui:
-    #     p.resetDebugVisualizerCamera(
-    #         cameraDistance=1.5, cameraYaw=45, cameraPitch=-30,
-    #         cameraTargetPosition=[0.5, 0.0, env.table_surface_height]
-    #     )
-    #     env.draw_boxels(all_boxels, duration=0)
+    if gui:
+        viz = BoxelVisualizer()
+        viz.draw_registry(registry, duration=0, label_size=1.0, skip_free=True)
     
     # =========================================================
     # PHASE 4: Hidden Object Scenario (ORACLE ONLY)
