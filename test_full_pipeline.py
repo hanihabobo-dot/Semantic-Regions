@@ -353,7 +353,10 @@ def main(gui=True, run_logger=None, scene_config=None):
                 max_time=120.0,
                 verbose=False
             )
-        
+
+        if gui:
+            env.refresh_debug_camera_views()
+
         if plan is None:
             exit_reason = "planner_failed"
             print("ERROR: No plan found!")
@@ -580,7 +583,10 @@ def main(gui=True, run_logger=None, scene_config=None):
                     print(f"    *** {placed_obj_name} PLACED at {boxel_id_str}! ***")
                 else:
                     print(f"    *** {obj_str} PLACED at {boxel_id_str}! ***")
-    
+
+            if gui:
+                env.refresh_debug_camera_views()
+
     # =========================================================
     # PHASE 6: Results & Cleanup
     # =========================================================
