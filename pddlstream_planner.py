@@ -30,7 +30,7 @@ from typing import List, Tuple, Optional, Dict, Any, Union
 
 from pddlstream.algorithms.meta import solve
 from pddlstream.language.constants import PDDLProblem, print_solution
-from pddlstream.language.generator import from_gen_fn, from_fn, from_test
+from pddlstream.language.generator import from_gen_fn, from_fn
 from pddlstream.utils import read
 
 from boxel_data import BoxelRegistry, BoxelType
@@ -106,7 +106,6 @@ class PDDLStreamPlanner:
             'sample-grasp': from_gen_fn(self.streams.sample_grasp),
             'plan-motion': from_gen_fn(self.streams.plan_motion),
             'compute-kin': from_gen_fn(self.streams.compute_kin_solution),
-            'test-boxel-fits': from_test(self.streams.test_boxel_fits),
         }
     
     def create_problem(self, 
@@ -334,6 +333,25 @@ class PDDLStreamPlanner:
 
         for obj in target_objects:
             init.append(('Obj', obj))
+
+        # Static boxel_fits facts (audit #102): do NOT use a PDDLStream test stream.
+        # Adaptive search re-invokes test streams heavily across skeletons; a cheap
+        # predicate became a bottleneck.  One pass here matches stream semantics.
+        obj_ids = []
+        for boxel in self.registry.boxels.values():
+            if boxel.boxel_type == BoxelType.OBJECT:
+                obj_ids.append(boxel.id)
+        for obj in target_objects:
+            if obj not in obj_ids:
+                obj_ids.append(obj)
+        free_ids = [
+            b.id for b in self.registry.boxels.values()
+            if b.boxel_type == BoxelType.FREE_SPACE
+        ]
+        for o in obj_ids:
+            for bid in free_ids:
+                if self.streams.test_boxel_fits(o, bid):
+                    init.append(('boxel_fits', o, bid))
 
         init.append(('Config', current_config))
         init.append(('at_config', current_config))

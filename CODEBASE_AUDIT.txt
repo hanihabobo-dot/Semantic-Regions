@@ -84,6 +84,32 @@ WSL VIRTUAL ENVIRONMENT — DO NOT DELETE
        Deleting it breaks the entire pipeline.
        Recreate: python3 -m venv wsl_env && pip install numpy pybullet
 
+STATIC GEOMETRY IN INIT (e.g. boxel_fits) — FUTURE MERGE/SPLIT
+       Predicates such as (boxel_fits ?o ?b) are precomputed in
+       pddlstream_planner._build_init() from the current BoxelRegistry
+       snapshot (old #102).  They are valid only for that partition and
+       geometry for one planning problem.
+
+       If we ever **re-split or re-merge** free-space (or other) boxels
+       **after** an action — e.g. online refinement between replans — the
+       registry and AABBs can change.  Then every init fact that depends on
+       boxel identity or extents (not only boxel_fits, but also is_free_space,
+       Boxel objects, etc.) must be **rebuilt from an updated registry** before
+       the next solve: effectively **re-initialise** the PDDLStream problem
+       (or an equivalent full refresh).  Do not assume a prior init stays
+       valid across merge/split.  Overlaps the re-boxelization requirement
+       in #4; call this out again when implementing dynamic partition updates.
+
+BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
+       The place precondition (boxel_fits ?o ?b) is satisfied by init facts
+       only.  BoxelStreams.test_boxel_fits() runs once per problem in
+       _build_init() for each (object, free_space) pair that geometrically
+       fits.  An earlier implementation used a PDDLStream test stream
+       (test-boxel-fits); adaptive search re-evaluated it heavily across
+       skeletons and dominated runtime despite a cheap per-call check.
+       stream.pddl no longer declares that stream; domain and predicate are
+       unchanged.
+
 
 ################################################################################
 #                                                                              #
@@ -263,13 +289,13 @@ Related: old #44 [ACCEPTED] (stale shadow AABBs — subsumed by this),
 ================================================================================
 Priority: TIER 1 — Needs design decision before implementation
 Where:    domain_pddlstream.pddl (place action),
-          pddlstream_planner.py (_build_init, _get_stream_map),
-          streams.py (BoxelStreams)
+          pddlstream_planner.py (_build_init: boxel_fits facts),
+          streams.py (BoxelStreams.test_boxel_fits)
 Depends:  None (but benefits from #2 and #4)
 Effort:   2-3 days (after design is decided)
 
 What:  The place action requires only that the destination is free and
-       large enough (is_free_space + boxel_fits).  It does NOT check
+       large enough (is_free_space + boxel_fits; see policy above).  It does NOT check
        whether placing the occluder at the destination re-blocks the
        view corridor the plan just cleared.
 

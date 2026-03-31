@@ -394,24 +394,18 @@ class BoxelStreams:
         return None
 
     # =========================================================================
-    # TEST STREAM: Boxel Fitness Check
+    # Boxel fitness (place precondition) — used from pddlstream_planner init
     # =========================================================================
-    # Used as a precondition for place: ensures the destination free boxel
-    # is at least as large as the object's bounding box on all three axes.
+    # True pairs are emitted as static (boxel_fits ?o ?b) in _build_init, not via
+    # a PDDLStream test stream (adaptive search would re-test combinatorially).
 
     def test_boxel_fits(self, obj_id: str, boxel_id: str) -> bool:
         """
-        Test whether a free-space boxel is large enough to contain an object.
+        Whether a free-space boxel is large enough to contain an object.
 
         Compares axis-aligned extents (max_corner - min_corner) of both
         boxels.  Returns True iff the free boxel's extent >= the object
         boxel's extent on all three axes.
-
-        PDDLStream declaration (see pddl/stream.pddl):
-            (:stream test-boxel-fits
-              :inputs (?o ?b)
-              :domain (and (Obj ?o) (Boxel ?b) (is_free_space ?b))
-              :certified (boxel_fits ?o ?b))
 
         Args:
             obj_id: Boxel ID of the object being placed
