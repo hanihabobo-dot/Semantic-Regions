@@ -294,7 +294,8 @@ class BoxelTestEnv:
             p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
         else:
             self.client_id = p.connect(p.DIRECT)
-        
+        self._gui = gui
+
         # Reset simulation
         p.resetSimulation()
         p.setGravity(0, 0, -9.81)  # standard gravitational acceleration
@@ -558,20 +559,87 @@ class BoxelTestEnv:
             List of free space boxels
         """
         return self.free_space_generator.generate(known_boxels, visualize)
-    
+
+    def _view_and_projection_matrices(self):
+        """View and projection matrices for the semantic camera (matches oracle rays)."""
+        view_matrix = p.computeViewMatrix(
+            cameraEyePosition=self.camera_position,
+            cameraTargetPosition=self.camera_target,
+            cameraUpVector=self.camera_up,
+        )
+        projection_matrix = p.computeProjectionMatrixFOV(
+            fov=self.fov,
+            aspect=self.image_width / self.image_height,
+            nearVal=self.near_plane,
+            farVal=self.far_plane,
+        )
+        return view_matrix, projection_matrix
+
+    def refresh_debug_camera_views(self) -> None:
+        """
+        Re-run the OpenGL camera render (no return values needed).
+
+        PyBullet's ExampleBrowser shows RGB/depth in the left panes when the
+        hardware renderer draws the off-screen camera; that only happens while
+        COV_ENABLE_RENDERING is on.  Call after exiting RenderingLock or
+        between executed actions so the thumbnails update.
+        """
+        if not self._gui:
+            return
+        view_matrix, projection_matrix = self._view_and_projection_matrices()
+        p.getCameraImage(
+            width=self.image_width,
+            height=self.image_height,
+            viewMatrix=view_matrix,
+            projectionMatrix=projection_matrix,
+            renderer=p.ER_BULLET_HARDWARE_OPENGL,
+        )
+
     def get_camera_observation(self) -> CameraObservation:
         """
         Capture an observation from the camera.
 
-        Only computes what downstream code actually consumes: visible objects,
-        object poses, and semantic boxels.  RGB, depth, and point-cloud fields
-        default to None (no consumer exists; see audit #56).
+        In GUI mode, order matches pre--#56 history (e.g. parent of ff6384f):
+        ``getCameraImage`` first so ExampleBrowser RGB/depth panes update, then
+        oracle boxels.  In DIRECT mode, skip rendering (audit #56 fast path).
         """
+        if not self._gui:
+            visible_objects, object_poses = self.oracle_detect_objects()
+            boxels = self.generate_boxels(visible_objects)
+            return CameraObservation(
+                visible_objects=visible_objects,
+                object_poses=object_poses,
+                boxels=boxels,
+            )
+
+        view_matrix, projection_matrix = self._view_and_projection_matrices()
+        _, _, rgb_array, depth_array, _ = p.getCameraImage(
+            width=self.image_width,
+            height=self.image_height,
+            viewMatrix=view_matrix,
+            projectionMatrix=projection_matrix,
+            renderer=p.ER_BULLET_HARDWARE_OPENGL,
+        )
+        rgb_image = np.array(rgb_array, dtype=np.uint8).reshape(
+            (self.image_height, self.image_width, 4)
+        )[:, :, :3]
+        depth_image = self._depth_buffer_to_meters(
+            np.array(depth_array).reshape((self.image_height, self.image_width))
+        )
+        point_cloud = self._depth_to_point_cloud(
+            depth_image, view_matrix, projection_matrix
+        )
+
         visible_objects, object_poses = self.oracle_detect_objects()
         boxels = self.generate_boxels(visible_objects)
 
         return CameraObservation(
-            visible_objects=visible_objects, object_poses=object_poses, boxels=boxels
+            rgb_image=rgb_image,
+            depth_image=depth_image,
+            point_cloud=point_cloud,
+            visible_objects=visible_objects,
+            object_poses=object_poses,
+            boxels=boxels,
         )
     
     def _depth_buffer_to_meters(self, depth_buffer: np.ndarray) -> np.ndarray:
