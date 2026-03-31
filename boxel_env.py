@@ -19,6 +19,25 @@ from visualization import BoxelVisualizer
 
 
 # ---------------------------------------------------------------------------
+# Debug visualizer (main GL view) — fixed defaults only
+# ---------------------------------------------------------------------------
+# ``getCameraImage`` uses ``computeViewMatrix(eye, target, up)``.  The
+# ExampleBrowser view only supports ``resetDebugVisualizerCamera(distance,
+# yaw, pitch, target)``.  Values below were **precomputed once** (see
+# ``tools/calibrate_debug_camera.py``) by grid-matching
+# ``computeViewMatrixFromYawPitchRoll`` to the default semantic camera:
+#   eye (0.5, -0.8, 0.7), target (0.5, 0.0, 0.5), up (0, 0, 1).
+
+_DEFAULT_DEBUG_VIS_TARGET = [0.5, 0.0, 0.5]
+_DEFAULT_DEBUG_VIS_DISTANCE = 1.8246211251235323
+_DEFAULT_DEBUG_VIS_YAW = 0.0
+_DEFAULT_DEBUG_VIS_PITCH = -14.04
+
+_DEFAULT_SEMANTIC_EYE = np.array([0.5, -0.8, 0.7])
+_DEFAULT_SEMANTIC_TARGET = np.array([0.5, 0.0, 0.5])
+
+
+# ---------------------------------------------------------------------------
 # Scene configuration types
 # ---------------------------------------------------------------------------
 
@@ -292,6 +311,16 @@ class BoxelTestEnv:
             p.configureDebugVisualizer(p.COV_ENABLE_MOUSE_PICKING, 0)
             # Disable segmentation mask preview window
             p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
+            # Main view: match fixed semantic camera immediately (before resetSimulation).
+            if np.allclose(self.camera_position, _DEFAULT_SEMANTIC_EYE) and np.allclose(
+                self.camera_target, _DEFAULT_SEMANTIC_TARGET
+            ):
+                p.resetDebugVisualizerCamera(
+                    cameraDistance=_DEFAULT_DEBUG_VIS_DISTANCE,
+                    cameraYaw=_DEFAULT_DEBUG_VIS_YAW,
+                    cameraPitch=_DEFAULT_DEBUG_VIS_PITCH,
+                    cameraTargetPosition=list(_DEFAULT_DEBUG_VIS_TARGET),
+                )
         else:
             self.client_id = p.connect(p.DIRECT)
         self._gui = gui
@@ -318,13 +347,29 @@ class BoxelTestEnv:
             table_x_range=self.table_x_range, table_y_range=self.table_y_range
         )
         self.visualizer = BoxelVisualizer()
-        
-        # Initialize debug camera state for keyboard navigation
-        self.debug_camera_distance = 1.5
-        self.debug_camera_yaw = 45.0
-        self.debug_camera_pitch = -30.0
-        self.debug_camera_target = np.array([0.5, 0.0, self.table_surface_height])
-        
+
+        if self._gui and np.allclose(
+            self.camera_position, _DEFAULT_SEMANTIC_EYE
+        ) and np.allclose(self.camera_target, _DEFAULT_SEMANTIC_TARGET):
+            # resetSimulation can reset the debug camera — re-apply fixed view after scene load.
+            p.resetDebugVisualizerCamera(
+                cameraDistance=_DEFAULT_DEBUG_VIS_DISTANCE,
+                cameraYaw=_DEFAULT_DEBUG_VIS_YAW,
+                cameraPitch=_DEFAULT_DEBUG_VIS_PITCH,
+                cameraTargetPosition=list(_DEFAULT_DEBUG_VIS_TARGET),
+            )
+            self.debug_camera_distance = _DEFAULT_DEBUG_VIS_DISTANCE
+            self.debug_camera_yaw = _DEFAULT_DEBUG_VIS_YAW
+            self.debug_camera_pitch = _DEFAULT_DEBUG_VIS_PITCH
+            self.debug_camera_target = np.array(_DEFAULT_DEBUG_VIS_TARGET, dtype=float)
+        else:
+            self.debug_camera_distance = 1.5
+            self.debug_camera_yaw = 45.0
+            self.debug_camera_pitch = -30.0
+            self.debug_camera_target = np.array(
+                [0.5, 0.0, self.table_surface_height], dtype=float
+            )
+
         occ_shapes = [s.shape.value for s in self.scene_config.occluders]
         tgt_shapes = [s.shape.value for s in self.scene_config.targets]
         print("Boxel Test Environment initialized successfully!")
@@ -333,7 +378,7 @@ class BoxelTestEnv:
         print(f"Occluders: {len(occ_shapes)} ({', '.join(occ_shapes)})")
         print(f"Targets:   {len(tgt_shapes)} ({', '.join(tgt_shapes)})")
         print(f"Objects in scene: {list(self.objects.keys())}")
-    
+
     def _setup_scene(self):
         """Set up the simulation scene with plane, table, robot, and objects."""
         # Load ground plane
