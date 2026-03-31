@@ -30,7 +30,8 @@ class BoxelVisualizer:
         self.shadow_bodies = []
     
     def draw_boxels(self, boxels: List[Boxel], duration: float = 0, clear_previous: bool = True,
-                    fill_opacity: float = 0.05):
+                    fill_opacity: float = 0.05, show_labels: bool = False,
+                    label_size: float = 1.0):
         """
         Visualize Semantic Boxels in the PyBullet GUI using debug lines.
         
@@ -39,6 +40,9 @@ class BoxelVisualizer:
             duration: How long lines remain visible (0 = forever)
             clear_previous: If True, clears previous debug items before drawing
             fill_opacity: Opacity for filled boxel phantoms (0.0 = invisible, 1.0 = solid)
+            show_labels: If True, draw a text label on top of each boxel.
+                Uses ``boxel.label`` if set, otherwise ``boxel.object_name``.
+            label_size: Text size for labels (PyBullet default units).
         """
         # Remove existing shadow bodies
         for body_id in self.shadow_bodies:
@@ -97,6 +101,20 @@ class BoxelVisualizer:
             
             # Draw filled phantom for all boxels
             self._draw_boxel_phantom(c, e, color, fill_opacity)
+
+            # Draw text label just above the top face
+            if show_labels:
+                text = boxel.label or boxel.object_name
+                if text:
+                    label_pos = [c[0], c[1], c[2] + e[2] + 0.01]
+                    text_id = p.addUserDebugText(
+                        text=text,
+                        textPosition=label_pos,
+                        textColorRGB=color,
+                        textSize=label_size,
+                        lifeTime=duration,
+                    )
+                    self.debug_items.append(text_id)
     
     def _get_boxel_color(self, boxel: Boxel) -> List[float]:
         """Get the color for a boxel based on its type."""
@@ -133,6 +151,40 @@ class BoxelVisualizer:
         
         self.shadow_bodies.append(body_id)
     
+    def draw_registry(self, registry, duration: float = 0,
+                      fill_opacity: float = 0.05, label_size: float = 1.0,
+                      skip_free: bool = True):
+        """
+        Draw all boxels from a BoxelRegistry with their registry IDs as labels.
+
+        Args:
+            registry: A BoxelRegistry instance (from boxel_data.py).
+            duration: How long lines remain visible (0 = forever).
+            fill_opacity: Opacity for filled boxel phantoms.
+            label_size: Text size for labels.
+            skip_free: If True, skip free-space boxels to reduce clutter.
+        """
+        from boxel_data import BoxelType
+
+        boxels: List[Boxel] = []
+        for bd in registry.boxels.values():
+            if skip_free and bd.boxel_type == BoxelType.FREE_SPACE:
+                continue
+            b = Boxel(
+                center=bd.center.copy(),
+                extent=bd.extent.copy(),
+                object_name=bd.object_name,
+                label=bd.id,
+                is_shadow=(bd.boxel_type == BoxelType.SHADOW),
+                is_occluder=bd.is_occluder,
+                is_free=(bd.boxel_type == BoxelType.FREE_SPACE),
+            )
+            boxels.append(b)
+
+        self.draw_boxels(boxels, duration=duration, clear_previous=True,
+                         fill_opacity=fill_opacity, show_labels=True,
+                         label_size=label_size)
+
     def clear_all(self):
         """Clear all debug items and shadow bodies."""
         for body_id in self.shadow_bodies:
