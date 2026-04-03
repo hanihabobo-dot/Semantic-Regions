@@ -19,6 +19,9 @@ Run from WSL:
 Or with no GUI (for testing):
     python3 test_full_pipeline.py --no-gui
 
+GUI on but no boxel wireframes/labels (PyBullet only):
+    python3 test_full_pipeline.py --no-boxel-viz
+
 PDDLStream path is added to sys.path via the hardcoded PDDLSTREAM_PATH constant below.
 """
 
@@ -116,7 +119,8 @@ class BeliefState:
         return self.target_found_in is not None
 
 
-def main(gui=True, run_logger=None, scene_config=None):
+def main(gui=True, run_logger=None, scene_config=None,
+         draw_boxel_overlays=True):
     print("=" * 60)
     print("FULL PIPELINE: PDDLStream + Replanning")
     print("=" * 60)
@@ -175,7 +179,7 @@ def main(gui=True, run_logger=None, scene_config=None):
     occluders = [b.id for b in registry.boxels.values() if b.boxel_type == BoxelType.OBJECT]
     print(f"  {len(registry.boxels)} boxels, {len(shadows)} shadows, {len(occluders)} occluders")
     
-    if gui:
+    if gui and draw_boxel_overlays:
         viz = BoxelVisualizer()
         viz.draw_registry(registry, duration=0, label_size=1.0, skip_free=True)
     
@@ -203,21 +207,34 @@ def main(gui=True, run_logger=None, scene_config=None):
                 target_to_shadow[tname] = shadow_id
                 break
     
-    if not target_to_shadow:
-        print(f"  ERROR: No target is geometrically inside any shadow region.")
-        print(f"  Cannot run hidden-object scenario.")
-        env.close()
-        return False
-    
-    # When multiple targets are hidden, pick one at random so evaluation
-    # runs aren't biased toward a particular spatial arrangement.
-    target_name = random.choice(list(target_to_shadow.keys()))
+    visible_target_locations = {}
+
+    if target_to_shadow:
+        # At least one target is hidden — run the search scenario.
+        target_name = random.choice(list(target_to_shadow.keys()))
+        oracle_hidden_shadow = target_to_shadow[target_name]
+        print(f"  Target: {target_name}")
+        print(f"  ORACLE: Actually hidden in {oracle_hidden_shadow} (ground-truth AABB containment)")
+        print(f"  Robot must search to find it!")
+    else:
+        # No target is hidden — all are visible from the camera.
+        # Pick a random visible target and resolve its boxel ID so the
+        # planner can generate a direct move→pick plan without sensing.
+        print(f"  No targets hidden — all visible from camera.")
+        target_name = random.choice(all_targets)
+        for boxel in registry.boxels.values():
+            if boxel.object_name == target_name:
+                visible_target_locations[target_name] = boxel.id
+                break
+        if target_name in visible_target_locations:
+            print(f"  Target: {target_name} at boxel "
+                  f"{visible_target_locations[target_name]} (direct pick)")
+        else:
+            print(f"  WARNING: Target {target_name} has no boxel in registry")
+            env.close()
+            return False
+
     target_info = env.objects[target_name]
-    oracle_hidden_shadow = target_to_shadow[target_name]
-    
-    print(f"  Target: {target_name}")
-    print(f"  ORACLE: Actually hidden in {oracle_hidden_shadow} (ground-truth AABB containment)")
-    print(f"  Robot must search to find it!")
     
     # Build shadow → [blocker_ids] mapping via raycasting (audit #78).
     # A shadow can be blocked by MORE than just the object that created it
@@ -296,7 +313,8 @@ def main(gui=True, run_logger=None, scene_config=None):
     # Export the initial PDDL problem for debugging / reproducibility.
     problem_path = planner.export_problem_pddl(
         target_objects=[target_name],
-        goal=('holding', target_name)
+        goal=('holding', target_name),
+        visible_target_locations=visible_target_locations,
     )
     print(f"  Exported initial problem to {problem_path}")
     if run_logger:
@@ -348,7 +366,8 @@ def main(gui=True, run_logger=None, scene_config=None):
                 known_empty_shadows=known_empty,
                 moved_occluders=dict(belief.occluders_moved),
                 max_time=120.0,
-                verbose=False
+                verbose=False,
+                visible_target_locations=visible_target_locations,
             )
 
         if gui:
@@ -507,6 +526,9 @@ def main(gui=True, run_logger=None, scene_config=None):
                     break
                 grasp_constraint_id, current_config = result
                 print(f"    *** {pick_obj_name} PICKED UP! ***")
+                if pick_obj_name == target_name:
+                    belief.target_found_in = visible_target_locations.get(
+                        target_name, "picked")
 
             elif action_name == 'place':
                 # PLACE: approach above destination → lower to contact →
@@ -988,6 +1010,11 @@ if __name__ == "__main__":
     #                 used for batch evaluation across many seeds
     parser = argparse.ArgumentParser(description='Full PDDLStream Pipeline with Replanning')
     parser.add_argument('--no-gui', action='store_true', help='Run without GUI')
+    parser.add_argument(
+        '--no-boxel-viz',
+        action='store_true',
+        help='Keep PyBullet GUI but skip drawing boxel AABBs/labels (debug clutter)',
+    )
     parser.add_argument('--log-level', choices=['quiet', 'normal', 'verbose'],
                         default='normal',
                         help='Console verbosity (log file always captures everything)')
@@ -1021,8 +1048,12 @@ if __name__ == "__main__":
     # regardless of console verbosity for post-mortem analysis.
     logger = RunLogger(verbosity=args.log_level)
     try:
-        success = main(gui=not args.no_gui, run_logger=logger,
-                       scene_config=scene_cfg)
+        success = main(
+            gui=not args.no_gui,
+            run_logger=logger,
+            scene_config=scene_cfg,
+            draw_boxel_overlays=not args.no_boxel_viz,
+        )
     finally:
         logger.close()
     sys.exit(0 if success else 1)
