@@ -26,15 +26,15 @@ from visualization import BoxelVisualizer
 # yaw, pitch, target)``.  Values below were **precomputed once** (see
 # ``tools/calibrate_debug_camera.py``) by grid-matching
 # ``computeViewMatrixFromYawPitchRoll`` to the default semantic camera:
-#   eye (0.5, -0.8, 0.7), target (0.5, 0.0, 0.5), up (0, 0, 1).
+#   eye (0.1, -0.8, 0.7), target (0.1, 0.0, 0.5), up (0, 0, 1).
 
-_DEFAULT_DEBUG_VIS_TARGET = [0.5, 0.0, 0.5]
-_DEFAULT_DEBUG_VIS_DISTANCE = 1.8246211251235323
+_DEFAULT_DEBUG_VIS_TARGET = [0.1, 0.0, 0.5]
+_DEFAULT_DEBUG_VIS_DISTANCE = 0.8246211251235323
 _DEFAULT_DEBUG_VIS_YAW = 0.0
 _DEFAULT_DEBUG_VIS_PITCH = -14.04
 
-_DEFAULT_SEMANTIC_EYE = np.array([0.5, -0.8, 0.7])
-_DEFAULT_SEMANTIC_TARGET = np.array([0.5, 0.0, 0.5])
+_DEFAULT_SEMANTIC_EYE = np.array([0.1, -0.8, 0.7])
+_DEFAULT_SEMANTIC_TARGET = np.array([0.1, 0.0, 0.5])
 
 
 # ---------------------------------------------------------------------------
@@ -123,30 +123,31 @@ def default_scene() -> SceneConfig:
     Original hardcoded scene (3 occluders, 4 targets, all cubes).
 
     Preserved for backward compatibility and regression testing.
-    Occluder cubes are 0.15 m — too wide for the Panda gripper but
-    functional with constraint-based grasping (audit #77).
+    Occluder cubes are 0.075 m half-extent (7.5 cm) — graspable by
+    the Panda gripper.  All positions within 0.65 m of robot base
+    (fix #17: shifted -0.4 m in X, sizes halved from original).
     """
     return SceneConfig(
         occluders=[
-            ObjectSpec(ObjectShape.BOX, [0.075, 0.075, 0.075],
+            ObjectSpec(ObjectShape.BOX, [0.0375, 0.0375, 0.0375],
                        color=[0.8, 0.3, 0.3, 1.0], mass=0.5),
-            ObjectSpec(ObjectShape.BOX, [0.075, 0.075, 0.075],
+            ObjectSpec(ObjectShape.BOX, [0.0375, 0.0375, 0.0375],
                        color=[0.8, 0.3, 0.3, 1.0], mass=0.5),
-            ObjectSpec(ObjectShape.BOX, [0.075, 0.075, 0.075],
+            ObjectSpec(ObjectShape.BOX, [0.0375, 0.0375, 0.0375],
                        color=[0.8, 0.3, 0.3, 1.0], mass=0.5),
         ],
         targets=[
-            ObjectSpec(ObjectShape.BOX, [0.04, 0.04, 0.04],
+            ObjectSpec(ObjectShape.BOX, [0.02, 0.02, 0.02],
                        color=[0.3, 0.3, 0.8, 1.0], mass=0.1),
-            ObjectSpec(ObjectShape.BOX, [0.04, 0.04, 0.04],
+            ObjectSpec(ObjectShape.BOX, [0.02, 0.02, 0.02],
                        color=[0.3, 0.3, 0.8, 1.0], mass=0.1),
-            ObjectSpec(ObjectShape.BOX, [0.04, 0.04, 0.04],
+            ObjectSpec(ObjectShape.BOX, [0.02, 0.02, 0.02],
                        color=[0.3, 0.3, 0.8, 1.0], mass=0.1),
-            ObjectSpec(ObjectShape.BOX, [0.04, 0.04, 0.04],
+            ObjectSpec(ObjectShape.BOX, [0.02, 0.02, 0.02],
                        color=[0.3, 0.3, 0.8, 1.0], mass=0.1),
         ],
-        occluder_positions=[[0.5, 0.2], [0.6, -0.1], [0.4, -0.2]],
-        target_positions=[[0.5, 0.4], [0.6, 0.1], [0.4, -0.1], [0.7, -0.2]],
+        occluder_positions=[[0.1, 0.2], [0.2, -0.1], [0.0, -0.2]],
+        target_positions=[[0.1, 0.4], [0.2, 0.1], [0.0, -0.1], [0.3, -0.2]],
     )
 
 
@@ -294,9 +295,9 @@ class BoxelTestEnv:
         
         # Set default camera position
         if camera_position is None:
-            camera_position = np.array([0.5, -0.8, 0.7])
+            camera_position = np.array([0.1, -0.8, 0.7])
         if camera_target is None:
-            camera_target = np.array([0.5, 0.0, 0.5])
+            camera_target = np.array([0.1, 0.0, 0.5])
         if camera_up is None:
             camera_up = np.array([0, 0, 1])
         
@@ -367,7 +368,7 @@ class BoxelTestEnv:
             self.debug_camera_yaw = 45.0
             self.debug_camera_pitch = -30.0
             self.debug_camera_target = np.array(
-                [0.5, 0.0, self.table_surface_height], dtype=float
+                [0.1, 0.0, self.table_surface_height], dtype=float
             )
 
         occ_shapes = [s.shape.value for s in self.scene_config.occluders]

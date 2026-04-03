@@ -114,7 +114,8 @@ class PDDLStreamPlanner:
                        current_config: 'Union[RobotConfig, str]' = None,
                        known_empty_shadows: List[str] = None,
                        moved_occluders: Dict[str, str] = None,
-                       observed_clear_regions: Optional[List[str]] = None) -> PDDLProblem:
+                       observed_clear_regions: Optional[List[str]] = None,
+                       visible_target_locations: Optional[Dict[str, str]] = None) -> PDDLProblem:
         """
         Create a PDDLStream problem from current state.
         
@@ -128,6 +129,9 @@ class PDDLStreamPlanner:
             moved_occluders: Dict mapping occluder_id -> destination_boxel_id
             observed_clear_regions: Regions explicitly observed clear; see
                 _build_init() docstring (audit #67).
+            visible_target_locations: Dict mapping target_name -> boxel_id for
+                targets that are visible from the camera and do not require
+                sensing.  Adds obj_at_boxel so pick is directly plannable.
             
         Returns:
             PDDLProblem for PDDLStream solver
@@ -136,7 +140,8 @@ class PDDLStreamPlanner:
             current_config = self.home_config
         init = self._build_init(target_objects, current_config,
                                 known_empty_shadows, moved_occluders,
-                                observed_clear_regions)
+                                observed_clear_regions,
+                                visible_target_locations)
         
         constant_map = {}
         stream_map = self._get_stream_map()
@@ -156,7 +161,8 @@ class PDDLStreamPlanner:
                             current_config: 'Union[RobotConfig, str]' = None,
                             known_empty_shadows: List[str] = None,
                             moved_occluders: Dict[str, str] = None,
-                            filepath: str = "pddl/problem_debug.pddl") -> str:
+                            filepath: str = "pddl/problem_debug.pddl",
+                            visible_target_locations: Optional[Dict[str, str]] = None) -> str:
         """
         Export the programmatically-built problem to a standalone PDDL file.
 
@@ -176,6 +182,8 @@ class PDDLStreamPlanner:
             known_empty_shadows: Shadows already checked (empty)
             moved_occluders: Dict mapping occluder_id -> destination_boxel_id
             filepath: Output path (default: pddl/problem_debug.pddl)
+            visible_target_locations: Dict mapping target_name -> boxel_id for
+                visible targets (see _build_init docstring).
 
         Returns:
             The filepath written to
@@ -186,7 +194,8 @@ class PDDLStreamPlanner:
         moved_occluders = moved_occluders or {}
 
         init = self._build_init(target_objects, current_config,
-                                known_empty_shadows, moved_occluders)
+                                known_empty_shadows, moved_occluders,
+                                visible_target_locations=visible_target_locations)
 
         objects = set()
         for fact in init:
@@ -239,7 +248,8 @@ class PDDLStreamPlanner:
                     current_config: 'Union[RobotConfig, str]' = None,
                     known_empty_shadows: List[str] = None,
                     moved_occluders: Dict[str, str] = None,
-                    observed_clear_regions: Optional[List[str]] = None) -> List[Tuple]:
+                    observed_clear_regions: Optional[List[str]] = None,
+                    visible_target_locations: Optional[Dict[str, str]] = None) -> List[Tuple]:
         """
         Build the init state as a list of fact tuples.
 
@@ -261,6 +271,11 @@ class PDDLStreamPlanner:
                 Supply an explicit set when extending to scenarios with
                 limited sensor coverage where the robot has not yet
                 observed all regions.
+            visible_target_locations: Dict mapping target_name -> boxel_id for
+                targets whose position is already known (camera-visible, no
+                sensing required).  Adds ``obj_at_boxel`` and
+                ``obj_at_boxel_KIF`` so the pick action's preconditions are
+                directly satisfiable without a prior sense action.
 
         Returns:
             List of fact tuples for the init state
@@ -269,6 +284,7 @@ class PDDLStreamPlanner:
             current_config = self.home_config
         known_empty_shadows = known_empty_shadows or []
         moved_occluders = moved_occluders or {}
+        visible_target_locations = visible_target_locations or {}
 
         init = []
         shadows = []
@@ -334,6 +350,11 @@ class PDDLStreamPlanner:
         for obj in target_objects:
             init.append(('Obj', obj))
 
+        for tgt, boxel_id in visible_target_locations.items():
+            init.append(('obj_at_boxel', tgt, boxel_id))
+            init.append(('obj_at_boxel_KIF', tgt, boxel_id))
+            init.append(('obj_pose_known', tgt))
+
         # Static boxel_fits facts (audit #102): do NOT use a PDDLStream test stream.
         # Adaptive search re-invokes test streams heavily across skeletons; a cheap
         # predicate became a bottleneck.  One pass here matches stream semantics.
@@ -368,7 +389,8 @@ class PDDLStreamPlanner:
              moved_occluders: Dict[str, str] = None,
              max_time: float = 30.0,
              verbose: bool = True,
-             observed_clear_regions: Optional[List[str]] = None) -> Optional[List[Tuple]]:
+             observed_clear_regions: Optional[List[str]] = None,
+             visible_target_locations: Optional[Dict[str, str]] = None) -> Optional[List[Tuple]]:
         """
         Generate a plan using PDDLStream.
         
@@ -382,6 +404,8 @@ class PDDLStreamPlanner:
             verbose: Print planning info
             observed_clear_regions: Regions explicitly observed clear; see
                 _build_init() docstring (audit #67).
+            visible_target_locations: Dict mapping target_name -> boxel_id for
+                visible targets (see _build_init docstring).
             
         Returns:
             List of action tuples, or None if planning fails
@@ -390,7 +414,8 @@ class PDDLStreamPlanner:
             current_config = self.home_config
         problem = self.create_problem(target_objects, goal, current_config,
                                       known_empty_shadows, moved_occluders,
-                                      observed_clear_regions)
+                                      observed_clear_regions,
+                                      visible_target_locations)
         
         if verbose:
             print(f"\n--- PDDLStream Planning ---")

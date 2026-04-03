@@ -427,23 +427,18 @@ class BoxelStreams:
     # =========================================================================
     # Called first during planning: "how can I grab this object?"
     #
-    # Top-down grasp clearances above the object center (m).
-    # 0.05 is the minimum for Panda finger clearance above small objects
-    # (target size 0.08 m); 0.10 and 0.15 give progressively more room
-    # to avoid table/neighbor collisions at the cost of weaker grasp
-    # contact (acceptable — execution uses a constraint-based weld).
-    _GRASP_Z_OFFSETS = [0.05, 0.10, 0.15]
+    # Fixed top-down grasp clearance above the object center (m).
+    # 0.10 m gives reliable IK and finger clearance for the current
+    # object sizes (occluder 0.0375 m half-extent, target 0.02 m).
+    _GRASP_Z_OFFSETS = [0.1]
 
     def sample_grasp(self, obj_id: str) -> Iterator[Tuple[Grasp]]:
         """
         Generate grasp poses for an object with varying clearance.
 
-        Yields multiple top-down grasps at different heights above the
-        object center.  The lowest (0.05 m) places the EE close to the
-        object for a tight grasp; higher offsets (0.10, 0.15 m) give the
-        arm more room to avoid collisions with the table or adjacent
-        objects at the cost of a less secure grip (acceptable because
-        execution uses a constraint-based weld, not contact physics).
+        Yields a single top-down grasp at a fixed 0.10 m above the
+        object center.  Execution uses a constraint-based weld so grip
+        security is independent of the exact EE height.
 
         PDDLStream declaration (see pddl/stream.pddl):
             (:stream sample-grasp
