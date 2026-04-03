@@ -396,10 +396,10 @@ class BoxelTestEnv:
         table_id = p.loadURDF("table/table.urdf", table_position, [0, 0, 0, 1], useFixedBase=True)
         self.table_surface_height = 0.625 + table_z_offset
 
-        # Table XY bounds — derived from table position [0.5, 0] and size [1.0, 1.0].
-        # Defined once here; passed to ShadowCalculator, FreeSpaceGenerator, and
-        # any external code that needs to check table boundaries.
-        self.table_x_range = (0.0, 1.0)
+        # XY bounds for voxelization / shadows / free-space (logical workspace).
+        # Table mesh stays centered at [0.5, 0]; this window is shifted −0.4 m
+        # in X so the voxel grid encloses objects near the robot without clipping.
+        self.table_x_range = (-0.4, 0.6)
         self.table_y_range = (-0.5, 0.5)
         
         self.objects["table"] = ObjectInfo(
