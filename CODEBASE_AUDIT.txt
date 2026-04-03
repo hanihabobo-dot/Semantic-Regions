@@ -624,56 +624,6 @@ Fix:   ONE COMMIT — increase ray density in oracle_detect_objects():
 Related: #15 (shadow splitting depends on correct visibility),
          #16 (camera angle exacerbates this)
 
-
-================================================================================
-#15. SHADOW VOLUMES EXTEND THROUGH INVISIBLE OBJECTS — NO SPLITTING
-================================================================================
-Priority: TIER 0 — Direct consequence of #14
-Where:    boxel_env.py (generate_boxels, ~line 550),
-          shadow_calculator.py (calculate_shadow_boxel)
-Depends:  #14 (fixing visibility fixes the primary cause)
-Effort:   1 day (after #14) or 2-3 days (standalone workaround)
-
-What:  generate_boxels() passes only VISIBLE objects as obstacles
-       to calculate_shadow_boxel().  If an object is classified as
-       invisible by oracle_detect_objects() (#14), it is not in
-       solid_boxels and therefore not in the obstacles list.
-
-       Shadow volumes from visible occluders extend through invisible
-       objects without being split.  The shadow calculator's Step 3
-       (_subtract_aabb / _is_downstream) never fires for these
-       objects because they are simply absent from the obstacles list.
-
-       Observed failure (run 2026-04-03): occluder_1 at (0.5, 0.2)
-       was invisible.  shadow_000 (from occluder_2) extended from
-       Y=-0.024 to Y=0.493, passing straight through occluder_1's
-       position at Y=0.2.  shadow_001 (from occluder_3) similarly
-       extended from Y=-0.126 to Y=0.324, also passing through
-       occluder_1.  Neither shadow was split around occluder_1.
-
-       At sensing time, raycasting from the camera through these
-       shadow volumes physically hit occluder_1 (49-58% blockage),
-       but the planner had no knowledge of this obstacle and could
-       not plan to move it.
-
-Fix:   OPTION A (preferred): Fix #14 first.  Once occluder_1 is
-       correctly detected as visible, it enters solid_boxels and
-       the existing splitting logic handles it automatically.
-
-       OPTION B (standalone): In generate_boxels(), include ALL
-       scene objects (not just visible ones) in the obstacles list
-       for shadow calculation.  This ensures shadows are split even
-       around undetected objects.  Drawback: may create many small
-       shadow fragments for objects the planner cannot reason about.
-
-       OPTION C (defensive): After shadow computation, validate each
-       shadow by casting a sample of rays through it.  If rays are
-       blocked by unknown objects, flag the shadow as partially
-       obstructed and add the blocking object to the registry.
-
-Related: #14 (root cause), #4 (re-boxelization)
-
-
 ================================================================================
 #16. CAMERA PITCH TOO SHALLOW — DEBUG VIEW MISMATCH
 ================================================================================
@@ -695,11 +645,10 @@ What:  The semantic camera (used for shadow calculation, visibility
        The debug visualization camera (_DEFAULT_DEBUG_VIS_*) is
        configured to approximately match the semantic camera at
        startup (distance=1.82, yaw=0, pitch=-14.04, target=[0.5,0,
-       0.5]).  However, the user can freely rotate the debug camera,
-       creating a misleading impression: the main viewport may show
-       a steep top-down view where all objects are visible, while the
-       actual semantic camera has a much shallower angle that misses
-       rear objects.  The "Synthetic Camera RGB data" panel (top-left)
+       0.5]). The main viewport may show a steep top-down view where 
+       all objects are visible, while the actual semantic camera has 
+       a much shallower angle that misses rear objects.
+       The "Synthetic Camera RGB data" panel (top-left)
        shows the true semantic camera view, but it is small and easy
        to overlook.
 
@@ -710,7 +659,7 @@ What:  The semantic camera (used for shadow calculation, visibility
        viewport suggests.
 
 Fix:   ONE COMMIT — adjust semantic camera parameters:
-       (a) Increase camera height (Z) or reduce distance (Y) to
+       (a) Increase camera height (Z) to
            achieve a steeper look angle (e.g. 30-45° pitch).
            Example: [0.5, -0.5, 1.0] → pitch ≈ 45°, can see over
            most tabletop objects.
@@ -720,10 +669,6 @@ Fix:   ONE COMMIT — adjust semantic camera parameters:
        (c) Consider adding a visual indicator (debug line or
            wireframe frustum) showing the semantic camera's actual
            field of view in the debug viewport.
-
-       Trade-off: a steeper camera reduces shadow volume sizes
-       (shadows are shorter when the camera looks more downward).
-       This may require re-tuning shadow height overestimates.
 
 Related: #14 (camera angle exacerbates sparse corner check)
 
@@ -766,7 +711,7 @@ Fix:   ONE COMMIT — redesign default_scene():
        (a) Move all object positions closer to the robot base.
            Keep all objects within 0.5-0.6 m horizontal distance
            from the base (well within reliable workspace).
-           Example: shift table center or reduce object spread.
+           Example: shift center.
        (b) Reduce occluder size from 0.075 to 0.04-0.05 m
            half-extent (8-10 cm cubes) — still large enough to
            cast meaningful shadows but graspable by the Panda.
@@ -774,7 +719,7 @@ Fix:   ONE COMMIT — redesign default_scene():
            half-extent = 8 cm cubes — already borderline).
        (d) Validate all positions with IK solver before committing:
            for each object position, verify that compute_kin returns
-           a valid joint configuration.
+           a valid joint configuration. (nice to have)
        (e) Update mixed_shapes_scene() and scalability_scene() with
            the same spatial constraints.
 
