@@ -4,7 +4,8 @@ CODEBASE AUDIT — OPEN ISSUES
 Date: 2026-02-25 (original audit, merged from 3 audit passes)
 Restructured: 2026-03-24
 
-  All open issues renumbered #1–#13 in priority order.
+  All open issues renumbered #1–#13 in priority order (2026-03-24).
+  Issues #14–#18 added 2026-04-03 from failed run analysis.
   Mapping from old numbers:
     #1  ← old #106    #5  ← old #107    #9  ← old #76a    #13 ← old #81
     #2  ← old #103    #6  ← old #105    #10 ← old #76b
@@ -240,7 +241,7 @@ Fix:   ONE COMMIT — choose one approach:
        OPTION A is recommended — simpler, and move already exists.
 
 Related: old #79 [DONE] (arm blocks sensing), old #86 [DONE] (config
-         tracking on replan)
+         tracking on replan), #18 (observational symptom: arm in view path)
 
 
 ================================================================================
@@ -575,6 +576,263 @@ Related: #4 (re-boxelization could trigger re-discovery)
 
 
 ================================================================================
+#14. SPARSE VISIBILITY CHECK — 8 AABB CORNERS MISS PARTIALLY VISIBLE OBJECTS
+================================================================================
+Priority: TIER 0 — Root cause of persistent sensing failures
+Where:    boxel_env.py (oracle_detect_objects, ~line 719)
+Depends:  None
+Effort:   1-2 days
+
+What:  oracle_detect_objects() determines whether an object is visible
+       by casting exactly 8 rays from the camera to the 8 corners of
+       the object's AABB.  If ANY ray reaches the object, it is
+       visible; if ALL 8 are intercepted, the object is classified as
+       invisible.
+
+       8 corners is too sparse.  When an object is partially visible
+       (e.g. a sliver sticks out between two occluders, or the top
+       protrudes above a shorter occluder), none of the 8 corners may
+       land in the visible gap.  The object is then classified as
+       invisible despite being partially visible from the camera.
+
+       Observed failure (run 2026-04-03): occluder_1 at (0.5, 0.2)
+       was classified as invisible because all 8 AABB corner rays
+       were intercepted by occluder_2 and occluder_3 in front.
+       Consequences:
+       (a) occluder_1 never entered the BoxelRegistry as an object
+           boxel — the planner had no knowledge of it.
+       (b) Shadow volumes from other occluders extended through
+           occluder_1's position unsplit (#15).
+       (c) The planner could never plan to relocate occluder_1,
+           causing ALL subsequent sense actions to report 49-58%
+           ray blockage.  10 plans executed, all failed — total
+           mission failure.
+
+Fix:   ONE COMMIT — increase ray density in oracle_detect_objects():
+       (a) Replace 8-corner rays with a denser grid over the AABB
+           surface (e.g. 4×4 grid per face = 96 rays, or N×N on the
+           camera-facing face only).
+       (b) Alternative: use the rendered depth buffer to check if
+           any pixel corresponds to the object's body ID (segmentation
+           mask approach — PyBullet's getCameraImage returns a
+           segmentation buffer).  This is both cheaper and catches
+           any visible pixel, no matter how small.
+       (c) Either approach should use a visibility THRESHOLD: an
+           object may be "visible" if ≥ K% of sample points reach
+           it, to filter noise from sub-pixel slivers.
+
+Related: #15 (shadow splitting depends on correct visibility),
+         #16 (camera angle exacerbates this)
+
+
+================================================================================
+#15. SHADOW VOLUMES EXTEND THROUGH INVISIBLE OBJECTS — NO SPLITTING
+================================================================================
+Priority: TIER 0 — Direct consequence of #14
+Where:    boxel_env.py (generate_boxels, ~line 550),
+          shadow_calculator.py (calculate_shadow_boxel)
+Depends:  #14 (fixing visibility fixes the primary cause)
+Effort:   1 day (after #14) or 2-3 days (standalone workaround)
+
+What:  generate_boxels() passes only VISIBLE objects as obstacles
+       to calculate_shadow_boxel().  If an object is classified as
+       invisible by oracle_detect_objects() (#14), it is not in
+       solid_boxels and therefore not in the obstacles list.
+
+       Shadow volumes from visible occluders extend through invisible
+       objects without being split.  The shadow calculator's Step 3
+       (_subtract_aabb / _is_downstream) never fires for these
+       objects because they are simply absent from the obstacles list.
+
+       Observed failure (run 2026-04-03): occluder_1 at (0.5, 0.2)
+       was invisible.  shadow_000 (from occluder_2) extended from
+       Y=-0.024 to Y=0.493, passing straight through occluder_1's
+       position at Y=0.2.  shadow_001 (from occluder_3) similarly
+       extended from Y=-0.126 to Y=0.324, also passing through
+       occluder_1.  Neither shadow was split around occluder_1.
+
+       At sensing time, raycasting from the camera through these
+       shadow volumes physically hit occluder_1 (49-58% blockage),
+       but the planner had no knowledge of this obstacle and could
+       not plan to move it.
+
+Fix:   OPTION A (preferred): Fix #14 first.  Once occluder_1 is
+       correctly detected as visible, it enters solid_boxels and
+       the existing splitting logic handles it automatically.
+
+       OPTION B (standalone): In generate_boxels(), include ALL
+       scene objects (not just visible ones) in the obstacles list
+       for shadow calculation.  This ensures shadows are split even
+       around undetected objects.  Drawback: may create many small
+       shadow fragments for objects the planner cannot reason about.
+
+       OPTION C (defensive): After shadow computation, validate each
+       shadow by casting a sample of rays through it.  If rays are
+       blocked by unknown objects, flag the shadow as partially
+       obstructed and add the blocking object to the registry.
+
+Related: #14 (root cause), #4 (re-boxelization)
+
+
+================================================================================
+#16. CAMERA PITCH TOO SHALLOW — DEBUG VIEW MISMATCH
+================================================================================
+Priority: TIER 1 — Scene design / perception quality
+Where:    boxel_env.py (camera defaults ~line 31-37, ~line 296-299)
+Depends:  None
+Effort:   1 day (parameter tuning)
+
+What:  The semantic camera (used for shadow calculation, visibility
+       raycasting, and sensing) is at [0.5, -0.8, 0.7] looking at
+       [0.5, 0.0, 0.5].  The look direction vector is (0, 0.8, -0.2),
+       giving a downward pitch of only ~14° below horizontal.
+
+       At this shallow angle, a 15 cm occluder cube at Y=-0.1 easily
+       blocks the view to objects at Y=0.2 — the camera cannot see
+       over the front objects.  This directly causes occluder_1 (at
+       Y=0.2, behind occluder_2 at Y=-0.1) to be invisible (#14).
+
+       The debug visualization camera (_DEFAULT_DEBUG_VIS_*) is
+       configured to approximately match the semantic camera at
+       startup (distance=1.82, yaw=0, pitch=-14.04, target=[0.5,0,
+       0.5]).  However, the user can freely rotate the debug camera,
+       creating a misleading impression: the main viewport may show
+       a steep top-down view where all objects are visible, while the
+       actual semantic camera has a much shallower angle that misses
+       rear objects.  The "Synthetic Camera RGB data" panel (top-left)
+       shows the true semantic camera view, but it is small and easy
+       to overlook.
+
+       The shadow regions stretching far into positive Y and
+       intersecting with occluder_1 (visible in the debug viewport
+       but invisible to the semantic camera) confirm the mismatch:
+       the semantic camera's perspective is lower than what the debug
+       viewport suggests.
+
+Fix:   ONE COMMIT — adjust semantic camera parameters:
+       (a) Increase camera height (Z) or reduce distance (Y) to
+           achieve a steeper look angle (e.g. 30-45° pitch).
+           Example: [0.5, -0.5, 1.0] → pitch ≈ 45°, can see over
+           most tabletop objects.
+       (b) Update _DEFAULT_DEBUG_VIS_* constants to match the new
+           semantic camera so the initial debug viewport accurately
+           represents what the system perceives.
+       (c) Consider adding a visual indicator (debug line or
+           wireframe frustum) showing the semantic camera's actual
+           field of view in the debug viewport.
+
+       Trade-off: a steeper camera reduces shadow volume sizes
+       (shadows are shorter when the camera looks more downward).
+       This may require re-tuning shadow height overestimates.
+
+Related: #14 (camera angle exacerbates sparse corner check)
+
+
+================================================================================
+#17. SCENE LAYOUT — OBJECTS OUT OF ROBOT REACH
+================================================================================
+Priority: TIER 1 — Scene design / task feasibility
+Where:    boxel_env.py (default_scene ~line 125, _setup_scene),
+          SceneConfig (occluder_positions, target_positions)
+Depends:  None
+Effort:   1 day (parameter tuning + validation)
+
+What:  The Franka Panda robot base is at [-0.4, 0.0, 0.0].  The
+       Panda's maximum reach is ~0.855 m from the base flange.
+       Accounting for the floor-mounted base reaching up to the table
+       surface at Z=0.625, effective horizontal reach at table height
+       is approximately 0.7-0.75 m from the base.
+
+       Several default_scene positions exceed this:
+
+         Object      Position(X,Y)   Horiz. dist from base
+         occluder_1  (0.5, 0.2)      0.92 m   — BEYOND reach
+         occluder_2  (0.6, -0.1)     1.00 m   — BEYOND reach
+         target_1    (0.5, 0.4)      0.99 m   — BEYOND reach
+         target_2    (0.6, 0.1)      1.00 m   — BEYOND reach
+         target_4    (0.7, -0.2)     1.12 m   — BEYOND reach
+
+       IK solutions may still be found (the Panda can sometimes
+       reach slightly beyond nominal limits with specific joint
+       configurations), but solutions are unreliable, near
+       singularities, and collisions are likely.
+
+       Additionally, the occluder half-extents (0.075 m = 15 cm
+       cubes) are large relative to the Panda gripper's max opening
+       (~0.08 m).  The gripper can barely close around a 15 cm cube.
+       Smaller objects (e.g. 5-8 cm cubes) would be more realistic.
+
+Fix:   ONE COMMIT — redesign default_scene():
+       (a) Move all object positions closer to the robot base.
+           Keep all objects within 0.5-0.6 m horizontal distance
+           from the base (well within reliable workspace).
+           Example: shift table center or reduce object spread.
+       (b) Reduce occluder size from 0.075 to 0.04-0.05 m
+           half-extent (8-10 cm cubes) — still large enough to
+           cast meaningful shadows but graspable by the Panda.
+       (c) Reduce target size proportionally (currently 0.04 m
+           half-extent = 8 cm cubes — already borderline).
+       (d) Validate all positions with IK solver before committing:
+           for each object position, verify that compute_kin returns
+           a valid joint configuration.
+       (e) Update mixed_shapes_scene() and scalability_scene() with
+           the same spatial constraints.
+
+Related: #1 (collision-blind sub-moves are worse near workspace
+         limits where joint velocities are high)
+
+
+================================================================================
+#18. PLAN SEQUENCE move→sense POSITIONS ARM IN CAMERA VIEW PATH
+================================================================================
+Priority: TIER 0 — Extends #3 (sense action design)
+Where:    domain_pddlstream.pddl (sense / pick actions),
+          test_full_pipeline.py (sense handler ~line 415)
+Depends:  None (but #3 fix also addresses this)
+Effort:   Included in #3
+
+What:  The PDDL planner produces plans like:
+
+         move(q_home, q_shadow, shadow_001) →
+         sense(target, shadow_001) →
+         pick(target, shadow_001, grasp, q_shadow)
+
+       The move is a precondition of pick (needs at_config for the
+       grasp configuration), and sense is also a precondition of pick
+       (needs obj_at_boxel_KIF).  Since move and sense are
+       independent, the planner linearizes them arbitrarily — and
+       FastDownward consistently places move BEFORE sense.
+
+       This means the robot arm physically travels TO the shadow
+       region BEFORE the camera tries to see into it.  The sense
+       handler compensates by secretly retracting the arm to home
+       (line 428, audit #79), creating a wasteful round-trip:
+         arm at home → move to shadow → retract to home → sense →
+         (move to shadow again on next plan)
+
+       Worse: if the home-retract is incomplete or the arm's home
+       configuration still partially intersects the camera's FOV for
+       certain shadow regions, sensing fails due to arm blockage.
+       The sense_shadow_raycasting function correctly counts robot
+       hits (line 701), but cannot distinguish this from occluder
+       blockage in the plan-level feedback.
+
+       The root cause is that sense has no at_config precondition
+       (#3).  If it required (at_config q_home), the planner would
+       be forced to order: sense → move → pick (or move_home →
+       sense → move_to_shadow → pick), keeping the arm clear during
+       sensing.
+
+Fix:   Subsumed by #3.  Whichever option is chosen for #3, the
+       resulting plan ordering will naturally avoid this problem.
+       Documenting separately because the symptom (arm in view path)
+       is observationally distinct from the PDDL state-drift symptom
+       described in #3.
+
+Related: #3 (same root cause and fix)
+
+
+================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without
@@ -602,11 +860,16 @@ TIER 0 — ACTIONABLE NOW (no dependencies):
   #1   Execution sub-moves collision-blind                ~1-2 days
   #2   Boxel merge condition incomplete                   ~2-3 days
   #3   Sense hidden move (add at_config precondition)     ~1-2 days
+  #14  Sparse visibility check (8 AABB corners)           ~1-2 days
+  #18  move→sense arm blocking (extends #3)               incl. in #3
 
 TIER 1 — DEPENDS ON TIER 0:
   #4   Post-action re-boxelization              depends #2  ~3-5 days
   #5   Placement re-blocks view corridor        needs design ~2-3 days
   #6   Multi-boxel free space placement         depends #2  ~1 week
+  #15  Shadow volumes ignore invisible objects  depends #14 ~1 day
+  #16  Camera pitch too shallow / debug mismatch            ~1 day
+  #17  Scene objects out of robot reach                     ~1 day
 
 TIER 2 — PDDL REDESIGN (optional for thesis):
   #7   Pick PDDL decomposition into sub-actions             ~1 week
@@ -619,8 +882,8 @@ TIER 3 — THESIS EVALUATION (independent of code fixes):
   #12  Scalability analysis                     depends #9  ~2-3 days
   #13  Recursive object discovery                           ~2-3 days
 
-Total: 13 open issues
-Estimated effort: ~7-10 weeks sequential; less with parallelism
+Total: 18 open issues (13 original + 5 new: #14-#18)
+Estimated effort: ~8-11 weeks sequential; less with parallelism
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
