@@ -66,8 +66,7 @@
   ;; blocks_view is derived: true when an object is currently at a position
   ;; that geometrically blocks a view corridor.
   ;; view_clear is derived via stratified negation: true when no object
-  ;; blocks the view. Push never mentions views — it moves objects, and
-  ;; the planner re-derives visibility automatically.
+  ;; blocks the view.
   
   (:derived (blocks_view ?obj ?region)
     (exists (?b)

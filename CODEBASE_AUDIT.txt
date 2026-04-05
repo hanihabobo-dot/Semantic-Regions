@@ -797,6 +797,47 @@ Related: #5 (placement re-blocks cleared corridor), #4 (stale world model),
 
 
 ================================================================================
+#22. PLACE ALLOWS MULTIPLE OBJECTS IN THE SAME FREE BOXEL
+================================================================================
+Priority: TIER 0 — Quick PDDL fix
+Where:    domain_pddlstream.pddl (place action preconditions, derived predicates)
+Depends:  None
+Effort:   ~0.5 day
+
+What:  The place action's precondition checks (is_free_space ?b), which is
+       a STATIC predicate set once at init time.  Placing object A at
+       free_015 adds (obj_at_boxel A free_015) but does NOT remove
+       (is_free_space free_015).  A subsequent place of object B at
+       free_015 still passes all preconditions — the planner treats the
+       boxel as available even though it is already occupied.
+
+       Observed: planner places two occluders at the same free boxel in
+       the same plan.  Physically the objects overlap in PyBullet and
+       one or both may be knocked off the table by the physics settle.
+
+Fix:   ONE COMMIT — add a derived predicate for occupancy:
+
+       (a) domain_pddlstream.pddl:
+           Add derived predicate:
+             (:derived (boxel_occupied ?b)
+               (exists (?o)
+                 (obj_at_boxel ?o ?b)))
+
+           Add precondition to place:
+             (not (boxel_occupied ?b))
+
+       (b) No changes to streams, planner init, or Python code.
+           obj_at_boxel already tracks what is where; the derived
+           predicate reuses it.
+
+       After this fix, once place(A, free_015) fires and adds
+       obj_at_boxel(A, free_015), boxel_occupied(free_015) becomes
+       true, and a second place targeting free_015 is blocked.
+
+Related: #4 (re-boxelization would also address stale is_free_space)
+
+
+================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without
@@ -826,6 +867,7 @@ TIER 0 — ACTIONABLE NOW (no dependencies):
   #14  Sparse visibility check (8 AABB corners)           ~1-2 days
   #18  move→sense arm blocking (extends #3)               incl. in #3
   #21  Blocked sense switches shadows / false all_searched ~1-2 days
+  #22  Place allows multiple objects in same free boxel    ~0.5 day
   #19  Mid-air free boxels used as placement targets      ~0.5 day   [DONE]
 
 TIER 1 — Mixed dependencies (see each issue):
@@ -848,7 +890,7 @@ TIER 3 — THESIS EVALUATION (independent of code fixes):
   #13  Recursive object discovery                           ~2-3 days
   #20  Distinct object colors + color-reflecting names       ~0.5–1 day [DONE]
 
-Total: 20 entries (#1, #3–#21; #2 → archive/CODEBASE_AUDIT_DEFERRED.txt; #19 [DONE]; #20 [DONE])
+Total: 21 entries (#1, #3–#22; #2 → archive/CODEBASE_AUDIT_DEFERRED.txt; #5, #19, #20 [DONE])
 Estimated effort: ~8-11 weeks sequential; less with parallelism
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt

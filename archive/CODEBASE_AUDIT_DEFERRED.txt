@@ -5,6 +5,9 @@ Archived: 2026-03-24
 Source: CODEBASE_AUDIT.txt (open issues file)
 
 Contents of this file:
+  - DEFERRED full boxel merge condition (#2 / old #103): convex-only merge is
+    accepted for current scope; identical blocks_view_at, observability, and
+    back-to-front order deferred.  See section "#2" below (2026-04-05).
   - DEFERRED scene infrastructure (#55): parameterization is done, no batch
     evaluation runner needed until #76 scaffolding exists.
   - DEFERRED dead method bodies (#56): _depth_buffer_to_meters,
@@ -71,6 +74,49 @@ What:  Scene parameterization infrastructure is fully implemented:
        over multiple seeds to collect metrics.  This is a sub-task of #76
        (evaluation framework) — once #76 scaffolding exists, hooking in
        the scalability_scene preset is a one-day job.
+
+================================================================================
+#2. FULL BOXEL MERGE CONDITION (IDENTICAL PROPERTIES + OBSERVABILITY + ORDER)
+================================================================================
+DEFERRED — 2026-04-05 (moved from CODEBASE_AUDIT.txt open issues)
+Source numbering: open issue #2 ← old #103
+
+STATUS: For current thesis scope, the **existing merge logic is sufficient**:
+only the **convex union** check when merging adjacent free boxels (as in
+cell_merger.merge_free_space).  No requirement to implement identical
+blocks_view_at sets, paired observability, or back-to-front merge order
+before shipping re-boxelization (#4) or multi-boxel placement (#6).
+
+RATIONALE: Explicit project decision (2026-04-05): a simple convexity check
+suffices; the stricter supervisor meeting conditions remain documented here
+for future work if symbolic errors from over-merging appear in evaluation.
+
+Where:    cell_merger.py, boxel_data.py (if revived)
+Depends:  None — was listed as prerequisite for #4/#6 in the open audit;
+          those issues now use **convex-only** re-merge unless this item
+          is revived.
+
+What (deferred — full specification): Two adjacent free boxels would merge
+if and only if:
+  (a) Convex result (existing check — supervisor also noted convex merge
+      may be theoretically subtle), AND
+  (b) IDENTICAL logical properties — same blocks_view_at target sets, AND
+  (c) Same observability — both observable or both fully in shadow.
+  Merge ORDER: back-to-front (far from camera first).
+
+  Consequence if wrongly merged: symbolic meaning of merged boxels can be
+  undefined for view-blocking; the accepted risk is mitigated by accepting
+  finer-grained partitions from convex-only merging.
+
+Fix (when/if revived): ONE COMMIT — in cell_merger.py merge_free_space():
+  (a) Accept shadow/blocking information as parameters.
+  (b) Before merging: both observable or both in shadow; identical
+      blocks_view_at target sets.
+  (c) Process candidates back-to-front.
+  (d) Merged boxel inherits the common property set.
+
+Related: CODEBASE_AUDIT.txt #4, #5, #6 (no longer blocked on this item);
+         meeting notes §3 below (original #103 discussion).
 
 ================================================================================
 59. OBJECTS FLY AWAY ON FIRST GRASP — CONSTRAINT-BASED GRASPING IS THE PROBLEM
@@ -617,9 +663,8 @@ KEY DECISIONS AND DESIGN NOTES
 
 ACTION ITEMS FROM MEETING (captured as open issues in CODEBASE_AUDIT.txt)
   [x] #102 — Enforce target-boxel size precondition in place action.
-  [x] #103 — Implement logical property equivalence check in boxel merge,
-      including the visibility/observability condition (both observable or
-      both in shadow) and the blocks-same-objects condition.
+  [~] #103 — Full merge condition deferred; convex-only merge accepted
+      (2026-04-05).  See section "#2. FULL BOXEL MERGE CONDITION" above.
   [x] #104 — Implement post-action full re-boxelization (naive first), with
       observation history preserved across re-boxelizations.  Incremental
       merge/split as later optimisation.
