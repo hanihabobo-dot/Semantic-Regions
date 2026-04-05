@@ -322,6 +322,8 @@ class PDDLStreamPlanner:
 
             elif boxel.boxel_type == BoxelType.FREE_SPACE:
                 init.append(('is_free_space', boxel.id))
+                if boxel.on_surface is not None:
+                    init.append(('on_surface', boxel.id))
                 if observed_clear_regions is None or boxel.id in observed_clear_regions:
                     for obj in target_objects:
                         init.append(('obj_at_boxel_KIF', obj, boxel.id))
