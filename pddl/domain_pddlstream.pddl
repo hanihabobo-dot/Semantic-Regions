@@ -56,6 +56,7 @@
     (kin_solution ?o ?b ?g ?q)    ; Config ?q for picking ?o from ?b with ?g
     (config_for_boxel ?q ?b)      ; Config ?q targets boxel ?b (EE inside ?b)
     (boxel_fits ?o ?b)            ; Free boxel ?b is large enough to contain ?o
+    (on_surface ?b)               ; Boxel ?b rests on a support surface (table)
   )
   
   ;; =========================================================================
@@ -212,6 +213,7 @@
       (holding ?o)
       (at_config ?q)
       (is_free_space ?b)
+      (on_surface ?b)
       (boxel_fits ?o ?b)
       (kin_solution ?o ?b ?g ?q)
     )
