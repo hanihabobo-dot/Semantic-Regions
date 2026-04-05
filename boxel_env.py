@@ -48,6 +48,24 @@ class ObjectShape(Enum):
     SPHERE = "sphere"
 
 
+# ---------------------------------------------------------------------------
+# Named colour palette for scene objects
+# ---------------------------------------------------------------------------
+# Seven visually distinct RGBA colours used by the scene-preset functions
+# to give every manipulable object a unique appearance and a human-readable
+# name (e.g. "red_object", "blue_object").  Each entry is [R, G, B, 1.0].
+
+OBJECT_COLORS: Dict[str, List[float]] = {
+    "red":    [0.85, 0.20, 0.20, 1.0],
+    "green":  [0.15, 0.75, 0.20, 1.0],
+    "orange": [0.90, 0.55, 0.10, 1.0],
+    "blue":   [0.20, 0.35, 0.90, 1.0],
+    "cyan":   [0.15, 0.80, 0.80, 1.0],
+    "purple": [0.70, 0.20, 0.80, 1.0],
+    "yellow": [0.90, 0.85, 0.10, 1.0],
+}
+
+
 @dataclass
 class ObjectSpec:
     """
@@ -65,6 +83,7 @@ class ObjectSpec:
     color: List[float] = field(default_factory=lambda: [0.5, 0.5, 0.5, 1.0])
     mass: float = 0.5
     lateral_friction: float = 1.0
+    name: Optional[str] = None  # color-based name; overrides auto-generated occluder_N / target_N
 
     @property
     def aabb_half_extents(self) -> np.ndarray:
@@ -130,21 +149,21 @@ def default_scene() -> SceneConfig:
     return SceneConfig(
         occluders=[
             ObjectSpec(ObjectShape.BOX, [0.0375, 0.0375, 0.0375],
-                       color=[0.8, 0.3, 0.3, 1.0], mass=0.5),
+                       color=OBJECT_COLORS["red"],    mass=0.5, name="red_object"),
             ObjectSpec(ObjectShape.BOX, [0.0375, 0.0375, 0.0375],
-                       color=[0.8, 0.3, 0.3, 1.0], mass=0.5),
+                       color=OBJECT_COLORS["green"],  mass=0.5, name="green_object"),
             ObjectSpec(ObjectShape.BOX, [0.0375, 0.0375, 0.0375],
-                       color=[0.8, 0.3, 0.3, 1.0], mass=0.5),
+                       color=OBJECT_COLORS["orange"], mass=0.5, name="orange_object"),
         ],
         targets=[
             ObjectSpec(ObjectShape.BOX, [0.02, 0.02, 0.02],
-                       color=[0.3, 0.3, 0.8, 1.0], mass=0.1),
+                       color=OBJECT_COLORS["blue"],   mass=0.1, name="blue_object"),
             ObjectSpec(ObjectShape.BOX, [0.02, 0.02, 0.02],
-                       color=[0.3, 0.3, 0.8, 1.0], mass=0.1),
+                       color=OBJECT_COLORS["cyan"],   mass=0.1, name="cyan_object"),
             ObjectSpec(ObjectShape.BOX, [0.02, 0.02, 0.02],
-                       color=[0.3, 0.3, 0.8, 1.0], mass=0.1),
+                       color=OBJECT_COLORS["purple"], mass=0.1, name="purple_object"),
             ObjectSpec(ObjectShape.BOX, [0.02, 0.02, 0.02],
-                       color=[0.3, 0.3, 0.8, 1.0], mass=0.1),
+                       color=OBJECT_COLORS["yellow"], mass=0.1, name="yellow_object"),
         ],
         occluder_positions=[[0.1, 0.2], [0.2, -0.1], [0.0, -0.2]],
         target_positions=[[0.1, 0.4], [0.2, 0.1], [0.0, -0.1], [0.3, -0.2]],
@@ -159,29 +178,24 @@ def mixed_shapes_scene(seed: int = 42) -> SceneConfig:
     Occluders are tall enough (0.12–0.15 m) to cast shadows from the
     overhead camera that fully hide targets (0.04–0.06 m).
     """
-    occluder_colors = [
-        [0.85, 0.25, 0.25, 1.0],
-        [0.85, 0.55, 0.20, 1.0],
-        [0.70, 0.25, 0.45, 1.0],
-    ]
     return SceneConfig(
         occluders=[
             ObjectSpec(ObjectShape.CYLINDER, [0.03, 0.075],
-                       color=occluder_colors[0], mass=0.5),
+                       color=OBJECT_COLORS["red"],    mass=0.5, name="red_object"),
             ObjectSpec(ObjectShape.BOX, [0.03, 0.03, 0.075],
-                       color=occluder_colors[1], mass=0.5),
+                       color=OBJECT_COLORS["orange"], mass=0.5, name="orange_object"),
             ObjectSpec(ObjectShape.CYLINDER, [0.035, 0.06],
-                       color=occluder_colors[2], mass=0.5),
+                       color=OBJECT_COLORS["purple"], mass=0.5, name="purple_object"),
         ],
         targets=[
             ObjectSpec(ObjectShape.BOX, [0.025, 0.025, 0.025],
-                       color=[0.25, 0.25, 0.85, 1.0], mass=0.1),
+                       color=OBJECT_COLORS["blue"],   mass=0.1, name="blue_object"),
             ObjectSpec(ObjectShape.CYLINDER, [0.02, 0.03],
-                       color=[0.25, 0.65, 0.85, 1.0], mass=0.1),
+                       color=OBJECT_COLORS["cyan"],   mass=0.1, name="cyan_object"),
             ObjectSpec(ObjectShape.SPHERE, [0.025],
-                       color=[0.25, 0.85, 0.45, 1.0], mass=0.1),
+                       color=OBJECT_COLORS["green"],  mass=0.1, name="green_object"),
             ObjectSpec(ObjectShape.BOX, [0.02, 0.02, 0.03],
-                       color=[0.65, 0.25, 0.85, 1.0], mass=0.1),
+                       color=OBJECT_COLORS["yellow"], mass=0.1, name="yellow_object"),
         ],
         occluder_positions=[[0.5, 0.2], [0.6, -0.1], [0.4, -0.2]],
         target_positions=[[0.5, 0.4], [0.6, 0.1], [0.4, -0.1], [0.7, -0.2]],
@@ -204,34 +218,49 @@ def scalability_scene(n_occluders: int = 3, n_targets: int = 4,
         lambda: ObjectSpec(ObjectShape.CYLINDER,
                            [rng.uniform(0.025, 0.035),
                             rng.uniform(0.06, 0.08)],
-                           color=[rng.uniform(0.5, 0.9), 0.25, 0.25, 1.0],
                            mass=0.5),
         lambda: ObjectSpec(ObjectShape.BOX,
                            [rng.uniform(0.025, 0.035),
                             rng.uniform(0.025, 0.035),
                             rng.uniform(0.06, 0.08)],
-                           color=[rng.uniform(0.5, 0.9), 0.5, 0.2, 1.0],
                            mass=0.5),
     ]
 
     tgt_pool = [
         lambda: ObjectSpec(ObjectShape.BOX,
                            [rng.uniform(0.02, 0.03)] * 3,
-                           color=[0.25, 0.25, rng.uniform(0.6, 0.9), 1.0],
                            mass=0.1),
         lambda: ObjectSpec(ObjectShape.CYLINDER,
                            [rng.uniform(0.015, 0.025),
                             rng.uniform(0.025, 0.035)],
-                           color=[0.25, rng.uniform(0.5, 0.9), 0.8, 1.0],
                            mass=0.1),
         lambda: ObjectSpec(ObjectShape.SPHERE,
                            [rng.uniform(0.02, 0.028)],
-                           color=[0.25, rng.uniform(0.6, 0.9), 0.4, 1.0],
                            mass=0.1),
     ]
 
     occluders = [rng.choice(occ_pool)() for _ in range(n_occluders)]
     targets = [rng.choice(tgt_pool)() for _ in range(n_targets)]
+
+    # Assign palette colours and names in index order.
+    # Sizes/shapes above are unchanged; only color and name are set here.
+    # Cycle through the 7-colour palette; append "_2", "_3"... on repeats.
+    color_keys = list(OBJECT_COLORS.keys())
+    used_names: Dict[str, int] = {}
+    for i, spec in enumerate(occluders):
+        ck = color_keys[i % len(color_keys)]
+        base = f"{ck}_object"
+        count = used_names.get(base, 0) + 1
+        used_names[base] = count
+        spec.color = OBJECT_COLORS[ck]
+        spec.name = base if count == 1 else f"{base}_{count}"
+    for j, spec in enumerate(targets):
+        ck = color_keys[(n_occluders + j) % len(color_keys)]
+        base = f"{ck}_object"
+        count = used_names.get(base, 0) + 1
+        used_names[base] = count
+        spec.color = OBJECT_COLORS[ck]
+        spec.name = base if count == 1 else f"{base}_{count}"
 
     return SceneConfig(
         occluders=occluders,
@@ -517,7 +546,7 @@ class BoxelTestEnv:
             pos = [xy[0], xy[1], z]
 
             body_id = self._spawn_object(spec, pos)
-            name = f"occluder_{i + 1}"
+            name = spec.name if spec.name is not None else f"occluder_{i + 1}"
             self.objects[name] = ObjectInfo(
                 object_id=body_id, name=name,
                 position=np.array(pos), orientation=np.array([0, 0, 0, 1]),
@@ -542,7 +571,7 @@ class BoxelTestEnv:
             pos = [xy[0], xy[1], z]
 
             body_id = self._spawn_object(spec, pos)
-            name = f"target_{i + 1}"
+            name = spec.name if spec.name is not None else f"target_{i + 1}"
             self.objects[name] = ObjectInfo(
                 object_id=body_id, name=name,
                 position=np.array(pos), orientation=np.array([0, 0, 0, 1]),

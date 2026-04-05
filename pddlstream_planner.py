@@ -121,7 +121,7 @@ class PDDLStreamPlanner:
         
         Args:
             target_objects: Objects to reason about
-            goal: Goal as a tuple, e.g. ('holding', 'target_1').
+            goal: Goal as a tuple, e.g. ('holding', 'blue_object').
                   Passed directly to PDDLStream — must match domain predicates.
             current_config: Current robot config (RobotConfig preferred;
                 string accepted for backward compat, wrapped automatically)
@@ -177,7 +177,7 @@ class PDDLStreamPlanner:
 
         Args:
             target_objects: Objects to reason about
-            goal: Goal as a tuple, e.g. ('holding', 'target_1')
+            goal: Goal as a tuple, e.g. ('holding', 'blue_object')
             current_config: Current robot config (RobotConfig preferred)
             known_empty_shadows: Shadows already checked (empty)
             moved_occluders: Dict mapping occluder_id -> destination_boxel_id
@@ -398,7 +398,7 @@ class PDDLStreamPlanner:
         
         Args:
             target_objects: Objects to reason about
-            goal: Goal as a tuple, e.g. ('holding', 'target_1')
+            goal: Goal as a tuple, e.g. ('holding', 'blue_object')
             current_config: Current robot config (RobotConfig preferred)
             known_empty_shadows: Shadows already checked (empty)
             moved_occluders: Dict mapping occluder_id -> destination_boxel_id

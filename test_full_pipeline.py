@@ -192,7 +192,10 @@ def main(gui=True, run_logger=None, scene_config=None,
     # genuinely occluded.  The robot only discovers this through sensing.
     print("\n--- Phase 4: Hidden Object Scenario ---")
     
-    all_targets = [name for name in env.objects.keys() if name.startswith("target")]
+    all_targets = [
+        name for name, info in env.objects.items()
+        if not info.is_occluder and name not in ("plane", "table", "robot")
+    ]
     
     # AABB containment test: a target is "in" a shadow if its position
     # falls within the shadow boxel's axis-aligned bounding box.
@@ -259,7 +262,7 @@ def main(gui=True, run_logger=None, scene_config=None,
     
     # Bridge between the symbolic (PDDL) and physical (PyBullet) worlds.
     # The planner reasons about boxel IDs like "obj_000"; execution needs
-    # PyBullet body IDs and names like "occluder_1".  This mapping lets the
+    # PyBullet body IDs and names like "red_object".  This mapping lets the
     # action dispatcher translate plan parameters into simulator calls.
     boxel_to_pybullet = {}
     for boxel in registry.boxels.values():
@@ -283,7 +286,7 @@ def main(gui=True, run_logger=None, scene_config=None,
     # Collision-aware planning needs to know which PyBullet bodies are
     # movable objects (to exclude the grasped object from self-collision)
     # vs. immovable support surfaces (always present in collision checks).
-    # Both human-readable names ("occluder_1") and boxel IDs ("obj_000")
+    # Both human-readable names ("red_object") and boxel IDs ("obj_000")
     # map to the same body ID, so streams can look up either form.
     object_body_ids = {}
     for name, obj_info in env.objects.items():
@@ -821,7 +824,7 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui):
     Args:
         robot_id: PyBullet body ID of the robot
         env: BoxelTestEnv instance
-        obj_name: Name key in env.objects (e.g. "target_1", "occluder_2")
+        obj_name: Name key in env.objects (e.g. "blue_object", "red_object")
         obj_pos: Current object position [x, y, z] (from PyBullet)
         grasp: Grasp object from the plan (position, orientation)
         config: RobotConfig from the plan's compute_kin_solution (fallback)
