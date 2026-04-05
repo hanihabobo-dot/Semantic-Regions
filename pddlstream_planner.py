@@ -58,7 +58,8 @@ class PDDLStreamPlanner:
                  shadow_occluder_map: Dict[str, str] = None,
                  physics_client: int = None,
                  object_body_ids: Dict[str, int] = None,
-                 support_body_ids: frozenset = None):
+                 support_body_ids: frozenset = None,
+                 camera_pos: 'np.ndarray' = None):
         """
         Initialize the planner.
 
@@ -75,10 +76,13 @@ class PDDLStreamPlanner:
                 from collision checks.
             support_body_ids: Body IDs of support surfaces (table, ground
                 plane) ignored during pick/place endpoint checks.
+            camera_pos: Fixed camera position [x, y, z].  Used to compute
+                blocks_view_at facts for placement positions (audit #5).
         """
         self.registry = registry
         self.robot_id = robot_id
         self.shadow_occluder_map = shadow_occluder_map or {}
+        self.camera_pos = camera_pos
 
         self.streams = BoxelStreams(
             registry, robot_id=robot_id, physics_client=physics_client,
@@ -243,6 +247,67 @@ class PDDLStreamPlanner:
 
         return output_path
 
+    @staticmethod
+    def _ray_aabb_intersects(origin: np.ndarray, endpoint: np.ndarray,
+                             aabb_min: np.ndarray, aabb_max: np.ndarray) -> bool:
+        """
+        Slab-method ray-AABB intersection for the segment origin→endpoint.
+
+        Returns True if the ray passes through [aabb_min, aabb_max] at a
+        parameter 0 < t < 1 (i.e. the box is strictly between origin and
+        endpoint, not behind origin or beyond endpoint).
+        """
+        direction = endpoint - origin
+        with np.errstate(divide='ignore', invalid='ignore'):
+            inv_dir = np.where(
+                np.abs(direction) > 1e-10,
+                1.0 / direction,
+                np.copysign(1e10, direction),
+            )
+        t1 = (aabb_min - origin) * inv_dir
+        t2 = (aabb_max - origin) * inv_dir
+        t_enter = np.max(np.minimum(t1, t2))
+        t_exit = np.min(np.maximum(t1, t2))
+        return bool(t_enter <= t_exit and t_exit > 0.0 and t_enter < 1.0)
+
+    def _compute_placement_view_blocks(self, shadow_ids, free_boxels):
+        """
+        For each (free_boxel, shadow) pair, test whether the free boxel
+        lies in the camera→shadow line of sight.
+
+        Casts a 5x5 ray grid from the camera through each shadow volume
+        (same density as compute_shadow_blockers in test_full_pipeline.py)
+        and tests each ray against every free boxel's AABB.
+
+        Returns:
+            Set of (free_boxel_id, shadow_id) pairs where placement would
+            block the camera's view to the shadow.
+        """
+        cam = self.camera_pos
+        blocking = set()
+        n = 5
+
+        for shadow_id in shadow_ids:
+            sb = self.registry.get_boxel(shadow_id)
+            if sb is None:
+                continue
+            min_c, max_c = sb.min_corner, sb.max_corner
+            z_mid = (min_c[2] + max_c[2]) / 2.0
+
+            ray_endpoints = []
+            for xi in np.linspace(min_c[0], max_c[0], n):
+                for yi in np.linspace(min_c[1], max_c[1], n):
+                    ray_endpoints.append(np.array([xi, yi, z_mid]))
+
+            for fb in free_boxels:
+                for ep in ray_endpoints:
+                    if self._ray_aabb_intersects(cam, ep,
+                                                 fb.min_corner, fb.max_corner):
+                        blocking.add((fb.id, shadow_id))
+                        break
+
+        return blocking
+
     def _build_init(self,
                     target_objects: List[str],
                     current_config: 'Union[RobotConfig, str]' = None,
@@ -348,6 +413,27 @@ class PDDLStreamPlanner:
                 if shadow_boxel and shadow_boxel.created_by_boxel_id:
                     occ_id = shadow_boxel.created_by_boxel_id
                     init.append(('blocks_view_at', occ_id, occ_id, shadow_id))
+
+        # Placement-blocking facts (audit #5): for each free-space boxel,
+        # check whether it lies in the camera→shadow line of sight.  Emitted
+        # as blocks_view_at(obj, free_boxel, shadow) so that the existing
+        # derived predicates (blocks_view / view_blocked / view_clear)
+        # automatically prevent placements that re-block a cleared corridor.
+        if self.camera_pos is not None and shadows:
+            free_boxels = [
+                b for b in self.registry.boxels.values()
+                if b.boxel_type == BoxelType.FREE_SPACE
+            ]
+            placement_blocks = self._compute_placement_view_blocks(
+                shadows, free_boxels
+            )
+            obj_boxel_ids = [
+                b.id for b in self.registry.boxels.values()
+                if b.boxel_type == BoxelType.OBJECT
+            ]
+            for (free_id, shadow_id) in placement_blocks:
+                for obj_id in obj_boxel_ids:
+                    init.append(('blocks_view_at', obj_id, free_id, shadow_id))
 
         for obj in target_objects:
             init.append(('Obj', obj))

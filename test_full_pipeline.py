@@ -311,7 +311,8 @@ def main(gui=True, run_logger=None, scene_config=None,
                                  shadow_occluder_map=shadow_occluder_map,
                                  physics_client=env.client_id,
                                  object_body_ids=object_body_ids,
-                                 support_body_ids=support_body_ids)
+                                 support_body_ids=support_body_ids,
+                                 camera_pos=env.camera_position)
     
     # Export the initial PDDL problem for debugging / reproducibility.
     problem_path = planner.export_problem_pddl(
