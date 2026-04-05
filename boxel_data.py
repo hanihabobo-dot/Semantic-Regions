@@ -290,27 +290,34 @@ def create_boxel_registry_from_boxels(boxels, table_surface_height: float) -> Bo
         else:
             boxel_type = BoxelType.OBJECT
         
-        # Generate ID based on type
-        if boxel_type == BoxelType.OBJECT:
-            prefix = "obj"
-        elif boxel_type == BoxelType.SHADOW:
-            prefix = "shadow"
+        # Assign a semantic ID when possible, fall back to sequential counter.
+        # OBJECT boxels use the object's human-readable name (e.g. "red_object").
+        # SHADOW boxels use "shadow_of_<caster>" (e.g. "shadow_of_red_object").
+        # FREE_SPACE and any unnamed boxels keep the sequential "free_NNN" / etc.
+        parent_object_name = None
+
+        if boxel_type == BoxelType.OBJECT and boxel.object_name:
+            boxel_id = boxel.object_name
+        elif (boxel_type == BoxelType.SHADOW and boxel.object_name
+              and boxel.object_name.startswith("shadow_of_")):
+            boxel_id = boxel.object_name  # already "shadow_of_<name>"
+            parent_object_name = boxel.object_name[len("shadow_of_"):]
+            shadow_parent_map[boxel_id] = parent_object_name
         else:
-            prefix = "free"
-        
-        boxel_id = registry.generate_id(prefix)
+            prefix = ("obj" if boxel_type == BoxelType.OBJECT
+                      else "shadow" if boxel_type == BoxelType.SHADOW
+                      else "free")
+            boxel_id = registry.generate_id(prefix)
+            if boxel_type == BoxelType.SHADOW and boxel.object_name:
+                if boxel.object_name.startswith("shadow_of_"):
+                    parent_object_name = boxel.object_name[len("shadow_of_"):]
+                    shadow_parent_map[boxel_id] = parent_object_name
+
         boxel_id_map[id(boxel)] = boxel_id
-        
-        # Track object name to ID mapping
+
+        # Track object name to ID mapping (used by second pass for shadow linking)
         if boxel_type == BoxelType.OBJECT and boxel.object_name:
             object_name_to_id[boxel.object_name] = boxel_id
-        
-        # Extract parent object name for shadow boxels (format: "shadow_of_<object_name>")
-        parent_object_name = None
-        if boxel_type == BoxelType.SHADOW and boxel.object_name:
-            if boxel.object_name.startswith("shadow_of_"):
-                parent_object_name = boxel.object_name[len("shadow_of_"):]
-                shadow_parent_map[boxel_id] = parent_object_name
         
         # Create BoxelData
         min_corner = boxel.center - boxel.extent

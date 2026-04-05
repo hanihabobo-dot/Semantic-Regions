@@ -170,11 +170,18 @@ class BoxelVisualizer:
         for bd in registry.boxels.values():
             if skip_free and bd.boxel_type == BoxelType.FREE_SPACE:
                 continue
+            if bd.boxel_type == BoxelType.OBJECT:
+                label = bd.object_name or bd.id
+            elif bd.boxel_type == BoxelType.SHADOW:
+                label = (f"shadow_of_{bd.created_by_object}"
+                         if bd.created_by_object else bd.id)
+            else:
+                label = bd.id
             b = Boxel(
                 center=bd.center.copy(),
                 extent=bd.extent.copy(),
                 object_name=bd.object_name,
-                label=bd.id,
+                label=label,
                 is_shadow=(bd.boxel_type == BoxelType.SHADOW),
                 is_occluder=bd.is_occluder,
                 is_free=(bd.boxel_type == BoxelType.FREE_SPACE),

@@ -149,7 +149,7 @@ class BoxelStreams:
             object_body_ids: Mapping from object/boxel identifiers to PyBullet
                 body IDs. Used to exclude the grasped object from collision
                 checks in compute_kin and plan_motion. Keys should include
-                both object names ("occluder_1") and boxel IDs ("obj_003").
+                both object names ("red_object") and boxel IDs ("obj_003").
             support_body_ids: Body IDs of support surfaces (table, ground
                 plane).  Ignored during all collision checks for pick/place
                 motions (both endpoint validation and RRT path planning)
@@ -382,7 +382,7 @@ class BoxelStreams:
         """
         Look up the PyBullet body ID for an object or boxel identifier.
 
-        Handles both direct object names (e.g. "target_2") and boxel IDs
+        Handles both direct object names (e.g. "blue_object") and boxel IDs
         (e.g. "obj_003") by falling back to the boxel's object_name.
         """
         key = str(obj_id)

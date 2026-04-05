@@ -4,14 +4,22 @@ CODEBASE AUDIT — OPEN ISSUES
 Date: 2026-02-25 (original audit, merged from 3 audit passes)
 Restructured: 2026-03-24
 
-  All open issues renumbered #1–#13 in priority order (2026-03-24).
+  All open issues renumbered #1–#13 in priority order (2026-03-24);
+    #2 removed from open list 2026-04-05 (deferred; see deferred file).
   Issues #14–#18 added 2026-04-03 from failed run analysis.
   Issue #19 added 2026-04-05 from live run (free boxel inside shadow region).
+  Issue #20 added 2026-04-05 — distinct PyBullet colors per object and
+    object names that reflect color (e.g. blue_object); geometry, sizes,
+    and target-selection logic unchanged.
+  Issue #2 (full boxel merge condition, old #103) DEFERRED 2026-04-05 →
+    archive/CODEBASE_AUDIT_DEFERRED.txt.  Convex-only merge accepted for
+    current scope; open issue list below is #1, #3–#20.
   Mapping from old numbers:
     #1  ← old #106    #5  ← old #107    #9  ← old #76a    #13 ← old #81
-    #2  ← old #103    #6  ← old #105    #10 ← old #76b
-    #3  ← old #93a    #7  ← old #93b    #11 ← old #76c
-    #4  ← old #104    #8  ← old #93c    #12 ← old #76d
+    #3  ← old #93a    #6  ← old #105    #10 ← old #76b
+    #4  ← old #104    #7  ← old #93b    #11 ← old #76c
+    #8  ← old #93c    #12 ← old #76d
+    #2  DEFERRED (old #103) — archive/CODEBASE_AUDIT_DEFERRED.txt
 
   Structural changes:
   - Old #95 (systemic PDDL state drift) dissolved — it was a meta-issue
@@ -115,7 +123,7 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 ################################################################################
 #                                                                              #
-#                     OPEN ISSUES — #1 through #13                             #
+#                     OPEN ISSUES — #1, #3 through #20                         #
 #                                                                              #
 ################################################################################
 
@@ -163,46 +171,44 @@ Related: #7/#8 (full PDDL decomposition is the long-term fix)
 
 
 ================================================================================
-#2. BOXEL MERGE CONDITION INCOMPLETE
+#2. PLACEMENT DESTINATION MAY RE-BLOCK THE CLEARED VIEW CORRIDOR
 ================================================================================
-Priority: TIER 0 — Prerequisite for #4 and #6
-Where:    cell_merger.py, boxel_data.py
-Depends:  None
-Effort:   2-3 days
+Priority: TIER 1 — Needs design decision before implementation
+Where:    domain_pddlstream.pddl (place action),
+          pddlstream_planner.py (_build_init: boxel_fits facts),
+          streams.py (BoxelStreams.test_boxel_fits)
+Depends:  None (but benefits from #4)
+Effort:   2-3 days (after design is decided)
 
-What:  The current merge logic only checks whether two adjacent free
-       boxels produce a CONVEX result.  Per the supervisor meeting
-       (2026-03-22), two additional conditions are required:
+What:  The place action requires only that the destination is free and
+       large enough (is_free_space + boxel_fits; see policy above).  It does NOT check
+       whether placing the occluder at the destination re-blocks the
+       view corridor the plan just cleared.
 
-       Two adjacent boxels should be merged if and only if:
-         (a) Convex result (existing check — may need revisiting per
-             supervisor's observation that "a merging operation
-             definitely does not produce convex boxes"), AND
-         (b) IDENTICAL logical properties — they block the view to
-             exactly the same set of target objects (same
-             blocks_view_at facts), AND
-         (c) Same observability status — BOTH currently observable OR
-             BOTH completely in a shadow region.
+       Example: occluder blocks shadow_007.  Planner places occluder
+       at a free boxel that is ALSO in the camera LOS cone to
+       shadow_007.  After place, view is still blocked — the plan
+       accomplishes nothing.
 
-       Merge ORDER: back-to-front (far from camera first), per
-       supervisor guidance.
+       Two sub-problems:
+       (a) Destination re-blocks the SAME shadow (primary case).
+       (b) Destination blocks ANY shadow (stricter, may be too
+           conservative).
 
-       Consequence of not merging correctly: boxels with different
-       logical properties get merged, producing boxels whose symbolic
-       meaning is undefined — PDDL state cannot correctly represent
-       what they block.
+Fix:   ONE COMMIT — candidate approaches (design decision needed):
 
-Fix:   ONE COMMIT — in cell_merger.py merge_free_space():
-       (a) Accept shadow/blocking information as parameters (which
-           targets does each boxel's camera corridor obstruct).
-       (b) Before merging two candidates, check:
-           - Both observable or both in shadow
-           - Both have identical blocks_view_at target sets
-       (c) Process candidates back-to-front.
-       (d) Merged boxel inherits the common property set.
+       OPTION A — Test stream: test-place-clears-view(?o ?dest ?shadow)
+       returns True iff placing ?o at ?dest does NOT block ?shadow.
+       Add as precondition on place.
 
-Related: #4 (re-boxelization depends on correct merge condition),
-         #6 (multi-boxel placement depends on correct merging)
+       OPTION B — Pre-computed safe set: at problem build time, for
+       each free boxel compute whether it lies in any LOS cone.  Emit
+       (no_view_block ?b) facts.  Place requires (no_view_block ?b).
+
+       OPTION C — Explicit placement-region set: pre-approved "safe
+       placement" boxels (outside all camera cones) as init facts.
+
+Related: #4, #6
 
 
 ================================================================================
@@ -252,7 +258,7 @@ Priority: TIER 1
 Where:    test_full_pipeline.py (execution loop),
           boxel_data.py (BoxelRegistry),
           cell_merger.py
-Depends:  #2 (merge condition must be correct before re-merging)
+Depends:  None (re-merge uses existing convex merge; full merge #2 deferred)
 Effort:   3-5 days
 
 What:  After a pick-and-place action, the boxel partition is NOT
@@ -260,7 +266,7 @@ What:  After a pick-and-place action, the boxel partition is NOT
        (a) OCCUPIED boxels that are now FREE (object picked up)
        (b) FREE boxels that are now OCCUPIED (object placed there)
        (c) Shadow regions that changed (occluder moved)
-       (d) Merge structure is stale (needs re-merge with #2 rules)
+       (d) Merge structure is stale (needs re-run of convex merge pass)
 
        The planner operates on this stale partition, causing it to:
        - Try placing in no-longer-free boxels
@@ -271,8 +277,8 @@ Fix:   ONE COMMIT — implement full re-boxelization (naive first):
        (a) After each scene-changing action (place), re-evaluate every
            boxel's occupancy status against current PyBullet state.
        (b) Recompute shadow regions for relocated occluders.
-       (c) Re-run the merge pass using the correct merge condition
-           from #2.
+       (c) Re-run the merge pass (convex-only; stricter merge deferred
+           — archive/CODEBASE_AUDIT_DEFERRED.txt #2).
        (d) Rebuild shadow_occluder_map.
        (e) Feed updated BoxelRegistry into _build_init() for next
            planning cycle.
@@ -287,63 +293,23 @@ Related: old #44 [ACCEPTED] (stale shadow AABBs — subsumed by this),
 
 
 ================================================================================
-#5. PLACEMENT DESTINATION MAY RE-BLOCK THE CLEARED VIEW CORRIDOR
-================================================================================
-Priority: TIER 1 — Needs design decision before implementation
-Where:    domain_pddlstream.pddl (place action),
-          pddlstream_planner.py (_build_init: boxel_fits facts),
-          streams.py (BoxelStreams.test_boxel_fits)
-Depends:  None (but benefits from #2 and #4)
-Effort:   2-3 days (after design is decided)
-
-What:  The place action requires only that the destination is free and
-       large enough (is_free_space + boxel_fits; see policy above).  It does NOT check
-       whether placing the occluder at the destination re-blocks the
-       view corridor the plan just cleared.
-
-       Example: occluder blocks shadow_007.  Planner places occluder
-       at a free boxel that is ALSO in the camera LOS cone to
-       shadow_007.  After place, view is still blocked — the plan
-       accomplishes nothing.
-
-       Two sub-problems:
-       (a) Destination re-blocks the SAME shadow (primary case).
-       (b) Destination blocks ANY shadow (stricter, may be too
-           conservative).
-
-Fix:   ONE COMMIT — candidate approaches (design decision needed):
-
-       OPTION A — Test stream: test-place-clears-view(?o ?dest ?shadow)
-       returns True iff placing ?o at ?dest does NOT block ?shadow.
-       Add as precondition on place.
-
-       OPTION B — Pre-computed safe set: at problem build time, for
-       each free boxel compute whether it lies in any LOS cone.  Emit
-       (no_view_block ?b) facts.  Place requires (no_view_block ?b).
-
-       OPTION C — Explicit placement-region set: pre-approved "safe
-       placement" boxels (outside all camera cones) as init facts.
-
-Related: #2, #4, #6
-
-
-================================================================================
 #6. MULTI-BOXEL FREE SPACE PLACEMENT
 ================================================================================
-Priority: TIER 1 — Depends on #2 for correct merging
+Priority: TIER 1 — Implement if convex merge leaves regions too small
 Where:    domain_pddlstream.pddl, stream.pddl, streams.py,
           pddlstream_planner.py
-Depends:  #2 (correct merge condition reduces need for multi-boxel)
+Depends:  None (aggressive semantic merge deferred — archive #2)
 Effort:   ~1 week
 
 What:  The place action targets a SINGLE boxel.  If no single free
        boxel is large enough, the planner cannot reason about placing
        across multiple adjacent free boxels.
 
-       After merging with correct #2 condition, free boxels with
-       identical properties merge into large regions, largely
-       mitigating this.  Multi-boxel placement is needed only for
-       objects at occlusion boundaries where boxels stay small.
+       Convex-only free-space merge may leave smaller regions than a
+       full semantic merge would; multi-boxel placement is needed for
+       objects at occlusion boundaries or when single boxels are too
+       small.  If testing shows placement failures due to boxel size,
+       implement the fix below.
 
 Fix:   ONE COMMIT — multi-variant place actions (agreed in meeting):
        (a) Add place-in-2-boxels action to domain_pddlstream.pddl:
@@ -353,12 +319,6 @@ Fix:   ONE COMMIT — multi-variant place actions (agreed in meeting):
        (b) Add corresponding stream in stream.pddl.
        (c) Implement adjacency + union-fitness test in streams.py.
        (d) Optionally generalise to place-in-N-boxels.
-
-       If #2 merging works well, this may become unnecessary for
-       the thesis scenarios.  Implement only if testing reveals
-       placement failures due to boxel size.
-
-Related: #2 (merge condition)
 
 
 ================================================================================
@@ -626,109 +586,6 @@ Related: #15 (shadow splitting depends on correct visibility),
          #16 (camera angle exacerbates this)
 
 ================================================================================
-#16. CAMERA PITCH TOO SHALLOW — DEBUG VIEW MISMATCH
-================================================================================
-Priority: TIER 1 — Scene design / perception quality
-Where:    boxel_env.py (camera defaults ~line 31-37, ~line 296-299)
-Depends:  None
-Effort:   1 day (parameter tuning)
-
-What:  The semantic camera (used for shadow calculation, visibility
-       raycasting, and sensing) is at [0.5, -0.8, 0.7] looking at
-       [0.5, 0.0, 0.5].  The look direction vector is (0, 0.8, -0.2),
-       giving a downward pitch of only ~14° below horizontal.
-
-       At this shallow angle, a 15 cm occluder cube at Y=-0.1 easily
-       blocks the view to objects at Y=0.2 — the camera cannot see
-       over the front objects.  This directly causes occluder_1 (at
-       Y=0.2, behind occluder_2 at Y=-0.1) to be invisible (#14).
-
-       The debug visualization camera (_DEFAULT_DEBUG_VIS_*) is
-       configured to approximately match the semantic camera at
-       startup (distance=1.82, yaw=0, pitch=-14.04, target=[0.5,0,
-       0.5]). The main viewport may show a steep top-down view where 
-       all objects are visible, while the actual semantic camera has 
-       a much shallower angle that misses rear objects.
-       The "Synthetic Camera RGB data" panel (top-left)
-       shows the true semantic camera view, but it is small and easy
-       to overlook.
-
-       The shadow regions stretching far into positive Y and
-       intersecting with occluder_1 (visible in the debug viewport
-       but invisible to the semantic camera) confirm the mismatch:
-       the semantic camera's perspective is lower than what the debug
-       viewport suggests.
-
-Fix:   ONE COMMIT — adjust semantic camera parameters:
-       (a) Increase camera height (Z) to
-           achieve a steeper look angle (e.g. 30-45° pitch).
-           Example: [0.5, -0.5, 1.0] → pitch ≈ 45°, can see over
-           most tabletop objects.
-       (b) Update _DEFAULT_DEBUG_VIS_* constants to match the new
-           semantic camera so the initial debug viewport accurately
-           represents what the system perceives.
-       (c) Consider adding a visual indicator (debug line or
-           wireframe frustum) showing the semantic camera's actual
-           field of view in the debug viewport.
-
-Related: #14 (camera angle exacerbates sparse corner check)
-
-
-================================================================================
-#17. SCENE LAYOUT — OBJECTS OUT OF ROBOT REACH
-================================================================================
-Priority: TIER 1 — Scene design / task feasibility
-Where:    boxel_env.py (default_scene ~line 125, _setup_scene),
-          SceneConfig (occluder_positions, target_positions)
-Depends:  None
-Effort:   1 day (parameter tuning + validation)
-
-What:  The Franka Panda robot base is at [-0.4, 0.0, 0.0].  The
-       Panda's maximum reach is ~0.855 m from the base flange.
-       Accounting for the floor-mounted base reaching up to the table
-       surface at Z=0.625, effective horizontal reach at table height
-       is approximately 0.7-0.75 m from the base.
-
-       Several default_scene positions exceed this:
-
-         Object      Position(X,Y)   Horiz. dist from base
-         occluder_1  (0.5, 0.2)      0.92 m   — BEYOND reach
-         occluder_2  (0.6, -0.1)     1.00 m   — BEYOND reach
-         target_1    (0.5, 0.4)      0.99 m   — BEYOND reach
-         target_2    (0.6, 0.1)      1.00 m   — BEYOND reach
-         target_4    (0.7, -0.2)     1.12 m   — BEYOND reach
-
-       IK solutions may still be found (the Panda can sometimes
-       reach slightly beyond nominal limits with specific joint
-       configurations), but solutions are unreliable, near
-       singularities, and collisions are likely.
-
-       Additionally, the occluder half-extents (0.075 m = 15 cm
-       cubes) are large relative to the Panda gripper's max opening
-       (~0.08 m).  The gripper can barely close around a 15 cm cube.
-       Smaller objects (e.g. 5-8 cm cubes) would be more realistic.
-
-Fix:   ONE COMMIT — redesign default_scene():
-       (a) Move all object positions closer to the robot base.
-           Keep all objects within 0.5-0.6 m horizontal distance
-           from the base (well within reliable workspace).
-           Example: shift center.
-       (b) Reduce occluder size from 0.075 to 0.04-0.05 m
-           half-extent (8-10 cm cubes) — still large enough to
-           cast meaningful shadows but graspable by the Panda.
-       (c) Reduce target size proportionally (currently 0.04 m
-           half-extent = 8 cm cubes — already borderline).
-       (d) Validate all positions with IK solver before committing:
-           for each object position, verify that compute_kin returns
-           a valid joint configuration. (nice to have)
-       (e) Update mixed_shapes_scene() and scalability_scene() with
-           the same spatial constraints.
-
-Related: #1 (collision-blind sub-moves are worse near workspace
-         limits where joint velocities are high)
-
-
-================================================================================
 #18. PLAN SEQUENCE move→sense POSITIONS ARM IN CAMERA VIEW PATH
 ================================================================================
 Priority: TIER 0 — Extends #3 (sense action design)
@@ -860,6 +717,37 @@ Related: #5 (placement re-blocks view corridor — X-Y overlap variant)
 
 
 ================================================================================
+#20. DISTINCT OBJECT COLORS AND COLOR-REFLECTING NAMES (SIZES / TARGETS UNCHANGED)  [DONE]
+================================================================================
+Priority: TIER 3 — Presentation and traceability (no change to planning geometry)
+Where:    Scene / object spawn and visual setup (PyBullet colors), and symbolic
+          naming wherever objects appear in PDDL, logs, and UI (e.g. replace
+          generic obj_* labels with names like blue_object, red_object).
+Depends:  None
+Effort:   ~0.5–1 day
+
+What:   Manipulable objects are hard to tell apart in the simulator and in
+        traces when they share the same appearance and undistinguished names.
+
+        Requirement:
+        - Assign each object a visibly different color in the scene.
+        - Rename objects so names encode that color (e.g. blue_object,
+          red_object, green_object) consistently across planning and execution.
+
+        Explicit non-goals (out of scope for this item):
+        - Do NOT change object sizes, mass distribution, or collision geometry.
+        - Do NOT change how the target object is chosen (same selection policy
+          as today); only the resulting object's display name and material color
+          should align once the target is fixed.
+
+Fix:   ONE COMMIT — cosmetic / naming only: material or override RGB per body,
+       and thread the new names through registry/init so planner and logs stay
+       consistent with what the user sees.
+
+Related: #9 (metrics may later report by human-readable object id)
+
+
+================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without
@@ -885,16 +773,15 @@ be parallelized where no dependency exists.
 
 TIER 0 — ACTIONABLE NOW (no dependencies):
   #1   Execution sub-moves collision-blind                ~1-2 days
-  #2   Boxel merge condition incomplete                   ~2-3 days
   #3   Sense hidden move (add at_config precondition)     ~1-2 days
   #14  Sparse visibility check (8 AABB corners)           ~1-2 days
   #18  move→sense arm blocking (extends #3)               incl. in #3
   #19  Mid-air free boxels used as placement targets      ~0.5 day   [DONE]
 
-TIER 1 — DEPENDS ON TIER 0:
-  #4   Post-action re-boxelization              depends #2  ~3-5 days
+TIER 1 — Mixed dependencies (see each issue):
+  #4   Post-action re-boxelization                          ~3-5 days
   #5   Placement re-blocks view corridor        needs design ~2-3 days
-  #6   Multi-boxel free space placement         depends #2  ~1 week
+  #6   Multi-boxel free space placement                     ~1 week
   #15  Shadow volumes ignore invisible objects  depends #14 ~1 day
   #16  Camera pitch too shallow / debug mismatch            ~1 day
   #17  Scene objects out of robot reach                     ~1 day
@@ -909,8 +796,9 @@ TIER 3 — THESIS EVALUATION (independent of code fixes):
   #11  Baseline: fixed semantic regions         depends #9  ~3-5 days
   #12  Scalability analysis                     depends #9  ~2-3 days
   #13  Recursive object discovery                           ~2-3 days
+  #20  Distinct object colors + color-reflecting names       ~0.5–1 day [DONE]
 
-Total: 19 open issues (13 original + 6 new: #14-#19)
+Total: 19 entries (#1, #3–#20; #2 → archive/CODEBASE_AUDIT_DEFERRED.txt; #19 [DONE]; #20 [DONE])
 Estimated effort: ~8-11 weeks sequential; less with parallelism
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
