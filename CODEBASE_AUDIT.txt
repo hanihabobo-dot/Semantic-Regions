@@ -14,9 +14,13 @@ Restructured: 2026-03-24
   Issue #21 added 2026-04-05 — blocked sense causes shadow switching and
     false "searched all shadows" termination without actually clearing and
     observing the active blocked shadow.
+  2026-04-06 — Moved resolved open-audit items to
+    archive/CODEBASE_AUDIT_RESOLVED.txt: #5 (placement re-blocks corridor;
+    body had been mislabeled #2), #19, #20, #22.
   Issue #2 (full boxel merge condition, old #103) DEFERRED 2026-04-05 →
     archive/CODEBASE_AUDIT_DEFERRED.txt.  Convex-only merge accepted for
-    current scope; open issue list below is #1, #3–#21.
+    current scope; open issue list below is #1, #3–#4, #6–#21
+    (resolved #5, #19, #20, #22 live in archive/CODEBASE_AUDIT_RESOLVED.txt).
   Mapping from old numbers:
     #1  ← old #106    #5  ← old #107    #9  ← old #76a    #13 ← old #81
     #3  ← old #93a    #6  ← old #105    #10 ← old #76b
@@ -171,47 +175,6 @@ Fix:   ONE COMMIT — replace move_robot_smooth() calls with
        code and NO PDDL domain changes.
 
 Related: #7/#8 (full PDDL decomposition is the long-term fix)
-
-
-================================================================================
-#2. PLACEMENT DESTINATION MAY RE-BLOCK THE CLEARED VIEW CORRIDOR  [DONE]
-================================================================================
-Priority: TIER 1 — Needs design decision before implementation
-Where:    domain_pddlstream.pddl (place action),
-          pddlstream_planner.py (_build_init: boxel_fits facts),
-          streams.py (BoxelStreams.test_boxel_fits)
-Depends:  None (but benefits from #4)
-Effort:   2-3 days (after design is decided)
-
-What:  The place action requires only that the destination is free and
-       large enough (is_free_space + boxel_fits; see policy above).  It does NOT check
-       whether placing the occluder at the destination re-blocks the
-       view corridor the plan just cleared.
-
-       Example: occluder blocks shadow_007.  Planner places occluder
-       at a free boxel that is ALSO in the camera LOS cone to
-       shadow_007.  After place, view is still blocked — the plan
-       accomplishes nothing.
-
-       Two sub-problems:
-       (a) Destination re-blocks the SAME shadow (primary case).
-       (b) Destination blocks ANY shadow (stricter, may be too
-           conservative).
-
-Fix:   ONE COMMIT — candidate approaches (design decision needed):
-
-       OPTION A — Test stream: test-place-clears-view(?o ?dest ?shadow)
-       returns True iff placing ?o at ?dest does NOT block ?shadow.
-       Add as precondition on place.
-
-       OPTION B — Pre-computed safe set: at problem build time, for
-       each free boxel compute whether it lies in any LOS cone.  Emit
-       (no_view_block ?b) facts.  Place requires (no_view_block ?b).
-
-       OPTION C — Explicit placement-region set: pre-approved "safe
-       placement" boxels (outside all camera cones) as init facts.
-
-Related: #4, #6
 
 
 ================================================================================
@@ -639,118 +602,6 @@ Related: #3 (same root cause and fix)
 
 
 ================================================================================
-#19. MID-AIR FREE BOXELS USED AS PLACEMENT — GRAVITY DROPS INTO SHADOW  [DONE]
-================================================================================
-Priority: TIER 0 — Can be fixed independently, simple guard
-Where:    pddlstream_planner.py (_build_init: is_free_space emission),
-          test_full_pipeline.py (execute_place, gravity settle step)
-Depends:  None
-Effort:   0.5 day
-
-What:  During the 2026-04-05 run (Plan #3), the planner chose free_012 as
-       the drop destination for obj_004 (occluder_1), which was blocking
-       shadow_000.  After placement, sensing shadow_000 reported:
-
-         "View to shadow_000 still blocked (69% rays hit occluder)"
-
-       Investigation of boxel_data.json reveals that free_012 and
-       shadow_000 do NOT overlap in 3D — the octree is correct:
-
-         shadow_000: min=[0.053, 0.238, 0.325] max=[0.147, 0.497, 0.400]
-         free_012:   min=[-0.15, 0.250, 0.450] max=[0.350, 0.500, 0.575]
-
-       Their Z ranges are disjoint (shadow max Z=0.400 < free min Z=0.450).
-       free_012 is a mid-air boxel (on_surface: null) floating ABOVE
-       shadow_000.
-
-       However, their X-Y projections fully overlap:
-         X: shadow [0.053, 0.147]  ⊂  free [-0.15, 0.350]
-         Y: shadow [0.238, 0.497]  ⊂  free [0.250, 0.500]
-
-       The placement execution chain causes the problem:
-         1. boxel_centers["free_012"] = [0.10, 0.375, 0.5125]  (mid-air)
-         2. compute_kin targets EE at boxel center + grasp offset
-         3. Robot moves there, opens gripper, releases constraint
-         4. p.stepSimulation() runs 30 times — GRAVITY drops the object
-            from Z=0.51 to the TABLE at Z≈0.363
-         5. At (X=0.10, Y=0.375) on the table surface, the object is
-            dead center inside shadow_000 (X: 0.053-0.147, Y: 0.238-0.497)
-
-       The boxelization is correct — a free boxel CAN exist above a
-       shadow region in 3D.  The bug is that the planner treats mid-air
-       boxels as valid placement targets, ignoring that gravity will
-       project the object down to the table surface, where its X-Y
-       footprint collides with the shadow region below.
-
-       This also explains why free_012 was reused in Plan #1 (to place
-       obj_006) — the planner happily picks mid-air boxels.
-
-Fix:   ONE COMMIT — PDDL-level fix using an (on_surface) fluent:
-
-       The fix belongs in the PDDL domain, not hardcoded in Python.
-       The place action should only allow placement in boxels that are
-       both known-free AND on a support surface.
-
-       (a) domain_pddlstream.pddl:
-           - Add predicate: (on_surface ?b)
-           - Add precondition to the place action:
-               (on_surface ?b)
-             alongside the existing (is_free_space ?b) and
-             (boxel_fits ?o ?b).
-           The place action then requires:
-             (is_free_space ?b)   — known empty
-             (on_surface ?b)      — resting on a support surface
-             (boxel_fits ?o ?b)   — large enough for the object
-
-       (b) pddlstream_planner.py (_build_init):
-           - Emit (on_surface ?b) for every boxel where
-             boxel.on_surface is not None.
-           This is a fluent, not static: after re-boxelization (#4)
-           the on_surface status of boxels may change.
-
-       (c) No stream.pddl changes needed — on_surface is a simple
-           init fact, not a stream-certified predicate.
-
-       This eliminates 12 of 44 free boxels (those with on_surface=null)
-       from placement consideration.  Mid-air boxels remain in the
-       registry for spatial reasoning but cannot be placement targets.
-
-Related: #5 (placement re-blocks view corridor — X-Y overlap variant)
-         #4 (stale is_free_space facts after prior placements)
-
-
-================================================================================
-#20. DISTINCT OBJECT COLORS AND COLOR-REFLECTING NAMES (SIZES / TARGETS UNCHANGED)  [DONE]
-================================================================================
-Priority: TIER 3 — Presentation and traceability (no change to planning geometry)
-Where:    Scene / object spawn and visual setup (PyBullet colors), and symbolic
-          naming wherever objects appear in PDDL, logs, and UI (e.g. replace
-          generic obj_* labels with names like blue_object, red_object).
-Depends:  None
-Effort:   ~0.5–1 day
-
-What:   Manipulable objects are hard to tell apart in the simulator and in
-        traces when they share the same appearance and undistinguished names.
-
-        Requirement:
-        - Assign each object a visibly different color in the scene.
-        - Rename objects so names encode that color (e.g. blue_object,
-          red_object, green_object) consistently across planning and execution.
-
-        Explicit non-goals (out of scope for this item):
-        - Do NOT change object sizes, mass distribution, or collision geometry.
-        - Do NOT change how the target object is chosen (same selection policy
-          as today); only the resulting object's display name and material color
-          should align once the target is fixed.
-
-Fix:   ONE COMMIT — cosmetic / naming only: material or override RGB per body,
-       and thread the new names through registry/init so planner and logs stay
-       consistent with what the user sees.
-
-Related: #9 (metrics may later report by human-readable object id)
-
-
-================================================================================
 #21. BLOCKED SENSE CAUSES SHADOW SWITCHING AND FALSE "SEARCHED ALL" TERMINATION
 ================================================================================
 Priority: TIER 0 — Control-loop correctness bug
@@ -797,47 +648,6 @@ Related: #5 (placement re-blocks cleared corridor), #4 (stale world model),
 
 
 ================================================================================
-#22. PLACE ALLOWS MULTIPLE OBJECTS IN THE SAME FREE BOXEL
-================================================================================
-Priority: TIER 0 — Quick PDDL fix
-Where:    domain_pddlstream.pddl (place action preconditions, derived predicates)
-Depends:  None
-Effort:   ~0.5 day
-
-What:  The place action's precondition checks (is_free_space ?b), which is
-       a STATIC predicate set once at init time.  Placing object A at
-       free_015 adds (obj_at_boxel A free_015) but does NOT remove
-       (is_free_space free_015).  A subsequent place of object B at
-       free_015 still passes all preconditions — the planner treats the
-       boxel as available even though it is already occupied.
-
-       Observed: planner places two occluders at the same free boxel in
-       the same plan.  Physically the objects overlap in PyBullet and
-       one or both may be knocked off the table by the physics settle.
-
-Fix:   ONE COMMIT — add a derived predicate for occupancy:
-
-       (a) domain_pddlstream.pddl:
-           Add derived predicate:
-             (:derived (boxel_occupied ?b)
-               (exists (?o)
-                 (obj_at_boxel ?o ?b)))
-
-           Add precondition to place:
-             (not (boxel_occupied ?b))
-
-       (b) No changes to streams, planner init, or Python code.
-           obj_at_boxel already tracks what is where; the derived
-           predicate reuses it.
-
-       After this fix, once place(A, free_015) fires and adds
-       obj_at_boxel(A, free_015), boxel_occupied(free_015) becomes
-       true, and a second place targeting free_015 is blocked.
-
-Related: #4 (re-boxelization would also address stale is_free_space)
-
-
-================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without
@@ -867,12 +677,9 @@ TIER 0 — ACTIONABLE NOW (no dependencies):
   #14  Sparse visibility check (8 AABB corners)           ~1-2 days
   #18  move→sense arm blocking (extends #3)               incl. in #3
   #21  Blocked sense switches shadows / false all_searched ~1-2 days
-  #22  Place allows multiple objects in same free boxel    ~0.5 day
-  #19  Mid-air free boxels used as placement targets      ~0.5 day   [DONE]
 
 TIER 1 — Mixed dependencies (see each issue):
   #4   Post-action re-boxelization                          ~3-5 days
-  #5   Placement re-blocks view corridor                      ~2-3 days [DONE]
   #6   Multi-boxel free space placement                     ~1 week
   #15  Shadow volumes ignore invisible objects  depends #14 ~1 day
   #16  Camera pitch too shallow / debug mismatch            ~1 day
@@ -888,9 +695,9 @@ TIER 3 — THESIS EVALUATION (independent of code fixes):
   #11  Baseline: fixed semantic regions         depends #9  ~3-5 days
   #12  Scalability analysis                     depends #9  ~2-3 days
   #13  Recursive object discovery                           ~2-3 days
-  #20  Distinct object colors + color-reflecting names       ~0.5–1 day [DONE]
 
-Total: 21 entries (#1, #3–#22; #2 → archive/CODEBASE_AUDIT_DEFERRED.txt; #5, #19, #20 [DONE])
+Total: 17 open items (#1, #3–#4, #6–#18, #21; deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
+      resolved #5, #19, #20, #22 → archive/CODEBASE_AUDIT_RESOLVED.txt)
 Estimated effort: ~8-11 weeks sequential; less with parallelism
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt

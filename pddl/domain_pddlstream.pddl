@@ -221,6 +221,7 @@
       (obj_at_boxel ?o ?b)
       (obj_at_boxel_KIF ?o ?b)
       (not (holding ?o))
+      (not (is_free_space ?b))
     )
   )
 )
