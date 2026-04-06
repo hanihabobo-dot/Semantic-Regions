@@ -136,45 +136,96 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 
 ================================================================================
-#1. EXECUTION SUB-MOVES ARE COLLISION-BLIND
+#1. COLLISION-BLIND EXECUTION AND STREAMED-CONFIG BYPASS
 ================================================================================
-Priority: TIER 0 — Start here (most self-contained)
-Where:    test_full_pipeline.py (execute_pick ~line 782, execute_place ~line 894)
-          robot_utils.py (move_robot_smooth)
+Priority: TIER 0 — Architectural correctness
+Where:    domain_pddlstream.pddl (pick/place actions),
+          stream.pddl, streams.py (compute-kin),
+          test_full_pipeline.py (execute_pick, execute_place)
 Depends:  None
-Effort:   1-2 days
+Effort:   ~3-5 days (subsumes old #7, #8, #23)
 
-What:  The sub-moves inside execute_pick (approach, descend-to-contact,
-       lift) and execute_place (approach, descend, retreat) all use
-       move_robot_smooth(), which is purely linear joint-space
-       interpolation with NO collision checking.
+What:  Three interrelated problems in how pick/place are modeled and
+       executed:
 
-       The PDDL planner calls plan_motion() (full RRT-Connect collision
-       checking) only for the symbolic move action.  Everything inside
-       execute_pick/execute_place runs blind at execution time.
+       (a) COLLISION-BLIND SUB-MOVES: execute_pick and execute_place
+           contain hardcoded approach/lower/lift/retreat sub-moves that
+           use move_robot_smooth() with NO collision checking.  Collisions
+           must also consider whatever object the arm is currently
+           holding, not just the arm itself.  plan_motion already handles
+           held-object collisions via ignored_body_ids; the sub-moves
+           bypass this entirely.
 
-       Consequence: the robot collides with other objects during
-       approach/retreat.  The hardcoded heights (approach 0.10 m,
-       lift/retreat 0.25 m) are never validated against the scene.
-       This is the observed failure: "robot struggles with move to
-       place path."
+       (b) REDUNDANT IK: execute_pick/place re-solve IK locally using
+           solve_ik() instead of using the RobotConfig already produced
+           by the compute-kin stream.  This creates state drift — the arm
+           ends up at a different joint config than the one plan_motion
+           verified, so the next move trajectory starts from the wrong
+           place and the arm "snaps back."
 
-Fix:   ONE COMMIT — replace move_robot_smooth() calls with
-       collision-aware motion:
-       (a) In execute_pick: for the approach and lift segments, call
-           BoxelStreams.plan_motion() or is_path_collision_free() to
-           get a collision-free trajectory, then follow its waypoints.
-       (b) In execute_place: same for approach and retreat segments.
-       (c) Pass ignored_body_ids (grasped object during pick approach;
-           none during retreat) matching what plan_motion already does
-           for the PDDL move action.
-       The descend-to-contact segment can remain linear (short vertical
-       move in collision with the target object by design).
+       (c) UNNECESSARY SUB-MOVES: the move action already delivers the
+           arm to the compute-kin config via a collision-free trajectory.
+           The approach/lower sub-moves in execute_pick/place duplicate
+           what move already did.  Explicit lift/retreat sub-moves are
+           also unnecessary — plan_motion for the NEXT move will naturally
+           produce a trajectory that lifts to avoid collisions, because
+           the RRT must find a collision-free path while the arm holds
+           the object.
 
-       Reuses existing RRT/collision infrastructure with minimal new
-       code and NO PDDL domain changes.
+Fix:   ONE COMMIT — let the planner handle all collision-aware motion:
 
-Related: #7/#8 (full PDDL decomposition is the long-term fix)
+       (1) compute-kin stream: keeps the current grasp offset (10 cm
+           above the boxel center, i.e. [0, 0, 0.10]).  This is the
+           config where the gripper hovers just above the object — close
+           enough for a safe add/remove-constraint, far enough that the
+           collision-free move can reach it without special-casing.
+
+       (2) PDDL move: unchanged.  Delivers the arm to the compute-kin
+           config via plan_motion (collision-free, with held-object
+           awareness via ignored_body_ids).
+
+       (3) PDDL pick action:
+           - Precondition: (at_config ?q) where ?q is the compute-kin
+             config (10 cm above object, inside the boxel).  move
+             already brought the arm here.
+           - Execution: open gripper, LOWER arm to contact, close
+             gripper, add constraint.  The lowering is a short stream sampled
+             controlled descent to a fixed point very close to the obeject from above.
+           - Effect: add (holding ?o), UPDATE at_config to the
+             lowered contact config.  The next move plans from here
+             and plan_motion/RRT naturally lifts to clear obstacles.
+
+       (4) PDDL place action — MIRROR of pick:
+           - Precondition: (at_config ?q) where ?q is the compute-kin
+             config for the destination boxel (10 cm above the boxel
+             center on the table surface).  move already brought the
+             arm here (while holding the object).
+           - Execution: LOWER arm to release height (~10 cm above
+             surface, same distance as pick), open gripper, remove
+             constraint, settle.  Mirror of pick's descent.
+           - Effect: remove (holding ?o), UPDATE at_config to the
+             lowered release config.  The next move plans from here.
+           - Note: currently we only place onto the table.  Stacking
+             (place onto another object) would require a different
+             compute-kin offset but is out of scope for now.
+
+       (5) The NEXT move after pick/place: plan_motion plans from the
+           grasp/release config and the current boxel to the next destination.  
+           Because the arm is holding an object (or just released one near other
+           objects), plan_motion/RRT will naturally find a path that
+           lifts/clears obstacles.  No hardcoded lift height needed.
+
+       (6) execute_pick/place: remove all solve_ik() calls, remove
+           approach/lower/lift/retreat sub-moves.  Use the streamed
+           config directly.  The functions become gripper-only operations.
+
+       This eliminates the approach→lower→lift choreography, the
+       redundant IK, and the collision-blind sub-moves in one change.
+       plan_motion already has the infrastructure (RRT, ignored_body_ids,
+       support surface exclusion); the fix is about routing all arm
+       motion through it.
+
+Related: #3 (sense also has hidden motion — same class of issue)
 
 
 ================================================================================
@@ -290,80 +341,32 @@ Fix:   ONE COMMIT — multi-variant place actions (agreed in meeting):
 ================================================================================
 #7. PICK ACTION — PDDL/PYTHON SCOPE MISMATCH
 ================================================================================
-Priority: TIER 2 — PDDL redesign, optional for thesis
-Where:    domain_pddlstream.pddl (pick action, ~line 178),
-          stream.pddl, streams.py, test_full_pipeline.py (execute_pick)
-Depends:  None (but #1 provides a lighter-weight mitigation)
-Effort:   ~1 week
+Priority: SUBSUMED by #1
+Where:    (see #1)
 
-What:  The PDDL pick action is modeled as an instantaneous single-
-       config operation.  The Python execute_pick() is a 6-step
-       choreographed sequence:
-         1. open_gripper
-         2. move to approach (IK solved at execution time)
-         3. descend to contact (plan config)
-         4. close_gripper
-         5. createConstraint (weld object to gripper)
-         6. lift (IK solved at execution time)
+What:  Previously proposed decomposing pick into 3 PDDL sub-actions
+       (approach_pick, grasp, lift).  This is unnecessary: #1's fix
+       makes move handle all collision-aware transit and pick becomes
+       a gripper-only action.  No PDDL decomposition needed.
 
-       Hidden sub-actions the planner cannot reason about:
-         3 moves, 3 IK solves, 1 open_gripper, 1 close_gripper,
-         1 createConstraint
+Status: Subsumed by #1.  The "full decomposition" approach adds PDDL
+        complexity without benefit — plan_motion already handles the
+        approach (via move) and lift (via the next move's RRT).
 
-       Consequences:
-       - Planner cannot detect collisions on approach/retreat (#1
-         provides a lighter-weight fix for this)
-       - Execution-time IK solves can fail (handled by abort-and-
-         replan, but planner has no awareness)
-       - Post-pick config differs from PDDL's ?q (accepted
-         simplification — old #62)
-
-Fix:   ONE COMMIT — decompose pick into PDDL sub-actions:
-       (a) approach_pick(?o ?b ?g ?q_approach)
-       (b) grasp(?o ?g)
-       (c) lift(?o ?q_lift)
-
-       Each sub-action has its own preconditions and effects,
-       including at_config updates.  Stream evaluations ~3x per pick.
-
-       NOTE: #1 (collision-aware sub-moves) is the pragmatic fix.
-       This full decomposition is architecturally correct but optional
-       for thesis scope.
-
-Related: #1 (lighter-weight collision fix), #8 (same pattern for place)
+Related: #1, #8
 
 
 ================================================================================
 #8. PLACE ACTION — PDDL/PYTHON SCOPE MISMATCH
 ================================================================================
-Priority: TIER 2 — PDDL redesign, optional for thesis
-Where:    domain_pddlstream.pddl (place action, ~line 205),
-          stream.pddl, streams.py,
-          test_full_pipeline.py (execute_place)
-Depends:  None (but #1 provides a lighter-weight mitigation)
-Effort:   ~1 week
+Priority: SUBSUMED by #1
+Where:    (see #1)
 
-What:  Same pattern as #7.  The PDDL place action is instantaneous
-       single-config.  The Python execute_place() is a 6-step
-       sequence:
-         1. move to approach (IK solved at execution time)
-         2. descend to contact (plan config)
-         3. open_gripper
-         4. removeConstraint
-         5. 30 stepSimulation (settling)
-         6. retreat (IK solved at execution time)
+What:  Same as #7.  Previously proposed decomposing place into 3 PDDL
+       sub-actions.  Subsumed by #1's fix: move handles transit,
+       place becomes a gripper-only release action.
 
-       Hidden sub-actions:
-         3 moves, 3 IK solves, 1 open_gripper, 1 removeConstraint,
-         30 stepSimulation
-
-Fix:   ONE COMMIT — decompose place into PDDL sub-actions:
-       (a) approach_place(?o ?b ?g ?q_approach)
-       (b) release(?o ?b)
-       (c) retreat(?q_retreat)
-
-       Same reasoning as #7: #1 is the pragmatic fix; this is the
-       architecturally correct long-term solution.
+Status: Subsumed by #1.
 
 Related: #1, #7
 
@@ -648,6 +651,22 @@ Related: #5 (placement re-blocks cleared corridor), #4 (stale world model),
 
 
 ================================================================================
+#23. REDUNDANT IK IN EXECUTION — RE-IK VS. STREAMED CONFIG
+================================================================================
+Priority: SUBSUMED by #1
+Where:    (see #1)
+
+What:  execute_pick/place re-solve IK instead of using the streamed
+       config.  This is one of the three sub-problems unified in #1.
+
+Status: Subsumed by #1.  When pick/place become gripper-only actions
+        that use the streamed config directly, the redundant IK
+        disappears along with the hidden sub-moves.
+
+Related: #1
+
+
+================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without
@@ -672,7 +691,10 @@ Each issue is one commit.  Dependencies listed; work within a tier can
 be parallelized where no dependency exists.
 
 TIER 0 — ACTIONABLE NOW (no dependencies):
-  #1   Execution sub-moves collision-blind                ~1-2 days
+  #1   Collision-blind execution + streamed-config bypass  ~3-5 days
+       (subsumes #7, #8, #23: pick/place become gripper-only;
+        move handles all collision-aware transit incl. held objects;
+        no PDDL decomposition needed — plan_motion lifts naturally)
   #3   Sense hidden move (add at_config precondition)     ~1-2 days
   #14  Sparse visibility check (8 AABB corners)           ~1-2 days
   #18  move→sense arm blocking (extends #3)               incl. in #3
@@ -685,9 +707,10 @@ TIER 1 — Mixed dependencies (see each issue):
   #16  Camera pitch too shallow / debug mismatch            ~1 day
   #17  Scene objects out of robot reach                     ~1 day
 
-TIER 2 — PDDL REDESIGN (optional for thesis):
-  #7   Pick PDDL decomposition into sub-actions             ~1 week
-  #8   Place PDDL decomposition into sub-actions            ~1 week
+TIER 2 — SUBSUMED (no longer separate work items):
+  #7   Pick PDDL scope mismatch                             SUBSUMED by #1
+  #8   Place PDDL scope mismatch                            SUBSUMED by #1
+  #23  Redundant IK in execution                            SUBSUMED by #1
 
 TIER 3 — THESIS EVALUATION (independent of code fixes):
   #9   Metric collection + experiment runner                ~3-5 days
@@ -696,7 +719,8 @@ TIER 3 — THESIS EVALUATION (independent of code fixes):
   #12  Scalability analysis                     depends #9  ~2-3 days
   #13  Recursive object discovery                           ~2-3 days
 
-Total: 17 open items (#1, #3–#4, #6–#18, #21; deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
+Total: 15 independent items (#1, #3–#4, #6, #9–#18, #21; #7/#8/#23 subsumed by #1;
+      deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
       resolved #5, #19, #20, #22 → archive/CODEBASE_AUDIT_RESOLVED.txt)
 Estimated effort: ~8-11 weeks sequential; less with parallelism
 
