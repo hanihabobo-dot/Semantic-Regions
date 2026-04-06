@@ -17,6 +17,8 @@ Restructured: 2026-03-24
   2026-04-06 — Moved resolved open-audit items to
     archive/CODEBASE_AUDIT_RESOLVED.txt: #5 (placement re-blocks corridor;
     body had been mislabeled #2), #19, #20, #22.
+  2026-04-06 — Moved subsumed #7, #8, #23 to
+    archive/CODEBASE_AUDIT_RESOLVED.txt (subsumed by #1).
   Issue #2 (full boxel merge condition, old #103) DEFERRED 2026-04-05 →
     archive/CODEBASE_AUDIT_DEFERRED.txt.  Convex-only merge accepted for
     current scope; open issue list below is #1, #3–#4, #6–#21
@@ -130,7 +132,7 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 ################################################################################
 #                                                                              #
-#                     OPEN ISSUES — #1, #3 through #21                         #
+#              OPEN ISSUES — #1, #3–#4, #6, #9–#18, #21                        #
 #                                                                              #
 ################################################################################
 
@@ -140,90 +142,197 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 ================================================================================
 Priority: TIER 0 — Architectural correctness
 Where:    domain_pddlstream.pddl (pick/place actions),
-          stream.pddl, streams.py (compute-kin),
+          stream.pddl (new descent streams),
+          streams.py (new descent stream implementations + plan_motion),
+          robot_utils.py (is_config_collision_free, is_path_collision_free),
           test_full_pipeline.py (execute_pick, execute_place)
 Depends:  None
 Effort:   ~3-5 days (subsumes old #7, #8, #23)
 
-What:  Three interrelated problems in how pick/place are modeled and
-       executed:
+PROBLEM
+-------
+Four problems in how pick/place are modeled and executed:
 
-       (a) COLLISION-BLIND SUB-MOVES: execute_pick and execute_place
-           contain hardcoded approach/lower/lift/retreat sub-moves that
-           use move_robot_smooth() with NO collision checking.  Collisions
-           must also consider whatever object the arm is currently
-           holding, not just the arm itself.  plan_motion already handles
-           held-object collisions via ignored_body_ids; the sub-moves
-           bypass this entirely.
+  (a) COLLISION-BLIND SUB-MOVES: execute_pick and execute_place
+      contain hardcoded approach/lower/lift/retreat sub-moves that use
+      move_robot_smooth() with NO collision checking.  The arm can
+      clip through objects.
 
-       (b) REDUNDANT IK: execute_pick/place re-solve IK locally using
-           solve_ik() instead of using the RobotConfig already produced
-           by the compute-kin stream.  This creates state drift — the arm
-           ends up at a different joint config than the one plan_motion
-           verified, so the next move trajectory starts from the wrong
-           place and the arm "snaps back."
+  (b) REDUNDANT IK: both functions call solve_ik() 2-3 times to
+      recompute joint configs instead of using the RobotConfig already
+      produced by the compute-kin stream.  The re-solved configs differ
+      from what plan_motion verified, causing state drift and arm
+      "snap-back" at the start of the next move.
 
-       (c) UNNECESSARY SUB-MOVES: the move action already delivers the
-           arm to the compute-kin config via a collision-free trajectory.
-           The approach/lower sub-moves in execute_pick/place duplicate
-           what move already did.  Explicit lift/retreat sub-moves are
-           also unnecessary — plan_motion for the NEXT move will naturally
-           produce a trajectory that lifts to avoid collisions, because
-           the RRT must find a collision-free path while the arm holds
-           the object.
+  (c) UNNECESSARY SUB-MOVES: the move action already delivers the arm
+      to the compute-kin config (10 cm above object) via a collision-
+      free RRT trajectory.  The approach sub-move duplicates this.
+      The lift sub-move is also unnecessary — the NEXT move's RRT
+      naturally lifts to clear obstacles because it must find a
+      collision-free path while the arm holds the object.
 
-Fix:   ONE COMMIT — let the planner handle all collision-aware motion:
+  (d) HELD-OBJECT COLLISIONS NOT CHECKED: plan_motion's collision
+      checking (is_config_collision_free in robot_utils.py) only calls
+      p.getContactPoints(bodyA=robot_id).  This detects robot-vs-
+      environment collisions but NOT held-object-vs-environment
+      collisions.  When the arm holds an object, the RRT can produce
+      paths where the held object clips through other objects.
+      The ignored_body_ids mechanism works the wrong way: it tells
+      the checker to SKIP the held body (so gripper-touching-object
+      is not flagged), but never adds a collision check FOR the held
+      body against the environment.
 
-       (1) compute-kin stream: keeps the current grasp offset (10 cm
-           above the boxel center, i.e. [0, 0, 0.10]).  This is the
-           config where the gripper hovers just above the object — close
-           enough for a safe add/remove-constraint, far enough that the
-           collision-free move can reach it without special-casing.
+INTENDED ACTION FLOW (after fix)
+---------------------------------
+  1. move       → brings arm to ?q_hover (compute-kin config, 10 cm
+                   above object, inside the boxel).  Collision checks
+                   now include the held object (if any) vs environment.
+  2. pick/place → descends from ?q_hover to ?q_contact (just above
+                   the object surface), does gripper + constraint ops.
+                   at_config updates from ?q_hover to ?q_contact.
+                   Still in the same boxel.
+  3. next move  → plans from ?q_contact.  RRT lifts naturally.
+                   Held-object collisions checked throughout.
 
-       (2) PDDL move: unchanged.  Delivers the arm to the compute-kin
-           config via plan_motion (collision-free, with held-object
-           awareness via ignored_body_ids).
+FIX — ONE COMMIT
+-----------------
+Changes span 5 files.  compute-kin stream is UNCHANGED.
 
-       (3) PDDL pick action:
-           - Precondition: (at_config ?q) where ?q is the compute-kin
-             config (10 cm above object, inside the boxel).  move
-             already brought the arm here.
-           - Execution: open gripper, LOWER arm to contact, close
-             gripper, add constraint.  The lowering is a short stream sampled
-             controlled descent to a fixed point very close to the obeject from above.
-           - Effect: add (holding ?o), UPDATE at_config to the
-             lowered contact config.  The next move plans from here
-             and plan_motion/RRT naturally lifts to clear obstacles.
+  (1) HELD-OBJECT COLLISION CHECKING (robot_utils.py):
+      is_config_collision_free:
+        - Accept a new parameter: held_body_ids (set of PyBullet body
+          IDs currently attached to the gripper via constraint).
+        - After the existing robot contact check, also call
+          p.getContactPoints(bodyA=held_id) for each held body.
+        - Filter out contacts between the held body and the robot
+          (they are intentionally in contact via the constraint).
+        - Any remaining contact = held object collides with
+          environment → return False.
+        - Implementation detail: p.resetJointState does NOT update
+          constraint-attached bodies.  After setting robot joints,
+          must manually compute the held body's world pose from the
+          EE link state + stored relative transform, then call
+          p.resetBasePositionAndOrientation on the held body before
+          running p.performCollisionDetection.
+      is_path_collision_free:
+        - Pass held_body_ids through to is_config_collision_free.
 
-       (4) PDDL place action — MIRROR of pick:
-           - Precondition: (at_config ?q) where ?q is the compute-kin
-             config for the destination boxel (10 cm above the boxel
-             center on the table surface).  move already brought the
-             arm here (while holding the object).
-           - Execution: LOWER arm to release height (~10 cm above
-             surface, same distance as pick), open gripper, remove
-             constraint, settle.  Mirror of pick's descent.
-           - Effect: remove (holding ?o), UPDATE at_config to the
-             lowered release config.  The next move plans from here.
-           - Note: currently we only place onto the table.  Stacking
-             (place onto another object) would require a different
-             compute-kin offset but is out of scope for now.
+  (2) plan_motion (streams.py):
+      - Extract held_body_ids from the endpoint configs'
+        ignored_body_ids (these already carry the held object's
+        PyBullet body ID).
+      - Pass held_body_ids to all collision-check calls (RRT
+        extend/connect, path validation, smoothing).
+      - PDDL stream definition (stream.pddl) is UNCHANGED — same
+        inputs/outputs/certified facts.
 
-       (5) The NEXT move after pick/place: plan_motion plans from the
-           grasp/release config and the current boxel to the next destination.  
-           Because the arm is holding an object (or just released one near other
-           objects), plan_motion/RRT will naturally find a path that
-           lifts/clears obstacles.  No hardcoded lift height needed.
+  (3) NEW STREAM — plan-pick-descent (stream.pddl + streams.py):
+      Inputs:  ?q_hover (the compute-kin config), ?o, ?b, ?g
+      Outputs: ?q_contact, ?t_descent
+      Certified: (Config ?q_contact) (Trajectory ?t_descent)
+                 (pick_descent ?q_hover ?q_contact ?t_descent)
+                 (config_for_boxel ?q_contact ?b)
 
-       (6) execute_pick/place: remove all solve_ik() calls, remove
-           approach/lower/lift/retreat sub-moves.  Use the streamed
-           config directly.  The functions become gripper-only operations.
+      Implementation (streams.py):
+        - Compute contact EE position from boxel center + small Z
+          offset (just above object surface, e.g. [0, 0, 0.02]).
+        - Solve IK for contact position → ?q_contact.
+        - Build a short linear trajectory from ?q_hover to ?q_contact.
+        - Optionally collision-check the descent path.
 
-       This eliminates the approach→lower→lift choreography, the
-       redundant IK, and the collision-blind sub-moves in one change.
-       plan_motion already has the infrastructure (RRT, ignored_body_ids,
-       support surface exclusion); the fix is about routing all arm
-       motion through it.
+  (4) NEW STREAM — plan-place-descent (stream.pddl + streams.py):
+      Mirror of plan-pick-descent for the place action.
+      Inputs:  ?q_hover, ?o, ?b, ?g
+      Outputs: ?q_release, ?t_descent
+      Certified: (Config ?q_release) (Trajectory ?t_descent)
+                 (place_descent ?q_hover ?q_release ?t_descent)
+                 (config_for_boxel ?q_release ?b)
+
+  (5) PDDL PICK (domain_pddlstream.pddl):
+      Add new predicate: (pick_descent ?q1 ?q2 ?t)
+
+      (:action pick
+        :parameters (?o ?b ?g ?q_hover ?q_contact ?t_descent)
+        :precondition (and
+          (Obj ?o) (Boxel ?b) (Grasp ?g)
+          (Config ?q_hover) (Config ?q_contact) (Trajectory ?t_descent)
+          (handempty)
+          (at_config ?q_hover)
+          (obj_at_boxel_KIF ?o ?b)
+          (obj_at_boxel ?o ?b)
+          (kin_solution ?o ?b ?g ?q_hover)
+          (pick_descent ?q_hover ?q_contact ?t_descent))
+        :effect (and
+          (holding ?o)
+          (not (handempty))
+          (not (obj_at_boxel ?o ?b))
+          (at_config ?q_contact)
+          (not (at_config ?q_hover))))
+
+  (6) PDDL PLACE (domain_pddlstream.pddl):
+      Add new predicate: (place_descent ?q1 ?q2 ?t)
+
+      (:action place
+        :parameters (?o ?b ?g ?q_hover ?q_release ?t_descent)
+        :precondition (and
+          (Obj ?o) (Boxel ?b) (Grasp ?g)
+          (Config ?q_hover) (Config ?q_release) (Trajectory ?t_descent)
+          (holding ?o)
+          (at_config ?q_hover)
+          (is_free_space ?b)
+          (on_surface ?b)
+          (boxel_fits ?o ?b)
+          (kin_solution ?o ?b ?g ?q_hover)
+          (place_descent ?q_hover ?q_release ?t_descent))
+        :effect (and
+          (handempty)
+          (obj_at_boxel ?o ?b)
+          (obj_at_boxel_KIF ?o ?b)
+          (not (holding ?o))
+          (not (is_free_space ?b))
+          (at_config ?q_release)
+          (not (at_config ?q_hover))))
+
+  (7) execute_pick (test_full_pipeline.py):
+      Remove ALL solve_ik() calls.
+      Remove approach/lift sub-moves.
+      New behavior:
+        - Unpack params: obj, boxel, grasp, q_hover, q_contact, traj
+        - open_gripper
+        - Follow traj (descent from q_hover to q_contact) the same
+          way the move handler follows its trajectory
+        - close_gripper
+        - Create constraint (same weld logic as current code)
+        - Return (constraint_id, q_contact)
+
+  (8) execute_place (test_full_pipeline.py):
+      Mirror of execute_pick.
+      New behavior:
+        - Unpack params: obj, boxel, grasp, q_hover, q_release, traj
+        - Follow traj (descent from q_hover to q_release)
+        - open_gripper
+        - Remove constraint
+        - Physics settle (existing 30-step loop)
+        - Return q_release
+
+  (9) Action dispatcher (test_full_pipeline.py, ~line 503/537):
+      Update param unpacking from 4 params to 6 params for pick/place.
+
+  (10) Remove TODO comments in domain_pddlstream.pddl (lines 170-173,
+       199-202) — they describe this fix and become obsolete.
+
+KEY INVARIANTS:
+  - compute-kin stream: UNCHANGED (still produces one config at 10 cm
+    above boxel center).
+  - PDDL move action definition: UNCHANGED.  But plan_motion's Python
+    implementation now checks held-object collisions.
+  - After pick/place, at_config points to q_contact/q_release, which
+    is still inside the same boxel (config_for_boxel certified).
+  - No solve_ik() calls remain in execute_pick/execute_place.
+  - The descent trajectory is produced by the stream (during planning),
+    not computed at execution time.
+  - All arm motion (move, pick descent, place descent) is now
+    collision-checked, including held-object-vs-environment.
 
 Related: #3 (sense also has hidden motion — same class of issue)
 
@@ -336,39 +445,6 @@ Fix:   ONE COMMIT — multi-variant place actions (agreed in meeting):
        (b) Add corresponding stream in stream.pddl.
        (c) Implement adjacency + union-fitness test in streams.py.
        (d) Optionally generalise to place-in-N-boxels.
-
-
-================================================================================
-#7. PICK ACTION — PDDL/PYTHON SCOPE MISMATCH
-================================================================================
-Priority: SUBSUMED by #1
-Where:    (see #1)
-
-What:  Previously proposed decomposing pick into 3 PDDL sub-actions
-       (approach_pick, grasp, lift).  This is unnecessary: #1's fix
-       makes move handle all collision-aware transit and pick becomes
-       a gripper-only action.  No PDDL decomposition needed.
-
-Status: Subsumed by #1.  The "full decomposition" approach adds PDDL
-        complexity without benefit — plan_motion already handles the
-        approach (via move) and lift (via the next move's RRT).
-
-Related: #1, #8
-
-
-================================================================================
-#8. PLACE ACTION — PDDL/PYTHON SCOPE MISMATCH
-================================================================================
-Priority: SUBSUMED by #1
-Where:    (see #1)
-
-What:  Same as #7.  Previously proposed decomposing place into 3 PDDL
-       sub-actions.  Subsumed by #1's fix: move handles transit,
-       place becomes a gripper-only release action.
-
-Status: Subsumed by #1.
-
-Related: #1, #7
 
 
 ================================================================================
@@ -651,22 +727,6 @@ Related: #5 (placement re-blocks cleared corridor), #4 (stale world model),
 
 
 ================================================================================
-#23. REDUNDANT IK IN EXECUTION — RE-IK VS. STREAMED CONFIG
-================================================================================
-Priority: SUBSUMED by #1
-Where:    (see #1)
-
-What:  execute_pick/place re-solve IK instead of using the streamed
-       config.  This is one of the three sub-problems unified in #1.
-
-Status: Subsumed by #1.  When pick/place become gripper-only actions
-        that use the streamed config directly, the redundant IK
-        disappears along with the hidden sub-moves.
-
-Related: #1
-
-
-================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without
@@ -692,9 +752,10 @@ be parallelized where no dependency exists.
 
 TIER 0 — ACTIONABLE NOW (no dependencies):
   #1   Collision-blind execution + streamed-config bypass  ~3-5 days
-       (subsumes #7, #8, #23: pick/place become gripper-only;
-        move handles all collision-aware transit incl. held objects;
-        no PDDL decomposition needed — plan_motion lifts naturally)
+       (subsumes #7, #8, #23: add descent streams to pick/place;
+        held-object collision checking in plan_motion/robot_utils;
+        execute_pick/place become gripper-only with zero solve_ik;
+        at_config updates to contact config)
   #3   Sense hidden move (add at_config precondition)     ~1-2 days
   #14  Sparse visibility check (8 AABB corners)           ~1-2 days
   #18  move→sense arm blocking (extends #3)               incl. in #3
@@ -707,11 +768,6 @@ TIER 1 — Mixed dependencies (see each issue):
   #16  Camera pitch too shallow / debug mismatch            ~1 day
   #17  Scene objects out of robot reach                     ~1 day
 
-TIER 2 — SUBSUMED (no longer separate work items):
-  #7   Pick PDDL scope mismatch                             SUBSUMED by #1
-  #8   Place PDDL scope mismatch                            SUBSUMED by #1
-  #23  Redundant IK in execution                            SUBSUMED by #1
-
 TIER 3 — THESIS EVALUATION (independent of code fixes):
   #9   Metric collection + experiment runner                ~3-5 days
   #10  Baseline: uniform voxelization           depends #9  ~3-5 days
@@ -719,9 +775,10 @@ TIER 3 — THESIS EVALUATION (independent of code fixes):
   #12  Scalability analysis                     depends #9  ~2-3 days
   #13  Recursive object discovery                           ~2-3 days
 
-Total: 15 independent items (#1, #3–#4, #6, #9–#18, #21; #7/#8/#23 subsumed by #1;
+Total: 12 open items (#1, #3–#4, #6, #9–#18, #21;
       deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
-      resolved #5, #19, #20, #22 → archive/CODEBASE_AUDIT_RESOLVED.txt)
+      resolved/subsumed #5, #7, #8, #19, #20, #22, #23 →
+        archive/CODEBASE_AUDIT_RESOLVED.txt)
 Estimated effort: ~8-11 weeks sequential; less with parallelism
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
