@@ -447,9 +447,9 @@ def main(gui=True, run_logger=None, scene_config=None,
 
                 # Retract arm to home so it doesn't block the camera's
                 # line of sight to the shadow region (audit #79).
-                home_joints = planner.home_config.joint_positions
-                move_robot_smooth(robot_id, home_joints, gui, steps=40)
-                current_config = planner.home_config
+                # home_joints = planner.home_config.joint_positions
+                # move_robot_smooth(robot_id, home_joints, gui, steps=40)
+                # current_config = planner.home_config
 
                 shadow_boxel = registry.get_boxel(str(shadow_id))
                 if shadow_boxel is None:
@@ -946,19 +946,19 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     """
     # Same clearances as execute_pick — see comments there.
     approach_height = 0.10
-    retreat_height = 0.25
+    # retreat_height = 0.25
     approach_dir = np.array([0.0, 0.0, 1.0])
 
     # Mirror of execute_pick's waypoint computation, but targeting the
     # destination boxel center instead of the object's current position.
     contact_ee = place_pos + grasp.position
     approach_ee = contact_ee + approach_dir * approach_height
-    retreat_ee = contact_ee + approach_dir * retreat_height
+    # retreat_ee = contact_ee + approach_dir * retreat_height
 
     pc = env.client_id
     approach_joints = solve_ik(robot_id, approach_ee, grasp.orientation, pc)
     contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc)
-    retreat_joints = solve_ik(robot_id, retreat_ee, grasp.orientation, pc)
+    # retreat_joints = solve_ik(robot_id, retreat_ee, grasp.orientation, pc)
 
     # Same IK failure triage as execute_pick — contact is mandatory,
     # approach/retreat have fallbacks.
@@ -969,10 +969,10 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
         print(f"    WARNING: IK failed for place approach of {obj_name}, "
               f"using contact config directly")
         approach_joints = contact_joints
-    if retreat_joints is None:
-        print(f"    WARNING: IK failed for place retreat of {obj_name}, "
-              f"using approach config as fallback")
-        retreat_joints = approach_joints
+    # if retreat_joints is None:
+    #     print(f"    WARNING: IK failed for place retreat of {obj_name}, "
+    #           f"using approach config as fallback")
+    #     retreat_joints = approach_joints
 
     # Execute the place sequence: approach → lower → release → settle → retreat
     move_robot_smooth(robot_id, approach_joints, gui)
@@ -991,7 +991,7 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     for _ in range(30):
         p.stepSimulation()
 
-    move_robot_smooth(robot_id, retreat_joints, gui)
+    # move_robot_smooth(robot_id, retreat_joints, gui)
 
     # Read actual joint state to prevent drift accumulation (audit #86).
     actual_joints = np.array(
