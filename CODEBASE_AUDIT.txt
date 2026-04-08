@@ -19,6 +19,17 @@ Restructured: 2026-03-24
     body had been mislabeled #2), #19, #20, #22.
   2026-04-06 — Moved subsumed #7, #8, #23 to
     archive/CODEBASE_AUDIT_RESOLVED.txt (subsumed by #1).
+  2026-04-08 — #1 partial (held-object + runtime visibility):
+    plan_motion/robot_utils hold grasp_ee_offset on RobotConfig (from
+    grasp.position in compute_kin_solution); collision checks position each
+    held body at EE × offset via p.multiplyTransforms (not at bare EE
+    origin).  held_body_ids = intersection of endpoint ignored_body_ids
+    (both endpoints must ignore the same body).  is_path_collision_free
+    and RRT extend/connect/smooth pass held_body_ee_offset.  Execution:
+    detect_execution_collisions after move waypoints and after pick, with
+    optional body_id_to_name for readable logs; no collision probe after
+    place while the object is no longer constrained (avoids table-contact
+    false positives).  Items (a)–(c) under #1 remain open.
   Issue #2 (full boxel merge condition, old #103) DEFERRED 2026-04-05 →
     archive/CODEBASE_AUDIT_DEFERRED.txt.  Convex-only merge accepted for
     current scope; open issue list below is #1, #3–#4, #6–#21
@@ -171,16 +182,15 @@ Four problems in how pick/place are modeled and executed:
       naturally lifts to clear obstacles because it must find a
       collision-free path while the arm holds the object.
 
-  (d) HELD-OBJECT COLLISIONS NOT CHECKED: plan_motion's collision
-      checking (is_config_collision_free in robot_utils.py) only calls
-      p.getContactPoints(bodyA=robot_id).  This detects robot-vs-
-      environment collisions but NOT held-object-vs-environment
-      collisions.  When the arm holds an object, the RRT can produce
-      paths where the held object clips through other objects.
-      The ignored_body_ids mechanism works the wrong way: it tells
-      the checker to SKIP the held body (so gripper-touching-object
-      is not flagged), but never adds a collision check FOR the held
-      body against the environment.
+  (d) HELD-OBJECT COLLISIONS NOT CHECKED: [IMPLEMENTED 2026-04-08]
+      Previously, plan_motion's collision checking only exercised the
+      robot links; held geometry could clip the environment during transit.
+      Fix in robot_utils.py / streams.py: for each held body, after FK
+      snapshot, reset its base pose using EE world transform composed with
+      grasp_ee_offset (RobotConfig); run getContactPoints on held bodies
+      and filter robot/held self-pairs.  plan_motion derives held_body_ids
+      from the intersection of q1 and q2 ignored_body_ids so transit
+      checks only apply when both endpoints agree an object is held.
 
 INTENDED ACTION FLOW (after fix)
 ---------------------------------
@@ -198,58 +208,54 @@ FIX — ONE COMMIT
 -----------------
 Changes span 5 files.  compute-kin stream is UNCHANGED.
 
-  (1) HELD-OBJECT COLLISION CHECKING (robot_utils.py):
-      is_config_collision_free:
-        - Accept a new parameter: held_body_ids (set of PyBullet body
-          IDs currently attached to the gripper via constraint).
-        - After the existing robot contact check, also call
-          p.getContactPoints(bodyA=held_id) for each held body.
-        - Filter out contacts between the held body and the robot
-          (they are intentionally in contact via the constraint).
-        - Any remaining contact = held object collides with
-          environment → return False.
-        - Implementation detail: p.resetJointState does NOT update
-          constraint-attached bodies.  After setting robot joints,
-          must manually compute the held body's world pose from the
-          EE link state + stored relative transform, then call
-          p.resetBasePositionAndOrientation on the held body before
-          running p.performCollisionDetection.
-      is_path_collision_free:
-        - Pass held_body_ids through to is_config_collision_free.
+  (1) HELD-OBJECT COLLISION CHECKING (robot_utils.py) — DONE:
+      is_config_collision_free / is_path_collision_free:
+        - held_body_ids, per-body held_body_ee_offset dict (from
+          RobotConfig.grasp_ee_offset set in compute_kin_solution).
+        - Pose held bodies with p.multiplyTransforms(ee_pos, ee_orn,
+          offset_pos, offset_orn) before performCollisionDetection.
+        - Filter robot-held and support contacts; remaining = collision.
+      detect_execution_collisions (optional body_names): runtime
+        performCollisionDetection + getContactPoints for visibility
+        during scripted execution (test_full_pipeline).
 
-  (2) plan_motion (streams.py):
-      - Extract held_body_ids from the endpoint configs'
-        ignored_body_ids (these already carry the held object's
-        PyBullet body ID).
-      - Pass held_body_ids to all collision-check calls (RRT
-        extend/connect, path validation, smoothing).
+  (2) plan_motion (streams.py) — held-object portion DONE:
+      - held_body_ids = q1.ignored_body_ids & q2.ignored_body_ids.
+      - Pass held_body_ids and held_body_ee_offset through RRT
+        extend/connect, path validation, smoothing.
       - PDDL stream definition (stream.pddl) is UNCHANGED — same
         inputs/outputs/certified facts.
 
-  (3) NEW STREAM — plan-pick-descent (stream.pddl + streams.py):
-      Inputs:  ?q_hover (the compute-kin config), ?o, ?b, ?g
-      Outputs: ?q_contact, ?t_descent
-      Certified: (Config ?q_contact) (Trajectory ?t_descent)
-                 (pick_descent ?q_hover ?q_contact ?t_descent)
-                 (config_for_boxel ?q_contact ?b)
+  (3) NEW STREAM — compute-contact-config (stream.pddl + streams.py):
+      Computes the contact/release config only.  Does NOT plan a
+      trajectory — the existing plan-motion stream handles that.
+
+      (:stream compute-contact-config
+        :inputs (?o ?b ?g)
+        :domain (and (Obj ?o) (Boxel ?b) (valid_grasp ?o ?g))
+        :outputs (?q_contact)
+        :certified (and (Config ?q_contact)
+                        (contact_config ?o ?b ?g ?q_contact)
+                        (config_for_boxel ?q_contact ?b)))
 
       Implementation (streams.py):
         - Compute contact EE position from boxel center + small Z
           offset (just above object surface, e.g. [0, 0, 0.02]).
         - Solve IK for contact position → ?q_contact.
-        - Build a short linear trajectory from ?q_hover to ?q_contact.
-        - Optionally collision-check the descent path.
+        - Attach the same ignored_body_ids as compute-kin (the
+          target object's body ID) so plan-motion knows to skip it.
 
-  (4) NEW STREAM — plan-place-descent (stream.pddl + streams.py):
-      Mirror of plan-pick-descent for the place action.
-      Inputs:  ?q_hover, ?o, ?b, ?g
-      Outputs: ?q_release, ?t_descent
-      Certified: (Config ?q_release) (Trajectory ?t_descent)
-                 (place_descent ?q_hover ?q_release ?t_descent)
-                 (config_for_boxel ?q_release ?b)
+  (4) TRAJECTORY PLANNING — reuse existing plan-motion:
+      The descent from ?q_hover to ?q_contact uses the SAME
+      plan-motion stream that move uses.  Same RRT, same collision
+      checking (now with held-object awareness from fix (1)/(2)).
+      No new trajectory stream needed.
+
+      PDDLStream will automatically bind plan-motion(?q_hover,
+      ?q_contact) → ?t_descent when both configs exist.
 
   (5) PDDL PICK (domain_pddlstream.pddl):
-      Add new predicate: (pick_descent ?q1 ?q2 ?t)
+      Add new predicate: (contact_config ?o ?b ?g ?q)
 
       (:action pick
         :parameters (?o ?b ?g ?q_hover ?q_contact ?t_descent)
@@ -261,7 +267,8 @@ Changes span 5 files.  compute-kin stream is UNCHANGED.
           (obj_at_boxel_KIF ?o ?b)
           (obj_at_boxel ?o ?b)
           (kin_solution ?o ?b ?g ?q_hover)
-          (pick_descent ?q_hover ?q_contact ?t_descent))
+          (contact_config ?o ?b ?g ?q_contact)
+          (motion ?q_hover ?q_contact ?t_descent))
         :effect (and
           (holding ?o)
           (not (handempty))
@@ -270,7 +277,8 @@ Changes span 5 files.  compute-kin stream is UNCHANGED.
           (not (at_config ?q_hover))))
 
   (6) PDDL PLACE (domain_pddlstream.pddl):
-      Add new predicate: (place_descent ?q1 ?q2 ?t)
+      Reuses the same (contact_config) predicate and (motion)
+      for the descent trajectory.
 
       (:action place
         :parameters (?o ?b ?g ?q_hover ?q_release ?t_descent)
@@ -283,7 +291,8 @@ Changes span 5 files.  compute-kin stream is UNCHANGED.
           (on_surface ?b)
           (boxel_fits ?o ?b)
           (kin_solution ?o ?b ?g ?q_hover)
-          (place_descent ?q_hover ?q_release ?t_descent))
+          (contact_config ?o ?b ?g ?q_release)
+          (motion ?q_hover ?q_release ?t_descent))
         :effect (and
           (handempty)
           (obj_at_boxel ?o ?b)
@@ -299,8 +308,8 @@ Changes span 5 files.  compute-kin stream is UNCHANGED.
       New behavior:
         - Unpack params: obj, boxel, grasp, q_hover, q_contact, traj
         - open_gripper
-        - Follow traj (descent from q_hover to q_contact) the same
-          way the move handler follows its trajectory
+        - Follow traj waypoints with move_robot_smooth (same code
+          the move handler uses to follow its trajectory)
         - close_gripper
         - Create constraint (same weld logic as current code)
         - Return (constraint_id, q_contact)
@@ -309,7 +318,7 @@ Changes span 5 files.  compute-kin stream is UNCHANGED.
       Mirror of execute_pick.
       New behavior:
         - Unpack params: obj, boxel, grasp, q_hover, q_release, traj
-        - Follow traj (descent from q_hover to q_release)
+        - Follow traj waypoints with move_robot_smooth
         - open_gripper
         - Remove constraint
         - Physics settle (existing 30-step loop)
@@ -324,15 +333,19 @@ Changes span 5 files.  compute-kin stream is UNCHANGED.
 KEY INVARIANTS:
   - compute-kin stream: UNCHANGED (still produces one config at 10 cm
     above boxel center).
-  - PDDL move action definition: UNCHANGED.  But plan_motion's Python
-    implementation now checks held-object collisions.
+  - plan-motion stream: UNCHANGED in PDDL definition.  Python
+    implementation enhanced with held-object collision checking.
+    Reused by both move and pick/place (descent trajectory).
+  - PDDL move action definition: UNCHANGED.
   - After pick/place, at_config points to q_contact/q_release, which
     is still inside the same boxel (config_for_boxel certified).
   - No solve_ik() calls remain in execute_pick/execute_place.
-  - The descent trajectory is produced by the stream (during planning),
-    not computed at execution time.
-  - All arm motion (move, pick descent, place descent) is now
-    collision-checked, including held-object-vs-environment.
+  - All trajectories (move and descent) are produced by streams
+    during planning, not computed at execution time.
+  - Execution uses move_robot_smooth for all trajectory following
+    (move handler, pick handler, place handler — same code path).
+  - All arm motion is collision-checked via plan-motion's RRT,
+    including held-object-vs-environment.
 
 Related: #3 (sense also has hidden motion — same class of issue)
 
@@ -752,10 +765,9 @@ be parallelized where no dependency exists.
 
 TIER 0 — ACTIONABLE NOW (no dependencies):
   #1   Collision-blind execution + streamed-config bypass  ~3-5 days
-       (subsumes #7, #8, #23: add descent streams to pick/place;
-        held-object collision checking in plan_motion/robot_utils;
-        execute_pick/place become gripper-only with zero solve_ik;
-        at_config updates to contact config)
+       (partial 2026-04-08: held-object RRT checks + execution collision
+        prints DONE; remainder: descent streams, gripper-only execute,
+        at_config contact, collision-checked sub-moves)
   #3   Sense hidden move (add at_config precondition)     ~1-2 days
   #14  Sparse visibility check (8 AABB corners)           ~1-2 days
   #18  move→sense arm blocking (extends #3)               incl. in #3

@@ -103,7 +103,9 @@ def is_config_collision_free(robot_id: int, joint_positions,
                               physics_client: int = 0,
                               ignored_bodies=None,
                               allow_gripper_collisions: bool = False,
-                              log_collisions: bool = True) -> bool:
+                              log_collisions: bool = True,
+                              held_body_ids=None,
+                              held_body_ee_offset=None) -> bool:
     """
     Check whether a 7-DOF arm configuration is collision-free.
 
@@ -121,6 +123,12 @@ def is_config_collision_free(robot_id: int, joint_positions,
       and non-robot bodies are also ignored.  Use this for pick/place
       endpoint checks where the gripper must enter cluttered space.
 
+    When *held_body_ids* is provided, those bodies are repositioned to
+    follow the end-effector at the hypothetical configuration and checked
+    for environment collisions.  ``resetJointState`` does not move
+    constraint-attached bodies, so we manually compute the EE world
+    pose and teleport each held body there before collision detection.
+
     Rendering is managed via ``RenderingLock`` — safe to call both
     standalone and from within an outer lock (e.g. planning phase).
 
@@ -133,14 +141,28 @@ def is_config_collision_free(robot_id: int, joint_positions,
                                   environment collision reporting.
         log_collisions:           If True, log the first collision found
                                   at DEBUG level.
+        held_body_ids:            Optional set/frozenset of body IDs
+                                  attached to the gripper.  These are
+                                  repositioned to the EE pose and checked
+                                  for environment collisions.
+        held_body_ee_offset:      Optional [x, y, z] offset from the EE
+                                  to the held object center (the grasp
+                                  clearance).  The held body is placed at
+                                  ``ee_pos - offset`` in the EE frame.
+                                  Without this, the body is placed at the
+                                  EE origin, which is too high for
+                                  top-down grasps.
 
     Returns:
         True if the configuration has no disallowed contacts.
     """
     if ignored_bodies is None:
         ignored_bodies = frozenset()
+    if held_body_ids is None:
+        held_body_ids = frozenset()
 
     saved = None
+    saved_held = {}
     with RenderingLock(physics_client):
         try:
             saved = [p.getJointState(robot_id, i, physicsClientId=physics_client)[0]
@@ -149,6 +171,28 @@ def is_config_collision_free(robot_id: int, joint_positions,
             for i, angle in zip(ARM_JOINT_INDICES, joint_positions):
                 p.resetJointState(robot_id, i, angle,
                                   physicsClientId=physics_client)
+
+            if held_body_ids:
+                ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK,
+                                         computeForwardKinematics=True,
+                                         physicsClientId=physics_client)
+                ee_pos, ee_orn = ee_state[4], ee_state[5]
+
+                if held_body_ee_offset is not None:
+                    offset_local = [-held_body_ee_offset[0],
+                                    -held_body_ee_offset[1],
+                                    -held_body_ee_offset[2]]
+                    held_pos, held_orn = p.multiplyTransforms(
+                        ee_pos, ee_orn, offset_local, [0, 0, 0, 1])
+                else:
+                    held_pos, held_orn = ee_pos, ee_orn
+
+                for hid in held_body_ids:
+                    saved_held[hid] = p.getBasePositionAndOrientation(
+                        hid, physicsClientId=physics_client)
+                    p.resetBasePositionAndOrientation(
+                        hid, held_pos, held_orn,
+                        physicsClientId=physics_client)
 
             p.performCollisionDetection(physicsClientId=physics_client)
             contacts = p.getContactPoints(bodyA=robot_id,
@@ -183,18 +227,37 @@ def is_config_collision_free(robot_id: int, joint_positions,
                                  link_b if body_a == robot_id else link_a)
                 return False
 
+            for hid in held_body_ids:
+                held_contacts = p.getContactPoints(bodyA=hid,
+                                                   physicsClientId=physics_client)
+                for c in held_contacts:
+                    other = c[2] if c[1] == hid else c[1]
+                    if other == robot_id:
+                        continue
+                    if other in ignored_bodies:
+                        continue
+                    if log_collisions:
+                        logger.debug("collision: held body %d <-> body %d",
+                                     hid, other)
+                    return False
+
             return True
         finally:
             if saved is not None:
                 for i, angle in zip(ARM_JOINT_INDICES, saved):
                     p.resetJointState(robot_id, i, angle,
                                       physicsClientId=physics_client)
+            for hid, (pos, orn) in saved_held.items():
+                p.resetBasePositionAndOrientation(
+                    hid, pos, orn, physicsClientId=physics_client)
 
 
 def is_path_collision_free(robot_id: int, q_start, q_end,
                             physics_client: int = 0, n_checks: int = 8,
                             ignored_bodies=None,
-                            allow_gripper_collisions: bool = False) -> bool:
+                            allow_gripper_collisions: bool = False,
+                            held_body_ids=None,
+                            held_body_ee_offset=None) -> bool:
     """
     Check a straight-line joint-space path for collisions.
 
@@ -211,6 +274,10 @@ def is_path_collision_free(robot_id: int, q_start, q_end,
         allow_gripper_collisions: If True, exempt gripper/wrist links
             from environment collision reporting (same as in
             is_config_collision_free).
+        held_body_ids:   Optional set/frozenset of body IDs attached to
+            the gripper, passed through to is_config_collision_free.
+        held_body_ee_offset: Optional [x, y, z] grasp offset, passed
+            through to is_config_collision_free.
 
     Returns:
         True if every sampled configuration is collision-free.
@@ -223,9 +290,92 @@ def is_path_collision_free(robot_id: int, q_start, q_end,
             if not is_config_collision_free(robot_id, q, physics_client,
                                             ignored_bodies,
                                             allow_gripper_collisions=allow_gripper_collisions,
-                                            log_collisions=False):
+                                            log_collisions=False,
+                                            held_body_ids=held_body_ids,
+                                            held_body_ee_offset=held_body_ee_offset):
                 return False
         return True
+
+
+# =============================================================================
+# Runtime collision monitoring (execution phase)
+# =============================================================================
+
+def detect_execution_collisions(robot_id: int,
+                                physics_client: int = 0,
+                                held_body_id: int = None,
+                                support_body_ids: frozenset = frozenset(),
+                                label: str = "",
+                                body_names: dict = None) -> list:
+    """
+    Check the live simulation state for collisions and print any found.
+
+    Unlike the planning-time ``is_config_collision_free``, this operates
+    on the *actual* physics state — no joint save/restore or body
+    repositioning is needed because ``stepSimulation`` already keeps
+    constrained bodies in the correct position.
+
+    Args:
+        robot_id:         PyBullet body ID of the robot.
+        physics_client:   PyBullet physics client ID.
+        held_body_id:     Body ID currently attached to the gripper via
+                          constraint, or None if the gripper is empty.
+        support_body_ids: Body IDs of surfaces to ignore (table, ground).
+        label:            Context string printed with each collision
+                          (e.g. "move to free_001").
+        body_names:       Optional {body_id: name} dict for readable output.
+
+    Returns:
+        List of collision description strings (empty = no collisions).
+    """
+    if body_names is None:
+        body_names = {}
+
+    def _name(bid):
+        return body_names.get(bid, f"body_{bid}")
+
+    p.performCollisionDetection(physicsClientId=physics_client)
+
+    collisions = []
+    skip = support_body_ids | ({held_body_id} if held_body_id is not None else set())
+
+    contacts = p.getContactPoints(bodyA=robot_id, physicsClientId=physics_client)
+    for c in contacts:
+        body_a, body_b, link_a, link_b = c[1], c[2], c[3], c[4]
+        if body_a == robot_id and body_b == robot_id:
+            pair = (min(link_a, link_b), max(link_a, link_b))
+            if pair in _PANDA_IGNORED_SELF_PAIRS:
+                continue
+            msg = f"robot self-collision links ({link_a}, {link_b})"
+            collisions.append(msg)
+            continue
+        other = body_b if body_a == robot_id else body_a
+        robot_link = link_a if body_a == robot_id else link_b
+        if other in skip or robot_link == -1:
+            continue
+        msg = f"robot link {robot_link} <-> {_name(other)}"
+        collisions.append(msg)
+
+    if held_body_id is not None:
+        held_name = _name(held_body_id)
+        held_contacts = p.getContactPoints(bodyA=held_body_id,
+                                           physicsClientId=physics_client)
+        for c in held_contacts:
+            other = c[2] if c[1] == held_body_id else c[1]
+            if other == robot_id or other in support_body_ids:
+                continue
+            if other == held_body_id:
+                continue
+            msg = f"{held_name} (held) <-> {_name(other)}"
+            collisions.append(msg)
+
+    if collisions:
+        tag = f" [{label}]" if label else ""
+        for msg in collisions:
+            print(f"    *** COLLISION{tag}: {msg} ***")
+        logger.warning("execution collisions%s: %s", tag, collisions)
+
+    return collisions
 
 
 # =============================================================================
