@@ -59,7 +59,8 @@ from cell_merger import merge_free_space_cells
 from pddlstream_planner import PDDLStreamPlanner
 from streams import RobotConfig
 from robot_utils import (END_EFFECTOR_LINK, RenderingLock, solve_ik,
-                         move_robot_smooth, open_gripper, close_gripper)
+                         move_robot_smooth, open_gripper, close_gripper,
+                         detect_execution_collisions)
 from run_logger import RunLogger
 from visualization import BoxelVisualizer
 
@@ -301,6 +302,9 @@ def main(gui=True, run_logger=None, scene_config=None,
         env.objects["table"].object_id,
     })
 
+    body_id_to_name = {info.object_id: name
+                       for name, info in env.objects.items()}
+
     # Initialise belief (all shadows unknown) and the planner.
     # The planner is stateless between calls — all context it needs
     # (known-empty shadows, moved occluders, current config) is passed
@@ -340,6 +344,7 @@ def main(gui=True, run_logger=None, scene_config=None,
     # 4 attempts per shadow + 1 final pick.
     max_replans = 4 * len(shadows) + 1
     grasp_constraint_id = None       # set during pick, cleared after place
+    held_body_id = None              # PyBullet body ID of the held object
     exit_reason = None               # tracks why the loop ended for Phase 6
     current_config = planner.home_config  # robot's last known joint config
     # Detect infinite-replan loops: if sensing the same shadow stays
@@ -433,6 +438,12 @@ def main(gui=True, run_logger=None, scene_config=None,
                     joint_positions=actual_joints,
                     name=q2.name
                 )
+                detect_execution_collisions(
+                    robot_id, env.client_id,
+                    held_body_id=held_body_id,
+                    support_body_ids=support_body_ids,
+                    label=f"move to {dest_boxel_id}",
+                    body_names=body_id_to_name)
                 print(f"    -> Arrived at {dest_boxel_id}")
                     
             elif action_name == 'sense':
@@ -529,6 +540,13 @@ def main(gui=True, run_logger=None, scene_config=None,
                     print(f"    IK failure during pick — replanning (audit #82)")
                     break
                 grasp_constraint_id, current_config = result
+                held_body_id = env.objects[pick_obj_name].object_id
+                detect_execution_collisions(
+                    robot_id, env.client_id,
+                    held_body_id=held_body_id,
+                    support_body_ids=support_body_ids,
+                    label=f"after pick {pick_obj_name}",
+                    body_names=body_id_to_name)
                 print(f"    *** {pick_obj_name} PICKED UP! ***")
                 if pick_obj_name == target_name:
                     belief.target_found_in = visible_target_locations.get(
@@ -564,6 +582,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                     break
                 current_config = place_result
                 grasp_constraint_id = None
+                held_body_id = None
 
                 # Refresh positions after the physics settle step inside
                 # execute_place — objects may have shifted slightly.

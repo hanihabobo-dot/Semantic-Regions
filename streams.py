@@ -53,6 +53,7 @@ class RobotConfig:
     name: str = ""
     is_heuristic: bool = False
     ignored_body_ids: frozenset = field(default_factory=frozenset)
+    grasp_ee_offset: np.ndarray = None
     
     def __hash__(self):
         return hash(self.name)
@@ -558,6 +559,22 @@ class BoxelStreams:
         base_ignored = q1.ignored_body_ids | q2.ignored_body_ids
         is_pick_place = bool(q1.ignored_body_ids or q2.ignored_body_ids)
 
+        # Intersection: bodies ignored by BOTH endpoints are genuinely held
+        # by the gripper throughout the motion.  Bodies in only one endpoint
+        # (e.g. the pick target) are being approached, not carried.
+        held_body_ids = q1.ignored_body_ids & q2.ignored_body_ids
+
+        # grasp_ee_offset describes where the held body sits relative to the
+        # EE (e.g. [0, 0, 0.10] = 10 cm below EE for a top-down grasp).
+        # Without this, the planning-time checker places the held body AT the
+        # EE, which is too high and misses collisions at the real object height.
+        held_body_ee_offset = None
+        if held_body_ids:
+            for q in (q1, q2):
+                if q.grasp_ee_offset is not None:
+                    held_body_ee_offset = q.grasp_ee_offset
+                    break
+
         # For pick/place, also ignore support surfaces (table) because the
         # Panda is mounted ON the table — its lower arm links overlap the
         # table's collision geometry in PyBullet, producing false positives
@@ -566,11 +583,12 @@ class BoxelStreams:
         path_ignored = base_ignored | self.support_body_ids if is_pick_place else base_ignored
 
         logger.debug("plan_motion: %s -> %s  endpoint_ignored=%s "
-                      "path_ignored=%s gripper_relax=%s",
+                      "path_ignored=%s gripper_relax=%s held=%s",
                       q1, q2,
                       sorted(endpoint_ignored) if endpoint_ignored else '{}',
                       sorted(path_ignored) if path_ignored != endpoint_ignored else '=',
-                      is_pick_place)
+                      is_pick_place,
+                      sorted(held_body_ids) if held_body_ids else '{}')
 
         # --- Step 2: Validate endpoints are collision-free --------------------
         # If either config is already in collision, no point trying to plan.
@@ -578,13 +596,17 @@ class BoxelStreams:
         # cluttered space (it must touch the object at the pick pose).
         if not is_config_collision_free(self.robot_id, q1.joint_positions,
                                         pc, endpoint_ignored,
-                                        allow_gripper_collisions=is_pick_place):
+                                        allow_gripper_collisions=is_pick_place,
+                                        held_body_ids=held_body_ids,
+                                        held_body_ee_offset=held_body_ee_offset):
             logger.warning("plan_motion: start config %s in collision "
                            "(ignored=%s)", q1, sorted(endpoint_ignored))
             return
         if not is_config_collision_free(self.robot_id, q2.joint_positions,
                                         pc, endpoint_ignored,
-                                        allow_gripper_collisions=is_pick_place):
+                                        allow_gripper_collisions=is_pick_place,
+                                        held_body_ids=held_body_ids,
+                                        held_body_ee_offset=held_body_ee_offset):
             logger.warning("plan_motion: goal config %s in collision "
                            "(ignored=%s)", q2, sorted(endpoint_ignored))
             return
@@ -597,7 +619,9 @@ class BoxelStreams:
                                   q2.joint_positions, pc,
                                   n_checks=self.RRT_EDGE_CHECKS,
                                   ignored_bodies=path_ignored,
-                                  allow_gripper_collisions=is_pick_place):
+                                  allow_gripper_collisions=is_pick_place,
+                                  held_body_ids=held_body_ids,
+                                  held_body_ee_offset=held_body_ee_offset):
             logger.info("plan_motion: direct path clear — linear trajectory")
             yield (self._linear_trajectory(q1, q2),)
             return
@@ -608,7 +632,9 @@ class BoxelStreams:
         logger.info("plan_motion: direct path blocked — running RRT-Connect")
         path = self._rrt_connect(q1.joint_positions, q2.joint_positions,
                                  path_ignored,
-                                 allow_gripper_collisions=is_pick_place)
+                                 allow_gripper_collisions=is_pick_place,
+                                 held_body_ids=held_body_ids,
+                                 held_body_ee_offset=held_body_ee_offset)
 
         if path is None:
             logger.warning("plan_motion: RRT-Connect failed (%d iters)",
@@ -620,7 +646,9 @@ class BoxelStreams:
         # waypoints 75 times and removes everything between them if the
         # direct edge is collision-free.
         smoothed = self._smooth_path(path, path_ignored,
-                                     allow_gripper_collisions=is_pick_place)
+                                     allow_gripper_collisions=is_pick_place,
+                                     held_body_ids=held_body_ids,
+                                     held_body_ee_offset=held_body_ee_offset)
         logger.info("plan_motion: RRT path %d wps -> smoothed %d wps",
                      len(path), len(smoothed))
 
@@ -691,7 +719,9 @@ class BoxelStreams:
                      parents: List[int],
                      q_target: np.ndarray,
                      ignored_bodies: frozenset = frozenset(),
-                     allow_gripper_collisions: bool = False) -> Optional[int]:
+                     allow_gripper_collisions: bool = False,
+                     held_body_ids: frozenset = frozenset(),
+                     held_body_ee_offset=None) -> Optional[int]:
         """
         Greedily extend a tree toward *q_target* until it either reaches
         the target or hits a collision.  Returns the connecting node index,
@@ -705,7 +735,9 @@ class BoxelStreams:
             if not is_path_collision_free(self.robot_id, q_cur, q_new, pc,
                                           self.RRT_EDGE_CHECKS,
                                           ignored_bodies=ignored_bodies,
-                                          allow_gripper_collisions=allow_gripper_collisions):
+                                          allow_gripper_collisions=allow_gripper_collisions,
+                                          held_body_ids=held_body_ids,
+                                          held_body_ee_offset=held_body_ee_offset):
                 return None
             new_idx = len(nodes)
             nodes.append(q_new)
@@ -728,7 +760,9 @@ class BoxelStreams:
     def _rrt_connect(self, q_start: np.ndarray,
                      q_goal: np.ndarray,
                      ignored_bodies: frozenset = frozenset(),
-                     allow_gripper_collisions: bool = False
+                     allow_gripper_collisions: bool = False,
+                     held_body_ids: frozenset = frozenset(),
+                     held_body_ee_offset=None
                      ) -> Optional[List[np.ndarray]]:
         """
         Bidirectional RRT-Connect (Kuffner & LaValle, 2000).
@@ -776,7 +810,9 @@ class BoxelStreams:
                                           nodes_a[near_idx], q_new, pc,
                                           self.RRT_EDGE_CHECKS,
                                           ignored_bodies=ignored_bodies,
-                                          allow_gripper_collisions=allow_gripper_collisions):
+                                          allow_gripper_collisions=allow_gripper_collisions,
+                                          held_body_ids=held_body_ids,
+                                          held_body_ee_offset=held_body_ee_offset):
                 nodes_a, nodes_b = nodes_b, nodes_a
                 parents_a, parents_b = parents_b, parents_a
                 swapped = not swapped
@@ -791,7 +827,9 @@ class BoxelStreams:
             # If successful, splice the two half-paths into a full trajectory.
             connect_idx = self._try_connect(nodes_b, parents_b, q_new,
                                             ignored_bodies,
-                                            allow_gripper_collisions)
+                                            allow_gripper_collisions,
+                                            held_body_ids,
+                                            held_body_ee_offset)
             if connect_idx is not None:
                 path_a = self._trace_path(nodes_a, parents_a, new_idx_a)
                 path_b = self._trace_path(nodes_b, parents_b, connect_idx)
@@ -816,7 +854,9 @@ class BoxelStreams:
 
     def _smooth_path(self, path: List[np.ndarray],
                      ignored_bodies: frozenset = frozenset(),
-                     allow_gripper_collisions: bool = False
+                     allow_gripper_collisions: bool = False,
+                     held_body_ids: frozenset = frozenset(),
+                     held_body_ee_offset=None
                      ) -> List[np.ndarray]:
         """
         Random shortcut smoothing: pick two non-adjacent waypoints and
@@ -835,7 +875,9 @@ class BoxelStreams:
             if is_path_collision_free(self.robot_id, smoothed[i], smoothed[j],
                                       pc, self.RRT_EDGE_CHECKS,
                                       ignored_bodies=ignored_bodies,
-                                      allow_gripper_collisions=allow_gripper_collisions):
+                                      allow_gripper_collisions=allow_gripper_collisions,
+                                      held_body_ids=held_body_ids,
+                                      held_body_ee_offset=held_body_ee_offset):
                 smoothed = smoothed[:i + 1] + smoothed[j:]
         return smoothed
     
@@ -927,6 +969,7 @@ class BoxelStreams:
             # object during collision checks for the entire motion to/from
             # this config.
             config.ignored_body_ids = ignored
+            config.grasp_ee_offset = grasp.position
             self._config_counter += 1
             config.name = f"q_kin_{obj_id}_{self._config_counter}"
             logger.debug("compute_kin: %s at %s -> %s  "
