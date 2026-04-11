@@ -1,14 +1,15 @@
 """
-Free Space Discretization using Octree.
+Free Space Discretization using Octree and Post-Placement Splitting.
 
 This module handles the discretization of free space above the table surface
-using an octree-based breadth-first subdivision algorithm.
+using an octree-based breadth-first subdivision algorithm, and provides
+AABB-subtraction splitting for free-space boxels after object placement.
 """
 
 import numpy as np
 import pybullet as p
 import time
-from typing import List
+from typing import List, Optional
 from boxel_types import Boxel, OctreeNode
 
 
@@ -191,3 +192,101 @@ class FreeSpaceGenerator:
         for item_id in self.candidate_debug_items:
             p.removeUserDebugItem(item_id)
         self.candidate_debug_items = []
+
+
+def split_free_boxel(free_boxel: Boxel, object_boxel: Boxel,
+                     min_extent: float = 0.005) -> List[Boxel]:
+    """
+    Split a free-space boxel around a placed object using 6-axis AABB subtraction.
+
+    Reuses the slab-cut pattern from ShadowCalculator._subtract_aabb but keeps
+    ALL surrounding fragments (no directional filtering).
+
+    Args:
+        free_boxel: The free-space boxel being consumed by placement.
+        object_boxel: The placed object's AABB (center/extent at its new position).
+        min_extent: Minimum half-extent on any axis (metres) to keep a fragment.
+            Fragments thinner than this are degenerate slivers and are discarded.
+
+    Returns:
+        List of free-space Boxel fragments surrounding the placed object.
+        Empty list if the object fully covers the free boxel.
+    """
+    f_min = (free_boxel.center - free_boxel.extent).copy()
+    f_max = (free_boxel.center + free_boxel.extent).copy()
+
+    # Clip the object AABB to the free-boxel bounds so slight physics
+    # drift after settling doesn't produce fragments outside the original
+    # free region.
+    o_min = np.maximum(object_boxel.center - object_boxel.extent, f_min)
+    o_max = np.minimum(object_boxel.center + object_boxel.extent, f_max)
+
+    if np.any(o_min >= o_max):
+        return []
+
+    fragments: List[Boxel] = []
+
+    # --- 6-axis slab cuts (same order as shadow_calculator._subtract_aabb) ---
+    # After each cut the "remaining" region (f_min/f_max) is narrowed on
+    # that axis so subsequent cuts only carve the residual volume.
+
+    # 1. Left of object (−X slab)
+    if f_min[0] < o_min[0]:
+        slab_max = f_max.copy()
+        slab_max[0] = o_min[0]
+        _append_if_valid(fragments, f_min, slab_max, min_extent)
+        f_min[0] = o_min[0]
+
+    # 2. Right of object (+X slab)
+    if f_max[0] > o_max[0]:
+        slab_min = f_min.copy()
+        slab_min[0] = o_max[0]
+        _append_if_valid(fragments, slab_min, f_max, min_extent)
+        f_max[0] = o_max[0]
+
+    # 3. Front of object (−Y slab)
+    if f_min[1] < o_min[1]:
+        slab_max = f_max.copy()
+        slab_max[1] = o_min[1]
+        _append_if_valid(fragments, f_min, slab_max, min_extent)
+        f_min[1] = o_min[1]
+
+    # 4. Back of object (+Y slab)
+    if f_max[1] > o_max[1]:
+        slab_min = f_min.copy()
+        slab_min[1] = o_max[1]
+        _append_if_valid(fragments, slab_min, f_max, min_extent)
+        f_max[1] = o_max[1]
+
+    # 5. Bottom of object (−Z slab)
+    if f_min[2] < o_min[2]:
+        slab_max = f_max.copy()
+        slab_max[2] = o_min[2]
+        _append_if_valid(fragments, f_min, slab_max, min_extent)
+        f_min[2] = o_min[2]
+
+    # 6. Top of object (+Z slab)
+    if f_max[2] > o_max[2]:
+        slab_min = f_min.copy()
+        slab_min[2] = o_max[2]
+        _append_if_valid(fragments, slab_min, f_max, min_extent)
+
+    return fragments
+
+
+def _append_if_valid(fragments: List[Boxel],
+                     slab_min: np.ndarray, slab_max: np.ndarray,
+                     min_extent: float) -> None:
+    """Create a free-space Boxel from bounds and append if non-degenerate."""
+    extent = (slab_max - slab_min) / 2.0
+    if np.any(extent < min_extent):
+        return
+    center = (slab_min + slab_max) / 2.0
+    fragments.append(Boxel(
+        center=center,
+        extent=extent,
+        object_name="free_space_split",
+        is_occluded=False,
+        is_shadow=False,
+        is_free=True,
+    ))

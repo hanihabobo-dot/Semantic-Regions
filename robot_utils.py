@@ -191,7 +191,7 @@ def is_config_collision_free(robot_id: int, joint_positions,
                     saved_held[hid] = p.getBasePositionAndOrientation(
                         hid, physicsClientId=physics_client)
                     p.resetBasePositionAndOrientation(
-                        hid, held_pos, held_orn,
+                        hid, ee_pos, ee_orn,
                         physicsClientId=physics_client)
 
             p.performCollisionDetection(physicsClientId=physics_client)
