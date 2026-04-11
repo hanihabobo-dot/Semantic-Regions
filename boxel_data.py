@@ -162,7 +162,69 @@ class BoxelRegistry:
     def get_free_space_boxels(self) -> List[BoxelData]:
         """Get all free space boxels."""
         return self.get_boxels_by_type(BoxelType.FREE_SPACE)
-    
+
+    def remove_boxel(self, boxel_id: str) -> Optional[BoxelData]:
+        """Remove a boxel from the registry and return it (None if absent)."""
+        return self.boxels.pop(boxel_id, None)
+
+    def update_after_place(
+        self,
+        free_boxel_id: str,
+        object_boxel_id: str,
+        placed_min: np.ndarray,
+        placed_max: np.ndarray,
+        free_fragments: List,
+        table_surface_height: float,
+    ) -> List[str]:
+        """
+        Update the registry after an object is placed into a free-space boxel.
+
+        Removes the consumed free-space entry, moves the object's AABB to its
+        new position, and registers the remaining free-space fragments produced
+        by split_free_boxel + merge.
+
+        Args:
+            free_boxel_id: ID of the free-space boxel consumed by placement.
+            object_boxel_id: Registry ID of the placed object.
+            placed_min: New AABB min corner of the placed object.
+            placed_max: New AABB max corner of the placed object.
+            free_fragments: Boxel list (boxel_types.Boxel) from
+                split_free_boxel / merge_free_space_cells.
+            table_surface_height: Z height of the table surface.
+
+        Returns:
+            List of newly created free-space boxel IDs.
+        """
+        self.remove_boxel(free_boxel_id)
+
+        obj_boxel = self.get_boxel(object_boxel_id)
+        if obj_boxel is not None:
+            obj_boxel.min_corner = np.asarray(placed_min, dtype=float)
+            obj_boxel.max_corner = np.asarray(placed_max, dtype=float)
+            obj_boxel.on_surface = (
+                "table" if placed_min[2] <= table_surface_height + 0.01 else None
+            )
+
+        new_ids: List[str] = []
+        for frag in free_fragments:
+            frag_id = self.generate_id("free")
+            frag_min = frag.center - frag.extent
+            frag_max = frag.center + frag.extent
+            frag_data = BoxelData(
+                id=frag_id,
+                boxel_type=BoxelType.FREE_SPACE,
+                min_corner=frag_min,
+                max_corner=frag_max,
+                on_surface=(
+                    "table" if frag_min[2] <= table_surface_height + 0.01 else None
+                ),
+                surface_z=table_surface_height,
+            )
+            self.add_boxel(frag_data)
+            new_ids.append(frag_id)
+
+        return new_ids
+
     def compute_neighbors(self, tolerance: float = 0.01) -> None:
         """
         Compute neighbor relationships for all boxels.

@@ -55,7 +55,9 @@ import pybullet_data
 from boxel_env import (BoxelTestEnv, SceneConfig,
                        default_scene, mixed_shapes_scene, scalability_scene)
 from boxel_data import BoxelRegistry, BoxelType, create_boxel_registry_from_boxels
+from boxel_types import Boxel
 from cell_merger import merge_free_space_cells
+from free_space import split_free_boxel
 from pddlstream_planner import PDDLStreamPlanner
 from streams import RobotConfig
 from robot_utils import (END_EFFECTOR_LINK, RenderingLock, solve_ik,
@@ -121,7 +123,7 @@ class BeliefState:
 
 
 def main(gui=True, run_logger=None, scene_config=None,
-         draw_boxel_overlays=True):
+         draw_boxel_overlays=True, show_free=False):
     print("=" * 60)
     print("FULL PIPELINE: PDDLStream + Replanning")
     print("=" * 60)
@@ -180,9 +182,11 @@ def main(gui=True, run_logger=None, scene_config=None,
     occluders = [b.id for b in registry.boxels.values() if b.boxel_type == BoxelType.OBJECT]
     print(f"  {len(registry.boxels)} boxels, {len(shadows)} shadows, {len(occluders)} occluders")
     
+    viz = None
     if gui and draw_boxel_overlays:
         viz = BoxelVisualizer()
-        viz.draw_registry(registry, duration=0, label_size=1.0, skip_free=True)
+        viz.draw_registry(registry, duration=0, label_size=1.0,
+                          skip_free=not show_free)
     
     # =========================================================
     # PHASE 4: Hidden Object Scenario (ORACLE ONLY)
@@ -592,6 +596,61 @@ def main(gui=True, run_logger=None, scene_config=None,
                     if bname in env.objects:
                         binfo['position'] = np.array(env.objects[bname].position)
 
+                # --- Split the consumed free-space boxel ---
+                # The placed object occupies part of the free boxel.
+                # Subtract its AABB to recover the remaining free volume,
+                # merge the fragments, and update the registry so the
+                # planner sees accurate free space on the next replan.
+                consumed_free = registry.get_boxel(boxel_id_str)
+                if (consumed_free is not None
+                        and consumed_free.boxel_type == BoxelType.FREE_SPACE):
+                    placed_name = (boxel_to_pybullet[obj_str]['name']
+                                   if obj_str in boxel_to_pybullet
+                                   else obj_str)
+                    if placed_name in env.objects:
+                        body_id = env.objects[placed_name].object_id
+                        aabb_min, aabb_max = p.getAABB(body_id)
+                        aabb_min = np.array(aabb_min)
+                        aabb_max = np.array(aabb_max)
+
+                        free_as_boxel = Boxel(
+                            center=consumed_free.center.copy(),
+                            extent=consumed_free.extent.copy(),
+                        )
+                        obj_as_boxel = Boxel(
+                            center=(aabb_min + aabb_max) / 2.0,
+                            extent=(aabb_max - aabb_min) / 2.0,
+                        )
+
+                        fragments = split_free_boxel(free_as_boxel, obj_as_boxel)
+                        if fragments:
+                            fragments = merge_free_space_cells(fragments)
+
+                        new_ids = registry.update_after_place(
+                            free_boxel_id=boxel_id_str,
+                            object_boxel_id=obj_str,
+                            placed_min=aabb_min,
+                            placed_max=aabb_max,
+                            free_fragments=fragments,
+                            table_surface_height=env.table_surface_height,
+                        )
+
+                        for nid in new_ids:
+                            b = registry.get_boxel(nid)
+                            if b is not None:
+                                boxel_centers[nid] = b.center
+
+                        print(f"    Split {boxel_id_str} -> "
+                              f"{len(new_ids)} free fragment(s) + object boxel")
+
+                        if viz is not None:
+                            viz.remove_boxel_viz(boxel_id_str)
+                            if show_free:
+                                for nid in new_ids:
+                                    bd = registry.get_boxel(nid)
+                                    if bd is not None:
+                                        viz.draw_boxel_data(bd)
+
                 # Rebuild shadow_occluder_map from current physics state so
                 # blocks_view_at facts reflect the relocated occluder's new
                 # position on the next replan (audit #73).
@@ -604,9 +663,10 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # knows this occluder is no longer blocking its original
                 # shadow — it will emit the correct obj_at_boxel facts.
                 #
-                # NOTE (audit #44 — accepted simplification): the BoxelRegistry
-                # is NOT recomputed here.  Shadow AABBs still describe the
-                # pre-relocation geometry.  This is functionally safe because:
+                # NOTE (audit #44 — accepted simplification): Free-space
+                # boxels are now split after placement (above), but shadow
+                # AABBs still describe the pre-relocation geometry.  This
+                # is functionally safe because:
                 # (a) sense_shadow_raycasting detects the target by PyBullet
                 #     body ID — any ray that hits the target works regardless
                 #     of whether the AABB is perfectly aligned.
@@ -617,8 +677,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                 #     (audit #73 DONE), so blocks_view_at facts reflect the
                 #     current blocker positions on replan.
                 # Full shadow recomputation would require re-running the camera
-                # observation + free-space generation + cell merger pipeline,
-                # which is a significant cost for marginal accuracy gain.
+                # observation pipeline, which is a separate concern (audit #4).
                 if obj_str in boxel_to_pybullet:
                     placed_obj_name = boxel_to_pybullet[obj_str]['name']
                     belief.mark_occluder_moved(obj_str, boxel_id_str)
@@ -1038,6 +1097,11 @@ if __name__ == "__main__":
         action='store_true',
         help='Keep PyBullet GUI but skip drawing boxel AABBs/labels (debug clutter)',
     )
+    parser.add_argument(
+        '--show-free',
+        action='store_true',
+        help='Include free-space boxels in the visualisation overlay',
+    )
     parser.add_argument('--log-level', choices=['quiet', 'normal', 'verbose'],
                         default='normal',
                         help='Console verbosity (log file always captures everything)')
@@ -1076,6 +1140,7 @@ if __name__ == "__main__":
             run_logger=logger,
             scene_config=scene_cfg,
             draw_boxel_overlays=not args.no_boxel_viz,
+            show_free=args.show_free,
         )
     finally:
         logger.close()
