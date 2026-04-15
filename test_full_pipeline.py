@@ -54,7 +54,7 @@ import pybullet_data
 # run_logger: Per-run artefact capture for reproducibility
 from boxel_env import (BoxelTestEnv, SceneConfig,
                        default_scene, mixed_shapes_scene, scalability_scene)
-from boxel_data import BoxelRegistry, BoxelType, create_boxel_registry_from_boxels
+from boxel_data import BoxelData, BoxelRegistry, BoxelType, create_boxel_registry_from_boxels
 from boxel_types import Boxel
 from cell_merger import merge_free_space_cells
 from free_space import split_free_boxel
@@ -596,11 +596,15 @@ def main(gui=True, run_logger=None, scene_config=None,
                     if bname in env.objects:
                         binfo['position'] = np.array(env.objects[bname].position)
 
-                # --- Split the consumed free-space boxel ---
-                # The placed object occupies part of the free boxel.
-                # Subtract its AABB to recover the remaining free volume,
-                # merge the fragments, and update the registry so the
-                # planner sees accurate free space on the next replan.
+                # --- Re-boxelize free space after placement ---
+                # Re-run the full octree + merge pipeline (same as the
+                # initial scan in Phase 2) using the current obstacles.
+                # The previous approach of splitting the consumed boxel and
+                # trying to merge fragments failed because the CellMerger
+                # requires exact face alignment — split fragments have edges
+                # shaped by the object AABB which never align with the
+                # octree-grid edges of existing free boxels.  Re-running
+                # the octree produces fine cells that merge naturally.
                 consumed_free = registry.get_boxel(boxel_id_str)
                 if (consumed_free is not None
                         and consumed_free.boxel_type == BoxelType.FREE_SPACE):
@@ -613,38 +617,104 @@ def main(gui=True, run_logger=None, scene_config=None,
                         aabb_min = np.array(aabb_min)
                         aabb_max = np.array(aabb_max)
 
-                        free_as_boxel = Boxel(
-                            center=consumed_free.center.copy(),
-                            extent=consumed_free.extent.copy(),
-                        )
-                        obj_as_boxel = Boxel(
-                            center=(aabb_min + aabb_max) / 2.0,
-                            extent=(aabb_max - aabb_min) / 2.0,
-                        )
+                        # Snapshot old free-space boxels before mutation.
+                        old_free = {
+                            b.id: b
+                            for b in registry.get_free_space_boxels()
+                            if b.id != boxel_id_str
+                        }
 
-                        fragments = split_free_boxel(free_as_boxel, obj_as_boxel)
-                        if fragments:
-                            fragments = merge_free_space_cells(fragments)
-
-                        new_ids = registry.update_after_place(
+                        # Remove consumed boxel + update object AABB.
+                        registry.update_after_place(
                             free_boxel_id=boxel_id_str,
                             object_boxel_id=obj_str,
                             placed_min=aabb_min,
                             placed_max=aabb_max,
-                            free_fragments=fragments,
+                            free_fragments=[],
                             table_surface_height=env.table_surface_height,
                         )
 
-                        for nid in new_ids:
-                            b = registry.get_boxel(nid)
-                            if b is not None:
-                                boxel_centers[nid] = b.center
+                        # Gather current obstacles (objects + shadows).
+                        known_obstacles = [
+                            Boxel(center=bd.center.copy(),
+                                  extent=bd.extent.copy(),
+                                  object_name=bd.object_name,
+                                  is_shadow=(bd.boxel_type == BoxelType.SHADOW))
+                            for bd in registry.boxels.values()
+                            if bd.boxel_type in (BoxelType.OBJECT,
+                                                 BoxelType.SHADOW)
+                        ]
 
-                        print(f"    Split {boxel_id_str} -> "
-                              f"{len(new_ids)} free fragment(s) + object boxel")
+                        # Re-run octree + merge (same pipeline as Phase 2).
+                        fresh_cells = env.generate_free_space(
+                            known_obstacles, visualize=False)
+                        merged = merge_free_space_cells(fresh_cells)
+
+                        # Diff against old free boxels: only touch what
+                        # actually changed so unaffected boxels keep their
+                        # IDs and viz.
+                        _tol = 1e-4
+                        old_matched: set = set()
+                        new_unmatched: list = []
+                        for m in merged:
+                            found = False
+                            for oid, od in old_free.items():
+                                if oid in old_matched:
+                                    continue
+                                if (np.allclose(m.center, od.center,
+                                                atol=_tol) and
+                                        np.allclose(m.extent, od.extent,
+                                                    atol=_tol)):
+                                    old_matched.add(oid)
+                                    found = True
+                                    break
+                            if not found:
+                                new_unmatched.append(m)
+                        old_removed = set(old_free) - old_matched
+
+                        # Remove stale free boxels from registry.
+                        for oid in old_removed:
+                            registry.remove_boxel(oid)
+                            boxel_centers.pop(oid, None)
+
+                        # Register genuinely new free boxels.
+                        new_ids: list = []
+                        for frag in new_unmatched:
+                            fid = registry.generate_id("free")
+                            fmin = frag.center - frag.extent
+                            fmax = frag.center + frag.extent
+                            fd = BoxelData(
+                                id=fid,
+                                boxel_type=BoxelType.FREE_SPACE,
+                                min_corner=fmin,
+                                max_corner=fmax,
+                                on_surface=(
+                                    "table"
+                                    if fmin[2] <= env.table_surface_height + 0.01
+                                    else None
+                                ),
+                                surface_z=env.table_surface_height,
+                            )
+                            registry.add_boxel(fd)
+                            new_ids.append(fid)
+                            boxel_centers[fid] = fd.center
+
+                        total_free = len(registry.get_free_space_boxels())
+                        print(f"    Re-boxelize: {len(old_removed)} removed, "
+                              f"{len(new_ids)} new, "
+                              f"{len(old_matched)} unchanged "
+                              f"({total_free} free total)")
 
                         if viz is not None:
                             viz.remove_boxel_viz(boxel_id_str)
+                            for oid in old_removed:
+                                viz.remove_boxel_viz(oid)
+                            # Redraw the moved object boxel at its new
+                            # position (old red wireframe is stale).
+                            moved_bd = registry.get_boxel(obj_str)
+                            if moved_bd is not None:
+                                viz.remove_boxel_viz(obj_str)
+                                viz.draw_boxel_data(moved_bd)
                             if show_free:
                                 for nid in new_ids:
                                     bd = registry.get_boxel(nid)

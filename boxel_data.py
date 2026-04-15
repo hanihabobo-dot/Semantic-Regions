@@ -167,6 +167,50 @@ class BoxelRegistry:
         """Remove a boxel from the registry and return it (None if absent)."""
         return self.boxels.pop(boxel_id, None)
 
+    def get_adjacent_free_boxels(
+        self,
+        region_min: np.ndarray,
+        region_max: np.ndarray,
+        exclude_ids: Optional[Set[str]] = None,
+        tolerance: float = 0.01,
+    ) -> List['BoxelData']:
+        """
+        Return all FREE_SPACE boxels that share a face with a given AABB region.
+
+        Two AABBs share a face when they touch on one axis (within *tolerance*)
+        and overlap on the other two axes by more than *tolerance*.  This is the
+        same adjacency criterion used by ``compute_neighbors`` / ``_check_adjacency``.
+
+        Args:
+            region_min: [x, y, z] minimum corner of the query region.
+            region_max: [x, y, z] maximum corner of the query region.
+            exclude_ids: Boxel IDs to skip (e.g. the consumed boxel itself).
+            tolerance: Face-touch and overlap tolerance in metres.
+
+        Returns:
+            List of adjacent BoxelData entries (type FREE_SPACE only).
+        """
+        exclude = exclude_ids or set()
+        result: List[BoxelData] = []
+        for bd in self.boxels.values():
+            if bd.boxel_type != BoxelType.FREE_SPACE or bd.id in exclude:
+                continue
+            b_min, b_max = bd.min_corner, bd.max_corner
+            for axis in range(3):
+                other = [i for i in range(3) if i != axis]
+                overlap_ok = True
+                for oa in other:
+                    if min(region_max[oa], b_max[oa]) - max(region_min[oa], b_min[oa]) < tolerance:
+                        overlap_ok = False
+                        break
+                if not overlap_ok:
+                    continue
+                if (abs(region_max[axis] - b_min[axis]) < tolerance or
+                        abs(b_max[axis] - region_min[axis]) < tolerance):
+                    result.append(bd)
+                    break
+        return result
+
     def update_after_place(
         self,
         free_boxel_id: str,
