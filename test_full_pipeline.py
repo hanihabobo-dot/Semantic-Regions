@@ -67,6 +67,98 @@ from run_logger import RunLogger
 from visualization import BoxelVisualizer
 
 
+def reboxelize_free_space(registry, env, boxel_centers, viz, show_free):
+    """
+    Re-run the full octree + merge pipeline and diff against the current
+    registry's free-space boxels.  Only changed boxels are removed/added.
+
+    Call this after any mutation that changes which regions are free
+    (object placement, shadow removal, new objects discovered, etc.).
+
+    Args:
+        registry: BoxelRegistry — will be mutated in place.
+        env: BoxelTestEnv — for ``generate_free_space``.
+        boxel_centers: Dict[str, np.ndarray] — updated in place.
+        viz: BoxelVisualizer or None.
+        show_free: Whether to draw free-space boxels.
+
+    Returns:
+        Tuple[List[str], Set[str]]: (new_ids, old_removed_ids).
+    """
+    old_free = {b.id: b for b in registry.get_free_space_boxels()}
+
+    known_obstacles = [
+        Boxel(center=bd.center.copy(),
+              extent=bd.extent.copy(),
+              object_name=bd.object_name,
+              is_shadow=(bd.boxel_type == BoxelType.SHADOW))
+        for bd in registry.boxels.values()
+        if bd.boxel_type in (BoxelType.OBJECT, BoxelType.SHADOW)
+    ]
+
+    fresh_cells = env.generate_free_space(known_obstacles, visualize=False)
+    merged = merge_free_space_cells(fresh_cells)
+
+    _tol = 1e-4
+    old_matched: set = set()
+    new_unmatched: list = []
+    for m in merged:
+        found = False
+        for oid, od in old_free.items():
+            if oid in old_matched:
+                continue
+            if (np.allclose(m.center, od.center, atol=_tol) and
+                    np.allclose(m.extent, od.extent, atol=_tol)):
+                old_matched.add(oid)
+                found = True
+                break
+        if not found:
+            new_unmatched.append(m)
+    old_removed = set(old_free) - old_matched
+
+    for oid in old_removed:
+        registry.remove_boxel(oid)
+        boxel_centers.pop(oid, None)
+
+    new_ids: list = []
+    for frag in new_unmatched:
+        fid = registry.generate_id("free")
+        fmin = frag.center - frag.extent
+        fmax = frag.center + frag.extent
+        fd = BoxelData(
+            id=fid,
+            boxel_type=BoxelType.FREE_SPACE,
+            min_corner=fmin,
+            max_corner=fmax,
+            on_surface=(
+                "table"
+                if fmin[2] <= env.table_surface_height + 0.01
+                else None
+            ),
+            surface_z=env.table_surface_height,
+        )
+        registry.add_boxel(fd)
+        new_ids.append(fid)
+        boxel_centers[fid] = fd.center
+
+    total_free = len(registry.get_free_space_boxels())
+    print(f"    Re-boxelize: {len(old_removed)} removed, "
+          f"{len(new_ids)} new, "
+          f"{len(old_matched)} unchanged "
+          f"({total_free} free total)")
+
+    if viz is not None:
+        for oid in old_removed:
+            viz.remove_boxel_viz(oid)
+        if show_free:
+            for nid in new_ids:
+                bd = registry.get_boxel(nid)
+                if bd is not None:
+                    viz.draw_boxel_data(bd)
+
+    return new_ids, old_removed
+
+
 class BeliefState:
     """
     Epistemic model of the robot's partial observability.
@@ -478,12 +570,13 @@ def main(gui=True, run_logger=None, scene_config=None,
                         occluder_pybullet_ids.add(boxel_to_pybullet[blocker_bid]['pybullet_id'])
                 shadow_occluder_id = shadow_boxel.created_by_boxel_id
 
-                sense_outcome, blocked_fraction = sense_shadow_raycasting(
+                sense_outcome, blocked_fraction, detected_bodies = sense_shadow_raycasting(
                     env.camera_position,
                     shadow_boxel,
                     target_pybullet_id,
                     occluder_pybullet_ids,
-                    robot_id=robot_id
+                    robot_id=robot_id,
+                    support_body_ids=support_body_ids,
                 )
 
                 # --- Interpret sensing result ---
@@ -491,13 +584,127 @@ def main(gui=True, run_logger=None, scene_config=None,
                     # Success: remaining plan actions will pick the target.
                     belief.mark_sensed(str(shadow_id), found=True)
                     print(f"    *** TARGET FOUND in {shadow_id}! (ray-cast) ***")
-                elif sense_outcome == "clear_but_empty":
-                    # Shadow is visible but target isn't there — eliminate
-                    # this shadow and replan to try the next one.
-                    belief.mark_sensed(str(shadow_id), found=False)
-                    print(f"    Target NOT in {shadow_id} (ray-cast: view clear but no target hit)")
+                elif sense_outcome in ("clear_but_empty", "contains_nontarget"):
+                    sid_str = str(shadow_id)
+                    belief.mark_sensed(sid_str, found=False)
+
+                    # Remove the sensed shadow from registry + tracking.
+                    registry.remove_boxel(sid_str)
+                    if sid_str in shadows:
+                        shadows.remove(sid_str)
+                    shadow_occluder_map.pop(sid_str, None)
+
+                    if sense_outcome == "contains_nontarget":
+                        # Non-target objects discovered inside the shadow.
+                        # Create OBJECT + SHADOW boxels for each one so the
+                        # planner knows about them on the next replan.
+                        discovered_names = [
+                            body_id_to_name[bid]
+                            for bid in detected_bodies
+                            if bid in body_id_to_name
+                        ]
+                        print(f"    Shadow {shadow_id} contains non-target "
+                              f"object(s): {discovered_names}")
+
+                        for obj_name in discovered_names:
+                            obj_info = env.objects.get(obj_name)
+                            if obj_info is None:
+                                continue
+                            bid = obj_info.object_id
+                            aabb_min, aabb_max = p.getAABB(bid)
+                            aabb_min = np.array(aabb_min)
+                            aabb_max = np.array(aabb_max)
+                            obj_center = (aabb_min + aabb_max) / 2.0
+                            obj_extent = (aabb_max - aabb_min) / 2.0
+
+                            # Register OBJECT boxel.
+                            obj_bd = BoxelData(
+                                id=obj_name,
+                                boxel_type=BoxelType.OBJECT,
+                                min_corner=aabb_min,
+                                max_corner=aabb_max,
+                                object_name=obj_name,
+                                is_occluder=False,
+                                on_surface=(
+                                    "table"
+                                    if aabb_min[2] <= env.table_surface_height + 0.01
+                                    else None
+                                ),
+                                surface_z=env.table_surface_height,
+                            )
+                            registry.add_boxel(obj_bd)
+                            boxel_centers[obj_name] = obj_bd.center
+                            object_body_ids[obj_name] = bid
+                            boxel_to_pybullet[obj_name] = {
+                                'name': obj_name,
+                                'pybullet_id': bid,
+                                'position': np.array(obj_info.position),
+                            }
+
+                            # Compute shadow for this newly visible object.
+                            obj_as_boxel = Boxel(
+                                center=obj_center, extent=obj_extent,
+                                object_name=obj_name, is_occluder=False)
+                            other_solids = [
+                                Boxel(center=bd.center.copy(),
+                                      extent=bd.extent.copy(),
+                                      object_name=bd.object_name)
+                                for bd in registry.boxels.values()
+                                if (bd.boxel_type == BoxelType.OBJECT
+                                    and bd.id != obj_name)
+                            ]
+                            shadow_parts = env.shadow_calculator.calculate_shadow_boxel(
+                                obj_as_boxel, other_solids)
+
+                            if shadow_parts:
+                                obj_bd.is_occluder = True
+                                for sp in shadow_parts:
+                                    s_id = registry.generate_id("shadow")
+                                    s_min = sp.center - sp.extent
+                                    s_max = sp.center + sp.extent
+                                    s_bd = BoxelData(
+                                        id=s_id,
+                                        boxel_type=BoxelType.SHADOW,
+                                        min_corner=s_min,
+                                        max_corner=s_max,
+                                        created_by_boxel_id=obj_name,
+                                        created_by_object=obj_name,
+                                        on_surface=(
+                                            "table"
+                                            if s_min[2] <= env.table_surface_height + 0.01
+                                            else None
+                                        ),
+                                        surface_z=env.table_surface_height,
+                                    )
+                                    registry.add_boxel(s_bd)
+                                    obj_bd.shadow_boxel_ids.append(s_id)
+                                    shadows.append(s_id)
+                                    shadow_occluder_map[s_id] = [obj_name]
+                                    boxel_centers[s_id] = s_bd.center
+
+                            if viz is not None:
+                                viz.draw_boxel_data(obj_bd)
+                                for s_id in obj_bd.shadow_boxel_ids:
+                                    s_bd = registry.get_boxel(s_id)
+                                    if s_bd is not None:
+                                        viz.draw_boxel_data(s_bd)
+
+                            print(f"      -> {obj_name}: object boxel + "
+                                  f"{len(shadow_parts)} shadow(s)")
+                    else:
+                        print(f"    Target NOT in {shadow_id} "
+                              f"(ray-cast: view clear but no target hit)")
+
+                    # Re-run octree + merge now that the shadow is gone
+                    # (and possibly new object/shadow boxels were added).
+                    if viz is not None:
+                        viz.remove_boxel_viz(sid_str)
+                    reboxelize_free_space(
+                        registry, env, boxel_centers, viz, show_free)
+
                     print(f"    -> REPLANNING with updated belief...")
                     break
+
                 else:
                     # Occluder (or robot arm) still blocks the view.
                     # Track repeated failures; after 3 attempts, assume
@@ -617,14 +824,10 @@ def main(gui=True, run_logger=None, scene_config=None,
                         aabb_min = np.array(aabb_min)
                         aabb_max = np.array(aabb_max)
 
-                        # Snapshot old free-space boxels before mutation.
-                        old_free = {
-                            b.id: b
-                            for b in registry.get_free_space_boxels()
-                            if b.id != boxel_id_str
-                        }
-
                         # Remove consumed boxel + update object AABB.
+                        # Full free-space reboxelization is deferred to
+                        # after the next sense action so we pay the
+                        # octree+merge cost only once per replan cycle.
                         registry.update_after_place(
                             free_boxel_id=boxel_id_str,
                             object_boxel_id=obj_str,
@@ -634,92 +837,12 @@ def main(gui=True, run_logger=None, scene_config=None,
                             table_surface_height=env.table_surface_height,
                         )
 
-                        # Gather current obstacles (objects + shadows).
-                        known_obstacles = [
-                            Boxel(center=bd.center.copy(),
-                                  extent=bd.extent.copy(),
-                                  object_name=bd.object_name,
-                                  is_shadow=(bd.boxel_type == BoxelType.SHADOW))
-                            for bd in registry.boxels.values()
-                            if bd.boxel_type in (BoxelType.OBJECT,
-                                                 BoxelType.SHADOW)
-                        ]
-
-                        # Re-run octree + merge (same pipeline as Phase 2).
-                        fresh_cells = env.generate_free_space(
-                            known_obstacles, visualize=False)
-                        merged = merge_free_space_cells(fresh_cells)
-
-                        # Diff against old free boxels: only touch what
-                        # actually changed so unaffected boxels keep their
-                        # IDs and viz.
-                        _tol = 1e-4
-                        old_matched: set = set()
-                        new_unmatched: list = []
-                        for m in merged:
-                            found = False
-                            for oid, od in old_free.items():
-                                if oid in old_matched:
-                                    continue
-                                if (np.allclose(m.center, od.center,
-                                                atol=_tol) and
-                                        np.allclose(m.extent, od.extent,
-                                                    atol=_tol)):
-                                    old_matched.add(oid)
-                                    found = True
-                                    break
-                            if not found:
-                                new_unmatched.append(m)
-                        old_removed = set(old_free) - old_matched
-
-                        # Remove stale free boxels from registry.
-                        for oid in old_removed:
-                            registry.remove_boxel(oid)
-                            boxel_centers.pop(oid, None)
-
-                        # Register genuinely new free boxels.
-                        new_ids: list = []
-                        for frag in new_unmatched:
-                            fid = registry.generate_id("free")
-                            fmin = frag.center - frag.extent
-                            fmax = frag.center + frag.extent
-                            fd = BoxelData(
-                                id=fid,
-                                boxel_type=BoxelType.FREE_SPACE,
-                                min_corner=fmin,
-                                max_corner=fmax,
-                                on_surface=(
-                                    "table"
-                                    if fmin[2] <= env.table_surface_height + 0.01
-                                    else None
-                                ),
-                                surface_z=env.table_surface_height,
-                            )
-                            registry.add_boxel(fd)
-                            new_ids.append(fid)
-                            boxel_centers[fid] = fd.center
-
-                        total_free = len(registry.get_free_space_boxels())
-                        print(f"    Re-boxelize: {len(old_removed)} removed, "
-                              f"{len(new_ids)} new, "
-                              f"{len(old_matched)} unchanged "
-                              f"({total_free} free total)")
-
                         if viz is not None:
                             viz.remove_boxel_viz(boxel_id_str)
-                            for oid in old_removed:
-                                viz.remove_boxel_viz(oid)
-                            # Redraw the moved object boxel at its new
-                            # position (old red wireframe is stale).
                             moved_bd = registry.get_boxel(obj_str)
                             if moved_bd is not None:
                                 viz.remove_boxel_viz(obj_str)
                                 viz.draw_boxel_data(moved_bd)
-                            if show_free:
-                                for nid in new_ids:
-                                    bd = registry.get_boxel(nid)
-                                    if bd is not None:
-                                        viz.draw_boxel_data(bd)
 
                 # Rebuild shadow_occluder_map from current physics state so
                 # blocks_view_at facts reflect the relocated occluder's new
@@ -804,55 +927,55 @@ def main(gui=True, run_logger=None, scene_config=None,
 
 
 def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
-                            occluder_pybullet_ids=None, robot_id=None):
+                            occluder_pybullet_ids=None, robot_id=None,
+                            support_body_ids=None):
     """
     Sense a shadow region using PyBullet ray-casting from the fixed camera.
 
-    Returns one of three outcomes:
+    Returns one of four outcomes:
       - found_target: at least one ray hits the target
-      - clear_but_empty: no ray hits target and no ray hits the occluder
-        or robot arm
       - still_blocked: no ray hits target and at least one ray hits occluder
         or robot arm
-
-    This keeps visibility verification inside the sensing action (Phase 3):
-    blocked sensing must not be treated as "target absent".
+      - contains_nontarget: view is clear but rays hit non-target dynamic
+        objects inside the shadow (e.g. another occluder that drifted in)
+      - clear_but_empty: no ray hits any dynamic object
 
     Args:
         camera_pos: Fixed camera position [x, y, z]
         shadow_boxel: BoxelData for the shadow region to sense
         target_pybullet_id: PyBullet body ID of the target object
         occluder_pybullet_ids: Optional set/list of PyBullet body IDs for ALL
-            objects that may block camera view to this shadow (audit #99).
-            Previously only the creating occluder was checked; now all
-            blockers from compute_shadow_blockers are accepted.
-        robot_id: Optional PyBullet body ID of the robot.  If provided, rays
-            hitting the robot arm are counted as blocked (audit #83).
+            objects that may block camera view to this shadow.
+        robot_id: Optional PyBullet body ID of the robot.
+        support_body_ids: Optional frozenset of static body IDs (plane, table)
+            to ignore when collecting detected bodies.
 
     Returns:
-        Tuple[str, float]:
-          - outcome string in {"found_target", "clear_but_empty", "still_blocked"}
-          - blocked_fraction (fraction of rays blocked by occluder or robot;
-            0 when not blocked)
+        Tuple[str, float, Set[int]]:
+          - outcome string
+          - blocked_fraction (0 when not blocked)
+          - set of non-target, non-occluder dynamic body IDs detected inside
+            the shadow (empty for found_target and still_blocked)
     """
     ray_origin = np.array(camera_pos)
+    ignore_ids = {-1}
+    if robot_id is not None:
+        ignore_ids.add(robot_id)
+    if support_body_ids:
+        ignore_ids |= set(support_body_ids)
+    if occluder_pybullet_ids:
+        ignore_ids |= set(occluder_pybullet_ids)
+    ignore_ids.add(target_pybullet_id)
 
     min_c = shadow_boxel.min_corner
     max_c = shadow_boxel.max_corner
 
-    # Three Z slices through the shadow volume:
-    # - Bottom slice at +0.04 m above min (half the target height 0.08 m,
-    #   avoids hitting the table surface at min_z);
-    # - Two interior slices at 33% and 67% of the shadow height.
     z_levels = [
         min_c[2] + 0.04,
         min_c[2] + (max_c[2] - min_c[2]) * 0.33,
         min_c[2] + (max_c[2] - min_c[2]) * 0.67,
     ]
 
-    # 7×7 grid per Z slice = 147 total rays.  Empirically chosen:
-    # 5×5 missed small targets at shadow edges; 9×9 doubled ray count
-    # with negligible detection improvement.
     n = 7
     ray_froms = []
     ray_tos = []
@@ -865,15 +988,18 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
     results = p.rayTestBatch(ray_froms, ray_tos)
     occluder_hits = 0
     robot_hits = 0
+    detected_bodies: set = set()
     total_rays = len(results)
 
     for hit_obj_id, _link, _frac, _pos, _normal in results:
         if hit_obj_id == target_pybullet_id:
-            return "found_target", 0.0
+            return "found_target", 0.0, set()
         if occluder_pybullet_ids and (hit_obj_id in occluder_pybullet_ids):
             occluder_hits += 1
         elif (robot_id is not None) and (hit_obj_id == robot_id):
             robot_hits += 1
+        elif hit_obj_id not in ignore_ids:
+            detected_bodies.add(hit_obj_id)
 
     blocked_total = occluder_hits + robot_hits
     if blocked_total > 0:
@@ -881,9 +1007,12 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
         if robot_hits > 0 and occluder_hits == 0:
             print(f"    NOTE: {robot_hits}/{total_rays} rays blocked by "
                   f"robot arm (not occluder)")
-        return "still_blocked", blocked_fraction
+        return "still_blocked", blocked_fraction, set()
 
-    return "clear_but_empty", 0.0
+    if detected_bodies:
+        return "contains_nontarget", 0.0, detected_bodies
+
+    return "clear_but_empty", 0.0, set()
 
 
 def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):

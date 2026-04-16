@@ -49,6 +49,24 @@ Restructured: 2026-03-24
   - Old #76 split into #9–#12 (metrics, baselines, scalability).
   - PA-1/PA-2 merged into #9/#13; PF-2/PF-3 merged into #7/#8.
 
+  2026-04-15 — #4 PARTIAL (post-action re-boxelization):
+    Free-space re-boxelization after place and sense is implemented.
+    After place: registry.update_after_place() removes consumed free boxel
+    and updates object AABB.  After sense (clear_but_empty or
+    contains_nontarget): shadow boxel removed from registry, shadow list,
+    and shadow_occluder_map; if non-target objects discovered, OBJECT +
+    SHADOW boxels created via shadow_calculator.  Single
+    reboxelize_free_space() call after sense re-runs the full octree +
+    merge pipeline (same as Phase 2 initial scan), diffs against existing
+    free boxels to only update changed ones, and updates viz for affected
+    boxels only.  sense_shadow_raycasting extended with fourth outcome
+    "contains_nontarget" and returns detected body IDs.
+    Remaining under #4: shadow geometry recomputation for relocated
+    occluders at their NEW positions (current shadows still describe
+    pre-relocation geometry — accepted simplification, see audit #44).
+  2026-04-15 — #18 folded into #3 (same root cause and fix).
+  2026-04-15 — #15, #16, #17 removed from open list (no longer relevant).
+
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
 
@@ -114,21 +132,19 @@ WSL VIRTUAL ENVIRONMENT — DO NOT DELETE
        Deleting it breaks the entire pipeline.
        Recreate: python3 -m venv wsl_env && pip install numpy pybullet
 
-STATIC GEOMETRY IN INIT (e.g. boxel_fits) — FUTURE MERGE/SPLIT
+STATIC GEOMETRY IN INIT (e.g. boxel_fits) — NOW REBUILT EACH REPLAN
        Predicates such as (boxel_fits ?o ?b) are precomputed in
        pddlstream_planner._build_init() from the current BoxelRegistry
        snapshot (old #102).  They are valid only for that partition and
        geometry for one planning problem.
 
-       If we ever **re-split or re-merge** free-space (or other) boxels
-       **after** an action — e.g. online refinement between replans — the
-       registry and AABBs can change.  Then every init fact that depends on
-       boxel identity or extents (not only boxel_fits, but also is_free_space,
-       Boxel objects, etc.) must be **rebuilt from an updated registry** before
-       the next solve: effectively **re-initialise** the PDDLStream problem
-       (or an equivalent full refresh).  Do not assume a prior init stays
-       valid across merge/split.  Overlaps the re-boxelization requirement
-       in #4; call this out again when implementing dynamic partition updates.
+       As of 2026-04-15, free-space boxels ARE re-merged and re-split
+       between replans (reboxelize_free_space after sense).  The registry
+       is mutated in place before each planner.plan() call, so
+       _build_init() always reads the latest partition.  Shadow removal
+       and new object/shadow creation after sense also update the
+       registry before the next replan.  The planner is stateless
+       between calls — all context is passed in each plan() call.
 
 BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
        The place precondition (boxel_fits ?o ?b) is satisfied by init facts
@@ -143,7 +159,7 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 ################################################################################
 #                                                                              #
-#              OPEN ISSUES — #1, #3–#4, #6, #9–#18, #21                        #
+#          OPEN ISSUES — #1, #3, #4(partial), #6, #9–#13, #14, #21            #
 #                                                                              #
 ################################################################################
 
@@ -370,6 +386,13 @@ What:  The sense handler secretly moves the robot to home
        the last move action.  If the planner chains sense -> pick,
        the pick starts from the wrong config in the symbolic model.
 
+       OBSERVABLE SYMPTOM (old #18, folded in): FastDownward
+       linearizes move BEFORE sense, so the arm travels TO the shadow
+       BEFORE the camera looks into it.  The sense handler compensates
+       by secretly retracting to home, creating a wasteful round-trip.
+       Adding at_config ?q_home to sense forces sense → move → pick
+       ordering, keeping the arm clear during sensing.
+
 Fix:   ONE COMMIT — choose one approach:
 
        OPTION A (minimal): Add (at_config ?q_home) as a precondition
@@ -387,48 +410,49 @@ Fix:   ONE COMMIT — choose one approach:
        OPTION A is recommended — simpler, and move already exists.
 
 Related: old #79 [DONE] (arm blocks sensing), old #86 [DONE] (config
-         tracking on replan), #18 (observational symptom: arm in view path)
+         tracking on replan)
 
 
 ================================================================================
-#4. POST-ACTION RE-BOXELIZATION — STALE PARTITION
+#4. POST-ACTION RE-BOXELIZATION — STALE PARTITION [PARTIAL 2026-04-15]
 ================================================================================
 Priority: TIER 1
-Where:    test_full_pipeline.py (execution loop),
-          boxel_data.py (BoxelRegistry),
-          cell_merger.py
-Depends:  None (re-merge uses existing convex merge; full merge #2 deferred)
-Effort:   3-5 days
+Where:    test_full_pipeline.py (execution loop, reboxelize_free_space),
+          boxel_data.py (BoxelRegistry)
+Depends:  None
+Effort:   Remaining ~1-2 days (shadow recomputation at new positions)
 
-What:  After a pick-and-place action, the boxel partition is NOT
-       recomputed.  Stale data includes:
-       (a) OCCUPIED boxels that are now FREE (object picked up)
-       (b) FREE boxels that are now OCCUPIED (object placed there)
-       (c) Shadow regions that changed (occluder moved)
-       (d) Merge structure is stale (needs re-run of convex merge pass)
+What:  After a pick-and-place action, the boxel partition must be
+       recomputed so the planner sees accurate geometry on replan.
 
-       The planner operates on this stale partition, causing it to:
-       - Try placing in no-longer-free boxels
-       - Miss newly available free space
-       - Plan sense actions for shadows that no longer exist
+DONE (2026-04-15):
+       (a) OCCUPIED→FREE: after place, registry.update_after_place()
+           removes consumed free boxel and updates object AABB.
+       (b) FREE→OCCUPIED: octree re-run correctly marks placed object's
+           footprint as occupied.
+       (c-partial) Sensed-empty shadows are removed from registry and
+           converted to free space.  Non-target objects discovered
+           inside shadows get OBJECT + SHADOW boxels created.
+       (d) Merge structure: reboxelize_free_space() re-runs the full
+           octree + merge pipeline (same CellMerger as Phase 2 initial
+           scan).  Only changed boxels are removed/added (diff against
+           previous state).  Belief history survives — BeliefState is
+           independent of boxel IDs.
+       (e) Registry is mutated before each planner.plan() call.
 
-Fix:   ONE COMMIT — implement full re-boxelization (naive first):
-       (a) After each scene-changing action (place), re-evaluate every
-           boxel's occupancy status against current PyBullet state.
-       (b) Recompute shadow regions for relocated occluders.
-       (c) Re-run the merge pass (convex-only; stricter merge deferred
-           — archive/CODEBASE_AUDIT_DEFERRED.txt #2).
-       (d) Rebuild shadow_occluder_map.
-       (e) Feed updated BoxelRegistry into _build_init() for next
-           planning cycle.
+REMAINING:
+       (c-remainder) Shadow geometry for relocated occluders is NOT
+           recomputed at their new positions.  The old shadow AABBs
+           describe pre-relocation geometry.  This is an accepted
+           simplification (audit #44) because:
+           - sense_shadow_raycasting uses PyBullet body IDs, not AABBs
+           - The occluder has been physically removed from the shadow
+           - shadow_occluder_map is refreshed after place (audit #73)
+           Full shadow recomputation would require re-running
+           shadow_calculator for the moved occluder at its new position.
 
-       CRITICAL: observation history (which boxels have been
-       sensed / known-empty) MUST survive re-boxelization.
-
-       Incremental recomputation is in FOR LATER.
-
-Related: old #44 [ACCEPTED] (stale shadow AABBs — subsumed by this),
-         old #73 [DONE] (stale shadow_occluder_map — extended by this)
+Related: old #44 [ACCEPTED] (stale shadow AABBs),
+         old #73 [DONE] (stale shadow_occluder_map)
 
 
 ================================================================================
@@ -643,55 +667,6 @@ Fix:   ONE COMMIT — increase ray density in oracle_detect_objects():
 Related: #15 (shadow splitting depends on correct visibility),
          #16 (camera angle exacerbates this)
 
-================================================================================
-#18. PLAN SEQUENCE move→sense POSITIONS ARM IN CAMERA VIEW PATH
-================================================================================
-Priority: TIER 0 — Extends #3 (sense action design)
-Where:    domain_pddlstream.pddl (sense / pick actions),
-          test_full_pipeline.py (sense handler ~line 415)
-Depends:  None (but #3 fix also addresses this)
-Effort:   Included in #3
-
-What:  The PDDL planner produces plans like:
-
-         move(q_home, q_shadow, shadow_001) →
-         sense(target, shadow_001) →
-         pick(target, shadow_001, grasp, q_shadow)
-
-       The move is a precondition of pick (needs at_config for the
-       grasp configuration), and sense is also a precondition of pick
-       (needs obj_at_boxel_KIF).  Since move and sense are
-       independent, the planner linearizes them arbitrarily — and
-       FastDownward consistently places move BEFORE sense.
-
-       This means the robot arm physically travels TO the shadow
-       region BEFORE the camera tries to see into it.  The sense
-       handler compensates by secretly retracting the arm to home
-       (line 428, audit #79), creating a wasteful round-trip:
-         arm at home → move to shadow → retract to home → sense →
-         (move to shadow again on next plan)
-
-       Worse: if the home-retract is incomplete or the arm's home
-       configuration still partially intersects the camera's FOV for
-       certain shadow regions, sensing fails due to arm blockage.
-       The sense_shadow_raycasting function correctly counts robot
-       hits (line 701), but cannot distinguish this from occluder
-       blockage in the plan-level feedback.
-
-       The root cause is that sense has no at_config precondition
-       (#3).  If it required (at_config q_home), the planner would
-       be forced to order: sense → move → pick (or move_home →
-       sense → move_to_shadow → pick), keeping the arm clear during
-       sensing.
-
-Fix:   Subsumed by #3.  Whichever option is chosen for #3, the
-       resulting plan ordering will naturally avoid this problem.
-       Documenting separately because the symptom (arm in view path)
-       is observationally distinct from the PDDL state-drift symptom
-       described in #3.
-
-Related: #3 (same root cause and fix)
-
 
 ================================================================================
 #21. BLOCKED SENSE CAUSES SHADOW SWITCHING AND FALSE "SEARCHED ALL" TERMINATION
@@ -757,7 +732,7 @@ FOR LATER
   permits after core evaluation (#9–#12) is complete.
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-04-15)
 ================================================================================
 
 Each issue is one commit.  Dependencies listed; work within a tier can
@@ -769,16 +744,16 @@ TIER 0 — ACTIONABLE NOW (no dependencies):
         prints DONE; remainder: descent streams, gripper-only execute,
         at_config contact, collision-checked sub-moves)
   #3   Sense hidden move (add at_config precondition)     ~1-2 days
+       (includes old #18: move→sense arm blocking)
   #14  Sparse visibility check (8 AABB corners)           ~1-2 days
-  #18  move→sense arm blocking (extends #3)               incl. in #3
   #21  Blocked sense switches shadows / false all_searched ~1-2 days
 
 TIER 1 — Mixed dependencies (see each issue):
-  #4   Post-action re-boxelization                          ~3-5 days
+  #4   Post-action re-boxelization [PARTIAL]                ~1-2 days remaining
+       (DONE: free-space octree+merge after sense, shadow→free conversion,
+        nontarget object discovery.  REMAINING: shadow geometry recompute
+        for relocated occluders at new positions.)
   #6   Multi-boxel free space placement                     ~1 week
-  #15  Shadow volumes ignore invisible objects  depends #14 ~1 day
-  #16  Camera pitch too shallow / debug mismatch            ~1 day
-  #17  Scene objects out of robot reach                     ~1 day
 
 TIER 3 — THESIS EVALUATION (independent of code fixes):
   #9   Metric collection + experiment runner                ~3-5 days
@@ -787,11 +762,11 @@ TIER 3 — THESIS EVALUATION (independent of code fixes):
   #12  Scalability analysis                     depends #9  ~2-3 days
   #13  Recursive object discovery                           ~2-3 days
 
-Total: 12 open items (#1, #3–#4, #6, #9–#18, #21;
+Total: 10 open items (#1, #3, #4(partial), #6, #9–#14, #21;
       deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
-      resolved/subsumed #5, #7, #8, #19, #20, #22, #23 →
+      resolved/subsumed #5, #7, #8, #15–#20, #22, #23 →
         archive/CODEBASE_AUDIT_RESOLVED.txt)
-Estimated effort: ~8-11 weeks sequential; less with parallelism
+Estimated effort: ~5-8 weeks sequential; less with parallelism
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
