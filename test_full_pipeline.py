@@ -1089,12 +1089,10 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui):
     """
     Execute pick action using the plan's grasp pose.
 
-    All waypoints are derived from the grasp relative to the object's
-    actual current position (obj_pos), not hardcoded offsets.  The
-    contact waypoint re-derives IK from ``obj_pos + grasp.position``
-    at execution time; if IK fails it falls back to the plan config.
-    This handles any drift between the boxel center used during
-    planning and the object's actual position.
+    The contact waypoint is computed from the object's actual AABB so
+    the Panda's finger pads physically wrap around the object.  The
+    planning offset (grasp.position, typically 10 cm) is only used for
+    approach/lift clearance — not for the contact height.
 
     The constraint-based attachment (p.createConstraint) is an accepted
     simulation simplification — see audit #7 part B.
@@ -1113,20 +1111,28 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui):
         attachment, and a RobotConfig representing the robot's actual
         final joint configuration (lift position).
     """
-    # Approach 0.10 m above contact: clears the tallest scene object
-    # (occluder 0.15 m cube ≈ 0.075 m half-height) with margin, while
-    # staying low enough for reliable IK on the Panda.
     approach_height = 0.10
-    # Lift 0.25 m above contact: must clear the occluder height (0.15 m)
-    # plus table-edge tolerance so the grasped object doesn't collide
-    # with anything during the subsequent move trajectory.
     lift_height = 0.25
     approach_dir = np.array([0.0, 0.0, 1.0])
 
-    # Compute the three end-effector waypoints relative to the object's
-    # CURRENT position (not the boxel center used during planning).
-    # grasp.position is the EE-to-object offset from the grasp sampler.
-    contact_ee = obj_pos + grasp.position
+    # --- Contact height from object geometry, not the planning offset --------
+    # grasp.position[2] is ~0.10 m (for collision-free motion planning).
+    # For execution we need the grasptarget at the object, not above it.
+    #
+    # panda_grasptarget (link 11) sits at the center of the finger-pad
+    # closing area.  Finger pads extend ~3.5 cm below the grasptarget.
+    # Ideal contact: grasptarget at the object center so fingers wrap
+    # symmetrically.  Floor: finger tips must stay above the table.
+    _FINGER_TIP_DEPTH = 0.035
+    table_z = env.table_surface_height
+    min_contact_z = table_z + _FINGER_TIP_DEPTH
+    contact_z = max(obj_pos[2], min_contact_z)
+
+    contact_ee = np.array([
+        obj_pos[0] + grasp.position[0],
+        obj_pos[1] + grasp.position[1],
+        contact_z,
+    ])
     approach_ee = contact_ee + approach_dir * approach_height
     lift_ee = contact_ee + approach_dir * lift_height
 
@@ -1203,9 +1209,11 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     Execute place action using the plan's grasp pose.
 
     Mirrors execute_pick() in reverse: approach above destination, lower
-    to contact, release, retreat.  The contact waypoint re-derives IK
-    from ``place_pos + grasp.position`` at execution time; falls back
-    to the plan config if IK fails.
+    to release height, open gripper, release constraint, settle.
+
+    The release height is computed so the held object's bottom rests on
+    the table surface, using the live EE-to-object offset from the
+    constraint (established at pick time).
 
     Args:
         robot_id: PyBullet body ID of the robot
@@ -1221,14 +1229,37 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
         RobotConfig: The robot's actual final joint configuration
         (retreat position above the placement).
     """
-    # Same clearances as execute_pick — see comments there.
     approach_height = 0.10
     # retreat_height = 0.25
     approach_dir = np.array([0.0, 0.0, 1.0])
 
-    # Mirror of execute_pick's waypoint computation, but targeting the
-    # destination boxel center instead of the object's current position.
-    contact_ee = place_pos + grasp.position
+    # --- Release height from held-object geometry ----------------------------
+    # Query the constraint to find the held body, then compute the EE
+    # height that places the object's bottom on the table surface.
+    # The live EE-to-object Z offset accounts for whatever grasp offset
+    # was established at pick time.
+    table_z = env.table_surface_height
+    if grasp_constraint_id is not None:
+        c_info = p.getConstraintInfo(grasp_constraint_id)
+        held_body_id = c_info[2]
+        held_aabb_min, held_aabb_max = p.getAABB(held_body_id)
+        obj_half_height = (held_aabb_max[2] - held_aabb_min[2]) / 2.0
+
+        ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
+        ee_z = ee_state[0][2]
+        obj_cur_z = p.getBasePositionAndOrientation(held_body_id)[0][2]
+        ee_to_obj_z = obj_cur_z - ee_z
+
+        target_obj_z = table_z + obj_half_height
+        contact_z = target_obj_z - ee_to_obj_z
+    else:
+        contact_z = place_pos[2] + grasp.position[2]
+
+    contact_ee = np.array([
+        place_pos[0] + grasp.position[0],
+        place_pos[1] + grasp.position[1],
+        contact_z,
+    ])
     approach_ee = contact_ee + approach_dir * approach_height
     # retreat_ee = contact_ee + approach_dir * retreat_height
 
