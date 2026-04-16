@@ -6,6 +6,7 @@ Archived: 2026-03-13 (added #64, #70, #71, #72, #74, #75)
 Archived: 2026-03-22 (added #60, #61, #67, #69, #78-#85, #98, #99, #101;
          verified against codebase during audit validation pass)
 Archived: 2026-04-06 (moved from CODEBASE_AUDIT.txt: #5, #19, #20, #22)
+Archived: 2026-04-16 (moved from CODEBASE_AUDIT.txt: #1 pick contact / execution)
 
 These issues have been fixed, reclassified as not-an-issue, or corrected.
 The active audit with remaining open issues is in CODEBASE_AUDIT.txt.
@@ -1993,4 +1994,40 @@ What:  execute_pick/place call solve_ik() 2-3 times instead of using
        configs from the stream.  All IK moves to the new descent
        streams; execute_pick/place have zero solve_ik calls after #1.
 
-Related: #1
+Related: #1 (audit #1 closed 2026-04-16 — IK-in-execution remains optional)
+
+
+================================================================================
+#1 (audit). PICK/PLACE “COLLISION” APPEARANCE — GRIPPER–OBJECT GAP  [CLOSED 2026-04-16]
+================================================================================
+(Moved from CODEBASE_AUDIT.txt 2026-04-16.  Former open title:
+“COLLISION-BLIND EXECUTION AND STREAMED-CONFIG BYPASS”.)
+
+Status: CLOSED for current thesis / demo scope.
+
+Observable problem: Gripper apparently clipping or “floating” objects;
+object hanging well below the gripper after pick; poor visual contact with
+the grasped body.
+
+Primary root cause fixed: execute_pick and execute_place used
+contact_ee = position + grasp.position with grasp.position[2] ~ 0.10 m
+(the same hover offset sample_grasp uses for motion planning).  The
+JOINT_FIXED constraint then welded the object ~10 cm below
+panda_grasptarget — easy to misread as geometric collision errors.
+
+Fix: test_full_pipeline.py — contact Z from object centre vs table +
+finger-tip floor (pick); release Z from held-body AABB, table height, and
+live EE–object Z offset (place).  Planning unchanged (still ~10 cm hover in
+compute_kin_solution for RRT).
+
+Optional future work (not tracked as open in CODEBASE_AUDIT.txt):
+execute_pick/place sub-moves still use move_robot_smooth without continuous
+collision queries; redundant solve_ik vs streamed RobotConfig; full PDDL
+q_hover + q_contact + planner-produced descent trajectories.  Revive only
+if regressions or harder safety guarantees are required.
+
+Unchanged by this closure: held-object-aware plan_motion (2026-04-08),
+detect_execution_collisions in test_full_pipeline.
+
+Related: archive entries #7, #8, #23 (subsumed under former open #1);
+robot_utils.py; streams.py.
