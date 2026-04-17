@@ -44,6 +44,10 @@ Restructured: 2026-03-24
   2026-04-17 — #28 RESOLVED: replaced hand-rolled quaternion math with
     p.getQuaternionFromEuler(); removed dead _direction_to_quat and
     _rotation_matrix_to_quat from streams.py.
+  2026-04-17 — #27 RESOLVED: extracted wireframe_corners_and_edges()
+    shared helper into visualization.py; draw_boxels(), draw_boxel_data(),
+    and free_space._draw_boxel_wireframe() now call the shared function
+    instead of computing corners/edges inline.
   2026-04-17 — Issues #24–#35 added from comprehensive codebase audit.
     #21 updated with PDDL-model design direction.
     #4 updated: shadow_occluder_map refresh after place was commented out
@@ -180,7 +184,7 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #3(def), #4(partial), #6, #9–#14, #21, #26–#27, #29–#35    #
+#  OPEN ISSUES — #3(def), #4(partial), #6, #9–#14, #21, #26, #29–#35        #
 #                                                                              #
 ################################################################################
 
@@ -598,20 +602,20 @@ Fix:   Extract into focused modules:
 
 
 ================================================================================
-#27. TRIPLICATED WIREFRAME DRAWING CODE
+#27. TRIPLICATED WIREFRAME DRAWING CODE  [RESOLVED 2026-04-17]
 ================================================================================
 Priority: TIER 2 — Code quality (AI-generated duplication)
 Where:    visualization.py (draw_boxels, draw_boxel_data),
           free_space.py (_draw_boxel_wireframe)
 Depends:  None
-Effort:   <1 day
 
-What:  The same 8-corner + 12-edge wireframe computation appears in
-       three independent copies.  Each computes corners identically
-       from center + extent × sign combinations.
-
-Fix:   Extract a shared helper _wireframe_corners_and_edges(center,
-       extent) into visualization.py and call it from all three sites.
+RESOLVED (2026-04-17):
+       Extracted wireframe_corners_and_edges(center, extent) as a
+       module-level function in visualization.py.  Uses precomputed
+       _SIGN_COMBOS array and _EDGE_INDICES list.  All three call
+       sites (draw_boxels, draw_boxel_data, _draw_boxel_wireframe)
+       now call the shared function instead of duplicating the
+       8-corner + 12-edge computation inline.
 
 
 ================================================================================
@@ -808,7 +812,7 @@ TIER 1 — Mixed dependencies (see each issue):
 
 TIER 2 — CODE QUALITY (independent of correctness fixes):
   #26  test_full_pipeline.py too long — extract modules     ~1-2 days
-  #27  Triplicated wireframe drawing code                    <1 day
+  #27  Triplicated wireframe drawing code                    [RESOLVED 2026-04-17]
   #28  Hand-rolled quaternion math                           [RESOLVED 2026-04-17]
   #35  Boxel vs BoxelData dual representation               ~2-3 days
 
@@ -827,9 +831,9 @@ TIER 3 — CODE QUALITY (low priority):
   #33  remove_boxel_viz O(n) list operations                 <1 day
   #34  _compute_placement_view_blocks scalability           (if needed)
 
-Total: 17 open items (#3(deferred), #4(partial), #6, #9–#14, #21, #26–#27,
+Total: 16 open items (#3(deferred), #4(partial), #6, #9–#14, #21, #26,
       #29–#35; deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
-      resolved/subsumed #1, #5, #7, #8, #15–#20, #22–#25, #28 →
+      resolved/subsumed #1, #5, #7, #8, #15–#20, #22–#25, #27–#28 →
         archive/CODEBASE_AUDIT_RESOLVED.txt)
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt

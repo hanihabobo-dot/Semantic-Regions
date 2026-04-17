@@ -11,6 +11,7 @@ import pybullet as p
 import time
 from typing import List, Optional
 from boxel_types import Boxel, OctreeNode
+from visualization import wireframe_corners_and_edges
 
 
 class FreeSpaceGenerator:
@@ -153,23 +154,7 @@ class FreeSpaceGenerator:
     
     def _draw_boxel_wireframe(self, center, extent, color, track_as_candidate=False):
         """Draw a wireframe box using PyBullet debug lines."""
-        c = center
-        e = extent
-        corners = [
-            c + np.array([-e[0], -e[1], -e[2]]),
-            c + np.array([e[0], -e[1], -e[2]]),
-            c + np.array([-e[0], e[1], -e[2]]),
-            c + np.array([e[0], e[1], -e[2]]),
-            c + np.array([-e[0], -e[1], e[2]]),
-            c + np.array([e[0], -e[1], e[2]]),
-            c + np.array([-e[0], e[1], e[2]]),
-            c + np.array([e[0], e[1], e[2]])
-        ]
-        edges = [
-            (0, 1), (0, 2), (0, 4), (1, 3), (1, 5),
-            (2, 3), (2, 6), (3, 7), (4, 5), (4, 6),
-            (5, 7), (6, 7)
-        ]
+        corners, edges = wireframe_corners_and_edges(center, extent)
         for start_idx, end_idx in edges:
             line_id = p.addUserDebugLine(
                 lineFromXYZ=corners[start_idx],
