@@ -701,9 +701,12 @@ class BoxelTestEnv:
         depth_image = self._depth_buffer_to_meters(
             np.array(depth_array).reshape((self.image_height, self.image_width))
         )
-        point_cloud = self._depth_to_point_cloud(
-            depth_image, view_matrix, projection_matrix
-        )
+        # Point cloud is not used by any downstream consumer; commented
+        # out to avoid the expensive depth→world-coordinate transform.
+        # Re-enable if a real perception pipeline replaces the oracle.
+        # point_cloud = self._depth_to_point_cloud(
+        #     depth_image, view_matrix, projection_matrix
+        # )
 
         visible_objects, object_poses = self.oracle_detect_objects()
         boxels = self.generate_boxels(visible_objects)
@@ -711,7 +714,6 @@ class BoxelTestEnv:
         return CameraObservation(
             rgb_image=rgb_image,
             depth_image=depth_image,
-            point_cloud=point_cloud,
             visible_objects=visible_objects,
             object_poses=object_poses,
             boxels=boxels,
