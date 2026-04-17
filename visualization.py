@@ -11,6 +11,28 @@ from typing import Dict, List, Optional
 from boxel_types import Boxel
 
 
+_EDGE_INDICES = [
+    (0, 1), (0, 2), (0, 4), (1, 3), (1, 5),
+    (2, 3), (2, 6), (3, 7), (4, 5), (4, 6),
+    (5, 7), (6, 7),
+]
+
+_SIGN_COMBOS = np.array([
+    [-1, -1, -1], [ 1, -1, -1], [-1,  1, -1], [ 1,  1, -1],
+    [-1, -1,  1], [ 1, -1,  1], [-1,  1,  1], [ 1,  1,  1],
+], dtype=float)
+
+
+def wireframe_corners_and_edges(center, extent):
+    """Return (corners, edges) for an axis-aligned box wireframe.
+
+    corners: list of 8 numpy arrays (the AABB vertices).
+    edges:   list of 12 (i, j) index pairs into *corners*.
+    """
+    corners = [center + extent * s for s in _SIGN_COMBOS]
+    return corners, _EDGE_INDICES
+
+
 class BoxelVisualizer:
     """
     Visualizes boxels in PyBullet using debug lines and phantom objects.
@@ -64,28 +86,7 @@ class BoxelVisualizer:
             boxel_item_ids: List[int] = []
             boxel_body_ids: List[int] = []
             
-            # Define the 8 corners
-            corners = [
-                c + np.array([-e[0], -e[1], -e[2]]),
-                c + np.array([e[0], -e[1], -e[2]]),
-                c + np.array([-e[0], e[1], -e[2]]),
-                c + np.array([e[0], e[1], -e[2]]),
-                c + np.array([-e[0], -e[1], e[2]]),
-                c + np.array([e[0], -e[1], e[2]]),
-                c + np.array([-e[0], e[1], e[2]]),
-                c + np.array([e[0], e[1], e[2]])
-            ]
-            
-            # Define edges
-            edges = [
-                (0, 1), (0, 2), (0, 4),
-                (1, 3), (1, 5),
-                (2, 3), (2, 6),
-                (3, 7),
-                (4, 5), (4, 6),
-                (5, 7),
-                (6, 7)
-            ]
+            corners, edges = wireframe_corners_and_edges(c, e)
             
             # Determine color
             color = self._get_boxel_color(boxel)
@@ -255,20 +256,7 @@ class BoxelVisualizer:
         is_thin = b.is_shadow or b.is_free or b.is_candidate
 
         item_ids: List[int] = []
-        corners = [
-            c + np.array([-e[0], -e[1], -e[2]]),
-            c + np.array([ e[0], -e[1], -e[2]]),
-            c + np.array([-e[0],  e[1], -e[2]]),
-            c + np.array([ e[0],  e[1], -e[2]]),
-            c + np.array([-e[0], -e[1],  e[2]]),
-            c + np.array([ e[0], -e[1],  e[2]]),
-            c + np.array([-e[0],  e[1],  e[2]]),
-            c + np.array([ e[0],  e[1],  e[2]]),
-        ]
-        edges = [
-            (0,1),(0,2),(0,4),(1,3),(1,5),
-            (2,3),(2,6),(3,7),(4,5),(4,6),(5,7),(6,7),
-        ]
+        corners, edges = wireframe_corners_and_edges(c, e)
         for si, ei in edges:
             lid = p.addUserDebugLine(
                 lineFromXYZ=corners[si], lineToXYZ=corners[ei],
