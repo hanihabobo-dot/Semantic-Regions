@@ -147,6 +147,8 @@ def reboxelize_free_space(registry, env, boxel_centers, viz, show_free):
           f"{len(old_matched)} unchanged "
           f"({total_free} free total)")
 
+    registry.mark_clean()
+
     if viz is not None:
         for oid in old_removed:
             viz.remove_boxel_viz(oid)
@@ -460,6 +462,15 @@ def main(gui=True, run_logger=None, scene_config=None,
             print("ERROR: Searched all shadows but target not found!")
             break
         
+        # Ensure the free-space partition is consistent before the planner
+        # reads the registry (audit #25).  After a place action,
+        # update_after_place sets registry.dirty because the consumed
+        # free boxel is gone but no replacement exists yet.  If a sense
+        # action already triggered reboxelization (clearing the flag),
+        # this is a no-op — avoiding the double octree+merge cost.
+        if registry.dirty:
+            reboxelize_free_space(registry, env, boxel_centers, viz, show_free)
+
         # Disable rendering for the entire planning phase (audit #60).
         # All IK and collision-check calls inside planner.plan() nest
         # harmlessly via RenderingLock's reference count.

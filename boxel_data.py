@@ -132,6 +132,17 @@ class BoxelRegistry:
     def __init__(self):
         self.boxels: Dict[str, BoxelData] = {}
         self._next_id = 0
+        self._dirty: bool = False
+
+    @property
+    def dirty(self) -> bool:
+        """True when the free-space partition has been mutated (e.g. by
+        update_after_place) but reboxelize_free_space has not yet run."""
+        return self._dirty
+
+    def mark_clean(self) -> None:
+        """Clear the dirty flag — called after reboxelization."""
+        self._dirty = False
     
     def generate_id(self, prefix: str = "boxel") -> str:
         """Generate a unique boxel ID."""
@@ -267,73 +278,9 @@ class BoxelRegistry:
             self.add_boxel(frag_data)
             new_ids.append(frag_id)
 
+        self._dirty = True
         return new_ids
 
-    def compute_neighbors(self, tolerance: float = 0.01) -> None:
-        """
-        Compute neighbor relationships for all boxels.
-        
-        Two boxels are neighbors if they share a face (are adjacent with matching dimensions).
-        """
-        boxel_list = list(self.boxels.values())
-        
-        for i, boxel_a in enumerate(boxel_list):
-            for j, boxel_b in enumerate(boxel_list):
-                if i >= j:
-                    continue
-                
-                direction = self._check_adjacency(boxel_a, boxel_b, tolerance)
-                if direction:
-                    # Add bidirectional neighbor relationship
-                    opposite = self._opposite_direction(direction)
-                    if boxel_b.id not in boxel_a.neighbor_ids[direction]:
-                        boxel_a.neighbor_ids[direction].append(boxel_b.id)
-                    if boxel_a.id not in boxel_b.neighbor_ids[opposite]:
-                        boxel_b.neighbor_ids[opposite].append(boxel_a.id)
-    
-    def _check_adjacency(self, a: BoxelData, b: BoxelData, tol: float) -> Optional[str]:
-        """
-        Check if two boxels are adjacent (touching) and return direction from a to b.
-        
-        Uses a lenient check: boxels are neighbors if they touch on a face,
-        meaning they share an overlapping region on two axes and touch on the third.
-        """
-        # Check each axis for adjacency
-        for axis, (pos_dir, neg_dir) in enumerate([
-            ("x_pos", "x_neg"), ("y_pos", "y_neg"), ("z_pos", "z_neg")
-        ]):
-            other_axes = [i for i in range(3) if i != axis]
-            
-            # Check if boxes OVERLAP on the other two axes (not exact alignment)
-            overlaps_on_other_axes = True
-            for oa in other_axes:
-                # Two ranges overlap if: max(a_min, b_min) < min(a_max, b_max)
-                overlap_min = max(a.min_corner[oa], b.min_corner[oa])
-                overlap_max = min(a.max_corner[oa], b.max_corner[oa])
-                if overlap_max - overlap_min < tol:  # No meaningful overlap
-                    overlaps_on_other_axes = False
-                    break
-            
-            if not overlaps_on_other_axes:
-                continue
-            
-            # Check if adjacent (touching) along this axis
-            if abs(a.max_corner[axis] - b.min_corner[axis]) < tol:
-                return pos_dir  # b is in positive direction from a
-            if abs(b.max_corner[axis] - a.min_corner[axis]) < tol:
-                return neg_dir  # b is in negative direction from a
-        
-        return None
-    
-    def _opposite_direction(self, direction: str) -> str:
-        """Get the opposite direction."""
-        opposites = {
-            "x_pos": "x_neg", "x_neg": "x_pos",
-            "y_pos": "y_neg", "y_neg": "y_pos",
-            "z_pos": "z_neg", "z_neg": "z_pos",
-        }
-        return opposites[direction]
-    
     def to_dict(self) -> Dict[str, Any]:
         """Convert registry to JSON-serializable dictionary."""
         return {

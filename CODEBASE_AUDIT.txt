@@ -36,6 +36,11 @@ Restructured: 2026-03-24
     was implemented on a separate branch but caused PDDLStream planning
     time to explode.  Reverted on main.  Revisit if planning budget
     increases or a cheaper formulation is found.
+  2026-04-17 — #25 RESOLVED: added BoxelRegistry._dirty flag set by
+    update_after_place(); reboxelize_free_space() clears it via
+    mark_clean().  Pre-plan check in the replan loop triggers
+    reboxelization only when needed (skipped if sense already ran it),
+    so _build_init always reads a consistent free-space partition.
   2026-04-17 — Issues #24–#35 added from comprehensive codebase audit.
     #21 updated with PDDL-model design direction.
     #4 updated: shadow_occluder_map refresh after place was commented out
@@ -172,7 +177,7 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #3(def), #4(partial), #6, #9–#14, #21, #25–#35              #
+#  OPEN ISSUES — #3(def), #4(partial), #6, #9–#14, #21, #26–#35              #
 #                                                                              #
 ################################################################################
 
@@ -547,38 +552,25 @@ RESOLVED (2026-04-17):
 
 
 ================================================================================
-#25. IS_FREE_SPACE REGISTRY INCONSISTENCY AFTER PLACE
+#25. IS_FREE_SPACE REGISTRY INCONSISTENCY AFTER PLACE  [RESOLVED 2026-04-17]
 ================================================================================
 Priority: TIER 1 — Correctness (observed by user)
 Where:    test_full_pipeline.py (place handler), boxel_data.py
 Depends:  None
-Effort:   <1 day
 
-What:  When an object is placed into a free-space boxel, the PDDL
-       domain correctly removes (is_free_space ?b) in the place action
-       effects.  The Python execution layer calls
-       registry.update_after_place() which removes the consumed boxel
-       from the registry.
+RESOLVED (2026-04-17):
+       Added BoxelRegistry._dirty flag (boxel_data.py).
+       update_after_place() sets _dirty = True after removing the
+       consumed free boxel.  reboxelize_free_space() calls
+       registry.mark_clean() after completing the octree+merge
+       pipeline.
 
-       Between update_after_place and the next sense action (which
-       triggers reboxelize_free_space), the registry's free-space
-       partition has a gap: the consumed boxel is gone but no
-       replacement free-space boxels exist for the surrounding area.
-       Reboxelization after place was intentionally deferred to avoid
-       paying the octree+merge cost twice per replan cycle (once after
-       place, once after sense).
-
-       The user has observed the planner seeing stale free-space
-       geometry on replan because _build_init reads the registry
-       BEFORE reboxelization runs.
-
-Fix:   Ensure _build_init (or the replan call site) triggers
-       reboxelization BEFORE building init facts, so the planner
-       always sees a consistent partition.  Alternatively, add a
-       "registry dirty" flag that forces reboxelization on next
-       _build_init if any mutation has occurred since the last one.
-       Do NOT add reboxelize_free_space directly after every place
-       action — the double-cost was intentionally avoided.
+       The replan loop (test_full_pipeline.py, before planner.plan())
+       checks registry.dirty: if True, reboxelize_free_space() runs
+       so _build_init always reads a consistent free-space partition.
+       If sense already triggered reboxelization (clearing the flag),
+       the check is a no-op — the intentional double-cost avoidance
+       is preserved.
 
 
 ================================================================================
@@ -815,7 +807,7 @@ TIER 1 — Mixed dependencies (see each issue):
         for relocated occluders at new positions.)
   #6   Multi-boxel free space placement                     ~1 week
   #24  shadow_occluder_map not refreshed after place         [RESOLVED 2026-04-17]
-  #25  is_free_space registry inconsistency after place      <1 day
+  #25  is_free_space registry inconsistency after place     [RESOLVED 2026-04-17]
 
 TIER 2 — CODE QUALITY (independent of correctness fixes):
   #26  test_full_pipeline.py too long — extract modules     ~1-2 days
@@ -838,9 +830,9 @@ TIER 3 — CODE QUALITY (low priority):
   #33  remove_boxel_viz O(n) list operations                 <1 day
   #34  _compute_placement_view_blocks scalability           (if needed)
 
-Total: 19 open items (#3(deferred), #4(partial), #6, #9–#14, #21, #25–#35;
+Total: 18 open items (#3(deferred), #4(partial), #6, #9–#14, #21, #26–#35;
       deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
-      resolved/subsumed #1, #5, #7, #8, #15–#20, #22–#24 →
+      resolved/subsumed #1, #5, #7, #8, #15–#20, #22–#25 →
         archive/CODEBASE_AUDIT_RESOLVED.txt)
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
