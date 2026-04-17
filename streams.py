@@ -317,68 +317,6 @@ class BoxelStreams:
             seed = np.clip(seed, JOINT_LIMITS_LOW, JOINT_LIMITS_HIGH)
             yield seed.tolist()
     
-    def _direction_to_quat(self, direction: np.ndarray) -> np.ndarray:
-        """
-        Convert a direction vector to a quaternion.
-        
-        The resulting orientation has z-axis aligned with direction.
-        
-        Args:
-            direction: Normalized direction vector
-            
-        Returns:
-            Quaternion [x, y, z, w]
-        """
-        # Default: pointing down (-z)
-        z_axis = direction / (np.linalg.norm(direction) + 1e-8)
-        
-        # Choose x-axis perpendicular to z
-        if abs(z_axis[2]) < 0.9:
-            x_axis = np.cross([0, 0, 1], z_axis)
-        else:
-            x_axis = np.cross([0, 1, 0], z_axis)
-        x_axis = x_axis / (np.linalg.norm(x_axis) + 1e-8)
-        
-        # y-axis completes the frame
-        y_axis = np.cross(z_axis, x_axis)
-        
-        # Build rotation matrix
-        R = np.array([x_axis, y_axis, z_axis]).T
-        
-        # Convert to quaternion
-        return self._rotation_matrix_to_quat(R)
-    
-    def _rotation_matrix_to_quat(self, R: np.ndarray) -> np.ndarray:
-        """Convert 3x3 rotation matrix to quaternion [x, y, z, w]."""
-        trace = R[0, 0] + R[1, 1] + R[2, 2]
-        
-        if trace > 0:
-            s = 0.5 / np.sqrt(trace + 1.0)
-            w = 0.25 / s
-            x = (R[2, 1] - R[1, 2]) * s
-            y = (R[0, 2] - R[2, 0]) * s
-            z = (R[1, 0] - R[0, 1]) * s
-        elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
-            s = 2.0 * np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2])
-            w = (R[2, 1] - R[1, 2]) / s
-            x = 0.25 * s
-            y = (R[0, 1] + R[1, 0]) / s
-            z = (R[0, 2] + R[2, 0]) / s
-        elif R[1, 1] > R[2, 2]:
-            s = 2.0 * np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2])
-            w = (R[0, 2] - R[2, 0]) / s
-            x = (R[0, 1] + R[1, 0]) / s
-            y = 0.25 * s
-            z = (R[1, 2] + R[2, 1]) / s
-        else:
-            s = 2.0 * np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1])
-            w = (R[1, 0] - R[0, 1]) / s
-            x = (R[0, 2] + R[2, 0]) / s
-            y = (R[1, 2] + R[2, 1]) / s
-            z = 0.25 * s
-        
-        return np.array([x, y, z, w])
-    
     def _resolve_body_id(self, obj_id) -> Optional[int]:
         """
         Look up the PyBullet body ID for an object or boxel identifier.
@@ -455,8 +393,8 @@ class BoxelStreams:
             Tuples of (grasp,) for the object — one per Z offset.
         """
         # Top-down orientation: pitch=180deg = gripper pointing straight down
-        orn = self._euler_to_quat(0, np.pi, 0)
-        # Yield one grasp per Z-offset (0.05, 0.10, 0.15 m above object).
+        orn = np.array(p.getQuaternionFromEuler([0, np.pi, 0]))
+        # Yield one grasp per Z-offset (currently 0.10 m above object).
         # position=[0,0,z] means no X/Y offset — directly above boxel center.
         # compute_kin_solution later adds this to boxel.center to get the
         # world-frame EE target position.
@@ -472,19 +410,6 @@ class BoxelStreams:
             logger.debug("sample_grasp: %s -> %s (z=%.2f)", obj_id,
                          grasp.name, z)
             yield (grasp,)
-    
-    def _euler_to_quat(self, roll: float, pitch: float, yaw: float) -> np.ndarray:
-        """Convert Euler angles to quaternion [x, y, z, w]."""
-        cy, sy = np.cos(yaw/2), np.sin(yaw/2)
-        cp, sp = np.cos(pitch/2), np.sin(pitch/2)
-        cr, sr = np.cos(roll/2), np.sin(roll/2)
-        
-        return np.array([
-            sr*cp*cy - cr*sp*sy,
-            cr*sp*cy + sr*cp*sy,
-            cr*cp*sy - sr*sp*cy,
-            cr*cp*cy + sr*sp*sy
-        ])
     
     # =========================================================================
     # STREAM 3: Plan Motion (RRT-Connect with shortcut smoothing)
