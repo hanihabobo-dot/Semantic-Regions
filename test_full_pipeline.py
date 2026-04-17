@@ -824,10 +824,6 @@ def main(gui=True, run_logger=None, scene_config=None,
                         aabb_min = np.array(aabb_min)
                         aabb_max = np.array(aabb_max)
 
-                        # Remove consumed boxel + update object AABB.
-                        # Full free-space reboxelization is deferred to
-                        # after the next sense action so we pay the
-                        # octree+merge cost only once per replan cycle.
                         registry.update_after_place(
                             free_boxel_id=boxel_id_str,
                             object_boxel_id=obj_str,
@@ -846,10 +842,10 @@ def main(gui=True, run_logger=None, scene_config=None,
 
                 # Rebuild shadow_occluder_map from current physics state so
                 # blocks_view_at facts reflect the relocated occluder's new
-                # position on the next replan (audit #73).
-                # shadow_occluder_map = compute_shadow_blockers(
-                #      env.camera_position, registry, shadows, occluders, env
-                # )
+                # position on the next replan (audit #73, #24 fixed).
+                shadow_occluder_map = compute_shadow_blockers(
+                     env.camera_position, registry, shadows, occluders, env
+                )
                 planner.shadow_occluder_map = shadow_occluder_map
 
                 # Record the relocation in belief state so the planner
@@ -867,8 +863,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                 #     region (picked up and placed elsewhere), so rays through
                 #     the old AABB pass through empty space.
                 # (c) shadow_occluder_map is refreshed after every place action
-                #     (audit #73 DONE), so blocks_view_at facts reflect the
-                #     current blocker positions on replan.
+                #     (audit #73; #24 fixed) so blocks_view_at facts are current.
                 # Full shadow recomputation would require re-running the camera
                 # observation pipeline, which is a separate concern (audit #4).
                 if obj_str in boxel_to_pybullet:

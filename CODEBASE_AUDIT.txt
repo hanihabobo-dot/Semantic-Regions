@@ -30,6 +30,19 @@ Restructured: 2026-03-24
     the gripper–object gap (weld far below grasptarget).  Optional future
     work (PDDL q_hover/q_contact, per-step sub-move collision queries) is
     not tracked as open unless regressions appear.
+  2026-04-17 — #24 RESOLVED: uncommented compute_shadow_blockers() call
+    after place action; shadow_occluder_map now refreshed on every replan.
+  2026-04-17 — #3 reclassified: RESOLVED → DEFERRED.  The move_home fix
+    was implemented on a separate branch but caused PDDLStream planning
+    time to explode.  Reverted on main.  Revisit if planning budget
+    increases or a cheaper formulation is found.
+  2026-04-17 — Issues #24–#35 added from comprehensive codebase audit.
+    #21 updated with PDDL-model design direction.
+    #4 updated: shadow_occluder_map refresh after place was commented out
+    (contradicts #73 DONE claim) — fixed by #24 (2026-04-17).
+    compute_neighbors dead code removed from boxel_data.py.
+    Point cloud computation commented out in boxel_env.py.
+    THESIS_NOTES.md created (accepted simplifications reference).
   Issue #2 (full boxel merge condition, old #103) DEFERRED 2026-04-05 →
     archive/CODEBASE_AUDIT_DEFERRED.txt.  Convex-only merge accepted for
     current scope; open issue list below is #3–#4, #6–#21
@@ -81,13 +94,13 @@ addressed by a specific issue:
       old #86 [DONE], old #62 [ACCEPTED], old #7/#8 subsumed by audit #1
       [RESOLVED 2026-04-16 — contact-height fix; see archive]
   (b) Hidden move in sense:
-      #3 [OPEN]
+      #3 [DEFERRED 2026-04-17 — planning-time explosion on branch]
   (c) Stale shadow geometry after occluder relocation:
       old #44 [ACCEPTED], #4 [OPEN]
   (d) Stale blocks_view_at facts:
       old #73 [DONE]
 
-When #3 and #4 are complete, all practical drift channels are addressed.
+When #4 is complete, all practical drift channels are addressed (#3 resolved).
 
 ================================================================================
 CODEBASE POLICY
@@ -159,53 +172,45 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 ################################################################################
 #                                                                              #
-#          OPEN ISSUES — #3, #4(partial), #6, #9–#13, #14, #21                 #
+#  OPEN ISSUES — #3(def), #4(partial), #6, #9–#14, #21, #25–#35              #
 #                                                                              #
 ################################################################################
 
 
 ================================================================================
-#3. SENSE ACTION HIDDEN MOVE — NO at_config PRECONDITION
+#3. SENSE ACTION HIDDEN MOVE — NO at_config PRECONDITION  [DEFERRED 2026-04-17]
 ================================================================================
 Priority: TIER 0 — Quick PDDL consistency fix
-Where:    domain_pddlstream.pddl (sense action, ~line 128),
-          test_full_pipeline.py (sense handler, ~line 425)
+Where:    domain_pddlstream.pddl (sense action),
+          pddlstream_planner.py (_build_init),
+          test_full_pipeline.py (sense handler + move_home handler)
 Depends:  None
-Effort:   1-2 days
 
-What:  The sense handler secretly moves the robot to home
-       configuration before raycasting (workaround for old #79: arm
-       blocking camera).  The PDDL sense action has NO at_config
-       precondition — the planner does not know sensing requires the
-       arm to be out of the way.
+DEFERRED (2026-04-17):
+  The fix below (Option A with move_home) was implemented on a separate
+  branch but caused PDDLStream planning time to explode — the additional
+  move_home action significantly expanded the search space.  Reverted on
+  main.  The commented-out arm retract in the sense handler
+  (test_full_pipeline.py ~lines 557-559) remains as a reference.
 
-       This causes PDDL state drift: after sense, the robot is
-       physically at home but PDDL still records (at_config ?q) from
-       the last move action.  If the planner chains sense -> pick,
-       the pick starts from the wrong config in the symbolic model.
+  Revisit if:
+  - Planning time budget is increased (e.g. max_time > 120 s)
+  - A cheaper PDDL formulation is found (e.g. conditional move_home
+    only when the arm is not already at home)
+  - The arm actually blocks sensing in a specific run (currently rare
+    because the camera is far from the table and the arm is small
+    relative to shadow volumes)
 
-       OBSERVABLE SYMPTOM (old #18, folded in): FastDownward
-       linearizes move BEFORE sense, so the arm travels TO the shadow
-       BEFORE the camera looks into it.  The sense handler compensates
-       by secretly retracting to home, creating a wasteful round-trip.
-       Adding at_config ?q_home to sense forces sense → move → pick
-       ordering, keeping the arm clear during sensing.
-
-Fix:   ONE COMMIT — choose one approach:
-
-       OPTION A (minimal): Add (at_config ?q_home) as a precondition
-       to the sense action in domain_pddlstream.pddl.  Emit
-       (at_config q_home) in _build_init() when the robot starts at
-       home.  The planner will generate move -> sense sequences when
-       the robot is not at home.  Remove the hidden move from the
-       sense handler (the planner now handles it explicitly).
-
-       OPTION B (pragmatic): Add a prepare_sense action that moves
-       the robot to home.  The sense action requires (at_config
-       ?q_home) as a precondition.  prepare_sense's effect sets
-       at_config to q_home.  More explicit but adds a PDDL action.
-
-       OPTION A is recommended — simpler, and move already exists.
+Previous fix design (Option A variant with move_home):
+  (a) sense requires (at_config ?q) + (is_home_config ?q) — the
+      planner must ensure the robot is at home before sensing.
+  (b) New move_home action (like move but without config_for_boxel)
+      lets the planner return the arm to q_home from any config.
+  (c) _build_init always emits (Config q_home) and
+      (is_home_config q_home); at_config tracks the current config
+      as before.
+  (d) Commented-out secret retract removed from sense handler;
+      move_home execution handler added to the action dispatcher.
 
 Related: old #79 [DONE] (arm blocks sensing), old #86 [DONE] (config
          tracking on replan)
@@ -245,12 +250,13 @@ REMAINING:
            simplification (audit #44) because:
            - sense_shadow_raycasting uses PyBullet body IDs, not AABBs
            - The occluder has been physically removed from the shadow
-           - shadow_occluder_map is refreshed after place (audit #73)
+           - shadow_occluder_map is refreshed after place (#73, #24 fixed
+             2026-04-17).
            Full shadow recomputation would require re-running
            shadow_calculator for the moved occluder at its new position.
 
 Related: old #44 [ACCEPTED] (stale shadow AABBs),
-         old #73 [DONE] (stale shadow_occluder_map)
+         old #73 [DONE] (stale shadow_occluder_map — but see #24)
 
 
 ================================================================================
@@ -508,8 +514,267 @@ Fix:   ONE COMMIT — design decision needed:
        OPTION B + C is likely the most practical: preserve truthful belief
        state and bias replanning toward the active blocked shadow.
 
+       DESIGN DIRECTION (2026-04-17): The fix MUST be in the PDDL model,
+       not in the execution loop.  The planner should reason about blocked
+       shadows.  Specifically:
+       - Add a blocked_unresolved shadow status (distinct from unknown
+         and not_here) in both BeliefState and the PDDL model.
+       - The PDDL domain must represent that a shadow is blocked and
+         needs further occluder removal before sensing can succeed.
+       - The planner should be responsible for selecting which shadow to
+         clear next — not the reactive execution loop.
+       - The execution loop must NEVER mark an unobserved shadow as
+         not_here under any circumstance (remove the 3-strike give-up).
+
 Related: #5 (placement re-blocks cleared corridor), #4 (stale world model),
          archive resolved #78(c) (3-strike give-up behavior)
+
+
+================================================================================
+#24. SHADOW_OCCLUDER_MAP NOT REFRESHED AFTER PLACE  [RESOLVED 2026-04-17]
+================================================================================
+Priority: TIER 1 — Correctness (stale planner facts)
+Where:    test_full_pipeline.py (~lines 846-849)
+Depends:  None
+
+RESOLVED (2026-04-17):
+       Uncommented the compute_shadow_blockers() call after every place
+       action (test_full_pipeline.py ~line 846).  The shadow_occluder_map
+       is now refreshed from the current physics state before being
+       assigned to planner.shadow_occluder_map, so blocks_view_at facts
+       are current on every replan.  Stale inline comment updated to
+       reflect the fix.
+
+
+================================================================================
+#25. IS_FREE_SPACE REGISTRY INCONSISTENCY AFTER PLACE
+================================================================================
+Priority: TIER 1 — Correctness (observed by user)
+Where:    test_full_pipeline.py (place handler), boxel_data.py
+Depends:  None
+Effort:   <1 day
+
+What:  When an object is placed into a free-space boxel, the PDDL
+       domain correctly removes (is_free_space ?b) in the place action
+       effects.  The Python execution layer calls
+       registry.update_after_place() which removes the consumed boxel
+       from the registry.
+
+       Between update_after_place and the next sense action (which
+       triggers reboxelize_free_space), the registry's free-space
+       partition has a gap: the consumed boxel is gone but no
+       replacement free-space boxels exist for the surrounding area.
+       Reboxelization after place was intentionally deferred to avoid
+       paying the octree+merge cost twice per replan cycle (once after
+       place, once after sense).
+
+       The user has observed the planner seeing stale free-space
+       geometry on replan because _build_init reads the registry
+       BEFORE reboxelization runs.
+
+Fix:   Ensure _build_init (or the replan call site) triggers
+       reboxelization BEFORE building init facts, so the planner
+       always sees a consistent partition.  Alternatively, add a
+       "registry dirty" flag that forces reboxelization on next
+       _build_init if any mutation has occurred since the last one.
+       Do NOT add reboxelize_free_space directly after every place
+       action — the double-cost was intentionally avoided.
+
+
+================================================================================
+#26. TEST_FULL_PIPELINE.PY TOO LONG — EXTRACT MODULES
+================================================================================
+Priority: TIER 2 — Code quality / maintainability
+Where:    test_full_pipeline.py (1378 lines)
+Depends:  None
+Effort:   1-2 days
+
+What:  The main pipeline file contains the entire execution loop,
+       BeliefState, reboxelize_free_space, sense_shadow_raycasting,
+       compute_shadow_blockers, execute_pick, execute_place, and the
+       CLI.  This makes the file hard to navigate, test, and review.
+
+Fix:   Extract into focused modules:
+       - belief.py — BeliefState class
+       - execution.py — execute_pick, execute_place,
+         sense_shadow_raycasting, compute_shadow_blockers
+       - reboxelize.py — reboxelize_free_space
+       The pipeline file should orchestrate these, not define them.
+
+
+================================================================================
+#27. TRIPLICATED WIREFRAME DRAWING CODE
+================================================================================
+Priority: TIER 2 — Code quality (AI-generated duplication)
+Where:    visualization.py (draw_boxels, draw_boxel_data),
+          free_space.py (_draw_boxel_wireframe)
+Depends:  None
+Effort:   <1 day
+
+What:  The same 8-corner + 12-edge wireframe computation appears in
+       three independent copies.  Each computes corners identically
+       from center + extent × sign combinations.
+
+Fix:   Extract a shared helper _wireframe_corners_and_edges(center,
+       extent) into visualization.py and call it from all three sites.
+
+
+================================================================================
+#28. HAND-ROLLED QUATERNION MATH — REPLACE WITH PYBULLET BUILTINS
+================================================================================
+Priority: TIER 2 — Code quality / correctness risk
+Where:    streams.py (~lines 320-380, 476-487)
+Depends:  None
+Effort:   <1 day
+
+What:  Three quaternion conversion functions are hand-implemented:
+       _direction_to_quat, _rotation_matrix_to_quat, _euler_to_quat.
+       PyBullet already provides p.getQuaternionFromEuler() (used
+       elsewhere in robot_utils.py).  _direction_to_quat is never
+       called anywhere.
+
+       Hand-rolled quaternion math is error-prone (sign conventions,
+       degenerate cases) and duplicates existing functionality.
+
+Fix:   Replace _euler_to_quat with p.getQuaternionFromEuler().
+       Remove _direction_to_quat and _rotation_matrix_to_quat (dead).
+
+
+================================================================================
+#29. SCENE SELECTION — RANDOM SCENE CLI FLAG
+================================================================================
+Priority: TIER 3 — Evaluation infrastructure
+Where:    test_full_pipeline.py (CLI, __main__)
+Depends:  None
+Effort:   <1 day
+
+What:  The pipeline always starts with default_scene() unless --scene
+       is explicitly passed.  There is no --random-scene flag that picks
+       a random scene preset for evaluation diversity.
+
+       All scene presets should produce similarly sized objects within
+       the same workspace dimensions to ensure comparable results.
+
+Fix:   Add --random-scene flag that randomly selects from available
+       presets (default, mixed, scalability with random params).
+
+
+================================================================================
+#30. GOAL AS CLI PARAMETER
+================================================================================
+Priority: TIER 3 — Evaluation infrastructure / extensibility
+Where:    test_full_pipeline.py (main, CLI)
+Depends:  None
+Effort:   <1 day
+
+What:  The goal is hardcoded as ('holding', target_name).  It should
+       be passable as a CLI parameter (like --show-free).
+
+       Future goals include stacking (e.g. ('on', obj_a, obj_b)),
+       which requires the goal format to be configurable.
+
+Fix:   Add --goal flag with options like "holding" (default),
+       "stacking", etc.  Parse into the appropriate tuple format.
+
+
+================================================================================
+#31. NARRATION COMMENTS — RESTATE CODE INSTEAD OF EXPLAINING INTENT
+================================================================================
+Priority: TIER 3 — Code quality
+Where:    Throughout codebase (visualization.py, streams.py, etc.)
+Depends:  None
+Effort:   1-2 days (sweep)
+
+What:  Many comments restate what the code does rather than why.
+       Examples: "# Define the 8 corners", "# Define edges",
+       "# Determine color", "# Get boxel centers for robot motion
+       targets".  These are AI-generated narration comments that add
+       noise and obscure the genuinely useful intent-explaining
+       comments (audit references, design decision notes).
+
+Fix:   Sweep codebase: remove narration comments, keep intent
+       comments.  Comments should explain WHY, not WHAT.
+
+
+================================================================================
+#32. COMMENT/CODE DRIFT — STALE COMMENTS DESCRIBING OLD BEHAVIOR
+================================================================================
+Priority: TIER 3 — Code quality
+Where:    streams.py (line 459 vs line 434), possibly others
+Depends:  None
+Effort:   <1 day
+
+What:  streams.py line 459 says "Yield one grasp per Z-offset (0.05,
+       0.10, 0.15 m above object)" but the actual list at line 434 is
+       [0.1].  The comment describes an earlier multi-height version
+       that was simplified without updating the comment.
+
+Fix:   Fix the stale comment.  Scan codebase for other instances of
+       comments that no longer match the code they describe.
+
+
+================================================================================
+#33. REMOVE_BOXEL_VIZ USES O(N) LIST.REMOVE()
+================================================================================
+Priority: TIER 3 — Performance (visualization)
+Where:    visualization.py (~lines 213-219)
+Depends:  None
+Effort:   <1 day
+
+What:  remove_boxel_viz() calls self.debug_items.remove(item_id) and
+       self.shadow_bodies.remove(body_id), both O(n) per call.  With
+       many boxels, incremental removal accumulates quadratic cost.
+
+Fix:   Convert debug_items and shadow_bodies from lists to sets for
+       O(1) removal.  The only list-specific operation is iteration
+       (in clear_all), which works on sets too.
+
+
+================================================================================
+#34. _COMPUTE_PLACEMENT_VIEW_BLOCKS SCALABILITY
+================================================================================
+Priority: TIER 3 — Scalability concern
+Where:    pddlstream_planner.py (~lines 273-309)
+Depends:  None
+Effort:   1-2 days (if needed)
+
+What:  Runs per-replan inside _build_init().  For S shadows × 25 rays
+       × F free boxels: all pure-Python ray-AABB intersection tests.
+       At current scale (3 shadows, 15 free = 1,125 tests) it is fast.
+       At evaluation scale (6 shadows, 50 free = 7,500 tests) it is
+       still under 50 ms.  At 10+ shadows with many free boxels it
+       would need spatial indexing (AABB tree).
+
+Fix:   No action needed at current scale.  If scalability evaluation
+       (#12) reveals this as a bottleneck, add an AABB tree or
+       vectorized numpy ray-box test.
+
+
+================================================================================
+#35. BOXEL VS BOXELDATA DUAL REPRESENTATION
+================================================================================
+Priority: TIER 2 — Code quality / architecture
+Where:    boxel_types.py (Boxel), boxel_data.py (BoxelData),
+          create_boxel_registry_from_boxels bridge function
+Depends:  None
+Effort:   2-3 days
+
+What:  Two separate data types represent boxels: Boxel (simple
+       center/extent dataclass from boxel_types.py) and BoxelData
+       (richer structure with registry ID, type, relationships from
+       boxel_data.py).  The bridge function
+       create_boxel_registry_from_boxels converts between them.
+
+       Every boundary crossing requires conversion: reboxelize_free_space
+       creates Boxel from BoxelData, passes to generate_free_space,
+       gets Boxel back, converts back to BoxelData.  This overhead
+       adds complexity and risks conversion mismatches.
+
+Fix:   Unify into a single type.  The simplest path is to make BoxelData
+       the sole representation and update FreeSpaceGenerator,
+       ShadowCalculator, CellMerger, and BoxelVisualizer to accept
+       BoxelData directly.  The Boxel class and the bridge function
+       become unnecessary.
 
 
 ================================================================================
@@ -530,17 +795,18 @@ FOR LATER
   permits after core evaluation (#9–#12) is complete.
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-04-16)
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-04-17)
 ================================================================================
 
 Each issue is one commit.  Dependencies listed; work within a tier can
 be parallelized where no dependency exists.
 
 TIER 0 — ACTIONABLE NOW (no dependencies):
-  #3   Sense hidden move (add at_config precondition)     ~1-2 days
-       (includes old #18: move→sense arm blocking)
+  #3   Sense hidden move (at_config precondition)         [DEFERRED 2026-04-17]
+       (planning-time explosion on branch; revisit later)
   #14  Sparse visibility check (8 AABB corners)           ~1-2 days
   #21  Blocked sense switches shadows / false all_searched ~1-2 days
+       (design direction: fix in PDDL model, not execution loop)
 
 TIER 1 — Mixed dependencies (see each issue):
   #4   Post-action re-boxelization [PARTIAL]                ~1-2 days remaining
@@ -548,6 +814,14 @@ TIER 1 — Mixed dependencies (see each issue):
         nontarget object discovery.  REMAINING: shadow geometry recompute
         for relocated occluders at new positions.)
   #6   Multi-boxel free space placement                     ~1 week
+  #24  shadow_occluder_map not refreshed after place         [RESOLVED 2026-04-17]
+  #25  is_free_space registry inconsistency after place      <1 day
+
+TIER 2 — CODE QUALITY (independent of correctness fixes):
+  #26  test_full_pipeline.py too long — extract modules     ~1-2 days
+  #27  Triplicated wireframe drawing code                    <1 day
+  #28  Hand-rolled quaternion math                           <1 day
+  #35  Boxel vs BoxelData dual representation               ~2-3 days
 
 TIER 3 — THESIS EVALUATION (independent of code fixes):
   #9   Metric collection + experiment runner                ~3-5 days
@@ -555,12 +829,19 @@ TIER 3 — THESIS EVALUATION (independent of code fixes):
   #11  Baseline: fixed semantic regions         depends #9  ~3-5 days
   #12  Scalability analysis                     depends #9  ~2-3 days
   #13  Recursive object discovery                           ~2-3 days
+  #29  Scene selection / random scene CLI flag                <1 day
+  #30  Goal as CLI parameter                                 <1 day
 
-Total: 9 open items (#3, #4(partial), #6, #9–#14, #21;
+TIER 3 — CODE QUALITY (low priority):
+  #31  Narration comments (restate code, not intent)        ~1-2 days
+  #32  Comment/code drift (stale comments)                   <1 day
+  #33  remove_boxel_viz O(n) list operations                 <1 day
+  #34  _compute_placement_view_blocks scalability           (if needed)
+
+Total: 19 open items (#3(deferred), #4(partial), #6, #9–#14, #21, #25–#35;
       deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
-      resolved/subsumed #1, #5, #7, #8, #15–#20, #22, #23 →
+      resolved/subsumed #1, #5, #7, #8, #15–#20, #22–#24 →
         archive/CODEBASE_AUDIT_RESOLVED.txt)
-Estimated effort: ~4-7 weeks sequential; less with parallelism
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
