@@ -41,6 +41,9 @@ Restructured: 2026-03-24
     mark_clean().  Pre-plan check in the replan loop triggers
     reboxelization only when needed (skipped if sense already ran it),
     so _build_init always reads a consistent free-space partition.
+  2026-04-17 — #28 RESOLVED: replaced hand-rolled quaternion math with
+    p.getQuaternionFromEuler(); removed dead _direction_to_quat and
+    _rotation_matrix_to_quat from streams.py.
   2026-04-17 — Issues #24–#35 added from comprehensive codebase audit.
     #21 updated with PDDL-model design direction.
     #4 updated: shadow_occluder_map refresh after place was commented out
@@ -177,7 +180,7 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #3(def), #4(partial), #6, #9–#14, #21, #26–#35              #
+#  OPEN ISSUES — #3(def), #4(partial), #6, #9–#14, #21, #26–#27, #29–#35    #
 #                                                                              #
 ################################################################################
 
@@ -612,24 +615,18 @@ Fix:   Extract a shared helper _wireframe_corners_and_edges(center,
 
 
 ================================================================================
-#28. HAND-ROLLED QUATERNION MATH — REPLACE WITH PYBULLET BUILTINS
+#28. HAND-ROLLED QUATERNION MATH — REPLACE WITH PYBULLET BUILTINS  [RESOLVED 2026-04-17]
 ================================================================================
 Priority: TIER 2 — Code quality / correctness risk
 Where:    streams.py (~lines 320-380, 476-487)
 Depends:  None
-Effort:   <1 day
 
-What:  Three quaternion conversion functions are hand-implemented:
-       _direction_to_quat, _rotation_matrix_to_quat, _euler_to_quat.
-       PyBullet already provides p.getQuaternionFromEuler() (used
-       elsewhere in robot_utils.py).  _direction_to_quat is never
-       called anywhere.
-
-       Hand-rolled quaternion math is error-prone (sign conventions,
-       degenerate cases) and duplicates existing functionality.
-
-Fix:   Replace _euler_to_quat with p.getQuaternionFromEuler().
-       Remove _direction_to_quat and _rotation_matrix_to_quat (dead).
+RESOLVED (2026-04-17):
+       Replaced _euler_to_quat with p.getQuaternionFromEuler() in
+       sample_grasp().  Removed dead _direction_to_quat and
+       _rotation_matrix_to_quat (never called externally).  Also fixed
+       stale comment on grasp Z-offset list (said "0.05, 0.10, 0.15"
+       but actual list is [0.1]).
 
 
 ================================================================================
@@ -812,7 +809,7 @@ TIER 1 — Mixed dependencies (see each issue):
 TIER 2 — CODE QUALITY (independent of correctness fixes):
   #26  test_full_pipeline.py too long — extract modules     ~1-2 days
   #27  Triplicated wireframe drawing code                    <1 day
-  #28  Hand-rolled quaternion math                           <1 day
+  #28  Hand-rolled quaternion math                           [RESOLVED 2026-04-17]
   #35  Boxel vs BoxelData dual representation               ~2-3 days
 
 TIER 3 — THESIS EVALUATION (independent of code fixes):
@@ -830,9 +827,9 @@ TIER 3 — CODE QUALITY (low priority):
   #33  remove_boxel_viz O(n) list operations                 <1 day
   #34  _compute_placement_view_blocks scalability           (if needed)
 
-Total: 18 open items (#3(deferred), #4(partial), #6, #9–#14, #21, #26–#35;
-      deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
-      resolved/subsumed #1, #5, #7, #8, #15–#20, #22–#25 →
+Total: 17 open items (#3(deferred), #4(partial), #6, #9–#14, #21, #26–#27,
+      #29–#35; deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
+      resolved/subsumed #1, #5, #7, #8, #15–#20, #22–#25, #28 →
         archive/CODEBASE_AUDIT_RESOLVED.txt)
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
