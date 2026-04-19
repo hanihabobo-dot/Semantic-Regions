@@ -3,14 +3,21 @@ Data structures for Semantic Boxel representation.
 
 This module contains the core data types used throughout the boxel system:
 - ObjectInfo: Stores PyBullet object metadata
-- Boxel: Semantic cuboid for belief representation
 - OctreeNode: Helper for spatial subdivision
 - CameraObservation: Container for camera capture results
+
+The Boxel dataclass that previously lived here was removed by audit #35
+(2026-04-17): the codebase now uses :class:`boxel_data.BoxelData` as the
+sole representation everywhere, including in stateless geometry producers
+(FreeSpaceGenerator, CellMerger, ShadowCalculator).
 """
 
 import numpy as np
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, TYPE_CHECKING
 from dataclasses import dataclass
+
+if TYPE_CHECKING:
+    from boxel_data import BoxelData  # forward reference for CameraObservation
 
 
 @dataclass
@@ -23,26 +30,6 @@ class ObjectInfo:
     size: np.ndarray  # [width, height, depth] dimensions
     is_visible: bool  # Whether object is currently visible from camera
     is_occluder: bool  # Whether this object is an occluder (larger cube)
-
-
-@dataclass
-class Boxel:
-    """
-    Semantic Boxel: A task-relevant cuboid for belief representation.
-    
-    In this implementation, Boxels are axis-aligned bounding boxes (AABBs) 
-    that bound objects or regions of interest. This abstraction allows the 
-    planner to reason about "regions" rather than precise object meshes.
-    """
-    center: np.ndarray  # [x, y, z] center coordinates of the box in world frame
-    extent: np.ndarray  # [x_half, y_half, z_half] half-dimensions (distance from center to edge)
-    object_name: Optional[str] = None  # Name of the object this boxel bounds (if any)
-    label: Optional[str] = None  # Optional display name in simulation (e.g. registry id); see BoxelVisualizer
-    is_occluded: bool = False  # Belief state: Is this boxel currently known to be occluded?
-    is_shadow: bool = False  # Is this a shadow/occlusion region cast by another object?
-    is_free: bool = False  # Is this boxel representing known free space?
-    is_candidate: bool = False  # Is this a candidate node currently being processed?
-    is_occluder: bool = False  # Does this object boxel cast shadows (occlude other regions)?
 
 
 class OctreeNode:
@@ -69,7 +56,7 @@ class CameraObservation:
     """Data structure for camera observations."""
     visible_objects: List[str]  # List of object names that are visible
     object_poses: Dict[str, Tuple[np.ndarray, np.ndarray]]  # Dict mapping object names to (position, orientation)
-    boxels: Optional[List[Boxel]] = None  # List of Semantic Boxels generated from the observation
+    boxels: Optional[List['BoxelData']] = None  # OBJECT + SHADOW BoxelData generated from the observation
     rgb_image: Optional[np.ndarray] = None  # RGB image (H, W, 3) — None when not computed
     depth_image: Optional[np.ndarray] = None  # Depth image (H, W) in meters — None when not computed
     point_cloud: Optional[np.ndarray] = None  # Point cloud (N, 3) in world coords — None when not computed

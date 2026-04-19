@@ -9,7 +9,7 @@ when shadows intersect with other objects.
 import numpy as np
 import pybullet as p
 from typing import List
-from boxel_types import Boxel
+from boxel_data import BoxelData, BoxelType
 
 
 class ShadowCalculator:
@@ -38,20 +38,26 @@ class ShadowCalculator:
         self.table_x_min, self.table_x_max = table_x_range
         self.table_y_min, self.table_y_max = table_y_range
     
-    def calculate_shadow_boxel(self, obj_boxel: Boxel, obstacles: List[Boxel]) -> List[Boxel]:
+    def calculate_shadow_boxel(self, obj_boxel: BoxelData,
+                               obstacles: List[BoxelData]) -> List[BoxelData]:
         """
         Calculate the Shadow Boxel(s) cast by an object, accounting for ray casting and obstacles.
-        
+
         1. Ray Casting: Uses PyBullet rayTestBatch to find shadow extent against table/world.
         2. Splitting: Breaks shadow boxels if they intersect with other objects.
         3. Height Constraint: Shadow height is an overestimate (at least as tall as object).
-        
+
         Args:
-            obj_boxel: The visible object casting the shadow.
-            obstacles: List of other solid boxels that might block the shadow.
-            
+            obj_boxel: BoxelData of the visible object casting the shadow.
+                ``object_name`` is used to label resulting shadow fragments
+                ("shadow_of_<name>"); ``created_by_object`` is set on each
+                returned shadow.
+            obstacles: BoxelData of other solid boxels that might block the
+                shadow (subtracted from the volume).
+
         Returns:
-            List[Boxel]: One or more boxels representing the shadow volume.
+            List[BoxelData]: One or more SHADOW BoxelData representing the
+            shadow volume.  IDs are left empty — the caller registers them.
         """
         cam_pos = self.camera_position
         obj_center = obj_boxel.center
@@ -170,16 +176,12 @@ class ShadowCalculator:
         else:
             s_max[dom_axis] = min(s_max[dom_axis], o_min[dom_axis])
             
-        # Initial Shadow Boxel
-        s_center = (s_min + s_max) / 2.0
-        s_extent = (s_max - s_min) / 2.0
-        
-        initial_shadow = Boxel(
-            center=s_center,
-            extent=s_extent,
-            object_name=f"shadow_of_{obj_boxel.object_name}",
-            is_occluded=True,
-            is_shadow=True
+        # Initial Shadow BoxelData (ID assigned later by registry).
+        initial_shadow = BoxelData(
+            boxel_type=BoxelType.SHADOW,
+            min_corner=s_min.copy(),
+            max_corner=s_max.copy(),
+            created_by_object=obj_boxel.object_name,
         )
         
         # --- Step 3: Handle Obstacles (Splitting) ---
@@ -197,25 +199,22 @@ class ShadowCalculator:
             
         return active_shadows
 
-    def _check_aabb_intersection(self, b1: Boxel, b2: Boxel) -> bool:
+    def _check_aabb_intersection(self, b1: BoxelData, b2: BoxelData) -> bool:
         """Check if two boxels intersect."""
-        min1 = b1.center - b1.extent
-        max1 = b1.center + b1.extent
-        min2 = b2.center - b2.extent
-        max2 = b2.center + b2.extent
-        
-        return (np.all(min1 <= max2) and np.all(max1 >= min2))
+        return (np.all(b1.min_corner <= b2.max_corner) and
+                np.all(b1.max_corner >= b2.min_corner))
 
-    def _subtract_aabb(self, shadow: Boxel, obstacle: Boxel, direction: np.ndarray) -> List[Boxel]:
+    def _subtract_aabb(self, shadow: BoxelData, obstacle: BoxelData,
+                       direction: np.ndarray) -> List[BoxelData]:
         """
         Subtract obstacle from shadow, keeping parts 'before' and 'around' the obstacle.
         """
-        s_min = shadow.center - shadow.extent
-        s_max = shadow.center + shadow.extent
-        o_min = obstacle.center - obstacle.extent
-        o_max = obstacle.center + obstacle.extent
-        
-        fragments = []
+        s_min = shadow.min_corner.copy()
+        s_max = shadow.max_corner.copy()
+        o_min = obstacle.min_corner
+        o_max = obstacle.max_corner
+
+        fragments: List[BoxelData] = []
         
         # Split along each axis
         # 1. Left of Obstacle (Min X)
@@ -268,37 +267,33 @@ class ShadowCalculator:
                 
         return filtered_fragments
 
-    def _create_boxel_from_bounds(self, min_pt, max_pt, template_boxel):
-        """Create a boxel from min/max bounds."""
-        center = (min_pt + max_pt) / 2.0
+    def _create_boxel_from_bounds(self, min_pt: np.ndarray, max_pt: np.ndarray,
+                                  template_boxel: BoxelData) -> "BoxelData | None":
+        """Create a SHADOW BoxelData from min/max bounds (None if degenerate)."""
         extent = (max_pt - min_pt) / 2.0
         # 1 mm minimum — reject degenerate slivers from clipping arithmetic.
         MIN_EXTENT = 0.001
         if np.any(extent <= 0) or np.any(extent < MIN_EXTENT):
             return None
-            
-        return Boxel(
-            center=center,
-            extent=extent,
-            object_name=template_boxel.object_name,
-            is_occluded=True,
-            is_shadow=True
+
+        return BoxelData(
+            boxel_type=BoxelType.SHADOW,
+            min_corner=min_pt.copy(),
+            max_corner=max_pt.copy(),
+            created_by_object=template_boxel.created_by_object,
         )
 
-    def _is_downstream(self, frag: Boxel, obstacle: Boxel, direction: np.ndarray) -> bool:
+    def _is_downstream(self, frag: BoxelData, obstacle: BoxelData,
+                       direction: np.ndarray) -> bool:
         """Check if a fragment is 'behind' the obstacle relative to shadow direction."""
-        dom_axis = np.argmax(np.abs(direction))
+        dom_axis = int(np.argmax(np.abs(direction)))
         sign = np.sign(direction[dom_axis])
-        
+
         if sign > 0:
-            f_min = frag.center[dom_axis] - frag.extent[dom_axis]
-            o_max = obstacle.center[dom_axis] + obstacle.extent[dom_axis]
-            if f_min >= o_max - 1e-4:  # 0.1 mm tolerance for floating-point rounding
+            if frag.min_corner[dom_axis] >= obstacle.max_corner[dom_axis] - 1e-4:
                 return True
         else:
-            f_max = frag.center[dom_axis] + frag.extent[dom_axis]
-            o_min = obstacle.center[dom_axis] - obstacle.extent[dom_axis]
-            if f_max <= o_min + 1e-4:  # same tolerance as above
+            if frag.max_corner[dom_axis] <= obstacle.min_corner[dom_axis] + 1e-4:
                 return True
-                
+
         return False

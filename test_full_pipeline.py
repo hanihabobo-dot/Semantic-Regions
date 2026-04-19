@@ -29,6 +29,7 @@ import sys
 import os
 import argparse
 import random
+from typing import List
 
 # PDDLStream is an external library (not pip-installable) that lives in a
 # sibling directory.  We inject it into sys.path so its modules can be
@@ -54,10 +55,9 @@ import pybullet_data
 # run_logger: Per-run artefact capture for reproducibility
 from boxel_env import (BoxelTestEnv, SceneConfig,
                        default_scene, mixed_shapes_scene, scalability_scene)
-from boxel_data import BoxelData, BoxelRegistry, BoxelType, create_boxel_registry_from_boxels
-from boxel_types import Boxel
+from boxel_data import BoxelData, BoxelRegistry, BoxelType
 from cell_merger import merge_free_space_cells
-from free_space import split_free_boxel
+from free_space import split_free_boxel  # noqa: F401  (kept for future use)
 from pddlstream_planner import PDDLStreamPlanner
 from streams import RobotConfig
 from robot_utils import (END_EFFECTOR_LINK, RenderingLock, solve_ik,
@@ -87,12 +87,10 @@ def reboxelize_free_space(registry, env, boxel_centers, viz, show_free):
     """
     old_free = {b.id: b for b in registry.get_free_space_boxels()}
 
+    # Pass OBJECT + SHADOW BoxelData straight into the octree generator —
+    # post-#35 it consumes BoxelData directly (no Boxel conversion).
     known_obstacles = [
-        Boxel(center=bd.center.copy(),
-              extent=bd.extent.copy(),
-              object_name=bd.object_name,
-              is_shadow=(bd.boxel_type == BoxelType.SHADOW))
-        for bd in registry.boxels.values()
+        bd for bd in registry.boxels.values()
         if bd.boxel_type in (BoxelType.OBJECT, BoxelType.SHADOW)
     ]
 
@@ -101,14 +99,14 @@ def reboxelize_free_space(registry, env, boxel_centers, viz, show_free):
 
     _tol = 1e-4
     old_matched: set = set()
-    new_unmatched: list = []
+    new_unmatched: List[BoxelData] = []
     for m in merged:
         found = False
         for oid, od in old_free.items():
             if oid in old_matched:
                 continue
-            if (np.allclose(m.center, od.center, atol=_tol) and
-                    np.allclose(m.extent, od.extent, atol=_tol)):
+            if (np.allclose(m.min_corner, od.min_corner, atol=_tol) and
+                    np.allclose(m.max_corner, od.max_corner, atol=_tol)):
                 old_matched.add(oid)
                 found = True
                 break
@@ -120,26 +118,12 @@ def reboxelize_free_space(registry, env, boxel_centers, viz, show_free):
         registry.remove_boxel(oid)
         boxel_centers.pop(oid, None)
 
+    env.annotate_free_space_surface(new_unmatched)
     new_ids: list = []
     for frag in new_unmatched:
-        fid = registry.generate_id("free")
-        fmin = frag.center - frag.extent
-        fmax = frag.center + frag.extent
-        fd = BoxelData(
-            id=fid,
-            boxel_type=BoxelType.FREE_SPACE,
-            min_corner=fmin,
-            max_corner=fmax,
-            on_surface=(
-                "table"
-                if fmin[2] <= env.table_surface_height + 0.01
-                else None
-            ),
-            surface_z=env.table_surface_height,
-        )
-        registry.add_boxel(fd)
+        fid = registry.add_boxel(frag)
         new_ids.append(fid)
-        boxel_centers[fid] = fd.center
+        boxel_centers[fid] = frag.center
 
     total_free = len(registry.get_free_space_boxels())
     print(f"    Re-boxelize: {len(old_removed)} removed, "
@@ -252,6 +236,9 @@ def main(gui=True, run_logger=None, scene_config=None,
     all_known = obs.boxels
     free_boxels = env.generate_free_space(all_known, visualize=False)
     merged_free = merge_free_space_cells(free_boxels)
+    # Free-space geometry is stateless until here; tag table-contact info
+    # so the planner can emit (on_surface ?b) for place actions (audit #35).
+    env.annotate_free_space_surface(merged_free)
     all_boxels = all_known + merged_free
     print(f"  Calculated {len(all_boxels)} boxels")
     
@@ -264,7 +251,12 @@ def main(gui=True, run_logger=None, scene_config=None,
     # Both the PDDL planner and the execution layer reference the same
     # registry, ensuring symbolic names map to consistent geometry.
     print("\n--- Phase 3: Creating BoxelRegistry ---")
-    registry = create_boxel_registry_from_boxels(all_boxels, env.table_surface_height)
+    # Post-#35: producers emit BoxelData with semantic IDs (object name for
+    # OBJECT, "shadow_of_<name>" for SHADOW) and parent linkage already set.
+    # Free-space cells arrive with empty IDs; add_boxel assigns "free_NNN".
+    registry = BoxelRegistry()
+    for bd in all_boxels:
+        registry.add_boxel(bd)
     registry.save_to_json("boxel_data.json")
     if run_logger:
         run_logger.save_artefact("boxel_data.json")
@@ -443,6 +435,7 @@ def main(gui=True, run_logger=None, scene_config=None,
     max_replans = 4 * len(shadows) + 1
     grasp_constraint_id = None       # set during pick, cleared after place
     held_body_id = None              # PyBullet body ID of the held object
+    held_object_boxel_id = None      # registry boxel ID of the held object
     exit_reason = None               # tracks why the loop ended for Phase 6
     current_config = planner.home_config  # robot's last known joint config
     # Detect infinite-replan loops: if sensing the same shadow stays
@@ -461,7 +454,49 @@ def main(gui=True, run_logger=None, scene_config=None,
             exit_reason = "all_searched"
             print("ERROR: Searched all shadows but target not found!")
             break
-        
+
+        # --- Drop any object still in the gripper before replanning -------
+        # The action loop can `break` mid-plan (sense failed, IK failed,
+        # missing shadow, etc.) before reaching the planned `place`.  When
+        # that happens the constraint from the prior `pick` is still
+        # attached, but the planner's _build_init unconditionally emits
+        # ('handempty',) and will happily plan another `pick` — leading to
+        # two objects dangling from the EE.  Release the held object in
+        # place so reality matches the planner's assumption.  Retry on
+        # failure (object stuck between fingers, constraint not removed,
+        # etc.); after exhausting retries, abort the run rather than carry
+        # on with an inconsistent world state.
+        if held_body_id is not None:
+            drop_ok, drop_state = release_held_object_in_place(
+                env=env,
+                robot_id=robot_id,
+                gui=gui,
+                grasp_constraint_id=grasp_constraint_id,
+                held_body_id=held_body_id,
+                held_object_boxel_id=held_object_boxel_id,
+                registry=registry,
+                boxel_centers=boxel_centers,
+                boxel_to_pybullet=boxel_to_pybullet,
+                body_id_to_name=body_id_to_name,
+                viz=viz,
+                shadows=shadows,
+                occluders=occluders,
+                planner=planner,
+                max_attempts=3,
+            )
+            grasp_constraint_id = None
+            held_body_id = None
+            held_object_boxel_id = None
+            if drop_state.get("shadow_occluder_map") is not None:
+                shadow_occluder_map = drop_state["shadow_occluder_map"]
+            if drop_state.get("current_config") is not None:
+                current_config = drop_state["current_config"]
+            if not drop_ok:
+                exit_reason = "drop_failed"
+                print("ERROR: Could not release held object after retries — "
+                      "aborting to avoid double-grasp.")
+                break
+
         # Ensure the free-space partition is consistent before the planner
         # reads the registry (audit #25).  After a place action,
         # update_after_place sets registry.dirty because the consumed
@@ -653,45 +688,34 @@ def main(gui=True, run_logger=None, scene_config=None,
                             }
 
                             # Compute shadow for this newly visible object.
-                            obj_as_boxel = Boxel(
-                                center=obj_center, extent=obj_extent,
-                                object_name=obj_name, is_occluder=False)
+                            # ShadowCalculator now accepts BoxelData directly,
+                            # so we can pass obj_bd and the OBJECT registry
+                            # entries with no conversion (audit #35).
                             other_solids = [
-                                Boxel(center=bd.center.copy(),
-                                      extent=bd.extent.copy(),
-                                      object_name=bd.object_name)
-                                for bd in registry.boxels.values()
+                                bd for bd in registry.boxels.values()
                                 if (bd.boxel_type == BoxelType.OBJECT
                                     and bd.id != obj_name)
                             ]
                             shadow_parts = env.shadow_calculator.calculate_shadow_boxel(
-                                obj_as_boxel, other_solids)
+                                obj_bd, other_solids)
 
                             if shadow_parts:
                                 obj_bd.is_occluder = True
+                                table_z = env.table_surface_height
                                 for sp in shadow_parts:
-                                    s_id = registry.generate_id("shadow")
-                                    s_min = sp.center - sp.extent
-                                    s_max = sp.center + sp.extent
-                                    s_bd = BoxelData(
-                                        id=s_id,
-                                        boxel_type=BoxelType.SHADOW,
-                                        min_corner=s_min,
-                                        max_corner=s_max,
-                                        created_by_boxel_id=obj_name,
-                                        created_by_object=obj_name,
-                                        on_surface=(
-                                            "table"
-                                            if s_min[2] <= env.table_surface_height + 0.01
-                                            else None
-                                        ),
-                                        surface_z=env.table_surface_height,
+                                    sp.created_by_boxel_id = obj_name
+                                    sp.created_by_object = obj_name
+                                    sp.on_surface = (
+                                        "table"
+                                        if sp.min_corner[2] <= table_z + 0.01
+                                        else None
                                     )
-                                    registry.add_boxel(s_bd)
+                                    sp.surface_z = table_z
+                                    s_id = registry.add_boxel(sp)  # auto-assigns "shadow_NNN"
                                     obj_bd.shadow_boxel_ids.append(s_id)
                                     shadows.append(s_id)
                                     shadow_occluder_map[s_id] = [obj_name]
-                                    boxel_centers[s_id] = s_bd.center
+                                    boxel_centers[s_id] = sp.center
 
                             if viz is not None:
                                 viz.draw_boxel_data(obj_bd)
@@ -742,6 +766,17 @@ def main(gui=True, run_logger=None, scene_config=None,
                 obj_str = str(obj)
                 print(f"    Picking {obj_str} from {boxel_id}...")
 
+                # Defensive: refuse to pick when the gripper is already
+                # holding something.  The pre-replan release step should
+                # have cleared this, but a fresh planner skeleton can in
+                # principle chain pick→pick without an intervening place;
+                # double-grasping would silently attach two bodies.
+                if held_body_id is not None or grasp_constraint_id is not None:
+                    held_name = body_id_to_name.get(held_body_id, str(held_body_id))
+                    print(f"    ERROR: Cannot pick {obj_str} — gripper already "
+                          f"holds {held_name}. Replanning.")
+                    break
+
                 # Resolve symbolic name → PyBullet object.  The target
                 # isn't in boxel_to_pybullet (it's hidden), so we
                 # handle it as a special case.
@@ -763,6 +798,10 @@ def main(gui=True, run_logger=None, scene_config=None,
                     break
                 grasp_constraint_id, current_config = result
                 held_body_id = env.objects[pick_obj_name].object_id
+                # Track the registry boxel ID corresponding to the held
+                # body so the emergency-drop path can relocate the right
+                # OBJECT boxel if we have to release mid-plan.
+                held_object_boxel_id = obj_str if obj_str in boxel_to_pybullet else None
                 detect_execution_collisions(
                     robot_id, env.client_id,
                     held_body_id=held_body_id,
@@ -805,6 +844,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                 current_config = place_result
                 grasp_constraint_id = None
                 held_body_id = None
+                held_object_boxel_id = None
 
                 # Refresh positions after the physics settle step inside
                 # execute_place — objects may have shifted slightly.
@@ -840,7 +880,6 @@ def main(gui=True, run_logger=None, scene_config=None,
                             object_boxel_id=obj_str,
                             placed_min=aabb_min,
                             placed_max=aabb_max,
-                            free_fragments=[],
                             table_surface_height=env.table_surface_height,
                         )
 
@@ -908,6 +947,10 @@ def main(gui=True, run_logger=None, scene_config=None,
             print(f"FAILED: All {len(shadows)} shadows searched — target not found")
         elif exit_reason == "planner_failed":
             print(f"FAILED: Planner returned no plan "
+                  f"({len(remaining)} unsearched shadows remaining)")
+        elif exit_reason == "drop_failed":
+            print(f"FAILED: Could not release held object after retries — "
+                  f"aborted to avoid double-grasp "
                   f"({len(remaining)} unsearched shadows remaining)")
         else:
             print(f"FAILED: Replan limit reached ({max_replans}) with "
@@ -1089,6 +1132,164 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
             print(f"    {sid} blocked by: {bids}")
 
     return blockers
+
+
+def release_held_object_in_place(
+    env,
+    robot_id,
+    gui,
+    grasp_constraint_id,
+    held_body_id,
+    held_object_boxel_id,
+    registry,
+    boxel_centers,
+    boxel_to_pybullet,
+    body_id_to_name,
+    viz,
+    shadows,
+    occluders,
+    planner,
+    max_attempts: int = 3,
+):
+    """
+    Open the gripper, remove the grasp constraint, and verify the object
+    actually fell/separated from the end-effector.  Retries on failure.
+
+    A drop is considered successful when, after settling:
+      • The object's COM is reasonably far from the EE (no longer pinched).
+      • The object's linear speed is near zero (came to rest, not floating).
+
+    Failure modes covered:
+      • removeConstraint raises (already removed, invalid id).
+      • Fingers re-close on the object due to position-control overshoot.
+      • Object snags on a finger pad and stays at gripper height.
+
+    Args:
+        env: BoxelTestEnv.
+        robot_id: PyBullet body ID of the robot.
+        gui: Whether GUI is active.
+        grasp_constraint_id: Constraint to remove (may be None).
+        held_body_id: PyBullet body ID of the held object.
+        held_object_boxel_id: Registry boxel ID for the held object (may be None).
+        registry, boxel_centers, boxel_to_pybullet, body_id_to_name, viz:
+            Bookkeeping caches that need to be updated with the dropped pose.
+        shadows, occluders, planner: Inputs for refreshing shadow_occluder_map.
+        max_attempts: How many open-and-settle cycles to try before giving up.
+
+    Returns:
+        Tuple[bool, Dict]: (success, state_updates).  state_updates may
+        contain 'shadow_occluder_map' and 'current_config' for the caller
+        to apply.  When success is False, the caller should abort the run.
+    """
+    state_updates: dict = {
+        "shadow_occluder_map": None,
+        "current_config": None,
+    }
+
+    dropped_name = body_id_to_name.get(held_body_id)
+    if dropped_name is None or dropped_name not in env.objects:
+        # Without a name we can't refresh the registry — but the caller
+        # still wants the constraint gone.
+        try:
+            if grasp_constraint_id is not None:
+                p.removeConstraint(grasp_constraint_id)
+        except Exception:
+            pass
+        return True, state_updates
+
+    constraint_removed = False
+    drop_ok = False
+
+    for attempt in range(1, max_attempts + 1):
+        print(f"  Replanning while holding {dropped_name} — release "
+              f"attempt {attempt}/{max_attempts}.")
+
+        # Remove the constraint exactly once; subsequent attempts only
+        # retry the gripper-open + settle cycle.
+        if not constraint_removed and grasp_constraint_id is not None:
+            try:
+                p.removeConstraint(grasp_constraint_id)
+                constraint_removed = True
+            except Exception as exc:
+                print(f"    WARNING: removeConstraint failed: {exc}")
+                # Treat as "already gone" so subsequent retries can proceed.
+                constraint_removed = True
+
+        open_gripper(robot_id, gui)
+        # Longer settle on retries so a snagged object has more time to
+        # slip free under gravity.
+        for _ in range(30 + 30 * (attempt - 1)):
+            env.step_simulation()
+        env.update_object_positions()
+
+        # --- Verify the object is actually free of the EE -----------------
+        ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
+        ee_pos = np.array(ee_state[0])
+        obj_pos = np.array(env.objects[dropped_name].position)
+        ee_to_obj_dist = float(np.linalg.norm(ee_pos - obj_pos))
+        lin_vel, _ = p.getBaseVelocity(held_body_id)
+        speed = float(np.linalg.norm(lin_vel))
+
+        # Heuristics:
+        # • If the object COM sits >= 8 cm from the EE, fingers can't
+        #   still be pinching it (Panda finger length ~5.4 cm).
+        # • If it's closer but at rest, it may have landed directly under
+        #   the gripper — that's still a successful drop.
+        far_enough = ee_to_obj_dist >= 0.08
+        at_rest = speed < 0.02
+        if far_enough and at_rest:
+            drop_ok = True
+            print(f"    -> Released {dropped_name} "
+                  f"(EE→obj {ee_to_obj_dist*100:.1f} cm, speed "
+                  f"{speed*100:.1f} cm/s)")
+            break
+        print(f"    Drop verification failed: EE→obj {ee_to_obj_dist*100:.1f} cm, "
+              f"speed {speed*100:.1f} cm/s — retrying.")
+
+    if not drop_ok:
+        return False, state_updates
+
+    # --- Update bookkeeping with the dropped object's final pose ---------
+    aabb_min, aabb_max = p.getAABB(held_body_id)
+    aabb_min = np.array(aabb_min)
+    aabb_max = np.array(aabb_max)
+    if (held_object_boxel_id is not None
+            and registry.get_boxel(held_object_boxel_id) is not None):
+        obj_bd = registry.get_boxel(held_object_boxel_id)
+        obj_bd.min_corner = aabb_min
+        obj_bd.max_corner = aabb_max
+        obj_bd.on_surface = (
+            "table"
+            if aabb_min[2] <= env.table_surface_height + 0.01
+            else None
+        )
+        boxel_centers[held_object_boxel_id] = obj_bd.center
+        if held_object_boxel_id in boxel_to_pybullet:
+            boxel_to_pybullet[held_object_boxel_id]['position'] = \
+                np.array(env.objects[dropped_name].position)
+        if viz is not None:
+            viz.remove_boxel_viz(held_object_boxel_id)
+            viz.draw_boxel_data(obj_bd)
+
+    # Free space and shadows must be refreshed: the dropped object now
+    # occupies new ground and may block different camera lines of sight.
+    setattr(registry, "_dirty", True)
+    state_updates["shadow_occluder_map"] = compute_shadow_blockers(
+        env.camera_position, registry, shadows, occluders, env
+    )
+    planner.shadow_occluder_map = state_updates["shadow_occluder_map"]
+
+    actual_joints = np.array(
+        [p.getJointState(robot_id, i)[0] for i in range(7)]
+    )
+    state_updates["current_config"] = RobotConfig(
+        joint_positions=actual_joints,
+        name="post_emergency_drop"
+    )
+    print(f"    -> Dropped {dropped_name} at "
+          f"{tuple(round(v, 3) for v in env.objects[dropped_name].position)}")
+
+    return True, state_updates
 
 
 def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui):

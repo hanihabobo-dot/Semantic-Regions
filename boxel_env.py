@@ -12,7 +12,8 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
-from boxel_types import ObjectInfo, Boxel, CameraObservation
+from boxel_types import ObjectInfo, CameraObservation
+from boxel_data import BoxelData, BoxelType
 from shadow_calculator import ShadowCalculator
 from free_space import FreeSpaceGenerator
 from visualization import BoxelVisualizer
@@ -578,62 +579,110 @@ class BoxelTestEnv:
                 size=spec.full_extents, is_visible=False, is_occluder=False
             )
     
-    def generate_boxels(self, visible_objects: List[str]) -> List[Boxel]:
+    def generate_boxels(self, visible_objects: List[str]) -> List[BoxelData]:
         """
-        Generate Semantic Boxels for visible objects and their shadows.
-        
+        Generate Semantic BoxelData for visible objects and their shadows.
+
+        Object boxels get ``id=<object_name>`` (e.g. "red_object") so the
+        planner can reference them with their human-readable label.
+        Shadow boxels get ``id=shadow_of_<object_name>`` and
+        ``created_by_boxel_id`` / ``created_by_object`` set to the parent
+        object name (which is also the parent's boxel ID).
+
         Args:
-            visible_objects: List of visible object names
-            
+            visible_objects: List of visible object names.
+
         Returns:
-            List of Boxel objects (objects + shadows)
+            List of OBJECT + SHADOW BoxelData with semantic IDs and parent
+            relationships fully populated, ready to be added to a registry.
         """
-        boxels = []
-        solid_boxels = []
-        
-        # Generate object boxels (initially not marked as occluders)
+        table_z = self.table_surface_height
+        on_surface_tol = 0.01  # PyBullet contact margin + AABB rounding
+
+        object_boxels: List[BoxelData] = []
         for obj_name in visible_objects:
             if obj_name not in self.objects:
                 continue
-                
+
             obj_info = self.objects[obj_name]
             aabb_min, aabb_max = p.getAABB(obj_info.object_id)
-            
-            center = (np.array(aabb_min) + np.array(aabb_max)) / 2.0
-            extent = (np.array(aabb_max) - np.array(aabb_min)) / 2.0
-            
-            obj_boxel = Boxel(center=center, extent=extent, object_name=obj_name,
-                             is_occluded=False, is_shadow=False, is_occluder=False)
-            solid_boxels.append(obj_boxel)
+            aabb_min = np.array(aabb_min)
+            aabb_max = np.array(aabb_max)
 
-        # Generate shadow boxels and mark objects as occluders if they cast shadows
-        for obj_boxel in solid_boxels:
-            obstacles = [b for b in solid_boxels if b.object_name != obj_boxel.object_name]
-            shadow_parts = self.shadow_calculator.calculate_shadow_boxel(obj_boxel, obstacles)
-            
-            # If this object casts any shadows, mark it as an occluder
+            object_boxels.append(BoxelData(
+                id=obj_name,
+                boxel_type=BoxelType.OBJECT,
+                min_corner=aabb_min,
+                max_corner=aabb_max,
+                object_name=obj_name,
+                is_occluder=False,  # set below if any shadow is cast
+                on_surface="table" if aabb_min[2] <= table_z + on_surface_tol else None,
+                surface_z=table_z,
+            ))
+
+        # Compute shadows; mark casters as occluders.
+        shadow_boxels: List[BoxelData] = []
+        for obj_boxel in object_boxels:
+            obstacles = [b for b in object_boxels if b.id != obj_boxel.id]
+            shadow_parts = self.shadow_calculator.calculate_shadow_boxel(
+                obj_boxel, obstacles)
+
             if shadow_parts:
                 obj_boxel.is_occluder = True
-            
-            boxels.extend(shadow_parts)
-        
-        # Add all object boxels (now with correct is_occluder status)
-        boxels.extend(solid_boxels)
-            
-        return boxels
-    
-    def generate_free_space(self, known_boxels: List[Boxel], visualize: bool = False) -> List[Boxel]:
+
+            for sp in shadow_parts:
+                # ShadowCalculator leaves ID empty; assign a stable
+                # "shadow_of_<parent>" name and link parent ↔ shadow IDs
+                # so downstream consumers (planner, visualizer) can
+                # rely on the relationship.
+                sp.id = f"shadow_of_{obj_boxel.id}"
+                sp.created_by_boxel_id = obj_boxel.id
+                sp.on_surface = (
+                    "table"
+                    if sp.min_corner[2] <= table_z + on_surface_tol
+                    else None
+                )
+                sp.surface_z = table_z
+                obj_boxel.shadow_boxel_ids.append(sp.id)
+                shadow_boxels.append(sp)
+
+        return object_boxels + shadow_boxels
+
+    def generate_free_space(self, known_boxels: List[BoxelData],
+                            visualize: bool = False) -> List[BoxelData]:
         """
         Discretize the free space using octree subdivision.
-        
+
         Args:
-            known_boxels: List of known boxels (objects + shadows)
-            visualize: If True, animates the generation process
-            
+            known_boxels: List of OBJECT + SHADOW BoxelData (the obstacles).
+            visualize: If True, animates the generation process.
+
         Returns:
-            List of free space boxels
+            List of FREE_SPACE BoxelData fragments (with empty IDs).
+            ``on_surface`` / ``surface_z`` are NOT populated here — the
+            execution layer annotates them after cell merging because
+            CellMerger emits fresh BoxelData copies that would otherwise
+            strip these fields.
         """
         return self.free_space_generator.generate(known_boxels, visualize)
+
+    def annotate_free_space_surface(self, free_boxels: List[BoxelData]) -> None:
+        """
+        Set ``on_surface`` / ``surface_z`` on FREE_SPACE BoxelData.
+
+        Free-space cells flow through stateless geometry stages
+        (FreeSpaceGenerator → CellMerger) before reaching the registry.
+        Those stages don't know the table height, so this helper carries
+        that knowledge to the call site.  Required by the planner so
+        ``place`` actions (precondition: ``(on_surface ?b)``) can fire.
+
+        Mutates ``free_boxels`` in place.  The 0.01 m tolerance accounts
+        for PyBullet contact margin and AABB rounding.
+        """
+        table_z = self.table_surface_height
+        for b in free_boxels:
+            b.on_surface = "table" if b.min_corner[2] <= table_z + 0.01 else None
+            b.surface_z = table_z
 
     def _view_and_projection_matrices(self):
         """View and projection matrices for the semantic camera (matches oracle rays)."""

@@ -22,52 +22,83 @@ class BoxelType(Enum):
     FREE_SPACE = "free_space"   # Known free space (merged)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class BoxelData:
     """
     Complete data structure for a Semantic Boxel.
-    
+
     Designed for PDDLStream integration with all necessary fields for:
     - Geometric queries (motion planning)
     - Spatial relationships (neighbors, occlusion)
     - Manipulation planning (reachability, placement)
+
+    Constructed via keyword arguments only (``kw_only=True``).  Producers
+    that don't yet have a stable ID (``FreeSpaceGenerator``, ``CellMerger``,
+    ``ShadowCalculator`` for transient fragments) leave ``id=""``;
+    ``BoxelRegistry.add_boxel`` then assigns a sequential ID with a
+    type-appropriate prefix.
     """
-    
+
     # === IDENTITY ===
-    id: str                                     # Unique identifier (e.g., "boxel_007")
-    boxel_type: BoxelType                       # Semantic type
-    
+    id: str = ""                                # Empty → registry assigns on add_boxel
+    boxel_type: BoxelType = BoxelType.FREE_SPACE
+
     # === GEOMETRY (AABB) ===
-    min_corner: np.ndarray                      # [x, y, z] minimum corner
-    max_corner: np.ndarray                      # [x, y, z] maximum corner
-    
+    min_corner: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    max_corner: np.ndarray = field(default_factory=lambda: np.zeros(3))
+
     # === OBJECT BOXEL FIELDS ===
     object_name: Optional[str] = None           # Physical object name (for type=OBJECT)
     is_occluder: bool = False                   # Does this cast shadows?
     shadow_boxel_ids: List[str] = field(default_factory=list)  # IDs of shadows this creates
-    
+
     # === SHADOW BOXEL FIELDS ===
     created_by_boxel_id: Optional[str] = None   # Which object boxel creates this shadow
     created_by_object: Optional[str] = None     # Object name that creates this shadow
-    
+
     # === SPATIAL RELATIONSHIPS ===
     neighbor_ids: Dict[str, List[str]] = field(default_factory=lambda: {
         "x_pos": [], "x_neg": [], "y_pos": [], "y_neg": [], "z_pos": [], "z_neg": []
     })
     on_surface: Optional[str] = None            # Which support surface (e.g., "table")
     surface_z: Optional[float] = None           # Z height of support surface
-    
+
     # Note: blocking_boxels removed - use created_by_boxel_id for shadows
     # Note: belief-state fields (possibly_contains, confirmed_contains,
     # confirmed_empty, observed, last_observation_time) removed — they were
     # always default values and never managed by any code path. Belief
     # tracking is handled by BeliefState in the execution layer.
-    
+
+    @classmethod
+    def from_center_extent(
+        cls,
+        center,
+        extent,
+        boxel_type: BoxelType = BoxelType.FREE_SPACE,
+        **kwargs,
+    ) -> 'BoxelData':
+        """
+        Build a BoxelData from a (center, half-extent) pair.
+
+        Convenience for stateless geometry generators that think in
+        center/extent rather than min/max corners (FreeSpaceGenerator,
+        CellMerger, ShadowCalculator).  Pass ``id=""`` (the default)
+        to defer ID assignment to ``BoxelRegistry.add_boxel``.
+        """
+        c = np.asarray(center, dtype=float)
+        e = np.asarray(extent, dtype=float)
+        return cls(
+            boxel_type=boxel_type,
+            min_corner=c - e,
+            max_corner=c + e,
+            **kwargs,
+        )
+
     @property
     def center(self) -> np.ndarray:
         """Compute center from corners."""
         return (self.min_corner + self.max_corner) / 2.0
-    
+
     @property
     def extent(self) -> np.ndarray:
         """Compute half-extents from corners."""
@@ -144,15 +175,32 @@ class BoxelRegistry:
         """Clear the dirty flag — called after reboxelization."""
         self._dirty = False
     
+    # Default ID prefix per boxel type when a producer leaves ``id=""``.
+    _PREFIX_FOR_TYPE = {
+        BoxelType.FREE_SPACE: "free",
+        BoxelType.OBJECT: "obj",
+        BoxelType.SHADOW: "shadow",
+    }
+
     def generate_id(self, prefix: str = "boxel") -> str:
         """Generate a unique boxel ID."""
         boxel_id = f"{prefix}_{self._next_id:03d}"
         self._next_id += 1
         return boxel_id
-    
-    def add_boxel(self, boxel: BoxelData) -> None:
-        """Add a boxel to the registry."""
+
+    def add_boxel(self, boxel: BoxelData) -> str:
+        """
+        Add a boxel to the registry.
+
+        If ``boxel.id`` is empty, a sequential ID is generated using a
+        prefix derived from ``boxel.boxel_type`` (see ``_PREFIX_FOR_TYPE``).
+        Returns the final ID under which the boxel was stored.
+        """
+        if not boxel.id:
+            prefix = self._PREFIX_FOR_TYPE.get(boxel.boxel_type, "boxel")
+            boxel.id = self.generate_id(prefix)
         self.boxels[boxel.id] = boxel
+        return boxel.id
     
     def get_boxel(self, boxel_id: str) -> Optional[BoxelData]:
         """Get a boxel by ID."""
@@ -228,27 +276,26 @@ class BoxelRegistry:
         object_boxel_id: str,
         placed_min: np.ndarray,
         placed_max: np.ndarray,
-        free_fragments: List,
         table_surface_height: float,
-    ) -> List[str]:
+    ) -> None:
         """
         Update the registry after an object is placed into a free-space boxel.
 
-        Removes the consumed free-space entry, moves the object's AABB to its
-        new position, and registers the remaining free-space fragments produced
-        by split_free_boxel + merge.
+        Removes the consumed free-space entry and moves the object's AABB to
+        its new position.  Sets the dirty flag so the replan loop knows to
+        re-run ``reboxelize_free_space`` before the next planner.plan() call
+        (audit #25).
+
+        Free-space fragments are NOT created here — re-boxelization is handled
+        end-to-end by ``reboxelize_free_space`` in test_full_pipeline.py, which
+        re-runs the full octree + merge pipeline against the current world.
 
         Args:
             free_boxel_id: ID of the free-space boxel consumed by placement.
             object_boxel_id: Registry ID of the placed object.
             placed_min: New AABB min corner of the placed object.
             placed_max: New AABB max corner of the placed object.
-            free_fragments: Boxel list (boxel_types.Boxel) from
-                split_free_boxel / merge_free_space_cells.
             table_surface_height: Z height of the table surface.
-
-        Returns:
-            List of newly created free-space boxel IDs.
         """
         self.remove_boxel(free_boxel_id)
 
@@ -260,26 +307,7 @@ class BoxelRegistry:
                 "table" if placed_min[2] <= table_surface_height + 0.01 else None
             )
 
-        new_ids: List[str] = []
-        for frag in free_fragments:
-            frag_id = self.generate_id("free")
-            frag_min = frag.center - frag.extent
-            frag_max = frag.center + frag.extent
-            frag_data = BoxelData(
-                id=frag_id,
-                boxel_type=BoxelType.FREE_SPACE,
-                min_corner=frag_min,
-                max_corner=frag_max,
-                on_surface=(
-                    "table" if frag_min[2] <= table_surface_height + 0.01 else None
-                ),
-                surface_z=table_surface_height,
-            )
-            self.add_boxel(frag_data)
-            new_ids.append(frag_id)
-
         self._dirty = True
-        return new_ids
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert registry to JSON-serializable dictionary."""
@@ -313,96 +341,8 @@ class BoxelRegistry:
         return registry
 
 
-def create_boxel_registry_from_boxels(boxels, table_surface_height: float) -> BoxelRegistry:
-    """
-    Create a BoxelRegistry from a list of Boxel objects (from boxel_types.py).
-    
-    This bridges the old Boxel class with the new BoxelData structure.
-    
-    Args:
-        boxels: List of Boxel objects from the existing system
-        table_surface_height: Z height of the table surface
-        
-    Returns:
-        BoxelRegistry with all boxels converted
-    """
-    from boxel_types import Boxel
-    
-    registry = BoxelRegistry()
-    boxel_id_map = {}  # Map old boxel to new ID
-    object_name_to_id = {}  # Map object name to boxel ID
-    shadow_parent_map = {}  # Map shadow boxel ID to parent object name
-    
-    # First pass: Create all boxel data objects
-    for i, boxel in enumerate(boxels):
-        # Determine type
-        if boxel.is_shadow:
-            boxel_type = BoxelType.SHADOW
-        elif boxel.is_free or (boxel.object_name and boxel.object_name.startswith("free_space")):
-            boxel_type = BoxelType.FREE_SPACE
-        else:
-            boxel_type = BoxelType.OBJECT
-        
-        # Assign a semantic ID when possible, fall back to sequential counter.
-        # OBJECT boxels use the object's human-readable name (e.g. "red_object").
-        # SHADOW boxels use "shadow_of_<caster>" (e.g. "shadow_of_red_object").
-        # FREE_SPACE and any unnamed boxels keep the sequential "free_NNN" / etc.
-        parent_object_name = None
-
-        if boxel_type == BoxelType.OBJECT and boxel.object_name:
-            boxel_id = boxel.object_name
-        elif (boxel_type == BoxelType.SHADOW and boxel.object_name
-              and boxel.object_name.startswith("shadow_of_")):
-            boxel_id = boxel.object_name  # already "shadow_of_<name>"
-            parent_object_name = boxel.object_name[len("shadow_of_"):]
-            shadow_parent_map[boxel_id] = parent_object_name
-        else:
-            prefix = ("obj" if boxel_type == BoxelType.OBJECT
-                      else "shadow" if boxel_type == BoxelType.SHADOW
-                      else "free")
-            boxel_id = registry.generate_id(prefix)
-            if boxel_type == BoxelType.SHADOW and boxel.object_name:
-                if boxel.object_name.startswith("shadow_of_"):
-                    parent_object_name = boxel.object_name[len("shadow_of_"):]
-                    shadow_parent_map[boxel_id] = parent_object_name
-
-        boxel_id_map[id(boxel)] = boxel_id
-
-        # Track object name to ID mapping (used by second pass for shadow linking)
-        if boxel_type == BoxelType.OBJECT and boxel.object_name:
-            object_name_to_id[boxel.object_name] = boxel_id
-        
-        # Create BoxelData
-        min_corner = boxel.center - boxel.extent
-        max_corner = boxel.center + boxel.extent
-        
-        boxel_data = BoxelData(
-            id=boxel_id,
-            boxel_type=boxel_type,
-            min_corner=min_corner,
-            max_corner=max_corner,
-            object_name=boxel.object_name if boxel_type == BoxelType.OBJECT else None,
-            is_occluder=boxel.is_occluder if hasattr(boxel, 'is_occluder') else False,
-            created_by_object=parent_object_name,
-            # 0.01 m tolerance accounts for PyBullet contact margin and AABB rounding.
-            on_surface="table" if min_corner[2] <= table_surface_height + 0.01 else None,
-            surface_z=table_surface_height,
-        )
-        
-        registry.add_boxel(boxel_data)
-    
-    # Second pass: Link shadow boxels to parent object boxels
-    for shadow_id, parent_name in shadow_parent_map.items():
-        shadow_boxel = registry.get_boxel(shadow_id)
-        if parent_name in object_name_to_id:
-            parent_id = object_name_to_id[parent_name]
-            parent_boxel = registry.get_boxel(parent_id)
-            
-            # Link shadow to parent
-            shadow_boxel.created_by_boxel_id = parent_id
-            
-            # Link parent to shadow
-            if shadow_id not in parent_boxel.shadow_boxel_ids:
-                parent_boxel.shadow_boxel_ids.append(shadow_id)
-    
-    return registry
+# Note (audit #35, 2026-04-17): create_boxel_registry_from_boxels() was the
+# bridge between the old boxel_types.Boxel and the modern BoxelData/Registry
+# representation.  Both producers (boxel_env.generate_boxels) and consumers
+# (FreeSpaceGenerator, CellMerger, ShadowCalculator, BoxelVisualizer) now use
+# BoxelData directly, so the bridge is no longer needed.
