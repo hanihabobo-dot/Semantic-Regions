@@ -479,6 +479,103 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # move_robot_smooth(robot_id, home_joints, gui, steps=40)
                 # current_config = planner.home_config
 
+                # Force-refresh every OBJECT boxel + its shadow children
+                # from the live PyBullet pose before we sense.  Settling
+                # and incidental contact can drift cubes between actions;
+                # without this pass the planner keeps reasoning over the
+                # AABB the cube had at Phase 2 spawn time.  Mirrors the
+                # contains_nontarget branch below — same field setup,
+                # same shadow_calculator call, same auxiliary maps.
+                #
+                # When the shadow part count is unchanged (the common
+                # case for translational drift) we update the existing
+                # shadow BoxelData in-place so their registry IDs — and
+                # the belief entries / sense-empty marks tied to those
+                # IDs — remain stable.  Only when topology actually
+                # changes do we fall back to remove-and-readd.
+                for obj_bd in list(registry.get_object_boxels()):
+                    obj_name_r = obj_bd.object_name
+                    if obj_name_r is None or obj_name_r not in env.objects:
+                        continue
+                    bid_r = env.objects[obj_name_r].object_id
+                    aabb_min_r, aabb_max_r = p.getAABB(bid_r)
+                    aabb_min_r = np.array(aabb_min_r)
+                    aabb_max_r = np.array(aabb_max_r)
+
+                    moved = not (
+                        np.allclose(obj_bd.min_corner, aabb_min_r, atol=1e-4)
+                        and np.allclose(obj_bd.max_corner, aabb_max_r, atol=1e-4)
+                    )
+                    if not moved:
+                        continue
+
+                    obj_bd.min_corner = aabb_min_r
+                    obj_bd.max_corner = aabb_max_r
+                    boxel_centers[obj_bd.id] = obj_bd.center
+
+                    other_solids_r = [
+                        bd for bd in registry.boxels.values()
+                        if (bd.boxel_type == BoxelType.OBJECT
+                            and bd.id != obj_bd.id)
+                    ]
+                    new_shadow_parts = env.shadow_calculator.calculate_shadow_boxel(
+                        obj_bd, other_solids_r)
+                    existing_shadow_ids = list(obj_bd.shadow_boxel_ids)
+                    table_z_r = env.table_surface_height
+
+                    if len(new_shadow_parts) == len(existing_shadow_ids):
+                        for s_id_r, sp in zip(existing_shadow_ids, new_shadow_parts):
+                            s_bd = registry.get_boxel(s_id_r)
+                            if s_bd is None:
+                                continue
+                            s_bd.min_corner = sp.min_corner
+                            s_bd.max_corner = sp.max_corner
+                            s_bd.on_surface = (
+                                "table"
+                                if sp.min_corner[2] <= table_z_r + 0.01
+                                else None
+                            )
+                            s_bd.surface_z = table_z_r
+                            boxel_centers[s_id_r] = s_bd.center
+                            if viz is not None:
+                                viz.remove_boxel_viz(s_id_r)
+                                viz.draw_boxel_data(s_bd)
+                        obj_bd.is_occluder = bool(new_shadow_parts)
+                    else:
+                        for s_id_old in existing_shadow_ids:
+                            registry.remove_boxel(s_id_old)
+                            if s_id_old in shadows:
+                                shadows.remove(s_id_old)
+                            shadow_occluder_map.pop(s_id_old, None)
+                            boxel_centers.pop(s_id_old, None)
+                            if viz is not None:
+                                viz.remove_boxel_viz(s_id_old)
+                        obj_bd.shadow_boxel_ids = []
+                        obj_bd.is_occluder = False
+
+                        if new_shadow_parts:
+                            obj_bd.is_occluder = True
+                            for sp in new_shadow_parts:
+                                sp.created_by_boxel_id = obj_bd.id
+                                sp.created_by_object = obj_name_r
+                                sp.on_surface = (
+                                    "table"
+                                    if sp.min_corner[2] <= table_z_r + 0.01
+                                    else None
+                                )
+                                sp.surface_z = table_z_r
+                                s_id_new = registry.add_boxel(sp)
+                                obj_bd.shadow_boxel_ids.append(s_id_new)
+                                shadows.append(s_id_new)
+                                shadow_occluder_map[s_id_new] = [obj_bd.id]
+                                boxel_centers[s_id_new] = sp.center
+                                if viz is not None:
+                                    viz.draw_boxel_data(sp)
+
+                    if viz is not None:
+                        viz.remove_boxel_viz(obj_bd.id)
+                        viz.draw_boxel_data(obj_bd)
+
                 shadow_boxel = registry.get_boxel(str(shadow_id))
                 if shadow_boxel is None:
                     print(f"    WARNING: Shadow '{shadow_id}' not found in registry. Replanning...")
