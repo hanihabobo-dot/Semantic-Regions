@@ -10,7 +10,8 @@ import numpy as np
 import pybullet as p
 import time
 from typing import List, Optional
-from boxel_types import Boxel, OctreeNode
+from boxel_types import OctreeNode
+from boxel_data import BoxelData, BoxelType
 from visualization import wireframe_corners_and_edges
 
 
@@ -50,29 +51,30 @@ class FreeSpaceGenerator:
         self.debug_items = []
         self.candidate_debug_items = []
     
-    def generate(self, known_boxels: List[Boxel], visualize: bool = False) -> List[Boxel]:
+    def generate(self, known_boxels: List[BoxelData],
+                 visualize: bool = False) -> List[BoxelData]:
         """
         Discretize the free space using an Octree (Breadth-First Search).
-        
+
         Args:
-            known_boxels: List of Object and Shadow Boxels
+            known_boxels: List of OBJECT + SHADOW BoxelData (the obstacles
+                that carve free space).
             visualize: If True, animates the generation process (1s per depth layer)
-            
+
         Returns:
-            List of Boxels representing the free space
+            List of FREE_SPACE BoxelData fragments with empty IDs (the
+            consumer registers them via ``BoxelRegistry.add_boxel``, which
+            assigns sequential IDs).
         """
         root_center = (self.ws_min + self.ws_max) / 2.0
         root_extent = (self.ws_max - self.ws_min) / 2.0
         
         root = OctreeNode(root_center, root_extent)
-        free_boxels = []
-        
-        # Helper to get bounds of a boxel
-        def get_bounds(b: Boxel):
-            return b.center - b.extent, b.center + b.extent
-        
-        # Pre-compute bounds for known boxels
-        known_bounds = [get_bounds(b) for b in known_boxels]
+        free_boxels: List[BoxelData] = []
+
+        # Pre-compute bounds for known boxels.  BoxelData stores corners
+        # directly, so no center/extent arithmetic is needed here.
+        known_bounds = [(b.min_corner, b.max_corner) for b in known_boxels]
         
         # BFS Queue
         current_layer = [root]
@@ -94,15 +96,10 @@ class FreeSpaceGenerator:
                 if not is_mixed:
                     # FREE
                     node.state = 'FREE'
-                    new_boxel = Boxel(
-                        center=node.center,
-                        extent=node.extent,
-                        object_name="free_space",
-                        is_occluded=False,
-                        is_shadow=False,
-                        is_free=True
-                    )
-                    free_boxels.append(new_boxel)
+                    free_boxels.append(BoxelData.from_center_extent(
+                        node.center, node.extent,
+                        boxel_type=BoxelType.FREE_SPACE,
+                    ))
                     
                     # Visualization
                     boxel_key = (tuple(node.center), tuple(node.extent))
@@ -179,8 +176,8 @@ class FreeSpaceGenerator:
         self.candidate_debug_items = []
 
 
-def split_free_boxel(free_boxel: Boxel, object_boxel: Boxel,
-                     min_extent: float = 0.005) -> List[Boxel]:
+def split_free_boxel(free_boxel: BoxelData, object_boxel: BoxelData,
+                     min_extent: float = 0.005) -> List[BoxelData]:
     """
     Split a free-space boxel around a placed object using 6-axis AABB subtraction.
 
@@ -188,28 +185,29 @@ def split_free_boxel(free_boxel: Boxel, object_boxel: Boxel,
     ALL surrounding fragments (no directional filtering).
 
     Args:
-        free_boxel: The free-space boxel being consumed by placement.
-        object_boxel: The placed object's AABB (center/extent at its new position).
+        free_boxel: The free-space BoxelData being consumed by placement.
+        object_boxel: The placed object's BoxelData (corners at its new position).
         min_extent: Minimum half-extent on any axis (metres) to keep a fragment.
             Fragments thinner than this are degenerate slivers and are discarded.
 
     Returns:
-        List of free-space Boxel fragments surrounding the placed object.
-        Empty list if the object fully covers the free boxel.
+        List of FREE_SPACE BoxelData fragments surrounding the placed object
+        (with empty IDs — caller registers them).  Empty list if the object
+        fully covers the free boxel.
     """
-    f_min = (free_boxel.center - free_boxel.extent).copy()
-    f_max = (free_boxel.center + free_boxel.extent).copy()
+    f_min = free_boxel.min_corner.copy()
+    f_max = free_boxel.max_corner.copy()
 
     # Clip the object AABB to the free-boxel bounds so slight physics
     # drift after settling doesn't produce fragments outside the original
     # free region.
-    o_min = np.maximum(object_boxel.center - object_boxel.extent, f_min)
-    o_max = np.minimum(object_boxel.center + object_boxel.extent, f_max)
+    o_min = np.maximum(object_boxel.min_corner, f_min)
+    o_max = np.minimum(object_boxel.max_corner, f_max)
 
     if np.any(o_min >= o_max):
         return []
 
-    fragments: List[Boxel] = []
+    fragments: List[BoxelData] = []
 
     # --- 6-axis slab cuts (same order as shadow_calculator._subtract_aabb) ---
     # After each cut the "remaining" region (f_min/f_max) is narrowed on
@@ -259,19 +257,15 @@ def split_free_boxel(free_boxel: Boxel, object_boxel: Boxel,
     return fragments
 
 
-def _append_if_valid(fragments: List[Boxel],
+def _append_if_valid(fragments: List[BoxelData],
                      slab_min: np.ndarray, slab_max: np.ndarray,
                      min_extent: float) -> None:
-    """Create a free-space Boxel from bounds and append if non-degenerate."""
+    """Create a FREE_SPACE BoxelData from bounds and append if non-degenerate."""
     extent = (slab_max - slab_min) / 2.0
     if np.any(extent < min_extent):
         return
-    center = (slab_min + slab_max) / 2.0
-    fragments.append(Boxel(
-        center=center,
-        extent=extent,
-        object_name="free_space_split",
-        is_occluded=False,
-        is_shadow=False,
-        is_free=True,
+    fragments.append(BoxelData(
+        boxel_type=BoxelType.FREE_SPACE,
+        min_corner=slab_min.copy(),
+        max_corner=slab_max.copy(),
     ))

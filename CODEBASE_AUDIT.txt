@@ -48,6 +48,17 @@ Restructured: 2026-03-24
     shared helper into visualization.py; draw_boxels(), draw_boxel_data(),
     and free_space._draw_boxel_wireframe() now call the shared function
     instead of computing corners/edges inline.
+  2026-04-19 — #35 RESOLVED: unified on BoxelData; deleted Boxel class
+    from boxel_types.py and the create_boxel_registry_from_boxels bridge
+    from boxel_data.py.  All producers (FreeSpaceGenerator, CellMerger,
+    ShadowCalculator, boxel_env.generate_boxels) and consumers
+    (BoxelVisualizer, test_full_pipeline) now operate on BoxelData
+    directly.  BoxelData gained kw_only=True, a from_center_extent
+    factory, and BoxelRegistry auto-assigns sequential IDs by type.
+    Surface bookkeeping (on_surface/surface_z) extracted to
+    boxel_env.annotate_free_space_surface — the bridge previously did
+    this implicitly; missing it caused the planner to drop (on_surface ?b)
+    and fail to find any plan with a place action.
   2026-04-17 — Issues #24–#35 added from comprehensive codebase audit.
     #21 updated with PDDL-model design direction.
     #4 updated: shadow_occluder_map refresh after place was commented out
@@ -184,7 +195,7 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #3(def), #4(partial), #6, #9–#14, #21, #26, #29–#35        #
+#  OPEN ISSUES — #3(def), #4(partial), #6, #9–#14, #21, #26, #29–#34        #
 #                                                                              #
 ################################################################################
 
@@ -744,30 +755,50 @@ Fix:   No action needed at current scale.  If scalability evaluation
 
 
 ================================================================================
-#35. BOXEL VS BOXELDATA DUAL REPRESENTATION
+#35. BOXEL VS BOXELDATA DUAL REPRESENTATION                [RESOLVED 2026-04-19]
 ================================================================================
 Priority: TIER 2 — Code quality / architecture
-Where:    boxel_types.py (Boxel), boxel_data.py (BoxelData),
-          create_boxel_registry_from_boxels bridge function
+Where:    boxel_types.py (Boxel REMOVED), boxel_data.py (BoxelData unified),
+          boxel_env.py, free_space.py, cell_merger.py, shadow_calculator.py,
+          visualization.py, test_full_pipeline.py
 Depends:  None
-Effort:   2-3 days
+Effort:   2-3 days  →  done in one session
 
-What:  Two separate data types represent boxels: Boxel (simple
+What:  Two separate data types represented boxels: Boxel (simple
        center/extent dataclass from boxel_types.py) and BoxelData
        (richer structure with registry ID, type, relationships from
        boxel_data.py).  The bridge function
-       create_boxel_registry_from_boxels converts between them.
+       create_boxel_registry_from_boxels converted between them.
 
-       Every boundary crossing requires conversion: reboxelize_free_space
-       creates Boxel from BoxelData, passes to generate_free_space,
-       gets Boxel back, converts back to BoxelData.  This overhead
-       adds complexity and risks conversion mismatches.
+       Every boundary crossing required conversion: reboxelize_free_space
+       created Boxel from BoxelData, passed to generate_free_space, got
+       Boxel back, then converted back to BoxelData.  This added
+       complexity and risked silent conversion mismatches.
 
-Fix:   Unify into a single type.  The simplest path is to make BoxelData
-       the sole representation and update FreeSpaceGenerator,
-       ShadowCalculator, CellMerger, and BoxelVisualizer to accept
-       BoxelData directly.  The Boxel class and the bridge function
-       become unnecessary.
+Resolution:
+  - Boxel dataclass deleted from boxel_types.py.
+  - BoxelData refactored: kw_only=True, default empty id, default
+    BoxelType.FREE_SPACE, default-zero corners, and a from_center_extent
+    classmethod for the geometric call sites.
+  - BoxelRegistry.add_boxel now auto-assigns "free_NNN" / "obj_NNN" /
+    "shadow_NNN" when boxel.id == "".
+  - FreeSpaceGenerator, CellMerger, ShadowCalculator now produce and
+    consume BoxelData directly.
+  - boxel_env.generate_boxels emits BoxelData with semantic IDs
+    ("red_object", "shadow_of_red_object") and parent linkage already
+    set, so create_boxel_registry_from_boxels became unnecessary and
+    was deleted.
+  - BoxelVisualizer consumes BoxelData natively (color/label derived
+    via _color_for_boxel / _label_for_boxel helpers).
+  - test_full_pipeline.py drops Boxel/bridge usage end-to-end.
+  - Surface bookkeeping (on_surface, surface_z) was previously a side
+    effect of the bridge.  Re-introduced as a single-source-of-truth
+    helper boxel_env.annotate_free_space_surface, called once after
+    cell merging in Phase 3 and again inside reboxelize_free_space, so
+    the planner can still emit (on_surface ?b) for place actions.
+
+Verified: full pipeline runs to completion; planner finds plans for
+       hidden-target scenarios as before.
 
 
 ================================================================================
@@ -814,7 +845,7 @@ TIER 2 — CODE QUALITY (independent of correctness fixes):
   #26  test_full_pipeline.py too long — extract modules     ~1-2 days
   #27  Triplicated wireframe drawing code                    [RESOLVED 2026-04-17]
   #28  Hand-rolled quaternion math                           [RESOLVED 2026-04-17]
-  #35  Boxel vs BoxelData dual representation               ~2-3 days
+  #35  Boxel vs BoxelData dual representation               [RESOLVED 2026-04-19]
 
 TIER 3 — THESIS EVALUATION (independent of code fixes):
   #9   Metric collection + experiment runner                ~3-5 days
@@ -831,9 +862,9 @@ TIER 3 — CODE QUALITY (low priority):
   #33  remove_boxel_viz O(n) list operations                 <1 day
   #34  _compute_placement_view_blocks scalability           (if needed)
 
-Total: 16 open items (#3(deferred), #4(partial), #6, #9–#14, #21, #26,
-      #29–#35; deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
-      resolved/subsumed #1, #5, #7, #8, #15–#20, #22–#25, #27–#28 →
+Total: 15 open items (#3(deferred), #4(partial), #6, #9–#14, #21, #26,
+      #29–#34; deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
+      resolved/subsumed #1, #5, #7, #8, #15–#20, #22–#25, #27–#28, #35 →
         archive/CODEBASE_AUDIT_RESOLVED.txt)
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
