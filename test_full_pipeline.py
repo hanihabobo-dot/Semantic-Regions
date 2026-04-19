@@ -23,17 +23,24 @@ GUI on but no boxel wireframes/labels (PyBullet only):
     python3 test_full_pipeline.py --no-boxel-viz
 
 PDDLStream path is added to sys.path via the hardcoded PDDLSTREAM_PATH constant below.
+
+Architecture (post-#26 refactor, 2026-04-19):
+    belief.py       BeliefState — partial-observability bookkeeping.
+    execution.py    execute_pick / execute_place / sense_shadow_raycasting /
+                    compute_shadow_blockers / release_held_object_in_place.
+    reboxelize.py   reboxelize_free_space — octree+merge diff after mutations.
+    THIS FILE       Phase 1-6 orchestration + CLI.  Reads top-down: setup,
+                    boxel calc, registry, scenario selection, replan loop,
+                    results.  Action handlers live next to the loop because
+                    they own the cross-cutting bookkeeping (registry, viz,
+                    belief, planner state).
 """
 
 import sys
 import os
 import argparse
 import random
-from typing import List
 
-# PDDLStream is an external library (not pip-installable) that lives in a
-# sibling directory.  We inject it into sys.path so its modules can be
-# imported like normal packages by our planner wrapper.
 PDDLSTREAM_PATH = os.environ.get(
     'PDDLSTREAM_PATH',
     os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'pddlstream_lib')
@@ -43,16 +50,7 @@ if os.path.exists(PDDLSTREAM_PATH):
 
 import numpy as np
 import pybullet as p
-import pybullet_data
 
-# --- Semantic Boxels modules ---
-# boxel_env: PyBullet world setup, camera, scene configs
-# boxel_data: Boxel types (OBJECT, SHADOW, FREE_SPACE) and registry
-# cell_merger: Merges adjacent free-space cells to reduce planner branching
-# pddlstream_planner: Wraps PDDLStream with our domain/problem definitions
-# streams: Data classes shared between planner and executor (RobotConfig, etc.)
-# robot_utils: Low-level Panda arm control (IK, gripper, smooth motion)
-# run_logger: Per-run artefact capture for reproducibility
 from boxel_env import (BoxelTestEnv, SceneConfig,
                        default_scene, mixed_shapes_scene, scalability_scene)
 from boxel_data import BoxelData, BoxelRegistry, BoxelType
@@ -60,152 +58,25 @@ from cell_merger import merge_free_space_cells
 from free_space import split_free_boxel  # noqa: F401  (kept for future use)
 from pddlstream_planner import PDDLStreamPlanner
 from streams import RobotConfig
-from robot_utils import (END_EFFECTOR_LINK, RenderingLock, solve_ik,
-                         move_robot_smooth, open_gripper, close_gripper,
+from robot_utils import (RenderingLock, move_robot_smooth,
                          detect_execution_collisions)
 from run_logger import RunLogger
 from visualization import BoxelVisualizer
 
-
-def reboxelize_free_space(registry, env, boxel_centers, viz, show_free):
-    """
-    Re-run the full octree + merge pipeline and diff against the current
-    registry's free-space boxels.  Only changed boxels are removed/added.
-
-    Call this after any mutation that changes which regions are free
-    (object placement, shadow removal, new objects discovered, etc.).
-
-    Args:
-        registry: BoxelRegistry — will be mutated in place.
-        env: BoxelTestEnv — for ``generate_free_space``.
-        boxel_centers: Dict[str, np.ndarray] — updated in place.
-        viz: BoxelVisualizer or None.
-        show_free: Whether to draw free-space boxels.
-
-    Returns:
-        Tuple[List[str], Set[str]]: (new_ids, old_removed_ids).
-    """
-    old_free = {b.id: b for b in registry.get_free_space_boxels()}
-
-    # Pass OBJECT + SHADOW BoxelData straight into the octree generator —
-    # post-#35 it consumes BoxelData directly (no Boxel conversion).
-    known_obstacles = [
-        bd for bd in registry.boxels.values()
-        if bd.boxel_type in (BoxelType.OBJECT, BoxelType.SHADOW)
-    ]
-
-    fresh_cells = env.generate_free_space(known_obstacles, visualize=False)
-    merged = merge_free_space_cells(fresh_cells)
-
-    _tol = 1e-4
-    old_matched: set = set()
-    new_unmatched: List[BoxelData] = []
-    for m in merged:
-        found = False
-        for oid, od in old_free.items():
-            if oid in old_matched:
-                continue
-            if (np.allclose(m.min_corner, od.min_corner, atol=_tol) and
-                    np.allclose(m.max_corner, od.max_corner, atol=_tol)):
-                old_matched.add(oid)
-                found = True
-                break
-        if not found:
-            new_unmatched.append(m)
-    old_removed = set(old_free) - old_matched
-
-    for oid in old_removed:
-        registry.remove_boxel(oid)
-        boxel_centers.pop(oid, None)
-
-    env.annotate_free_space_surface(new_unmatched)
-    new_ids: list = []
-    for frag in new_unmatched:
-        fid = registry.add_boxel(frag)
-        new_ids.append(fid)
-        boxel_centers[fid] = frag.center
-
-    total_free = len(registry.get_free_space_boxels())
-    print(f"    Re-boxelize: {len(old_removed)} removed, "
-          f"{len(new_ids)} new, "
-          f"{len(old_matched)} unchanged "
-          f"({total_free} free total)")
-
-    registry.mark_clean()
-
-    if viz is not None:
-        for oid in old_removed:
-            viz.remove_boxel_viz(oid)
-        if show_free:
-            for nid in new_ids:
-                bd = registry.get_boxel(nid)
-                if bd is not None:
-                    viz.draw_boxel_data(bd)
-
-    return new_ids, old_removed
-
-
-class BeliefState:
-    """
-    Epistemic model of the robot's partial observability.
-
-    The robot cannot see through occluders, so it doesn't know which shadow
-    hides the target.  This class tracks what has been learned through
-    sensing actions, enabling the replanning loop to avoid re-exploring
-    already-checked shadows.
-
-    Lifecycle per shadow:
-      unknown  ─── sense ───► not_here  (target absent → eliminate)
-                         └──► found     (target present → goal reached)
-
-    ``occluders_moved`` records physical relocations so the planner can
-    emit correct ``obj_at_boxel`` facts for objects that are no longer at
-    their original positions.
-    """
-    def __init__(self, shadows: list, target: str):
-        self.target = target
-        self.shadow_status = {s: 'unknown' for s in shadows}
-        self.target_found_in = None
-        self.occluders_moved = {}  # {occluder_id: destination_boxel_id}
-    
-    def mark_sensed(self, shadow_id: str, found: bool):
-        """Update belief after sensing a shadow."""
-        if found:
-            self.shadow_status[shadow_id] = 'found'
-            self.target_found_in = shadow_id
-        else:
-            self.shadow_status[shadow_id] = 'not_here'
-    
-    def mark_occluder_moved(self, occluder_id: str, destination: str):
-        """
-        Mark that an occluder has been pushed to a new location.
-
-        Args:
-            occluder_id: Boxel ID of the occluder that was pushed
-            destination: Symbolic boxel ID for the push destination (used
-                by the planner to emit obj_at_boxel for the new location)
-        """
-        self.occluders_moved[occluder_id] = destination
-
-    def get_unknown_shadows(self):
-        """Get list of shadows we haven't checked yet."""
-        return [s for s, status in self.shadow_status.items() if status == 'unknown']
-    
-    def get_known_empty_shadows(self):
-        """Get list of shadows we've checked and found empty."""
-        return [s for s, status in self.shadow_status.items() if status == 'not_here']
-    
-    def is_target_found(self):
-        """Check if we've found the target."""
-        return self.target_found_in is not None
+from belief import BeliefState
+from reboxelize import reboxelize_free_space
+from execution import (sense_shadow_raycasting, compute_shadow_blockers,
+                       release_held_object_in_place,
+                       execute_pick, execute_place)
 
 
 def main(gui=True, run_logger=None, scene_config=None,
-         draw_boxel_overlays=True, show_free=False):
+         draw_boxel_overlays=True, show_free=False,
+         goal_kind='holding'):
     print("=" * 60)
     print("FULL PIPELINE: PDDLStream + Replanning")
     print("=" * 60)
-    
+
     # =========================================================
     # PHASE 1: Setup Environment
     # =========================================================
@@ -213,13 +84,13 @@ def main(gui=True, run_logger=None, scene_config=None,
     env = BoxelTestEnv(gui=gui, scene_config=scene_config)
     robot_id = env.objects["robot"].object_id
     print(f"Robot ID: {robot_id}")
-    
+
     # Let settle: 50 steps at 240 Hz ≈ 0.2 s.  Enough for the loaded
     # Panda + cubes to reach static equilibrium after spawning.
     for _ in range(50):
         env.step_simulation()
     env.update_object_positions()
-    
+
     # =========================================================
     # PHASE 2: Boxel Calculation (fast, no visualization)
     # =========================================================
@@ -241,7 +112,7 @@ def main(gui=True, run_logger=None, scene_config=None,
     env.annotate_free_space_surface(merged_free)
     all_boxels = all_known + merged_free
     print(f"  Calculated {len(all_boxels)} boxels")
-    
+
     # =========================================================
     # PHASE 3: Create Registry
     # =========================================================
@@ -260,20 +131,20 @@ def main(gui=True, run_logger=None, scene_config=None,
     registry.save_to_json("boxel_data.json")
     if run_logger:
         run_logger.save_artefact("boxel_data.json")
-    
+
     # Extract the two categories the planner cares about:
     # - shadows: regions that might hide the target (must be sensed)
     # - occluders: objects blocking those shadows (must be relocated first)
     shadows = [b.id for b in registry.boxels.values() if b.boxel_type == BoxelType.SHADOW]
     occluders = [b.id for b in registry.boxels.values() if b.boxel_type == BoxelType.OBJECT]
     print(f"  {len(registry.boxels)} boxels, {len(shadows)} shadows, {len(occluders)} occluders")
-    
+
     viz = None
     if gui and draw_boxel_overlays:
         viz = BoxelVisualizer()
         viz.draw_registry(registry, duration=0, label_size=1.0,
                           skip_free=not show_free)
-    
+
     # =========================================================
     # PHASE 4: Hidden Object Scenario (ORACLE ONLY)
     # =========================================================
@@ -282,12 +153,12 @@ def main(gui=True, run_logger=None, scene_config=None,
     # volume?) to verify the scene is valid — at least one target must be
     # genuinely occluded.  The robot only discovers this through sensing.
     print("\n--- Phase 4: Hidden Object Scenario ---")
-    
+
     all_targets = [
         name for name, info in env.objects.items()
         if not info.is_occluder and name not in ("plane", "table", "robot")
     ]
-    
+
     # AABB containment test: a target is "in" a shadow if its position
     # falls within the shadow boxel's axis-aligned bounding box.
     # This is an oracle check — it uses the simulator's ground-truth
@@ -300,11 +171,10 @@ def main(gui=True, run_logger=None, scene_config=None,
             if sb and np.all(tpos >= sb.min_corner) and np.all(tpos <= sb.max_corner):
                 target_to_shadow[tname] = shadow_id
                 break
-    
+
     visible_target_locations = {}
 
     if target_to_shadow:
-        # At least one target is hidden — run the search scenario.
         target_name = random.choice(list(target_to_shadow.keys()))
         oracle_hidden_shadow = target_to_shadow[target_name]
         print(f"  Target: {target_name}")
@@ -328,8 +198,15 @@ def main(gui=True, run_logger=None, scene_config=None,
             env.close()
             return False
 
-    target_info = env.objects[target_name]
-    
+    # The goal kind is decoupled from target selection so future goal
+    # types (e.g. ('on', a, b)) can reuse the same target-discovery code.
+    # Currently only 'holding' is wired through the planner.
+    if goal_kind == 'holding':
+        goal = ('holding', target_name)
+    else:
+        raise ValueError(f"Unsupported --goal '{goal_kind}'. "
+                         "Add a builder before passing it through.")
+
     # Build shadow → [blocker_ids] mapping via raycasting (audit #78).
     # A shadow can be blocked by MORE than just the object that created it
     # (e.g. a second occluder drifts into the line of sight after spawning).
@@ -350,7 +227,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                 )
             else:
                 print(f"  WARNING: Shadow {shadow_id} has no linked occluder — skipping")
-    
+
     # Bridge between the symbolic (PDDL) and physical (PyBullet) worlds.
     # The planner reasons about boxel IDs like "obj_000"; execution needs
     # PyBullet body IDs and names like "red_object".  This mapping lets the
@@ -363,9 +240,9 @@ def main(gui=True, run_logger=None, scene_config=None,
                 'pybullet_id': env.objects[boxel.object_name].object_id,
                 'position': np.array(env.objects[boxel.object_name].position)
             }
-    
+
     print(f"  Boxel->PyBullet mapping: {len(boxel_to_pybullet)} objects")
-    
+
     # =========================================================
     # PHASE 5: Planning with Replanning Loop
     # =========================================================
@@ -373,7 +250,7 @@ def main(gui=True, run_logger=None, scene_config=None,
     # execute until a sense action reveals new information, then replan with
     # updated beliefs.  This is a sense-plan-act loop with lazy replanning.
     print("\n--- Phase 5: Planning with Replanning ---")
-    
+
     # Collision-aware planning needs to know which PyBullet bodies are
     # movable objects (to exclude the grasped object from self-collision)
     # vs. immovable support surfaces (always present in collision checks).
@@ -402,25 +279,23 @@ def main(gui=True, run_logger=None, scene_config=None,
     # the latest world state.
     belief = BeliefState(shadows, target_name)
     planner = PDDLStreamPlanner(registry, robot_id=robot_id,
-                                 shadow_occluder_map=shadow_occluder_map,
-                                 physics_client=env.client_id,
-                                 object_body_ids=object_body_ids,
-                                 support_body_ids=support_body_ids,
-                                 camera_pos=env.camera_position)
-    
-    # Export the initial PDDL problem for debugging / reproducibility.
+                                shadow_occluder_map=shadow_occluder_map,
+                                physics_client=env.client_id,
+                                object_body_ids=object_body_ids,
+                                support_body_ids=support_body_ids,
+                                camera_pos=env.camera_position)
+
     problem_path = planner.export_problem_pddl(
         target_objects=[target_name],
-        goal=('holding', target_name),
+        goal=goal,
         visible_target_locations=visible_target_locations,
     )
     print(f"  Exported initial problem to {problem_path}")
     if run_logger:
         run_logger.save_artefact(problem_path, "problem_initial.pddl")
-    
-    # Get boxel centers for robot motion targets
+
     boxel_centers = {b.id: b.center for b in registry.boxels.values()}
-    
+
     plan_count = 0
     # --- Reactive replanning loop ---
     # Design: the PDDL sense action is OPTIMISTIC — it assumes the
@@ -441,15 +316,15 @@ def main(gui=True, run_logger=None, scene_config=None,
     # Detect infinite-replan loops: if sensing the same shadow stays
     # "still_blocked" 3+ times, give up on it (audit #78c).
     blocked_counts = {}  # shadow_id → consecutive-block count
-    
+
     while not belief.is_target_found() and plan_count < max_replans:
         plan_count += 1
         unknown_shadows = belief.get_unknown_shadows()
         known_empty = belief.get_known_empty_shadows()
-        
+
         print(f"\n=== PLAN #{plan_count} ===")
         print(f"Unknown shadows remaining: {len(unknown_shadows)}")
-        
+
         if not unknown_shadows:
             exit_reason = "all_searched"
             print("ERROR: Searched all shadows but target not found!")
@@ -512,7 +387,7 @@ def main(gui=True, run_logger=None, scene_config=None,
         with RenderingLock(env.client_id):
             plan = planner.plan(
                 target_objects=[target_name],
-                goal=('holding', target_name),
+                goal=goal,
                 current_config=current_config,
                 known_empty_shadows=known_empty,
                 moved_occluders=dict(belief.occluders_moved),
@@ -528,11 +403,11 @@ def main(gui=True, run_logger=None, scene_config=None,
             exit_reason = "planner_failed"
             print("ERROR: No plan found!")
             break
-        
+
         print(f"Plan: {len(plan)} actions")
         for i, action in enumerate(plan):
             print(f"  {i+1}. {action[0]}")
-        
+
         # Safety gate: during planning, streams may emit "heuristic"
         # configs (e.g. boxel-center approximations) when no robot_id is
         # available.  These are geometrically reasonable but not IK-valid,
@@ -554,9 +429,9 @@ def main(gui=True, run_logger=None, scene_config=None,
         for i, action in enumerate(plan):
             action_name = action[0]
             params = action[1:]
-            
+
             print(f"\n  Executing: {action_name}")
-            
+
             if action_name == 'move':
                 # MOVE: follow a collision-free trajectory from q1 to q2.
                 # The trajectory was computed by the plan_motion stream
@@ -587,7 +462,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                     label=f"move to {dest_boxel_id}",
                     body_names=body_id_to_name)
                 print(f"    -> Arrived at {dest_boxel_id}")
-                    
+
             elif action_name == 'sense':
                 # SENSE: cast rays from the fixed camera through the
                 # shadow volume to determine what's inside.
@@ -599,7 +474,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                 print(f"    Sensing {shadow_id} (fixed camera)...")
 
                 # Retract arm to home so it doesn't block the camera's
-                # line of sight to the shadow region (audit #79).
+                # line of sight to the shadow region (audit #79, #3 deferred).
                 # home_joints = planner.home_config.joint_positions
                 # move_robot_smooth(robot_id, home_joints, gui, steps=40)
                 # current_config = planner.home_config
@@ -614,7 +489,6 @@ def main(gui=True, run_logger=None, scene_config=None,
                 for blocker_bid in shadow_occluder_map.get(str(shadow_id), []):
                     if blocker_bid in boxel_to_pybullet:
                         occluder_pybullet_ids.add(boxel_to_pybullet[blocker_bid]['pybullet_id'])
-                shadow_occluder_id = shadow_boxel.created_by_boxel_id
 
                 sense_outcome, blocked_fraction, detected_bodies = sense_shadow_raycasting(
                     env.camera_position,
@@ -625,16 +499,13 @@ def main(gui=True, run_logger=None, scene_config=None,
                     support_body_ids=support_body_ids,
                 )
 
-                # --- Interpret sensing result ---
                 if sense_outcome == "found_target":
-                    # Success: remaining plan actions will pick the target.
                     belief.mark_sensed(str(shadow_id), found=True)
                     print(f"    *** TARGET FOUND in {shadow_id}! (ray-cast) ***")
                 elif sense_outcome in ("clear_but_empty", "contains_nontarget"):
                     sid_str = str(shadow_id)
                     belief.mark_sensed(sid_str, found=False)
 
-                    # Remove the sensed shadow from registry + tracking.
                     registry.remove_boxel(sid_str)
                     if sid_str in shadows:
                         shadows.remove(sid_str)
@@ -660,10 +531,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                             aabb_min, aabb_max = p.getAABB(bid)
                             aabb_min = np.array(aabb_min)
                             aabb_max = np.array(aabb_max)
-                            obj_center = (aabb_min + aabb_max) / 2.0
-                            obj_extent = (aabb_max - aabb_min) / 2.0
 
-                            # Register OBJECT boxel.
                             obj_bd = BoxelData(
                                 id=obj_name,
                                 boxel_type=BoxelType.OBJECT,
@@ -756,7 +624,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                     else:
                         print(f"    -> REPLANNING without marking shadow empty...")
                     break  # Exit action loop to replan
-                    
+
             elif action_name == 'pick':
                 # PICK: approach → open gripper → lower to contact →
                 # close gripper → attach via constraint → lift.
@@ -894,7 +762,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # blocks_view_at facts reflect the relocated occluder's new
                 # position on the next replan (audit #73, #24 fixed).
                 shadow_occluder_map = compute_shadow_blockers(
-                     env.camera_position, registry, shadows, occluders, env
+                    env.camera_position, registry, shadows, occluders, env
                 )
                 planner.shadow_occluder_map = shadow_occluder_map
 
@@ -957,7 +825,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                   f"{len(remaining)} unsearched shadows remaining")
         print(f"  Plans executed: {plan_count}")
     print("=" * 60)
-    
+
     # Keep the GUI visible briefly so the user can inspect the final
     # state, then tear down the simulation cleanly.
     if gui:
@@ -967,558 +835,12 @@ def main(gui=True, run_logger=None, scene_config=None,
         while time.time() < end_time:
             env.step_simulation()
             time.sleep(1.0 / 240.0)
-    
+
     if grasp_constraint_id is not None:
         p.removeConstraint(grasp_constraint_id)
-    
+
     env.close()
     return belief.is_target_found()
-
-
-def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
-                            occluder_pybullet_ids=None, robot_id=None,
-                            support_body_ids=None):
-    """
-    Sense a shadow region using PyBullet ray-casting from the fixed camera.
-
-    Returns one of four outcomes:
-      - found_target: at least one ray hits the target
-      - still_blocked: no ray hits target and at least one ray hits occluder
-        or robot arm
-      - contains_nontarget: view is clear but rays hit non-target dynamic
-        objects inside the shadow (e.g. another occluder that drifted in)
-      - clear_but_empty: no ray hits any dynamic object
-
-    Args:
-        camera_pos: Fixed camera position [x, y, z]
-        shadow_boxel: BoxelData for the shadow region to sense
-        target_pybullet_id: PyBullet body ID of the target object
-        occluder_pybullet_ids: Optional set/list of PyBullet body IDs for ALL
-            objects that may block camera view to this shadow.
-        robot_id: Optional PyBullet body ID of the robot.
-        support_body_ids: Optional frozenset of static body IDs (plane, table)
-            to ignore when collecting detected bodies.
-
-    Returns:
-        Tuple[str, float, Set[int]]:
-          - outcome string
-          - blocked_fraction (0 when not blocked)
-          - set of non-target, non-occluder dynamic body IDs detected inside
-            the shadow (empty for found_target and still_blocked)
-    """
-    ray_origin = np.array(camera_pos)
-    ignore_ids = {-1}
-    if robot_id is not None:
-        ignore_ids.add(robot_id)
-    if support_body_ids:
-        ignore_ids |= set(support_body_ids)
-    if occluder_pybullet_ids:
-        ignore_ids |= set(occluder_pybullet_ids)
-    ignore_ids.add(target_pybullet_id)
-
-    min_c = shadow_boxel.min_corner
-    max_c = shadow_boxel.max_corner
-
-    z_levels = [
-        min_c[2] + 0.04,
-        min_c[2] + (max_c[2] - min_c[2]) * 0.33,
-        min_c[2] + (max_c[2] - min_c[2]) * 0.67,
-    ]
-
-    n = 7
-    ray_froms = []
-    ray_tos = []
-    for z_target in z_levels:
-        for xi in np.linspace(min_c[0], max_c[0], n):
-            for yi in np.linspace(min_c[1], max_c[1], n):
-                ray_froms.append(ray_origin.tolist())
-                ray_tos.append([float(xi), float(yi), float(z_target)])
-
-    results = p.rayTestBatch(ray_froms, ray_tos)
-    occluder_hits = 0
-    robot_hits = 0
-    detected_bodies: set = set()
-    total_rays = len(results)
-
-    for hit_obj_id, _link, _frac, _pos, _normal in results:
-        if hit_obj_id == target_pybullet_id:
-            return "found_target", 0.0, set()
-        if occluder_pybullet_ids and (hit_obj_id in occluder_pybullet_ids):
-            occluder_hits += 1
-        elif (robot_id is not None) and (hit_obj_id == robot_id):
-            robot_hits += 1
-        elif hit_obj_id not in ignore_ids:
-            detected_bodies.add(hit_obj_id)
-
-    blocked_total = occluder_hits + robot_hits
-    if blocked_total > 0:
-        blocked_fraction = blocked_total / total_rays if total_rays > 0 else 0.0
-        if robot_hits > 0 and occluder_hits == 0:
-            print(f"    NOTE: {robot_hits}/{total_rays} rays blocked by "
-                  f"robot arm (not occluder)")
-        return "still_blocked", blocked_fraction, set()
-
-    if detected_bodies:
-        return "contains_nontarget", 0.0, detected_bodies
-
-    return "clear_but_empty", 0.0, set()
-
-
-def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
-    """
-    For each shadow, find ALL object boxels that block the camera's view.
-
-    Casts a coarse ray grid from the camera through each shadow volume.
-    Any object whose PyBullet body intercepts at least one ray is recorded
-    as a blocker for that shadow.  This replaces the old one-to-one
-    shadow_occluder_map that only tracked the creating occluder (audit #78).
-
-    Why not just use the parent relationship?  Because after objects are
-    relocated, a DIFFERENT object may now block the camera's view of a
-    shadow that was originally created by something else.
-
-    Args:
-        camera_pos: Camera position [x, y, z].
-        registry: BoxelRegistry with all boxels.
-        shadow_ids: List of shadow boxel IDs.
-        object_ids: List of object boxel IDs.
-        env: BoxelTestEnv for resolving PyBullet body IDs.
-
-    Returns:
-        Dict mapping shadow_id → list of blocker object boxel IDs.
-    """
-    # Reverse lookup: PyBullet body ID → boxel ID, so we can identify
-    # which symbolic object a ray hit.
-    pybullet_to_boxel = {}
-    for obj_bid in object_ids:
-        obj_boxel = registry.get_boxel(obj_bid)
-        if obj_boxel and obj_boxel.object_name and obj_boxel.object_name in env.objects:
-            body_id = env.objects[obj_boxel.object_name].object_id
-            pybullet_to_boxel[body_id] = obj_bid
-
-    ray_origin = camera_pos.tolist()
-    blockers = {}
-
-    for shadow_id in shadow_ids:
-        sb = registry.get_boxel(shadow_id)
-        if sb is None:
-            continue
-
-        blocker_set = set()
-        min_c, max_c = sb.min_corner, sb.max_corner
-        # Single Z slice at the shadow midpoint — coarser than
-        # sense_shadow_raycasting because we only need to identify
-        # WHICH objects block, not whether the target is visible.
-        z_mid = (min_c[2] + max_c[2]) / 2.0
-        n = 5
-
-        ray_froms = []
-        ray_tos = []
-        for xi in np.linspace(min_c[0], max_c[0], n):
-            for yi in np.linspace(min_c[1], max_c[1], n):
-                ray_froms.append(ray_origin)
-                ray_tos.append([float(xi), float(yi), float(z_mid)])
-
-        results = p.rayTestBatch(ray_froms, ray_tos)
-        for hit_id, _link, _frac, _pos, _normal in results:
-            if hit_id in pybullet_to_boxel:
-                blocker_set.add(pybullet_to_boxel[hit_id])
-
-        blockers[shadow_id] = list(blocker_set)
-
-    print(f"  Shadow blockers (audit #78):")
-    for sid, bids in blockers.items():
-        if bids:
-            print(f"    {sid} blocked by: {bids}")
-
-    return blockers
-
-
-def release_held_object_in_place(
-    env,
-    robot_id,
-    gui,
-    grasp_constraint_id,
-    held_body_id,
-    held_object_boxel_id,
-    registry,
-    boxel_centers,
-    boxel_to_pybullet,
-    body_id_to_name,
-    viz,
-    shadows,
-    occluders,
-    planner,
-    max_attempts: int = 3,
-):
-    """
-    Open the gripper, remove the grasp constraint, and verify the object
-    actually fell/separated from the end-effector.  Retries on failure.
-
-    A drop is considered successful when, after settling:
-      • The object's COM is reasonably far from the EE (no longer pinched).
-      • The object's linear speed is near zero (came to rest, not floating).
-
-    Failure modes covered:
-      • removeConstraint raises (already removed, invalid id).
-      • Fingers re-close on the object due to position-control overshoot.
-      • Object snags on a finger pad and stays at gripper height.
-
-    Args:
-        env: BoxelTestEnv.
-        robot_id: PyBullet body ID of the robot.
-        gui: Whether GUI is active.
-        grasp_constraint_id: Constraint to remove (may be None).
-        held_body_id: PyBullet body ID of the held object.
-        held_object_boxel_id: Registry boxel ID for the held object (may be None).
-        registry, boxel_centers, boxel_to_pybullet, body_id_to_name, viz:
-            Bookkeeping caches that need to be updated with the dropped pose.
-        shadows, occluders, planner: Inputs for refreshing shadow_occluder_map.
-        max_attempts: How many open-and-settle cycles to try before giving up.
-
-    Returns:
-        Tuple[bool, Dict]: (success, state_updates).  state_updates may
-        contain 'shadow_occluder_map' and 'current_config' for the caller
-        to apply.  When success is False, the caller should abort the run.
-    """
-    state_updates: dict = {
-        "shadow_occluder_map": None,
-        "current_config": None,
-    }
-
-    dropped_name = body_id_to_name.get(held_body_id)
-    if dropped_name is None or dropped_name not in env.objects:
-        # Without a name we can't refresh the registry — but the caller
-        # still wants the constraint gone.
-        try:
-            if grasp_constraint_id is not None:
-                p.removeConstraint(grasp_constraint_id)
-        except Exception:
-            pass
-        return True, state_updates
-
-    constraint_removed = False
-    drop_ok = False
-
-    for attempt in range(1, max_attempts + 1):
-        print(f"  Replanning while holding {dropped_name} — release "
-              f"attempt {attempt}/{max_attempts}.")
-
-        # Remove the constraint exactly once; subsequent attempts only
-        # retry the gripper-open + settle cycle.
-        if not constraint_removed and grasp_constraint_id is not None:
-            try:
-                p.removeConstraint(grasp_constraint_id)
-                constraint_removed = True
-            except Exception as exc:
-                print(f"    WARNING: removeConstraint failed: {exc}")
-                # Treat as "already gone" so subsequent retries can proceed.
-                constraint_removed = True
-
-        open_gripper(robot_id, gui)
-        # Longer settle on retries so a snagged object has more time to
-        # slip free under gravity.
-        for _ in range(30 + 30 * (attempt - 1)):
-            env.step_simulation()
-        env.update_object_positions()
-
-        # --- Verify the object is actually free of the EE -----------------
-        ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
-        ee_pos = np.array(ee_state[0])
-        obj_pos = np.array(env.objects[dropped_name].position)
-        ee_to_obj_dist = float(np.linalg.norm(ee_pos - obj_pos))
-        lin_vel, _ = p.getBaseVelocity(held_body_id)
-        speed = float(np.linalg.norm(lin_vel))
-
-        # Heuristics:
-        # • If the object COM sits >= 8 cm from the EE, fingers can't
-        #   still be pinching it (Panda finger length ~5.4 cm).
-        # • If it's closer but at rest, it may have landed directly under
-        #   the gripper — that's still a successful drop.
-        far_enough = ee_to_obj_dist >= 0.08
-        at_rest = speed < 0.02
-        if far_enough and at_rest:
-            drop_ok = True
-            print(f"    -> Released {dropped_name} "
-                  f"(EE→obj {ee_to_obj_dist*100:.1f} cm, speed "
-                  f"{speed*100:.1f} cm/s)")
-            break
-        print(f"    Drop verification failed: EE→obj {ee_to_obj_dist*100:.1f} cm, "
-              f"speed {speed*100:.1f} cm/s — retrying.")
-
-    if not drop_ok:
-        return False, state_updates
-
-    # --- Update bookkeeping with the dropped object's final pose ---------
-    aabb_min, aabb_max = p.getAABB(held_body_id)
-    aabb_min = np.array(aabb_min)
-    aabb_max = np.array(aabb_max)
-    if (held_object_boxel_id is not None
-            and registry.get_boxel(held_object_boxel_id) is not None):
-        obj_bd = registry.get_boxel(held_object_boxel_id)
-        obj_bd.min_corner = aabb_min
-        obj_bd.max_corner = aabb_max
-        obj_bd.on_surface = (
-            "table"
-            if aabb_min[2] <= env.table_surface_height + 0.01
-            else None
-        )
-        boxel_centers[held_object_boxel_id] = obj_bd.center
-        if held_object_boxel_id in boxel_to_pybullet:
-            boxel_to_pybullet[held_object_boxel_id]['position'] = \
-                np.array(env.objects[dropped_name].position)
-        if viz is not None:
-            viz.remove_boxel_viz(held_object_boxel_id)
-            viz.draw_boxel_data(obj_bd)
-
-    # Free space and shadows must be refreshed: the dropped object now
-    # occupies new ground and may block different camera lines of sight.
-    setattr(registry, "_dirty", True)
-    state_updates["shadow_occluder_map"] = compute_shadow_blockers(
-        env.camera_position, registry, shadows, occluders, env
-    )
-    planner.shadow_occluder_map = state_updates["shadow_occluder_map"]
-
-    actual_joints = np.array(
-        [p.getJointState(robot_id, i)[0] for i in range(7)]
-    )
-    state_updates["current_config"] = RobotConfig(
-        joint_positions=actual_joints,
-        name="post_emergency_drop"
-    )
-    print(f"    -> Dropped {dropped_name} at "
-          f"{tuple(round(v, 3) for v in env.objects[dropped_name].position)}")
-
-    return True, state_updates
-
-
-def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui):
-    """
-    Execute pick action using the plan's grasp pose.
-
-    The contact waypoint is computed from the object's actual AABB so
-    the Panda's finger pads physically wrap around the object.  The
-    planning offset (grasp.position, typically 10 cm) is only used for
-    approach/lift clearance — not for the contact height.
-
-    The constraint-based attachment (p.createConstraint) is an accepted
-    simulation simplification — see audit #7 part B.
-
-    Args:
-        robot_id: PyBullet body ID of the robot
-        env: BoxelTestEnv instance
-        obj_name: Name key in env.objects (e.g. "blue_object", "red_object")
-        obj_pos: Current object position [x, y, z] (from PyBullet)
-        grasp: Grasp object from the plan (position, orientation)
-        config: RobotConfig from the plan's compute_kin_solution (fallback)
-        gui: Whether GUI is active (for step_simulation timing)
-
-    Returns:
-        Tuple[int, RobotConfig]: PyBullet constraint ID for the grasp
-        attachment, and a RobotConfig representing the robot's actual
-        final joint configuration (lift position).
-    """
-    approach_height = 0.10
-    lift_height = 0.25
-    approach_dir = np.array([0.0, 0.0, 1.0])
-
-    # --- Contact height from object geometry, not the planning offset --------
-    # grasp.position[2] is ~0.10 m (for collision-free motion planning).
-    # For execution we need the grasptarget at the object, not above it.
-    #
-    # panda_grasptarget (link 11) sits at the center of the finger-pad
-    # closing area.  Finger pads extend ~3.5 cm below the grasptarget.
-    # Ideal contact: grasptarget at the object center so fingers wrap
-    # symmetrically.  Floor: finger tips must stay above the table.
-    _FINGER_TIP_DEPTH = 0.035
-    table_z = env.table_surface_height
-    min_contact_z = table_z + _FINGER_TIP_DEPTH
-    contact_z = max(obj_pos[2], min_contact_z)
-
-    contact_ee = np.array([
-        obj_pos[0] + grasp.position[0],
-        obj_pos[1] + grasp.position[1],
-        contact_z,
-    ])
-    approach_ee = contact_ee + approach_dir * approach_height
-    lift_ee = contact_ee + approach_dir * lift_height
-
-    # Solve IK for all three waypoints independently.  Each call resets
-    # the arm to a rest pose seed for deterministic results regardless
-    # of current joint state (see robot_utils.solve_ik).
-    pc = env.client_id
-    approach_joints = solve_ik(robot_id, approach_ee, grasp.orientation, pc)
-    contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc)
-    lift_joints = solve_ik(robot_id, lift_ee, grasp.orientation, pc)
-
-    # IK failure triage: contact is mandatory (can't pick without reaching
-    # the object); approach and lift are nice-to-have with graceful
-    # fallbacks.  Aborting on contact failure triggers a replan rather
-    # than driving the arm to an arbitrary configuration (audit #82).
-    if contact_joints is None:
-        print(f"    ERROR: IK failed for pick contact of {obj_name} — aborting")
-        return None, None
-    if approach_joints is None:
-        print(f"    WARNING: IK failed for pick approach of {obj_name}, "
-              f"using contact config directly")
-        approach_joints = contact_joints
-    if lift_joints is None:
-        print(f"    WARNING: IK failed for pick lift of {obj_name}, "
-              f"using approach config as fallback")
-        lift_joints = approach_joints
-
-    # Execute the pick sequence: approach → open → descend → close → attach → lift
-    move_robot_smooth(robot_id, approach_joints, gui)
-    open_gripper(robot_id, gui)
-
-    move_robot_smooth(robot_id, contact_joints, gui)
-    close_gripper(robot_id, gui)
-
-    # Attach the object to the gripper with a fixed constraint.
-    # This is a simulation simplification — real grippers use friction,
-    # but constraints prevent physics-engine slip during fast motions.
-    #
-    # Compute the ACTUAL relative transform between EE and object at this
-    # instant rather than using the planned grasp.position offset — position-
-    # control lag means the true EE pose differs slightly, and using the
-    # planned offset causes a corrective snap impulse (audit #98).
-    obj_id = env.objects[obj_name].object_id
-    ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
-    ee_world_pos, ee_world_orn = ee_state[0], ee_state[1]
-    obj_world_pos, obj_world_orn = p.getBasePositionAndOrientation(obj_id)
-    inv_ee_pos, inv_ee_orn = p.invertTransform(ee_world_pos, ee_world_orn)
-    parent_frame_pos, parent_frame_orn = p.multiplyTransforms(
-        inv_ee_pos, inv_ee_orn, obj_world_pos, obj_world_orn
-    )
-    grasp_constraint_id = p.createConstraint(
-        robot_id, END_EFFECTOR_LINK, obj_id, -1,
-        p.JOINT_FIXED, [0, 0, 0],
-        list(parent_frame_pos), [0, 0, 0],
-        parentFrameOrientation=list(parent_frame_orn)
-    )
-
-    move_robot_smooth(robot_id, lift_joints, gui)
-
-    # Read the actual joint state — position control may not reach the exact
-    # IK target.  Tracking the true state prevents PDDL state drift from
-    # compounding across chained actions within a plan (audit #86).
-    actual_joints = np.array(
-        [p.getJointState(robot_id, i)[0] for i in range(7)]
-    )
-    final_config = RobotConfig(joint_positions=actual_joints,
-                               name="post_pick_lift")
-    return grasp_constraint_id, final_config
-
-
-def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
-                   grasp_constraint_id, gui):
-    """
-    Execute place action using the plan's grasp pose.
-
-    Mirrors execute_pick() in reverse: approach above destination, lower
-    to release height, open gripper, release constraint, settle.
-
-    The release height is computed so the held object's bottom rests on
-    the table surface, using the live EE-to-object offset from the
-    constraint (established at pick time).
-
-    Args:
-        robot_id: PyBullet body ID of the robot
-        env: BoxelTestEnv instance
-        obj_name: Name of the object being placed (for logging)
-        place_pos: Destination position [x, y, z] (boxel center)
-        grasp: Grasp object from the plan (position, orientation)
-        config: RobotConfig from the plan's compute_kin_solution (fallback)
-        grasp_constraint_id: PyBullet constraint ID from execute_pick()
-        gui: Whether GUI is active (for step_simulation timing)
-
-    Returns:
-        RobotConfig: The robot's actual final joint configuration
-        (retreat position above the placement).
-    """
-    approach_height = 0.10
-    # retreat_height = 0.25
-    approach_dir = np.array([0.0, 0.0, 1.0])
-
-    # --- Release height from held-object geometry ----------------------------
-    # Query the constraint to find the held body, then compute the EE
-    # height that places the object's bottom on the table surface.
-    # The live EE-to-object Z offset accounts for whatever grasp offset
-    # was established at pick time.
-    table_z = env.table_surface_height
-    if grasp_constraint_id is not None:
-        c_info = p.getConstraintInfo(grasp_constraint_id)
-        held_body_id = c_info[2]
-        held_aabb_min, held_aabb_max = p.getAABB(held_body_id)
-        obj_half_height = (held_aabb_max[2] - held_aabb_min[2]) / 2.0
-
-        ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
-        ee_z = ee_state[0][2]
-        obj_cur_z = p.getBasePositionAndOrientation(held_body_id)[0][2]
-        ee_to_obj_z = obj_cur_z - ee_z
-
-        target_obj_z = table_z + obj_half_height
-        contact_z = target_obj_z - ee_to_obj_z
-    else:
-        contact_z = place_pos[2] + grasp.position[2]
-
-    contact_ee = np.array([
-        place_pos[0] + grasp.position[0],
-        place_pos[1] + grasp.position[1],
-        contact_z,
-    ])
-    approach_ee = contact_ee + approach_dir * approach_height
-    # retreat_ee = contact_ee + approach_dir * retreat_height
-
-    pc = env.client_id
-    approach_joints = solve_ik(robot_id, approach_ee, grasp.orientation, pc)
-    contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc)
-    # retreat_joints = solve_ik(robot_id, retreat_ee, grasp.orientation, pc)
-
-    # Same IK failure triage as execute_pick — contact is mandatory,
-    # approach/retreat have fallbacks.
-    if contact_joints is None:
-        print(f"    ERROR: IK failed for place contact of {obj_name} — aborting")
-        return None
-    if approach_joints is None:
-        print(f"    WARNING: IK failed for place approach of {obj_name}, "
-              f"using contact config directly")
-        approach_joints = contact_joints
-    # if retreat_joints is None:
-    #     print(f"    WARNING: IK failed for place retreat of {obj_name}, "
-    #           f"using approach config as fallback")
-    #     retreat_joints = approach_joints
-
-    # Execute the place sequence: approach → lower → release → settle → retreat
-    move_robot_smooth(robot_id, approach_joints, gui)
-
-    move_robot_smooth(robot_id, contact_joints, gui)
-
-    open_gripper(robot_id, gui)
-
-    # Remove the fixed constraint so the object responds to gravity
-    # and rests on the table surface.
-    if grasp_constraint_id is not None:
-        p.removeConstraint(grasp_constraint_id)
-
-    # 30 steps ≈ 0.125 s — let the placed object settle before retreating
-    # so it reaches a stable resting pose and doesn't tip over.
-    for _ in range(30):
-        p.stepSimulation()
-
-    # move_robot_smooth(robot_id, retreat_joints, gui)
-
-    # Read actual joint state to prevent drift accumulation (audit #86).
-    actual_joints = np.array(
-        [p.getJointState(robot_id, i)[0] for i in range(7)]
-    )
-    return RobotConfig(joint_positions=actual_joints,
-                       name="post_place_retreat")
-
-
-# compute_push_displacement() removed (#53): push superseded by pick-and-place.
-# The function teleported occluders via p.resetBasePositionAndOrientation without
-# involving the robot arm. Occluder relocation now uses pick → move → place.
 
 
 if __name__ == "__main__":
@@ -1552,6 +874,13 @@ if __name__ == "__main__":
                         help='Number of targets (scalability scene only)')
     parser.add_argument('--seed', type=int, default=0,
                         help='Random seed (scalability/mixed scenes)')
+    parser.add_argument(
+        '--goal',
+        choices=['holding'],
+        default='holding',
+        help="Goal kind. 'holding' picks the (hidden or visible) target. "
+             "Reserved for future kinds (e.g. stacking) — see audit #30.",
+    )
     args = parser.parse_args()
 
     # Lazy scene construction — each builder captures CLI args and
@@ -1578,6 +907,7 @@ if __name__ == "__main__":
             scene_config=scene_cfg,
             draw_boxel_overlays=not args.no_boxel_viz,
             show_free=args.show_free,
+            goal_kind=args.goal,
         )
     finally:
         logger.close()

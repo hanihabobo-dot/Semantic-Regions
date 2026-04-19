@@ -195,7 +195,7 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #3(def), #4(partial), #6, #9–#14, #21, #26, #29–#34        #
+#  OPEN ISSUES — #3(def), #4(partial), #6, #9–#14, #21, #29–#34             #
 #                                                                              #
 ################################################################################
 
@@ -592,24 +592,27 @@ RESOLVED (2026-04-17):
 
 
 ================================================================================
-#26. TEST_FULL_PIPELINE.PY TOO LONG — EXTRACT MODULES
+#26. TEST_FULL_PIPELINE.PY TOO LONG — EXTRACT MODULES   [RESOLVED 2026-04-19]
 ================================================================================
 Priority: TIER 2 — Code quality / maintainability
-Where:    test_full_pipeline.py (1378 lines)
+Where:    test_full_pipeline.py (was 1585 lines → now 914),
+          belief.py (new), execution.py (new), reboxelize.py (new)
 Depends:  None
-Effort:   1-2 days
 
-What:  The main pipeline file contains the entire execution loop,
-       BeliefState, reboxelize_free_space, sense_shadow_raycasting,
-       compute_shadow_blockers, execute_pick, execute_place, and the
-       CLI.  This makes the file hard to navigate, test, and review.
-
-Fix:   Extract into focused modules:
-       - belief.py — BeliefState class
+RESOLVED (2026-04-19):
+       Extracted three focused modules; test_full_pipeline.py now reads
+       top-down as Phase 1-6 orchestration + CLI only.
+       - belief.py — BeliefState (pure bookkeeping, no PyBullet/planner).
        - execution.py — execute_pick, execute_place,
-         sense_shadow_raycasting, compute_shadow_blockers
-       - reboxelize.py — reboxelize_free_space
-       The pipeline file should orchestrate these, not define them.
+         sense_shadow_raycasting, compute_shadow_blockers,
+         release_held_object_in_place.
+       - reboxelize.py — reboxelize_free_space (octree+merge diff).
+       test_full_pipeline.py also gained a --goal CLI flag (currently only
+       'holding' is wired through the planner — placeholder for the goal-
+       parameterisation work tracked under #30).
+       Smoke test (--no-gui, default scene, seed 0): pipeline planned 4
+       times, executed move→pick→move→place→move→sense→pick and found
+       the hidden target.  No behavioural change.
 
 
 ================================================================================
@@ -842,7 +845,7 @@ TIER 1 — Mixed dependencies (see each issue):
   #25  is_free_space registry inconsistency after place     [RESOLVED 2026-04-17]
 
 TIER 2 — CODE QUALITY (independent of correctness fixes):
-  #26  test_full_pipeline.py too long — extract modules     ~1-2 days
+  #26  test_full_pipeline.py too long — extract modules      [RESOLVED 2026-04-19]
   #27  Triplicated wireframe drawing code                    [RESOLVED 2026-04-17]
   #28  Hand-rolled quaternion math                           [RESOLVED 2026-04-17]
   #35  Boxel vs BoxelData dual representation               [RESOLVED 2026-04-19]
@@ -862,9 +865,9 @@ TIER 3 — CODE QUALITY (low priority):
   #33  remove_boxel_viz O(n) list operations                 <1 day
   #34  _compute_placement_view_blocks scalability           (if needed)
 
-Total: 15 open items (#3(deferred), #4(partial), #6, #9–#14, #21, #26,
+Total: 14 open items (#3(deferred), #4(partial), #6, #9–#14, #21,
       #29–#34; deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
-      resolved/subsumed #1, #5, #7, #8, #15–#20, #22–#25, #27–#28, #35 →
+      resolved/subsumed #1, #5, #7, #8, #15–#20, #22–#28, #35 →
         archive/CODEBASE_AUDIT_RESOLVED.txt)
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
