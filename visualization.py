@@ -44,8 +44,10 @@ def _color_for_boxel(bd: BoxelData) -> List[float]:
     Color a boxel based on its semantic type and role.
 
     SHADOW   → gray
-    FREE     → green (merged free space; pre-merge cyan is no longer
-               surfaced in the registry)
+    FREE     → cyan  (matches the pre-#35 visual; the pre-merge "green
+               for merged" branch in the old bridge was dead code because
+               free boxels never had ``object_name`` set, so every free
+               cell fell through to cyan in practice)
     OBJECT + is_occluder → red
     OBJECT (non-occluder) → blue
     Anything else → green fallback
@@ -53,7 +55,7 @@ def _color_for_boxel(bd: BoxelData) -> List[float]:
     if bd.boxel_type == BoxelType.SHADOW:
         return [0.5, 0.5, 0.5]
     if bd.boxel_type == BoxelType.FREE_SPACE:
-        return [0.0, 1.0, 0.0]
+        return [0.0, 1.0, 1.0]
     if bd.boxel_type == BoxelType.OBJECT:
         return [1.0, 0.0, 0.0] if bd.is_occluder else [0.0, 0.0, 1.0]
     return [0.0, 1.0, 0.0]
@@ -78,7 +80,7 @@ class BoxelVisualizer:
     - Red  = Occluder (OBJECT with is_occluder=True)
     - Blue = Visible non-occluding object
     - Gray = SHADOW
-    - Green = FREE_SPACE (merged)
+    - Cyan = FREE_SPACE (merged)
     """
 
     def __init__(self):
