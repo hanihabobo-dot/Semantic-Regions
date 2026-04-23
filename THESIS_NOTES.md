@@ -181,3 +181,43 @@ in `belief.occluders_moved`, and the planner emits correct
 can cause suboptimal but not incorrect behavior in most cases.
 
 **References**: Audit #24.
+
+---
+
+## 11. String-Based State Representation (The "String Cheat")
+
+The planner and execution loop rely heavily on string matching rather than pure spatial or geometric reasoning. For example, the hidden object scenario setup determines the ground-truth location of the hidden object and stores it as a string ID (`oracle_hidden_shadow`). 
+
+When the robot "senses" a shadow, earlier versions of the code checked `if sensed_shadow_id == oracle_hidden_shadow`. Even with recent fixes, the PDDL planner (`pddlstream_planner.py`) builds its initial state using string dictionaries (`known_empty_shadows: List[str]`, `moved_occluders: Dict[str, str]`) instead of passing 3D bounding boxes or occupancy grids.
+
+**Thesis framing**: This is a simplification to bridge the gap between continuous geometry and discrete symbolic planning. The string IDs act as proxies for the underlying geometric volumes.
+
+**References**: Audit #1, #2 (resolved), and `pddlstream_planner.py` state construction.
+
+---
+
+## 12. Collision-Blind Execution (The Approach Phase)
+
+During the final 10 centimeters of a pick action (the "approach"), the execution layer (`execute_pick` and `execute_place`) uses a local Inverse Kinematics (IK) solver that bypasses the planner's collision checks. 
+
+The planner finds a safe path to a point *above* the object, but the final downward motion does not verify if the approach trajectory intersects with other objects. Additionally, there is a hack (`support_body_ids`) that explicitly ignores the table during pick/place operations because the Panda robot's base overlaps with the table geometry.
+
+**Thesis framing**: This is a common TAMP simplification where the final local approach is assumed to be free of complex obstacles if the pre-grasp pose is valid. Ignoring the table is a PyBullet-specific workaround for the Panda's kinematic setup.
+
+**References**: Audit #1 (resolved), `execution.py` (`execute_pick`), and `robot_utils.py`.
+
+---
+
+## 13. Hardcoded Magic Numbers and Overfitting
+
+The codebase relies on highly specific, hardcoded numbers that overfit the system to this exact table, the Franka Panda robot, and the specific test objects. 
+
+Examples include:
+- `_GRASP_Z_OFFSETS = [0.1]`: The robot only grasps exactly 10cm above the object's center.
+- `approach_height = 0.10`, `lift_height = 0.25`: Hardcoded execution heights that will fail if objects are taller than expected.
+- `min_resolution = 0.035`: The free space octree stops dividing at exactly 3.5cm.
+- Fixed camera position (`[0.1, -0.8, 0.7]`) and specific motor forces.
+
+**Thesis framing**: These constants were empirically tuned for the specific evaluation scenario to ensure stable simulation and planning times. Generalizing these parameters (e.g., dynamic grasp sampling based on object geometry) is orthogonal to the core contribution and left as future work.
+
+**References**: Audit #69, #84 (resolved), `streams.py`, `execution.py`, and `boxel_env.py`.
