@@ -348,13 +348,26 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     """
     Execute pick action using the plan's grasp pose.
 
+    Assumes the planned `move` action has already delivered the arm to
+    the compute_kin_solution config (boxel.center + grasp.position,
+    typically 10 cm above the object).  This routine only handles the
+    final lower-and-grasp:
+
+      open gripper  →  IK + lower to contact  →  close gripper  →  weld
+      via createConstraint with the live EE-to-object transform.
+
     The contact waypoint is computed from the object's actual AABB so
-    the Panda's finger pads physically wrap around the object.  The
-    planning offset (grasp.position, typically 10 cm) is only used for
-    approach/lift clearance — not for the contact height.
+    the Panda's finger pads physically wrap around the object.
 
     The constraint-based attachment (p.createConstraint) is an accepted
     simulation simplification — see audit #7 part B.
+
+    Lifting after the grasp is intentionally NOT done here (refactor
+    step 1).  The pick ends at the contact configuration with the
+    object welded to the EE; any subsequent `move` action's plan-motion
+    trajectory will lift the arm naturally through free space.  This
+    keeps execution one-to-one with PDDL actions — no hidden arm
+    motion that the planner does not see.
 
     Args:
         robot_id: PyBullet body ID of the robot
@@ -368,12 +381,8 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     Returns:
         Tuple[int, RobotConfig]: PyBullet constraint ID for the grasp
         attachment, and a RobotConfig representing the robot's actual
-        final joint configuration (lift position).
+        final joint configuration (contact position with object held).
     """
-    approach_height = 0.10
-    lift_height = 0.25
-    approach_dir = np.array([0.0, 0.0, 1.0])
-
     # --- Contact height from object geometry, not the planning offset --------
     # grasp.position[2] is ~0.10 m (for collision-free motion planning).
     # For execution we need the grasptarget at the object, not above it.
@@ -392,34 +401,23 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
         obj_pos[1] + grasp.position[1],
         contact_z,
     ])
-    approach_ee = contact_ee + approach_dir * approach_height
-    lift_ee = contact_ee + approach_dir * lift_height
 
-    # Solve IK for all three waypoints independently.  Each call resets
-    # the arm to a rest pose seed for deterministic results regardless
-    # of current joint state (see robot_utils.solve_ik).
+    # No pre-contact approach motion (refactor step 2).  The prior
+    # planned `move` action already delivered the arm to `config`, the
+    # compute_kin_solution config — which targets boxel.center +
+    # grasp.position, i.e. the same approach point we used to re-IK
+    # locally.  Re-doing it here was a duplicate of the planned motion
+    # and bypassed plan_motion's collision checks.
     pc = env.client_id
-    approach_joints = solve_ik(robot_id, approach_ee, grasp.orientation, pc)
     contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc)
-    lift_joints = solve_ik(robot_id, lift_ee, grasp.orientation, pc)
 
-    # IK failure triage: contact is mandatory (can't pick without reaching
-    # the object); approach and lift are nice-to-have with graceful
-    # fallbacks.  Aborting on contact failure triggers a replan rather
-    # than driving the arm to an arbitrary configuration (audit #82).
+    # Contact IK is mandatory (can't pick without reaching the object).
+    # Aborting on failure triggers a replan rather than driving the arm
+    # to an arbitrary configuration (audit #82).
     if contact_joints is None:
         print(f"    ERROR: IK failed for pick contact of {obj_name} — aborting")
         return None, None
-    if approach_joints is None:
-        print(f"    WARNING: IK failed for pick approach of {obj_name}, "
-              f"using contact config directly")
-        approach_joints = contact_joints
-    if lift_joints is None:
-        print(f"    WARNING: IK failed for pick lift of {obj_name}, "
-              f"using approach config as fallback")
-        lift_joints = approach_joints
 
-    move_robot_smooth(robot_id, approach_joints, gui)
     open_gripper(robot_id, gui)
 
     move_robot_smooth(robot_id, contact_joints, gui)
@@ -448,16 +446,17 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
         parentFrameOrientation=list(parent_frame_orn)
     )
 
-    move_robot_smooth(robot_id, lift_joints, gui)
-
-    # Read the actual joint state — position control may not reach the exact
-    # IK target.  Tracking the true state prevents PDDL state drift from
-    # compounding across chained actions within a plan (audit #86).
+    # No lift here (refactor step 1).  The arm stays at the contact
+    # config holding the object; the next planned `move` action will
+    # lift via plan_motion's collision-free trajectory.  Read the actual
+    # joint state — position control may not reach the exact IK target.
+    # Tracking the true state prevents PDDL state drift from compounding
+    # across chained actions within a plan (audit #86).
     actual_joints = np.array(
         [p.getJointState(robot_id, i)[0] for i in range(7)]
     )
     final_config = RobotConfig(joint_positions=actual_joints,
-                               name="post_pick_lift")
+                               name="post_pick_contact")
     return grasp_constraint_id, final_config
 
 
@@ -466,12 +465,21 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     """
     Execute place action using the plan's grasp pose.
 
-    Mirrors execute_pick() in reverse: approach above destination, lower
-    to release height, open gripper, release constraint, settle.
+    Assumes the planned `move` action has already delivered the arm to
+    the compute_kin_solution config (boxel.center + grasp.position,
+    typically 10 cm above the destination).  This routine only handles
+    the final lower-and-release:
+
+      IK + lower to release height  →  open gripper  →  removeConstraint
+      →  settle.
 
     The release height is computed so the held object's bottom rests on
     the table surface, using the live EE-to-object offset from the
     constraint (established at pick time).
+
+    Retreating after the release is intentionally NOT done here
+    (refactor step 1, mirror of execute_pick): the next planned `move`
+    action lifts via plan-motion's collision-free trajectory.
 
     Args:
         robot_id: PyBullet body ID of the robot
@@ -485,12 +493,9 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
 
     Returns:
         RobotConfig: The robot's actual final joint configuration
-        (retreat position above the placement).
+        (contact position with the object resting on the table below
+        the EE).
     """
-    approach_height = 0.10
-    # retreat_height = 0.25
-    approach_dir = np.array([0.0, 0.0, 1.0])
-
     # --- Release height from held-object geometry ----------------------------
     # Query the constraint to find the held body, then compute the EE
     # height that places the object's bottom on the table surface.
@@ -518,29 +523,19 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
         place_pos[1] + grasp.position[1],
         contact_z,
     ])
-    approach_ee = contact_ee + approach_dir * approach_height
-    # retreat_ee = contact_ee + approach_dir * retreat_height
 
+    # No pre-contact approach motion (refactor step 2).  The prior
+    # planned `move` action already delivered the arm to `config`, the
+    # compute_kin_solution config — which targets place_pos +
+    # grasp.position, i.e. the same approach point we used to re-IK
+    # locally.  Re-doing it here was a duplicate of the planned motion
+    # and bypassed plan_motion's collision checks.
     pc = env.client_id
-    approach_joints = solve_ik(robot_id, approach_ee, grasp.orientation, pc)
     contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc)
-    # retreat_joints = solve_ik(robot_id, retreat_ee, grasp.orientation, pc)
 
-    # Same IK failure triage as execute_pick — contact is mandatory,
-    # approach/retreat have fallbacks.
     if contact_joints is None:
         print(f"    ERROR: IK failed for place contact of {obj_name} — aborting")
         return None
-    if approach_joints is None:
-        print(f"    WARNING: IK failed for place approach of {obj_name}, "
-              f"using contact config directly")
-        approach_joints = contact_joints
-    # if retreat_joints is None:
-    #     print(f"    WARNING: IK failed for place retreat of {obj_name}, "
-    #           f"using approach config as fallback")
-    #     retreat_joints = approach_joints
-
-    move_robot_smooth(robot_id, approach_joints, gui)
 
     move_robot_smooth(robot_id, contact_joints, gui)
 
@@ -556,14 +551,12 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     for _ in range(30):
         p.stepSimulation()
 
-    # move_robot_smooth(robot_id, retreat_joints, gui)
-
     # Read actual joint state to prevent drift accumulation (audit #86).
     actual_joints = np.array(
         [p.getJointState(robot_id, i)[0] for i in range(7)]
     )
     return RobotConfig(joint_positions=actual_joints,
-                       name="post_place_retreat")
+                       name="post_place_contact")
 
 
 # compute_push_displacement() removed (#53): push superseded by pick-and-place.
