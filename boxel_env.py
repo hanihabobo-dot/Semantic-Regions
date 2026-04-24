@@ -126,12 +126,18 @@ class SceneConfig:
             table height + object half-height).  ``None`` → random.
         target_positions: Same, for targets.
         seed: RNG seed for random placement.  ``None`` → non-deterministic.
+        constrain_to_reach: When True, random XY sampling is restricted
+            to the intersection of (a) a safe on-table window and (b)
+            a disk around the robot base.  Used by stack_scene where
+            every cube must be both pickable and a viable stack target
+            (audit #30).
     """
     occluders: List[ObjectSpec]
     targets: List[ObjectSpec]
     occluder_positions: Optional[List[List[float]]] = None
     target_positions: Optional[List[List[float]]] = None
     seed: Optional[int] = None
+    constrain_to_reach: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +207,50 @@ def mixed_shapes_scene(seed: int = 42) -> SceneConfig:
         occluder_positions=[[0.5, 0.2], [0.6, -0.1], [0.4, -0.2]],
         target_positions=[[0.5, 0.4], [0.6, 0.1], [0.4, -0.1], [0.7, -0.2]],
         seed=seed,
+    )
+
+
+def stack_scene(n_objects: int = 3, seed: int = 0,
+                cube_half_extent: float = 0.025) -> SceneConfig:
+    """
+    Scene for ``--goal stack`` (audit #30): ``n_objects`` identical cubes
+    spawned at random reach-constrained positions on the table.
+
+    Identical cubes guarantee flat-on-flat contact during stacking, so
+    ``execute_stack`` can compute the release height from a single
+    half-extent without per-pair geometry checks.  Every cube is a
+    candidate to pick AND a candidate stack support — no occluders.
+
+    Cubes are stored in the ``targets`` list (registered with
+    ``is_visible=False``) only because that field has been historically
+    used for "things the planner manipulates"; visibility is recomputed
+    by ``oracle_detect_objects`` on the first camera pass anyway.
+
+    Args:
+        n_objects: Number of cubes to spawn.  Must be >= stack height.
+        seed: RNG seed for reproducible XY positions.
+        cube_half_extent: Half-side of each cube in metres.  0.025 m
+            (5 cm cube) fits the Panda gripper and stacks reliably.
+    """
+    color_keys = list(OBJECT_COLORS.keys())
+
+    targets = []
+    for i in range(n_objects):
+        ck = color_keys[i % len(color_keys)]
+        suffix = "" if i < len(color_keys) else f"_{i // len(color_keys) + 1}"
+        targets.append(ObjectSpec(
+            ObjectShape.BOX,
+            [cube_half_extent, cube_half_extent, cube_half_extent],
+            color=OBJECT_COLORS[ck],
+            mass=0.2,
+            name=f"{ck}_object{suffix}",
+        ))
+
+    return SceneConfig(
+        occluders=[],
+        targets=targets,
+        seed=seed,
+        constrain_to_reach=True,
     )
 
 
@@ -501,33 +551,77 @@ class BoxelTestEnv:
                              lateralFriction=spec.lateral_friction)
         return body_id
 
+    # Robot base XY (matches franka_panda spawn in _setup_scene) and the
+    # Panda's effective tabletop reach radius.  Used to keep random
+    # placements inside the arm's workspace when constrain_to_reach=True.
+    _ROBOT_BASE_XY = (-0.4, 0.0)
+    _PANDA_REACH_RADIUS = 0.65
+
+    # Reach-constrained XY window: the intersection of the actual table
+    # mesh footprint (which is centred at [0.5, 0]) and the Panda's
+    # reach disk.  This is NOT a redefinition of table_x_range /
+    # table_y_range — those describe the LOGICAL voxel-grid workspace
+    # (which extends back to x=-0.4 to enclose the robot's near field
+    # for boxelization).  Sampling x < ~0.05 there would land off the
+    # actual table mesh and the cube would fall instantly when physics
+    # starts.  This tighter window is only used by stack_scene-style
+    # scenes that demand every object be both pickable and on-table.
+    _SAFE_TABLE_X_RANGE = (0.05, 0.70)
+    _SAFE_TABLE_Y_RANGE = (-0.40, 0.40)
+
     def _random_xy_positions(self, n: int, rng: np.random.RandomState,
-                             margin: float = 0.10) -> List[List[float]]:
+                             margin: float = 0.10,
+                             constrain_to_reach: bool = False,
+                             reach_radius: Optional[float] = None
+                             ) -> List[List[float]]:
         """
         Sample *n* non-overlapping XY positions within the table bounds.
 
         Uses rejection sampling with a minimum separation of ``margin``
         metres to avoid objects spawning on top of each other.
+
+        When ``constrain_to_reach`` is True, samples are restricted to
+        the intersection of (a) the safe on-table window
+        (``_SAFE_TABLE_*_RANGE`` — not the wider ``table_*_range``) and
+        (b) a disk of radius ``reach_radius`` around the robot base.
+        Both constraints are needed for scenes like ``stack`` where every
+        object must be both pickable AND a viable stack destination
+        (audit #30).
         """
-        x_lo, x_hi = self.table_x_range
-        y_lo, y_hi = self.table_y_range
+        if constrain_to_reach:
+            x_lo, x_hi = self._SAFE_TABLE_X_RANGE
+            y_lo, y_hi = self._SAFE_TABLE_Y_RANGE
+        else:
+            x_lo, x_hi = self.table_x_range
+            y_lo, y_hi = self.table_y_range
         x_lo += margin
         x_hi -= margin
         y_lo += margin
         y_hi -= margin
+        bx, by = self._ROBOT_BASE_XY
+        r_max = (reach_radius if reach_radius is not None
+                 else self._PANDA_REACH_RADIUS)
         positions = []
-        for _ in range(n * 200):
+        for _ in range(n * 400):
             if len(positions) >= n:
                 break
             x = rng.uniform(x_lo, x_hi)
             y = rng.uniform(y_lo, y_hi)
+            if constrain_to_reach and np.hypot(x - bx, y - by) > r_max:
+                continue
             if all(np.hypot(x - px, y - py) >= margin
                    for px, py in positions):
                 positions.append([x, y])
         if len(positions) < n:
+            if constrain_to_reach:
+                bounds_msg = (f"safe table window x=({x_lo}, {x_hi}) "
+                              f"y=({y_lo}, {y_hi}) within reach={r_max}")
+            else:
+                bounds_msg = (f"table bounds x={self.table_x_range} "
+                              f"y={self.table_y_range}")
             raise RuntimeError(
-                f"Could not place {n} objects with margin={margin} m "
-                f"in table bounds x={self.table_x_range} y={self.table_y_range}"
+                f"Could not place {n} objects with margin={margin} m in "
+                f"{bounds_msg}"
             )
         return positions
 
@@ -539,7 +633,10 @@ class BoxelTestEnv:
         if cfg.occluder_positions is not None:
             xys = cfg.occluder_positions
         else:
-            xys = self._random_xy_positions(len(cfg.occluders), rng)
+            xys = self._random_xy_positions(
+                len(cfg.occluders), rng,
+                constrain_to_reach=cfg.constrain_to_reach,
+            )
 
         for i, (spec, xy) in enumerate(zip(cfg.occluders, xys)):
             he = spec.aabb_half_extents
@@ -564,7 +661,10 @@ class BoxelTestEnv:
         if cfg.target_positions is not None:
             xys = cfg.target_positions
         else:
-            xys = self._random_xy_positions(len(cfg.targets), rng)
+            xys = self._random_xy_positions(
+                len(cfg.targets), rng,
+                constrain_to_reach=cfg.constrain_to_reach,
+            )
 
         for i, (spec, xy) in enumerate(zip(cfg.targets, xys)):
             he = spec.aabb_half_extents

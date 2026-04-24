@@ -55,7 +55,8 @@ import numpy as np
 import pybullet as p
 
 from boxel_env import (BoxelTestEnv, SceneConfig,
-                       default_scene, mixed_shapes_scene, scalability_scene)
+                       default_scene, mixed_shapes_scene,
+                       scalability_scene, stack_scene)
 from boxel_data import BoxelData, BoxelRegistry, BoxelType
 from cell_merger import merge_free_space_cells
 from free_space import split_free_boxel  # noqa: F401  (kept for future use)
@@ -70,12 +71,92 @@ from belief import BeliefState
 from reboxelize import reboxelize_free_space
 from execution import (sense_shadow_raycasting, compute_shadow_blockers,
                        release_held_object_in_place,
-                       execute_pick, execute_place)
+                       execute_pick, execute_place, execute_stack)
+
+
+def goal_satisfied(goal, on_relations=None, target_found=False) -> bool:
+    """
+    Generic goal-predicate evaluator for the orchestration loop (audit #30).
+
+    Decoupled from BeliefState because stack goals don't need a belief
+    state at all — there are no shadows.  The two flavours we support:
+
+      ('holding', obj)   — delegates to ``target_found`` (set by the
+                           pick handler / sense outcome).
+      ('on', a, b)       — checked against ``on_relations``, the
+                           planner-side picture of the live stack
+                           maintained by the stack action handler.
+      ('and', g1, g2,..) — conjunction; recurses.
+
+    Reading from ``on_relations`` rather than re-deriving from PyBullet
+    AABBs each tick avoids races with in-flight settling — by the time
+    the loop polls, execute_stack has already let physics settle and
+    written the canonical relation.
+    """
+    on_relations = on_relations or {}
+    if not isinstance(goal, tuple):
+        return False
+    head = goal[0]
+    if head == 'and':
+        return all(goal_satisfied(sub, on_relations, target_found)
+                   for sub in goal[1:])
+    if head == 'holding':
+        return target_found
+    if head == 'on':
+        a, b = str(goal[1]), str(goal[2])
+        return on_relations.get(a) == b
+    return False
+
+
+def build_stack_goal(stackable_objects, stack_height, rng=None):
+    """
+    Pick ``stack_height`` distinct objects from ``stackable_objects`` and
+    return a goal for a tower of that height (audit #30).
+
+    For height H the goal is::
+
+        ('and', ('on', t_1, t_2), ..., ('on', t_{H-1}, t_H))
+
+    where ``t_1`` is the top and ``t_H`` is the base resting on the
+    table.  The base is implicitly table-resting — the domain doesn't
+    represent the table as an object.
+
+    Args:
+        stackable_objects: Object IDs the planner may use as cubes.
+        stack_height: Total cubes in the stack (>= 2).  Height 1 is
+            rejected because it collapses to (clear t), which the
+            planner trivially satisfies — use --goal holding instead.
+        rng: ``random.Random`` for reproducible shuffling.  Defaults to
+            module ``random`` so the existing --seed plumbing keeps
+            working unchanged.
+    """
+    if stack_height < 2:
+        raise ValueError(
+            f"--stack-height must be >= 2 for a meaningful goal "
+            f"(got {stack_height}).  Use --goal holding for a single object."
+        )
+    if len(stackable_objects) < stack_height:
+        raise ValueError(
+            f"Need at least {stack_height} stackable objects for "
+            f"--stack-height={stack_height}, have {len(stackable_objects)}. "
+            f"Increase --n-objects."
+        )
+
+    rng = rng or random
+    chosen = list(stackable_objects)
+    rng.shuffle(chosen)
+    chosen = chosen[:stack_height]
+
+    pairs = [('on', chosen[i], chosen[i + 1])
+             for i in range(stack_height - 1)]
+    if len(pairs) == 1:
+        return pairs[0]
+    return ('and',) + tuple(pairs)
 
 
 def main(gui=True, run_logger=None, scene_config=None,
          draw_boxel_overlays=True, show_free=False,
-         goal_kind='holding',
+         goal_kind='holding', stack_height=2,
          run_config: Optional[Dict[str, Any]] = None):
     print("=" * 60)
     print("FULL PIPELINE: PDDLStream + Replanning")
@@ -185,36 +266,55 @@ def main(gui=True, run_logger=None, scene_config=None,
                 break
 
     visible_target_locations = {}
+    on_relations: Dict[str, str] = {}      # stacked_obj -> support_obj
+    stack_target_objects = []              # populated only for --goal stack
 
-    if target_to_shadow:
-        target_name = random.choice(list(target_to_shadow.keys()))
-        oracle_hidden_shadow = target_to_shadow[target_name]
-        print(f"  Target: {target_name}")
-        print(f"  ORACLE: Actually hidden in {oracle_hidden_shadow} (ground-truth AABB containment)")
-        print(f"  Robot must search to find it!")
-    else:
-        # No target is hidden — all are visible from the camera.
-        # Pick a random visible target and resolve its boxel ID so the
-        # planner can generate a direct move→pick plan without sensing.
-        print(f"  No targets hidden — all visible from camera.")
-        target_name = random.choice(all_targets)
-        for boxel in registry.boxels.values():
-            if boxel.object_name == target_name:
-                visible_target_locations[target_name] = boxel.id
-                break
-        if target_name in visible_target_locations:
-            print(f"  Target: {target_name} at boxel "
-                  f"{visible_target_locations[target_name]} (direct pick)")
-        else:
-            print(f"  WARNING: Target {target_name} has no boxel in registry")
-            env.close()
-            return False
-
-    # The goal kind is decoupled from target selection so future goal
-    # types (e.g. ('on', a, b)) can reuse the same target-discovery code.
-    # Currently only 'holding' is wired through the planner.
     if goal_kind == 'holding':
+        if target_to_shadow:
+            target_name = random.choice(list(target_to_shadow.keys()))
+            oracle_hidden_shadow = target_to_shadow[target_name]
+            print(f"  Target: {target_name}")
+            print(f"  ORACLE: Actually hidden in {oracle_hidden_shadow} (ground-truth AABB containment)")
+            print(f"  Robot must search to find it!")
+        else:
+            # No target is hidden — all are visible from the camera.
+            # Pick a random visible target and resolve its boxel ID so the
+            # planner can generate a direct move→pick plan without sensing.
+            print(f"  No targets hidden — all visible from camera.")
+            target_name = random.choice(all_targets)
+            for boxel in registry.boxels.values():
+                if boxel.object_name == target_name:
+                    visible_target_locations[target_name] = boxel.id
+                    break
+            if target_name in visible_target_locations:
+                print(f"  Target: {target_name} at boxel "
+                      f"{visible_target_locations[target_name]} (direct pick)")
+            else:
+                print(f"  WARNING: Target {target_name} has no boxel in registry")
+                env.close()
+                return False
         goal = ('holding', target_name)
+    elif goal_kind == 'stack':
+        # stack_scene has no occluders → no shadows → no sensing needed.
+        # Every cube is its own visible target so the planner can pick
+        # any of them without a search loop.
+        stack_target_objects = list(all_targets)
+        for tname in stack_target_objects:
+            for boxel in registry.boxels.values():
+                if boxel.object_name == tname:
+                    visible_target_locations[tname] = boxel.id
+                    break
+        goal = build_stack_goal(stack_target_objects, stack_height)
+        # ``target_name`` is still referenced in the holding-style log
+        # paths (planner export, replan loop banner).  Pick the top of
+        # the requested tower as a representative — it matches the
+        # holding semantics ("the object the user cares about").
+        if isinstance(goal, tuple) and goal[0] == 'and':
+            target_name = str(goal[1][1])
+        else:
+            target_name = str(goal[1])
+        print(f"  Stack goal: {goal}")
+        print(f"  Stackable cubes: {stack_target_objects}")
     else:
         raise ValueError(f"Unsupported --goal '{goal_kind}'. "
                          "Add a builder before passing it through.")
@@ -297,8 +397,15 @@ def main(gui=True, run_logger=None, scene_config=None,
                                 support_body_ids=support_body_ids,
                                 camera_pos=env.camera_position)
 
+    # The planner needs to reason about every object that may participate
+    # in the goal.  For 'holding' that's just the chosen target; for
+    # 'stack' it's every cube in the requested tower.
+    planner_target_objects = (
+        stack_target_objects if goal_kind == 'stack' else [target_name]
+    )
+
     problem_path = planner.export_problem_pddl(
-        target_objects=[target_name],
+        target_objects=planner_target_objects,
         goal=goal,
         visible_target_locations=visible_target_locations,
     )
@@ -322,8 +429,13 @@ def main(gui=True, run_logger=None, scene_config=None,
     #
     # Termination: each replan eliminates at least one shadow (or retries
     # a blocked one up to 3 times), so worst case is bounded.  Budget:
-    # 4 attempts per shadow + 1 final pick.
-    max_replans = 4 * len(shadows) + 1
+    # 4 attempts per shadow + 1 final pick.  Stack has no shadows; size
+    # the budget by stack height instead — 2 PDDL actions per cube
+    # (pick + stack) plus a small slack for retries (audit #30).
+    if goal_kind == 'stack':
+        max_replans = 2 * stack_height + 3
+    else:
+        max_replans = 4 * len(shadows) + 1
     grasp_constraint_id = None       # set during pick, cleared after place
     held_body_id = None              # PyBullet body ID of the held object
     held_object_boxel_id = None      # registry boxel ID of the held object
@@ -333,18 +445,27 @@ def main(gui=True, run_logger=None, scene_config=None,
     # "still_blocked" 3+ times, give up on it (audit #78c).
     blocked_counts = {}  # shadow_id → consecutive-block count
 
-    while not belief.is_target_found() and plan_count < max_replans:
+    def _loop_done() -> bool:
+        # Holding goals stop when belief.target_found flips; stack goals
+        # stop when every (on a b) clause is satisfied (audit #30).
+        if goal_kind == 'holding':
+            return belief.is_target_found()
+        return goal_satisfied(goal, on_relations)
+
+    while not _loop_done() and plan_count < max_replans:
         plan_count += 1
         unknown_shadows = belief.get_unknown_shadows()
         known_empty = belief.get_known_empty_shadows()
 
         print(f"\n=== PLAN #{plan_count} ===")
-        print(f"Unknown shadows remaining: {len(unknown_shadows)}")
-
-        if not unknown_shadows:
-            exit_reason = "all_searched"
-            print("ERROR: Searched all shadows but target not found!")
-            break
+        if goal_kind == 'holding':
+            print(f"Unknown shadows remaining: {len(unknown_shadows)}")
+            if not unknown_shadows:
+                exit_reason = "all_searched"
+                print("ERROR: Searched all shadows but target not found!")
+                break
+        else:
+            print(f"Stack progress: {on_relations} (goal {goal})")
 
         # --- Drop any object still in the gripper before replanning -------
         # The action loop can `break` mid-plan (sense failed, IK failed,
@@ -403,7 +524,7 @@ def main(gui=True, run_logger=None, scene_config=None,
         with RenderingLock(env.client_id):
             plan_t0 = time.perf_counter()
             plan = planner.plan(
-                target_objects=[target_name],
+                target_objects=planner_target_objects,
                 goal=goal,
                 current_config=current_config,
                 known_empty_shadows=known_empty,
@@ -411,6 +532,12 @@ def main(gui=True, run_logger=None, scene_config=None,
                 max_time=120.0,
                 verbose=False,
                 visible_target_locations=visible_target_locations,
+                # on/clear facts only emitted into init when stackable
+                # objects is supplied — holding-goal runs pay nothing.
+                on_relations=(on_relations if goal_kind == 'stack'
+                              else None),
+                stackable_objects=(stack_target_objects
+                                   if goal_kind == 'stack' else None),
             )
             plan_dt = time.perf_counter() - plan_t0
         total_plan_time += plan_dt
@@ -807,6 +934,68 @@ def main(gui=True, run_logger=None, scene_config=None,
                 else:
                     print(f"    *** {obj_str} PLACED at {boxel_id_str}! ***")
 
+            elif action_name == 'stack':
+                # STACK: drop the held object on top of ?on_obj.  Mirrors
+                # `place` but the destination is computed from the
+                # support's CURRENT AABB inside execute_stack — no
+                # boxel-center lookup, no free-space consumption.  We
+                # refresh the OBJECT boxel for the stacked cube to its
+                # post-settle AABB so the next planner.plan() sees the
+                # new stack height (audit #30).
+                obj, on_obj, grasp, config = params
+                obj_str = str(obj)
+                on_obj_str = str(on_obj)
+                print(f"    Stacking {obj_str} on {on_obj_str}...")
+
+                stack_result = execute_stack(
+                    robot_id, env, obj_str, on_obj_str, grasp,
+                    grasp_constraint_id, gui)
+                if stack_result is None:
+                    print(f"    IK failure during stack — replanning (audit #30)")
+                    break
+                current_config = stack_result
+                grasp_constraint_id = None
+                held_body_id = None
+                held_object_boxel_id = None
+
+                env.update_object_positions()
+                for bid, binfo in boxel_to_pybullet.items():
+                    bname = binfo['name']
+                    if bname in env.objects:
+                        binfo['position'] = np.array(env.objects[bname].position)
+
+                # Refresh the stacked object's OBJECT boxel from its new
+                # AABB so _build_init's next pass sees it above the
+                # support and (clear ?obj_str) is emitted for the new
+                # stack top (the support is no longer clear, which the
+                # planner picks up via on_relations below).
+                if obj_str in env.objects:
+                    body_id = env.objects[obj_str].object_id
+                    a_min, a_max = p.getAABB(body_id)
+                    a_min = np.array(a_min)
+                    a_max = np.array(a_max)
+                    bd = registry.get_boxel(obj_str)
+                    if bd is not None:
+                        bd.min_corner = a_min
+                        bd.max_corner = a_max
+                        bd.on_surface = None
+                        boxel_centers[obj_str] = bd.center
+                        if viz is not None:
+                            viz.remove_boxel_viz(obj_str)
+                            viz.draw_boxel_data(bd)
+
+                # Track the relation so goal_satisfied() / next replan
+                # see the live stack.  Replace any prior support of
+                # obj_str (re-stacking) — the conditional pick effect in
+                # the domain already cleared the old support symbolically.
+                on_relations[obj_str] = on_obj_str
+                # Stacking does NOT consume free space (we placed onto
+                # an OBJECT, not a FREE_SPACE), so reboxelize_free_space
+                # is unnecessary here.  Any registry.dirty flag set by
+                # the AABB update will be picked up at the top of the
+                # next plan iteration via the existing dirty-flag check.
+                print(f"    *** {obj_str} STACKED on {on_obj_str}! ***")
+
             if gui:
                 env.refresh_debug_camera_views()
 
@@ -817,13 +1006,21 @@ def main(gui=True, run_logger=None, scene_config=None,
     # the loop tells us exactly why we stopped: target found, all shadows
     # exhausted, planner failure, or replan budget exceeded.
     print("\n" + "=" * 60)
-    success = belief.is_target_found()
+    if goal_kind == 'holding':
+        success = belief.is_target_found()
+    else:
+        success = goal_satisfied(goal, on_relations)
     if success:
         print(f"SUCCESS!")
-        print(f"  Target: {target_name}")
-        print(f"  Found in: {belief.target_found_in}")
-        print(f"  Plans executed: {plan_count}")
-        print(f"  Shadows searched: {len(shadows) - len(belief.get_unknown_shadows())}")
+        if goal_kind == 'holding':
+            print(f"  Target: {target_name}")
+            print(f"  Found in: {belief.target_found_in}")
+            print(f"  Plans executed: {plan_count}")
+            print(f"  Shadows searched: {len(shadows) - len(belief.get_unknown_shadows())}")
+        else:
+            print(f"  Stack goal: {goal}")
+            print(f"  Final on-relations: {on_relations}")
+            print(f"  Plans executed: {plan_count}")
     else:
         remaining = belief.get_unknown_shadows()
         if exit_reason is None:
@@ -837,6 +1034,9 @@ def main(gui=True, run_logger=None, scene_config=None,
             print(f"FAILED: Could not release held object after retries — "
                   f"aborted to avoid double-grasp "
                   f"({len(remaining)} unsearched shadows remaining)")
+        elif goal_kind == 'stack':
+            print(f"FAILED: Stack goal not reached after {plan_count} plans "
+                  f"(goal {goal}, achieved {on_relations})")
         else:
             print(f"FAILED: Replan limit reached ({max_replans}) with "
                   f"{len(remaining)} unsearched shadows remaining")
@@ -907,24 +1107,42 @@ if __name__ == "__main__":
     parser.add_argument('--log-level', choices=['quiet', 'normal', 'verbose'],
                         default='normal',
                         help='Console verbosity (log file always captures everything)')
-    parser.add_argument('--scene', choices=['default', 'mixed', 'scalability'],
+    parser.add_argument('--scene', choices=['default', 'mixed',
+                                            'scalability', 'stack'],
                         default='default',
                         help='Scene preset: default (original cubes), mixed (diverse '
-                             'shapes), scalability (random for evaluation)')
+                             'shapes), scalability (random for evaluation), '
+                             'stack (N identical cubes, no occluders).')
     parser.add_argument('--n-occluders', type=int, default=3,
                         help='Number of occluders (scalability scene only)')
     parser.add_argument('--n-targets', type=int, default=4,
                         help='Number of targets (scalability scene only)')
+    parser.add_argument('--n-objects', type=int, default=3,
+                        help='Number of cubes for the stack scene '
+                             '(must be >= --stack-height)')
     parser.add_argument('--seed', type=int, default=0,
-                        help='Random seed (scalability/mixed scenes)')
+                        help='Random seed (scalability/mixed/stack scenes)')
     parser.add_argument(
         '--goal',
-        choices=['holding'],
+        choices=['holding', 'stack'],
         default='holding',
-        help="Goal kind. 'holding' picks the (hidden or visible) target. "
-             "Reserved for future kinds (e.g. stacking) — see audit #30.",
+        help="Goal kind. 'holding' picks the (hidden or visible) target; "
+             "'stack' builds a randomised tower of cubes (audit #30).",
+    )
+    parser.add_argument(
+        '--stack-height',
+        type=int,
+        default=2,
+        help='Stack tower height in cubes (>= 2). Only used with '
+             '--goal stack. Defaults to 2 (one stacking action).',
     )
     args = parser.parse_args()
+
+    # When --goal stack is requested without an explicit --scene, fall
+    # back to stack_scene so the spawned objects are reach-constrained
+    # cubes by default.  Explicit --scene overrides this for A/B tests.
+    if args.goal == 'stack' and args.scene == 'default':
+        args.scene = 'stack'
 
     # Lazy scene construction — each builder captures CLI args and
     # returns a SceneConfig when called, so only the selected scene
@@ -937,6 +1155,10 @@ if __name__ == "__main__":
             n_targets=args.n_targets,
             seed=args.seed,
         ),
+        'stack': lambda: stack_scene(
+            n_objects=max(args.n_objects, args.stack_height),
+            seed=args.seed,
+        ),
     }
     scene_cfg = scene_builders[args.scene]()
 
@@ -945,15 +1167,17 @@ if __name__ == "__main__":
     # (audit #30 keep/kill).  Booleans match the kwargs we hand to main()
     # rather than the inverted no_* arg names for readability.
     run_config = {
-        "scene":       args.scene,
-        "n_occluders": args.n_occluders,
-        "n_targets":   args.n_targets,
-        "seed":        args.seed,
-        "goal":        args.goal,
-        "gui":         not args.no_gui,
-        "boxel_viz":   not args.no_boxel_viz,
-        "show_free":   args.show_free,
-        "log_level":   args.log_level,
+        "scene":        args.scene,
+        "n_occluders":  args.n_occluders,
+        "n_targets":    args.n_targets,
+        "n_objects":    args.n_objects,
+        "seed":         args.seed,
+        "goal":         args.goal,
+        "stack_height": args.stack_height,
+        "gui":          not args.no_gui,
+        "boxel_viz":    not args.no_boxel_viz,
+        "show_free":    args.show_free,
+        "log_level":    args.log_level,
     }
 
     # RunLogger captures all artefacts (PDDL files, boxel data, logs)
@@ -967,6 +1191,7 @@ if __name__ == "__main__":
             draw_boxel_overlays=not args.no_boxel_viz,
             show_free=args.show_free,
             goal_kind=args.goal,
+            stack_height=args.stack_height,
             run_config=run_config,
         )
     finally:

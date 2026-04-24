@@ -911,4 +911,97 @@ class BoxelStreams:
             logger.debug("compute_kin: all %d IK seeds failed for %s at %s "
                          "(target_pos=%s)", self.IK_NUM_SEEDS, obj_id,
                          boxel_id, target_pos.tolist())
+
+    # =========================================================================
+    # STREAM 4: Compute IK for Stack  (audit #30)
+    # =========================================================================
+    # Like compute_kin_solution but the EE target is derived from
+    # ?on_obj's CURRENT AABB rather than a precomputed boxel center,
+    # so a stack built across a multi-step plan keeps targeting the
+    # running stack height rather than the support's spawn pose.
+    #
+    # Reuses the same IK seed loop, dedup, and ignored-body convention as
+    # compute_kin_solution; the only differences are the target-pose
+    # derivation and the config name prefix.
+    def compute_stack_kin_solution(self, obj_id: str, on_obj_id: str,
+                                   grasp: Grasp) -> Iterator[Tuple[RobotConfig]]:
+        """
+        IK to release the held ``obj_id`` on top of ``on_obj_id``.
+
+        Pose derivation: read ``on_obj_id``'s current AABB from PyBullet
+        (falling back to its registry boxel) and compute the EE z so the
+        held object's bottom face rests on the support's top face:
+
+            ee_target.xy = on_obj_top.xy + grasp.position[:2]
+            ee_target.z  = on_obj_top.z + held_half_height + grasp.position[2]
+
+        ``held_half_height`` comes from the held object's registry boxel
+        (compute_kin_solution sized it from the AABB at scan time).
+
+        Certifies (Config ?q), (stack_kin ?o ?on_obj ?g ?q), and
+        (config_for_boxel ?q ?on_obj) — the last so the preceding move
+        action can deliver the arm to the support's OBJECT boxel.
+        """
+        held_boxel = self.registry.get_boxel(obj_id)
+        if held_boxel is None:
+            return
+        held_half_height = float(held_boxel.extent[2])
+
+        on_body_id = self._resolve_body_id(on_obj_id)
+        top_z: Optional[float] = None
+        if on_body_id is not None:
+            try:
+                aabb_min, aabb_max = p.getAABB(on_body_id,
+                                               physicsClientId=self.physics_client)
+                top_z = float(aabb_max[2])
+                cx = (aabb_min[0] + aabb_max[0]) / 2.0
+                cy = (aabb_min[1] + aabb_max[1]) / 2.0
+            except Exception:
+                top_z = None
+
+        if top_z is None:
+            on_boxel = self.registry.get_boxel(on_obj_id)
+            if on_boxel is None:
+                return
+            top_z = float(on_boxel.max_corner[2])
+            cx, cy, _ = on_boxel.center.tolist()
+
+        target_obj_pos = np.array([cx, cy, top_z + held_half_height])
+        target_pos = target_obj_pos + grasp.position
+        ee_orn = grasp.orientation
+
+        held_body_id = self._resolve_body_id(obj_id)
+        ignored = (frozenset({held_body_id})
+                   if held_body_id is not None else frozenset())
+
+        if self.robot_id is None:
+            logger.warning("compute_stack_kin: no robot_id — cannot compute IK "
+                           "for %s on %s", obj_id, on_obj_id)
+            return
+
+        seen = set()
+        yielded = 0
+        for seed_idx, seed in enumerate(self._ik_seeds()):
+            config = self._pybullet_ik(target_pos, ee_orn, seed=seed)
+            if config is None:
+                continue
+            sig = tuple(np.round(config.joint_positions, 3))
+            if sig in seen:
+                continue
+            seen.add(sig)
+            config.ignored_body_ids = ignored
+            config.grasp_ee_offset = grasp.position
+            self._config_counter += 1
+            config.name = f"q_stack_{obj_id}_on_{on_obj_id}_{self._config_counter}"
+            logger.debug("compute_stack_kin: %s on %s -> %s "
+                         "ee_target=%s seed=%d",
+                         obj_id, on_obj_id, config.name,
+                         target_pos.tolist(), seed_idx)
+            yield (config,)
+            yielded += 1
+
+        if yielded == 0:
+            logger.debug("compute_stack_kin: all %d seeds failed for %s on %s "
+                         "(target_pos=%s)", self.IK_NUM_SEEDS, obj_id,
+                         on_obj_id, target_pos.tolist())
     

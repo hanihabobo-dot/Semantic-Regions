@@ -15,7 +15,7 @@
 ;; Object types are encoded as predicates: (Boxel ?x), (Obj ?x), etc.
 
 (define (domain boxel-tamp)
-  (:requirements :strips :equality :derived-predicates)
+  (:requirements :strips :equality :derived-predicates :conditional-effects)
   
   (:predicates
     ;; --- Type predicates ---
@@ -57,6 +57,20 @@
     (config_for_boxel ?q ?b)      ; Config ?q targets boxel ?b (EE inside ?b)
     (boxel_fits ?o ?b)            ; Free boxel ?b is large enough to contain ?o
     (on_surface ?b)               ; Boxel ?b rests on a support surface (table)
+    
+    ;; --- Stacking (audit #30, --goal stack) ---
+    ;; (on ?o ?support) means ?o sits directly on top of ?support.
+    ;; "On the table" is implicit — an object that appears in no
+    ;; (on ?o ?x) fact is treated as table-resting.  This keeps the
+    ;; predicate space minimal while still expressing stack goals.
+    ;;
+    ;; (clear ?o) means nothing is stacked on ?o.  Only emitted into
+    ;; init when stackable_objects is supplied (i.e. the run is using
+    ;; --goal stack); holding-goal runs never see these facts and pay
+    ;; no grounding cost (audit #30 implementation note).
+    (on ?o1 ?o2)
+    (clear ?o)
+    (stack_kin ?o ?on_obj ?g ?q)  ; IK config ?q to place ?o on top of ?on_obj
   )
   
   ;; =========================================================================
@@ -188,6 +202,14 @@
       (holding ?o)
       (not (handempty))
       (not (obj_at_boxel ?o ?b))
+      ;; Stacking bookkeeping (audit #30): if ?o was sitting on some
+      ;; ?x, picking it off makes ?x clear again.  The forall ranges
+      ;; over (Obj ?x) but only fires when the (on ?o ?x) fluent is
+      ;; true, so for holding-goal runs (which never assert (on ...))
+      ;; it grounds to a no-op.
+      (forall (?x)
+        (when (on ?o ?x)
+          (and (not (on ?o ?x)) (clear ?x))))
     )
   )
   
@@ -220,6 +242,40 @@
       (obj_at_boxel_KIF ?o ?b)
       (not (holding ?o))
       (not (is_free_space ?b))
+    )
+  )
+
+  ;; =========================================================================
+  ;; STACK: Place the held object on top of another object  (audit #30)
+  ;; =========================================================================
+  ;; Mirrors place but the destination is an OBJECT boxel rather than a
+  ;; FREE_SPACE boxel.  ``stack_kin`` is certified by compute-stack-kin,
+  ;; which derives the EE target from ?on_obj's CURRENT top z + the held
+  ;; object's half-height; this is computed each time the planner is
+  ;; invoked so multi-step stacks tolerate per-step settling.
+  ;;
+  ;; (clear ?o) becomes true on the newly-stacked object so it is itself
+  ;; available as a support for a subsequent stack action.
+  (:action stack
+    :parameters (?o ?on_obj ?g ?q)
+    :precondition (and
+      (Obj ?o)
+      (Obj ?on_obj)
+      (Grasp ?g)
+      (Config ?q)
+      (holding ?o)
+      (at_config ?q)
+      (clear ?on_obj)
+      (stack_kin ?o ?on_obj ?g ?q)
+    )
+    :effect (and
+      (handempty)
+      (on ?o ?on_obj)
+      (clear ?o)
+      (obj_at_boxel ?o ?o)        ; OBJECT boxel ID equals object name
+      (obj_at_boxel_KIF ?o ?o)
+      (not (holding ?o))
+      (not (clear ?on_obj))
     )
   )
 )

@@ -12,6 +12,9 @@ run between actions:
     are relocated (audit #78).
   - execute_pick / execute_place: arm trajectories with constraint-based
     grasping and geometry-derived contact heights (audit #1, #98).
+  - execute_stack: place the held object on top of another object's live
+    AABB top — destination computed from the live PyBullet pose so
+    incremental stacks tolerate per-step settling (audit #30).
   - release_held_object_in_place: emergency drop with verification when
     the planner needs to be invoked while still holding an object.
 
@@ -557,6 +560,106 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     )
     return RobotConfig(joint_positions=actual_joints,
                        name="post_place_contact")
+
+
+def execute_stack(robot_id, env, obj_name, on_obj_name, grasp,
+                  grasp_constraint_id, gui) -> Optional[RobotConfig]:
+    """
+    Drop the held object on top of ``on_obj_name`` (audit #30, --goal stack).
+
+    Mirrors :func:`execute_place` in shape but the destination is read
+    LIVE from PyBullet rather than derived from a free-space boxel
+    centre:
+
+      EE z = on_obj_top_z + held_half_height - ee_to_obj_z
+
+    ``ee_to_obj_z`` is the current EE→object Z offset (queried from the
+    grasp constraint's body just like execute_place), so any drift in
+    the grasp pose between pick and stack is accounted for.
+
+    Why live AABBs instead of the planner's symbolic destination:
+    in a multi-step stack, by the time the third stack action runs the
+    first two cubes have physically settled and may differ slightly from
+    the planner's nominal pose.  Reading the support's actual top each
+    time keeps the placement geometrically grounded.
+
+    Note (audit #37 dependency): like execute_pick / execute_place, this
+    helper re-solves IK locally instead of using the planner's q.  If
+    that audit is ever resolved, this routine must be updated alongside
+    execute_pick/place to follow the same convention.
+
+    Args:
+        robot_id: PyBullet body ID of the robot.
+        env: BoxelTestEnv (for env.objects lookup and client_id).
+        obj_name: Held object's name (logging).
+        on_obj_name: Support object's name (must be in env.objects).
+        grasp: Grasp from the planner (provides EE→object offset).
+        grasp_constraint_id: Constraint id from the prior pick.  Required —
+            execute_stack queries it to find the held body.
+        gui: Whether GUI is active (controls move_robot_smooth pacing).
+
+    Returns:
+        RobotConfig at the contact pose after release+settle, or None on
+        IK failure (caller replans).
+    """
+    if on_obj_name not in env.objects:
+        print(f"    ERROR: stack support '{on_obj_name}' not in env.objects")
+        return None
+    if grasp_constraint_id is None:
+        print(f"    ERROR: stack {obj_name} on {on_obj_name} called without "
+              f"a held object (no grasp constraint).")
+        return None
+
+    support_id = env.objects[on_obj_name].object_id
+    sup_min, sup_max = p.getAABB(support_id)
+    sup_top_z = float(sup_max[2])
+    sup_cx = (sup_min[0] + sup_max[0]) / 2.0
+    sup_cy = (sup_min[1] + sup_max[1]) / 2.0
+
+    c_info = p.getConstraintInfo(grasp_constraint_id)
+    held_body_id = c_info[2]
+    held_aabb_min, held_aabb_max = p.getAABB(held_body_id)
+    held_half_height = (held_aabb_max[2] - held_aabb_min[2]) / 2.0
+
+    ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
+    ee_z = ee_state[0][2]
+    obj_cur_z = p.getBasePositionAndOrientation(held_body_id)[0][2]
+    ee_to_obj_z = obj_cur_z - ee_z
+
+    target_obj_z = sup_top_z + held_half_height
+    contact_z = target_obj_z - ee_to_obj_z
+
+    contact_ee = np.array([
+        sup_cx + grasp.position[0],
+        sup_cy + grasp.position[1],
+        contact_z,
+    ])
+
+    pc = env.client_id
+    contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc)
+    if contact_joints is None:
+        print(f"    ERROR: IK failed for stack contact of {obj_name} on "
+              f"{on_obj_name} - aborting")
+        return None
+
+    move_robot_smooth(robot_id, contact_joints, gui)
+
+    open_gripper(robot_id, gui)
+
+    p.removeConstraint(grasp_constraint_id)
+
+    # 60 settle steps (vs 30 for place): a stacked cube on a flat support
+    # face needs a touch more time to find equilibrium before we read its
+    # final pose into the registry.  Picked empirically — long enough to
+    # damp visible micro-bouncing, short enough to keep the run snappy.
+    for _ in range(60):
+        p.stepSimulation()
+
+    actual_joints = np.array(
+        [p.getJointState(robot_id, i)[0] for i in range(7)]
+    )
+    return RobotConfig(joint_positions=actual_joints,
+                       name=f"post_stack_{obj_name}_on_{on_obj_name}")
 
 
 # compute_push_displacement() removed (#53): push superseded by pick-and-place.
