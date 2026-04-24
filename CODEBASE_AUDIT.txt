@@ -111,7 +111,7 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #4(partial), #6, #9–#14, #21, #29–#34, #36, #37              #
+#  OPEN ISSUES — #4(partial), #6, #9–#14, #21, #29–#32, #34, #36, #37         #
 #                                                                              #
 ################################################################################
 
@@ -601,20 +601,25 @@ Fix:   Fix the stale comment.  Scan codebase for other instances of
 
 
 ================================================================================
-#33. REMOVE_BOXEL_VIZ USES O(N) LIST.REMOVE()
+#33. REMOVE_BOXEL_VIZ USES O(N) LIST.REMOVE()  [DONE 2026-04-24]
 ================================================================================
 Priority: TIER 3 — Performance (visualization)
-Where:    visualization.py (~lines 213-219)
+Where:    visualization.py (BoxelVisualizer.remove_boxel_viz, clear_all)
 Depends:  None
 Effort:   <1 day
 
-What:  remove_boxel_viz() calls self.debug_items.remove(item_id) and
+What:  remove_boxel_viz() called self.debug_items.remove(item_id) and
        self.shadow_bodies.remove(body_id), both O(n) per call.  With
-       many boxels, incremental removal accumulates quadratic cost.
+       many boxels, incremental removal accumulated quadratic cost
+       across reboxelization bursts.
 
-Fix:   Convert debug_items and shadow_bodies from lists to sets for
-       O(1) removal.  The only list-specific operation is iteration
-       (in clear_all), which works on sets too.
+Fix:   DONE 2026-04-24.  Converted BoxelVisualizer.debug_items and
+       BoxelVisualizer.shadow_bodies from List[int] to Set[int].
+       remove_boxel_viz() now uses set.discard() (single O(1) call,
+       no-op if missing — matches the previous `if x in s: s.remove(x)`
+       semantics).  `.append()` call sites switched to `.add()`;
+       `= []` resets switched to `.clear()`.  No external API change —
+       no consumer outside visualization.py touches these attributes.
 
 
 ================================================================================
@@ -864,12 +869,11 @@ TIER 3 — THESIS EVALUATION (independent of code fixes):
 TIER 3 — CODE QUALITY (low priority):
   #31  Narration comments (restate code, not intent)        ~1-2 days
   #32  Comment/code drift (stale comments)                   <1 day
-  #33  remove_boxel_viz O(n) list operations                 <1 day
   #34  _compute_placement_view_blocks scalability           (if needed)
 
-Total: 14 open items (#4(partial), #6, #9–#14, #21, #29–#34, #36, #37).
+Total: 13 open items (#4(partial), #6, #9–#14, #21, #29–#32, #34, #36, #37).
       Deferred: #2 → archive/CODEBASE_AUDIT_DEFERRED.txt.
-      Resolved/subsumed: #1, #3, #5, #7, #8, #15–#20, #22–#28, #35
+      Resolved/subsumed: #1, #3, #5, #7, #8, #15–#20, #22–#28, #33, #35
         → archive/CODEBASE_AUDIT_RESOLVED.txt.
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
