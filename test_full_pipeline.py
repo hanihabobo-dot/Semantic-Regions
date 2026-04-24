@@ -39,7 +39,10 @@ Architecture (post-#26 refactor, 2026-04-19):
 import sys
 import os
 import argparse
+import json
 import random
+import time
+from typing import Any, Dict, Optional
 
 PDDLSTREAM_PATH = os.environ.get(
     'PDDLSTREAM_PATH',
@@ -72,10 +75,19 @@ from execution import (sense_shadow_raycasting, compute_shadow_blockers,
 
 def main(gui=True, run_logger=None, scene_config=None,
          draw_boxel_overlays=True, show_free=False,
-         goal_kind='holding'):
+         goal_kind='holding',
+         run_config: Optional[Dict[str, Any]] = None):
     print("=" * 60)
     print("FULL PIPELINE: PDDLStream + Replanning")
     print("=" * 60)
+
+    # Echo the run configuration so saved logs are self-documenting:
+    # later baseline-vs-feature comparisons (audit #30 keep/kill) need
+    # to know which flags produced these timings.
+    if run_config:
+        print("\n--- Run configuration ---")
+        for k, v in run_config.items():
+            print(f"  {k:18s} = {v}")
 
     # =========================================================
     # PHASE 1: Setup Environment
@@ -297,6 +309,10 @@ def main(gui=True, run_logger=None, scene_config=None,
     boxel_centers = {b.id: b.center for b in registry.boxels.values()}
 
     plan_count = 0
+    # Per-call planner.plan() durations (audit #30 baseline timing).
+    # The cumulative total is what matters for keep/kill on stack-goal.
+    total_plan_time = 0.0
+    plan_times = []
     # --- Reactive replanning loop ---
     # Design: the PDDL sense action is OPTIMISTIC — it assumes the
     # target will be found.  When execution reveals otherwise (empty or
@@ -385,6 +401,7 @@ def main(gui=True, run_logger=None, scene_config=None,
         # All IK and collision-check calls inside planner.plan() nest
         # harmlessly via RenderingLock's reference count.
         with RenderingLock(env.client_id):
+            plan_t0 = time.perf_counter()
             plan = planner.plan(
                 target_objects=[target_name],
                 goal=goal,
@@ -395,6 +412,11 @@ def main(gui=True, run_logger=None, scene_config=None,
                 verbose=False,
                 visible_target_locations=visible_target_locations,
             )
+            plan_dt = time.perf_counter() - plan_t0
+        total_plan_time += plan_dt
+        plan_times.append(plan_dt)
+        print(f"  [timing] planner.plan() #{plan_count}: {plan_dt:.3f}s "
+              f"(cumulative {total_plan_time:.3f}s)")
 
         if gui:
             env.refresh_debug_camera_views()
@@ -795,7 +817,8 @@ def main(gui=True, run_logger=None, scene_config=None,
     # the loop tells us exactly why we stopped: target found, all shadows
     # exhausted, planner failure, or replan budget exceeded.
     print("\n" + "=" * 60)
-    if belief.is_target_found():
+    success = belief.is_target_found()
+    if success:
         print(f"SUCCESS!")
         print(f"  Target: {target_name}")
         print(f"  Found in: {belief.target_found_in}")
@@ -818,12 +841,38 @@ def main(gui=True, run_logger=None, scene_config=None,
             print(f"FAILED: Replan limit reached ({max_replans}) with "
                   f"{len(remaining)} unsearched shadows remaining")
         print(f"  Plans executed: {plan_count}")
+
+    print(f"\n--- Planning timing summary ---")
+    print(f"  Total plan() calls       : {len(plan_times)}")
+    print(f"  Cumulative planning time : {total_plan_time:.3f}s")
+    if plan_times:
+        avg = total_plan_time / len(plan_times)
+        print(f"  Average per call         : {avg:.3f}s")
+        per_call_str = ', '.join(f'{t:.3f}' for t in plan_times)
+        print(f"  Per-call (s)             : [{per_call_str}]")
+
+    # Machine-readable summary alongside the full text log so multi-run
+    # comparisons (baseline vs. stack feature, GUI vs. no-GUI, etc.)
+    # don't require parsing the prose log.
+    if run_logger is not None:
+        summary_path = run_logger.run_dir / "timing_summary.json"
+        try:
+            summary_path.write_text(json.dumps({
+                "run_config": run_config or {},
+                "success": bool(success),
+                "exit_reason": exit_reason,
+                "plan_count": plan_count,
+                "total_planning_time_s": round(total_plan_time, 3),
+                "per_call_planning_time_s": [round(t, 3) for t in plan_times],
+            }, indent=2))
+            print(f"  Timing summary written to {summary_path}")
+        except Exception as e:
+            print(f"  WARNING: could not write timing_summary.json: {e}")
     print("=" * 60)
 
     # Keep the GUI visible briefly so the user can inspect the final
     # state, then tear down the simulation cleanly.
     if gui:
-        import time
         print("\nWindow closing in 4 seconds...")
         end_time = time.time() + 4
         while time.time() < end_time:
@@ -834,7 +883,7 @@ def main(gui=True, run_logger=None, scene_config=None,
         p.removeConstraint(grasp_constraint_id)
 
     env.close()
-    return belief.is_target_found()
+    return success
 
 
 if __name__ == "__main__":
@@ -891,6 +940,22 @@ if __name__ == "__main__":
     }
     scene_cfg = scene_builders[args.scene]()
 
+    # Snapshot of effective CLI flags echoed into the per-run log and the
+    # JSON timing summary so cross-run comparisons can group by config
+    # (audit #30 keep/kill).  Booleans match the kwargs we hand to main()
+    # rather than the inverted no_* arg names for readability.
+    run_config = {
+        "scene":       args.scene,
+        "n_occluders": args.n_occluders,
+        "n_targets":   args.n_targets,
+        "seed":        args.seed,
+        "goal":        args.goal,
+        "gui":         not args.no_gui,
+        "boxel_viz":   not args.no_boxel_viz,
+        "show_free":   args.show_free,
+        "log_level":   args.log_level,
+    }
+
     # RunLogger captures all artefacts (PDDL files, boxel data, logs)
     # regardless of console verbosity for post-mortem analysis.
     logger = RunLogger(verbosity=args.log_level)
@@ -902,6 +967,7 @@ if __name__ == "__main__":
             draw_boxel_overlays=not args.no_boxel_viz,
             show_free=args.show_free,
             goal_kind=args.goal,
+            run_config=run_config,
         )
     finally:
         logger.close()
