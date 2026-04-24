@@ -2,133 +2,15 @@
 CODEBASE AUDIT — OPEN ISSUES
 ================================================================================
 Date: 2026-02-25 (original audit, merged from 3 audit passes)
-Restructured: 2026-03-24
+Restructured: 2026-03-24 — open issues renumbered #1-#13 in priority order.
+Slimmed:      2026-04-24 — moved RESOLVED inline entries (#3, #24, #25, #26,
+              #27, #28, #35) and the pre-2026-04-22 changelog journal to
+              archive/CODEBASE_AUDIT_RESOLVED.txt.
 
-  All open issues renumbered #1–#13 in priority order (2026-03-24);
-    #2 removed from open list 2026-04-05 (deferred; see deferred file).
-  Issues #14–#18 added 2026-04-03 from failed run analysis.
-  Issue #19 added 2026-04-05 from live run (free boxel inside shadow region).
-  Issue #20 added 2026-04-05 — distinct PyBullet colors per object and
-    object names that reflect color (e.g. blue_object); geometry, sizes,
-    and target-selection logic unchanged.
-  Issue #21 added 2026-04-05 — blocked sense causes shadow switching and
-    false "searched all shadows" termination without actually clearing and
-    observing the active blocked shadow.
-  2026-04-06 — Moved resolved open-audit items to
-    archive/CODEBASE_AUDIT_RESOLVED.txt: #5 (placement re-blocks corridor;
-    body had been mislabeled #2), #19, #20, #22.
-  2026-04-06 — Moved subsumed #7, #8, #23 to
-    archive/CODEBASE_AUDIT_RESOLVED.txt (historically grouped with audit #1).
-  2026-04-08 — Held-object transit collision (plan_motion / robot_utils):
-    grasp_ee_offset on RobotConfig; held bodies posed at EE × offset;
-    held_body_ids = intersection of endpoint ignored_body_ids; RRT passes
-    offsets; detect_execution_collisions after move and after pick.
-  2026-04-16 — Audit #1 [CLOSED] → archive/CODEBASE_AUDIT_RESOLVED.txt.
-    Pick/place execution uses geometry-based contact/release EE height
-    (test_full_pipeline.py), not the 0.10 m planning offset reused as
-    “contact”.  Prior “collision” / floating-object appearance was largely
-    the gripper–object gap (weld far below grasptarget).  Optional future
-    work (PDDL q_hover/q_contact, per-step sub-move collision queries) is
-    not tracked as open unless regressions appear.
-  2026-04-17 — #24 RESOLVED: uncommented compute_shadow_blockers() call
-    after place action; shadow_occluder_map now refreshed on every replan.
-  2026-04-17 — #3 reclassified: RESOLVED → DEFERRED.  The move_home fix
-    was implemented on a separate branch but caused PDDLStream planning
-    time to explode.  Reverted on main.  Revisit if planning budget
-    increases or a cheaper formulation is found.
-  2026-04-17 — #25 RESOLVED: added BoxelRegistry._dirty flag set by
-    update_after_place(); reboxelize_free_space() clears it via
-    mark_clean().  Pre-plan check in the replan loop triggers
-    reboxelization only when needed (skipped if sense already ran it),
-    so _build_init always reads a consistent free-space partition.
-  2026-04-17 — #28 RESOLVED: replaced hand-rolled quaternion math with
-    p.getQuaternionFromEuler(); removed dead _direction_to_quat and
-    _rotation_matrix_to_quat from streams.py.
-  2026-04-17 — #27 RESOLVED: extracted wireframe_corners_and_edges()
-    shared helper into visualization.py; draw_boxels(), draw_boxel_data(),
-    and free_space._draw_boxel_wireframe() now call the shared function
-    instead of computing corners/edges inline.
-  2026-04-22 — execution.py refactor steps 1 & 2 (in-progress series toward
-    1:1 PDDL/execution mapping; tracked under design discussion, no audit
-    item yet because the bigger restructure still has open questions
-    around place semantics).
-    - Step 1: removed the post-grasp lift from execute_pick.  Pick now
-      ends at the contact configuration with the object welded; any
-      subsequent `move` action's plan-motion trajectory lifts via RRT.
-      Returned RobotConfig name updated "post_pick_lift" -> "post_pick_contact".
-    - Step 2: removed the redundant pre-contact approach motion from
-      both execute_pick and execute_place.  The planned `move` action
-      already delivers the arm to the compute_kin_solution config
-      (boxel.center + grasp.position, ~10 cm above), so the local
-      approach IK + move was duplicating planned motion and bypassed
-      plan_motion's collision checks.  execute_place return name updated
-      "post_place_retreat" -> "post_place_contact".
-    - Knock-on: a `holding` goal terminates with the arm at contact (no
-      visible lift).  Captured as new issue #36 (low priority).
-    - The pick/place TODOs in domain_pddlstream.pddl referencing
-      "lower to contact" (audit #1) remain — actions still don't update
-      at_config or take a contact trajectory parameter.  Steps 3-7 of
-      the refactor will address those.
-    - Steps 3, 4, and the get-object-pose stream were considered and
-      REJECTED after design review; see issue #37 for the full debate
-      and rejected directions list.  Step 5 (use planner's q for
-      contact) was tentatively agreed but NOT implemented because of
-      open questions about gripper state during the planned move.
-      All of this is consolidated under #37 (TIER 3 very low).
-  2026-04-19 — #35 RESOLVED: unified on BoxelData; deleted Boxel class
-    from boxel_types.py and the create_boxel_registry_from_boxels bridge
-    from boxel_data.py.  All producers (FreeSpaceGenerator, CellMerger,
-    ShadowCalculator, boxel_env.generate_boxels) and consumers
-    (BoxelVisualizer, test_full_pipeline) now operate on BoxelData
-    directly.  BoxelData gained kw_only=True, a from_center_extent
-    factory, and BoxelRegistry auto-assigns sequential IDs by type.
-    Surface bookkeeping (on_surface/surface_z) extracted to
-    boxel_env.annotate_free_space_surface — the bridge previously did
-    this implicitly; missing it caused the planner to drop (on_surface ?b)
-    and fail to find any plan with a place action.
-  2026-04-17 — Issues #24–#35 added from comprehensive codebase audit.
-    #21 updated with PDDL-model design direction.
-    #4 updated: shadow_occluder_map refresh after place was commented out
-    (contradicts #73 DONE claim) — fixed by #24 (2026-04-17).
-    compute_neighbors dead code removed from boxel_data.py.
-    Point cloud computation commented out in boxel_env.py.
-    THESIS_NOTES.md created (accepted simplifications reference).
-  Issue #2 (full boxel merge condition, old #103) DEFERRED 2026-04-05 →
-    archive/CODEBASE_AUDIT_DEFERRED.txt.  Convex-only merge accepted for
-    current scope; open issue list below is #3–#4, #6–#21
-    (resolved #1, #5, #19, #20, #22 live in archive/CODEBASE_AUDIT_RESOLVED.txt).
-  Mapping from old numbers:
-    #1  ← old #106 [RESOLVED 2026-04-16 — see archive]    #5  ← old #107    #9  ← old #76a    #13 ← old #81
-    #3  ← old #93a    #6  ← old #105    #10 ← old #76b
-    #4  ← old #104    #7  ← old #93b    #11 ← old #76c
-    #8  ← old #93c    #12 ← old #76d
-    #2  DEFERRED (old #103) — archive/CODEBASE_AUDIT_DEFERRED.txt
-
-  Structural changes:
-  - Old #95 (systemic PDDL state drift) dissolved — it was a meta-issue
-    whose 4 drift channels are now tracked by #3, #4, #7, #8 and
-    already-resolved old #86, #62, #73, #44.
-  - Old #93 split into #3 (sense), #7 (pick), #8 (place).
-  - Old #76 split into #9–#12 (metrics, baselines, scalability).
-  - PA-1/PA-2 merged into #9/#13; PF-2/PF-3 merged into #7/#8.
-
-  2026-04-15 — #4 PARTIAL (post-action re-boxelization):
-    Free-space re-boxelization after place and sense is implemented.
-    After place: registry.update_after_place() removes consumed free boxel
-    and updates object AABB.  After sense (clear_but_empty or
-    contains_nontarget): shadow boxel removed from registry, shadow list,
-    and shadow_occluder_map; if non-target objects discovered, OBJECT +
-    SHADOW boxels created via shadow_calculator.  Single
-    reboxelize_free_space() call after sense re-runs the full octree +
-    merge pipeline (same as Phase 2 initial scan), diffs against existing
-    free boxels to only update changed ones, and updates viz for affected
-    boxels only.  sense_shadow_raycasting extended with fourth outcome
-    "contains_nontarget" and returns detected body IDs.
-    Remaining under #4: shadow geometry recomputation for relocated
-    occluders at their NEW positions (current shadows still describe
-    pre-relocation geometry — accepted simplification, see audit #44).
-  2026-04-15 — #18 folded into #3 (same root cause and fix).
-  2026-04-15 — #15, #16, #17 removed from open list (no longer relevant).
+Open issues currently tracked here are listed in the SUMMARY at the bottom
+of this file.  All resolved/subsumed items live in the archive (with their
+full original text and resolution notes).  Deferred items (e.g. #2 full
+boxel merge) live in archive/CODEBASE_AUDIT_DEFERRED.txt.
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -144,13 +26,15 @@ addressed by a specific issue:
       old #86 [DONE], old #62 [ACCEPTED], old #7/#8 subsumed by audit #1
       [RESOLVED 2026-04-16 — contact-height fix; see archive]
   (b) Hidden move in sense:
-      #3 [DEFERRED 2026-04-17 — planning-time explosion on branch]
+      #3 [RESOLVED 2026-04-24 — dead retract removed; see archive.
+         PDDL still does not constrain robot pose during sense, but the
+         executor performs no motion there, so no live drift.]
   (c) Stale shadow geometry after occluder relocation:
       old #44 [ACCEPTED], #4 [OPEN]
   (d) Stale blocks_view_at facts:
       old #73 [DONE]
 
-When #4 is complete, all practical drift channels are addressed (#3 resolved).
+When #4 is complete, all practical drift channels are addressed.
 
 ================================================================================
 CODEBASE POLICY
@@ -227,48 +111,9 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #3(def), #4(partial), #6, #9–#14, #21, #29–#34, #36, #37    #
+#  OPEN ISSUES — #4(partial), #6, #9–#14, #21, #29–#34, #36, #37              #
 #                                                                              #
 ################################################################################
-
-
-================================================================================
-#3. SENSE ACTION HIDDEN MOVE — NO at_config PRECONDITION  [DEFERRED 2026-04-17]
-================================================================================
-Priority: TIER 0 — Quick PDDL consistency fix
-Where:    domain_pddlstream.pddl (sense action),
-          pddlstream_planner.py (_build_init),
-          test_full_pipeline.py (sense handler + move_home handler)
-Depends:  None
-
-DEFERRED (2026-04-17):
-  The fix below (Option A with move_home) was implemented on a separate
-  branch but caused PDDLStream planning time to explode — the additional
-  move_home action significantly expanded the search space.  Reverted on
-  main.  The commented-out arm retract in the sense handler
-  (test_full_pipeline.py ~lines 557-559) remains as a reference.
-
-  Revisit if:
-  - Planning time budget is increased (e.g. max_time > 120 s)
-  - A cheaper PDDL formulation is found (e.g. conditional move_home
-    only when the arm is not already at home)
-  - The arm actually blocks sensing in a specific run (currently rare
-    because the camera is far from the table and the arm is small
-    relative to shadow volumes)
-
-Previous fix design (Option A variant with move_home):
-  (a) sense requires (at_config ?q) + (is_home_config ?q) — the
-      planner must ensure the robot is at home before sensing.
-  (b) New move_home action (like move but without config_for_boxel)
-      lets the planner return the arm to q_home from any config.
-  (c) _build_init always emits (Config q_home) and
-      (is_home_config q_home); at_config tracks the current config
-      as before.
-  (d) Commented-out secret retract removed from sense handler;
-      move_home execution handler added to the action dispatcher.
-
-Related: old #79 [DONE] (arm blocks sensing), old #86 [DONE] (config
-         tracking on replan)
 
 
 ================================================================================
@@ -586,100 +431,6 @@ Related: #5 (placement re-blocks cleared corridor), #4 (stale world model),
 
 
 ================================================================================
-#24. SHADOW_OCCLUDER_MAP NOT REFRESHED AFTER PLACE  [RESOLVED 2026-04-17]
-================================================================================
-Priority: TIER 1 — Correctness (stale planner facts)
-Where:    test_full_pipeline.py (~lines 846-849)
-Depends:  None
-
-RESOLVED (2026-04-17):
-       Uncommented the compute_shadow_blockers() call after every place
-       action (test_full_pipeline.py ~line 846).  The shadow_occluder_map
-       is now refreshed from the current physics state before being
-       assigned to planner.shadow_occluder_map, so blocks_view_at facts
-       are current on every replan.  Stale inline comment updated to
-       reflect the fix.
-
-
-================================================================================
-#25. IS_FREE_SPACE REGISTRY INCONSISTENCY AFTER PLACE  [RESOLVED 2026-04-17]
-================================================================================
-Priority: TIER 1 — Correctness (observed by user)
-Where:    test_full_pipeline.py (place handler), boxel_data.py
-Depends:  None
-
-RESOLVED (2026-04-17):
-       Added BoxelRegistry._dirty flag (boxel_data.py).
-       update_after_place() sets _dirty = True after removing the
-       consumed free boxel.  reboxelize_free_space() calls
-       registry.mark_clean() after completing the octree+merge
-       pipeline.
-
-       The replan loop (test_full_pipeline.py, before planner.plan())
-       checks registry.dirty: if True, reboxelize_free_space() runs
-       so _build_init always reads a consistent free-space partition.
-       If sense already triggered reboxelization (clearing the flag),
-       the check is a no-op — the intentional double-cost avoidance
-       is preserved.
-
-
-================================================================================
-#26. TEST_FULL_PIPELINE.PY TOO LONG — EXTRACT MODULES   [RESOLVED 2026-04-19]
-================================================================================
-Priority: TIER 2 — Code quality / maintainability
-Where:    test_full_pipeline.py (was 1585 lines → now 914),
-          belief.py (new), execution.py (new), reboxelize.py (new)
-Depends:  None
-
-RESOLVED (2026-04-19):
-       Extracted three focused modules; test_full_pipeline.py now reads
-       top-down as Phase 1-6 orchestration + CLI only.
-       - belief.py — BeliefState (pure bookkeeping, no PyBullet/planner).
-       - execution.py — execute_pick, execute_place,
-         sense_shadow_raycasting, compute_shadow_blockers,
-         release_held_object_in_place.
-       - reboxelize.py — reboxelize_free_space (octree+merge diff).
-       test_full_pipeline.py also gained a --goal CLI flag (currently only
-       'holding' is wired through the planner — placeholder for the goal-
-       parameterisation work tracked under #30).
-       Smoke test (--no-gui, default scene, seed 0): pipeline planned 4
-       times, executed move→pick→move→place→move→sense→pick and found
-       the hidden target.  No behavioural change.
-
-
-================================================================================
-#27. TRIPLICATED WIREFRAME DRAWING CODE  [RESOLVED 2026-04-17]
-================================================================================
-Priority: TIER 2 — Code quality (AI-generated duplication)
-Where:    visualization.py (draw_boxels, draw_boxel_data),
-          free_space.py (_draw_boxel_wireframe)
-Depends:  None
-
-RESOLVED (2026-04-17):
-       Extracted wireframe_corners_and_edges(center, extent) as a
-       module-level function in visualization.py.  Uses precomputed
-       _SIGN_COMBOS array and _EDGE_INDICES list.  All three call
-       sites (draw_boxels, draw_boxel_data, _draw_boxel_wireframe)
-       now call the shared function instead of duplicating the
-       8-corner + 12-edge computation inline.
-
-
-================================================================================
-#28. HAND-ROLLED QUATERNION MATH — REPLACE WITH PYBULLET BUILTINS  [RESOLVED 2026-04-17]
-================================================================================
-Priority: TIER 2 — Code quality / correctness risk
-Where:    streams.py (~lines 320-380, 476-487)
-Depends:  None
-
-RESOLVED (2026-04-17):
-       Replaced _euler_to_quat with p.getQuaternionFromEuler() in
-       sample_grasp().  Removed dead _direction_to_quat and
-       _rotation_matrix_to_quat (never called externally).  Also fixed
-       stale comment on grasp Z-offset list (said "0.05, 0.10, 0.15"
-       but actual list is [0.1]).
-
-
-================================================================================
 #29. SCENE SELECTION — RANDOM SCENE CLI FLAG
 ================================================================================
 Priority: TIER 3 — Evaluation infrastructure
@@ -787,53 +538,6 @@ What:  Runs per-replan inside _build_init().  For S shadows × 25 rays
 Fix:   No action needed at current scale.  If scalability evaluation
        (#12) reveals this as a bottleneck, add an AABB tree or
        vectorized numpy ray-box test.
-
-
-================================================================================
-#35. BOXEL VS BOXELDATA DUAL REPRESENTATION                [RESOLVED 2026-04-19]
-================================================================================
-Priority: TIER 2 — Code quality / architecture
-Where:    boxel_types.py (Boxel REMOVED), boxel_data.py (BoxelData unified),
-          boxel_env.py, free_space.py, cell_merger.py, shadow_calculator.py,
-          visualization.py, test_full_pipeline.py
-Depends:  None
-Effort:   2-3 days  →  done in one session
-
-What:  Two separate data types represented boxels: Boxel (simple
-       center/extent dataclass from boxel_types.py) and BoxelData
-       (richer structure with registry ID, type, relationships from
-       boxel_data.py).  The bridge function
-       create_boxel_registry_from_boxels converted between them.
-
-       Every boundary crossing required conversion: reboxelize_free_space
-       created Boxel from BoxelData, passed to generate_free_space, got
-       Boxel back, then converted back to BoxelData.  This added
-       complexity and risked silent conversion mismatches.
-
-Resolution:
-  - Boxel dataclass deleted from boxel_types.py.
-  - BoxelData refactored: kw_only=True, default empty id, default
-    BoxelType.FREE_SPACE, default-zero corners, and a from_center_extent
-    classmethod for the geometric call sites.
-  - BoxelRegistry.add_boxel now auto-assigns "free_NNN" / "obj_NNN" /
-    "shadow_NNN" when boxel.id == "".
-  - FreeSpaceGenerator, CellMerger, ShadowCalculator now produce and
-    consume BoxelData directly.
-  - boxel_env.generate_boxels emits BoxelData with semantic IDs
-    ("red_object", "shadow_of_red_object") and parent linkage already
-    set, so create_boxel_registry_from_boxels became unnecessary and
-    was deleted.
-  - BoxelVisualizer consumes BoxelData natively (color/label derived
-    via _color_for_boxel / _label_for_boxel helpers).
-  - test_full_pipeline.py drops Boxel/bridge usage end-to-end.
-  - Surface bookkeeping (on_surface, surface_z) was previously a side
-    effect of the bridge.  Re-introduced as a single-source-of-truth
-    helper boxel_env.annotate_free_space_surface, called once after
-    cell merging in Phase 3 and again inside reboxelize_free_space, so
-    the planner can still emit (on_surface ?b) for place actions.
-
-Verified: full pipeline runs to completion; planner finds plans for
-       hidden-target scenarios as before.
 
 
 ================================================================================
@@ -1026,15 +730,13 @@ FOR LATER
   permits after core evaluation (#9–#12) is complete.
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-04-22)
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-04-24)
 ================================================================================
 
 Each issue is one commit.  Dependencies listed; work within a tier can
 be parallelized where no dependency exists.
 
 TIER 0 — ACTIONABLE NOW (no dependencies):
-  #3   Sense hidden move (at_config precondition)         [DEFERRED 2026-04-17]
-       (planning-time explosion on branch; revisit later)
   #14  Sparse visibility check (8 AABB corners)           ~1-2 days
   #21  Blocked sense switches shadows / false all_searched ~1-2 days
        (design direction: fix in PDDL model, not execution loop)
@@ -1045,14 +747,6 @@ TIER 1 — Mixed dependencies (see each issue):
         nontarget object discovery.  REMAINING: shadow geometry recompute
         for relocated occluders at new positions.)
   #6   Multi-boxel free space placement                     ~1 week
-  #24  shadow_occluder_map not refreshed after place         [RESOLVED 2026-04-17]
-  #25  is_free_space registry inconsistency after place     [RESOLVED 2026-04-17]
-
-TIER 2 — CODE QUALITY (independent of correctness fixes):
-  #26  test_full_pipeline.py too long — extract modules      [RESOLVED 2026-04-19]
-  #27  Triplicated wireframe drawing code                    [RESOLVED 2026-04-17]
-  #28  Hand-rolled quaternion math                           [RESOLVED 2026-04-17]
-  #35  Boxel vs BoxelData dual representation               [RESOLVED 2026-04-19]
 
 TIER 3 — THESIS EVALUATION (independent of code fixes):
   #9   Metric collection + experiment runner                ~3-5 days
@@ -1071,10 +765,10 @@ TIER 3 — CODE QUALITY (low priority):
   #33  remove_boxel_viz O(n) list operations                 <1 day
   #34  _compute_placement_view_blocks scalability           (if needed)
 
-Total: 16 open items (#3(deferred), #4(partial), #6, #9–#14, #21,
-      #29–#34, #36, #37; deferred #2 → archive/CODEBASE_AUDIT_DEFERRED.txt;
-      resolved/subsumed #1, #5, #7, #8, #15–#20, #22–#28, #35 →
-        archive/CODEBASE_AUDIT_RESOLVED.txt)
+Total: 14 open items (#4(partial), #6, #9–#14, #21, #29–#34, #36, #37).
+      Deferred: #2 → archive/CODEBASE_AUDIT_DEFERRED.txt.
+      Resolved/subsumed: #1, #3, #5, #7, #8, #15–#20, #22–#28, #35
+        → archive/CODEBASE_AUDIT_RESOLVED.txt.
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
