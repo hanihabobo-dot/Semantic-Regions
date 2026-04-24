@@ -7,6 +7,9 @@ Archived: 2026-03-22 (added #60, #61, #67, #69, #78-#85, #98, #99, #101;
          verified against codebase during audit validation pass)
 Archived: 2026-04-06 (moved from CODEBASE_AUDIT.txt: #5, #19, #20, #22)
 Archived: 2026-04-16 (moved from CODEBASE_AUDIT.txt: #1 pick contact / execution)
+Archived: 2026-04-24 (moved from CODEBASE_AUDIT.txt: #3, #24, #25, #26, #27,
+         #28, #35.  All previously RESOLVED inline; relocated to slim the
+         open audit.  #3 reclassified DEFERRED → RESOLVED at the same time.)
 
 These issues have been fixed, reclassified as not-an-issue, or corrected.
 The active audit with remaining open issues is in CODEBASE_AUDIT.txt.
@@ -2031,3 +2034,199 @@ detect_execution_collisions in test_full_pipeline.
 
 Related: archive entries #7, #8, #23 (subsumed under former open #1);
 robot_utils.py; streams.py.
+
+
+================================================================================
+#3. SENSE ACTION HIDDEN MOVE — NO at_config PRECONDITION  [RESOLVED 2026-04-24]
+================================================================================
+(Moved from CODEBASE_AUDIT.txt 2026-04-24.  Reclassified DEFERRED → RESOLVED:
+the executor-side hidden move is gone; the PDDL-model gap is academic only
+because no robot motion happens during sense.)
+
+Priority: TIER 0 — Quick PDDL consistency fix
+Where:    domain_pddlstream.pddl (sense action),
+          pddlstream_planner.py (_build_init),
+          test_full_pipeline.py (sense handler)
+
+What:  The PDDL `sense` action had no (at_config ?q) precondition, while the
+       execution-side sense handler in test_full_pipeline.py used to retract
+       the arm to home_config before raycasting.  That hidden state change
+       was a fourth drift channel between PDDL symbolic state and PyBullet
+       physical state (old #95 (b)).
+
+History:
+  2026-04-06 (commit 91e0638) — disabled the home retract in the sense
+       handler; the move_robot_smooth(home_joints) call was commented out
+       so no hidden motion actually happens.
+  2026-04-17 — proper fix (Option A: add (at_config ?q) + (is_home_config ?q)
+       to sense, plus a new move_home action) was implemented on a branch.
+       It exploded PDDLStream planning time and was reverted on main.
+       Reclassified to DEFERRED.
+  2026-04-24 — Confirmed:
+       (a) sense_shadow_raycasting in execution.py performs no joint motion
+           (rays only); the only move_robot_smooth calls in execution.py
+           are in execute_pick / execute_place.
+       (b) The test_full_pipeline.py sense handler still had the dead
+           commented-out retract (lines 476-480) as a "for reference"
+           relic.  Removed entirely — keeping it was misleading because
+           a future reader could mistake it for dormant intentional logic.
+       (c) The PDDL model still does not constrain robot pose during sense,
+           but since no executor motion exists, there is no live drift.
+           Accepted as a deliberate simplification; not worth the planning-
+           time cost of the move_home formulation under the current budget.
+
+Resolution: 2026-04-24 — deleted the dead retract block from the sense
+       handler.  No PDDL change.  Revisit only if (i) sensing is later
+       extended with arm motion (e.g. moving-camera variant) — at that
+       point an at_config precondition becomes necessary and the move_home
+       formulation should be revisited; or (ii) planning budget grows large
+       enough that the move_home action's search overhead is acceptable.
+
+Related: old #79 [DONE] (arm blocks sensing), old #86 [DONE] (config
+         tracking on replan), THESIS_NOTES.md (accepted simplifications).
+
+
+================================================================================
+#24. SHADOW_OCCLUDER_MAP NOT REFRESHED AFTER PLACE  [RESOLVED 2026-04-17]
+================================================================================
+(Moved from CODEBASE_AUDIT.txt 2026-04-24.)
+
+Priority: TIER 1 — Correctness (stale planner facts)
+Where:    test_full_pipeline.py (~lines 846-849)
+
+RESOLVED (2026-04-17):
+       Uncommented the compute_shadow_blockers() call after every place
+       action (test_full_pipeline.py ~line 846).  The shadow_occluder_map
+       is now refreshed from the current physics state before being
+       assigned to planner.shadow_occluder_map, so blocks_view_at facts
+       are current on every replan.  Stale inline comment updated to
+       reflect the fix.
+
+
+================================================================================
+#25. IS_FREE_SPACE REGISTRY INCONSISTENCY AFTER PLACE  [RESOLVED 2026-04-17]
+================================================================================
+(Moved from CODEBASE_AUDIT.txt 2026-04-24.)
+
+Priority: TIER 1 — Correctness (observed by user)
+Where:    test_full_pipeline.py (place handler), boxel_data.py
+
+RESOLVED (2026-04-17):
+       Added BoxelRegistry._dirty flag (boxel_data.py).
+       update_after_place() sets _dirty = True after removing the
+       consumed free boxel.  reboxelize_free_space() calls
+       registry.mark_clean() after completing the octree+merge
+       pipeline.
+
+       The replan loop (test_full_pipeline.py, before planner.plan())
+       checks registry.dirty: if True, reboxelize_free_space() runs
+       so _build_init always reads a consistent free-space partition.
+       If sense already triggered reboxelization (clearing the flag),
+       the check is a no-op — the intentional double-cost avoidance
+       is preserved.
+
+
+================================================================================
+#26. TEST_FULL_PIPELINE.PY TOO LONG — EXTRACT MODULES   [RESOLVED 2026-04-19]
+================================================================================
+(Moved from CODEBASE_AUDIT.txt 2026-04-24.)
+
+Priority: TIER 2 — Code quality / maintainability
+Where:    test_full_pipeline.py (was 1585 lines → now 914),
+          belief.py (new), execution.py (new), reboxelize.py (new)
+
+RESOLVED (2026-04-19):
+       Extracted three focused modules; test_full_pipeline.py now reads
+       top-down as Phase 1-6 orchestration + CLI only.
+       - belief.py — BeliefState (pure bookkeeping, no PyBullet/planner).
+       - execution.py — execute_pick, execute_place,
+         sense_shadow_raycasting, compute_shadow_blockers,
+         release_held_object_in_place.
+       - reboxelize.py — reboxelize_free_space (octree+merge diff).
+       test_full_pipeline.py also gained a --goal CLI flag (currently only
+       'holding' is wired through the planner — placeholder for the goal-
+       parameterisation work tracked under #30).
+       Smoke test (--no-gui, default scene, seed 0): pipeline planned 4
+       times, executed move→pick→move→place→move→sense→pick and found
+       the hidden target.  No behavioural change.
+
+
+================================================================================
+#27. TRIPLICATED WIREFRAME DRAWING CODE  [RESOLVED 2026-04-17]
+================================================================================
+(Moved from CODEBASE_AUDIT.txt 2026-04-24.)
+
+Priority: TIER 2 — Code quality (AI-generated duplication)
+Where:    visualization.py (draw_boxels, draw_boxel_data),
+          free_space.py (_draw_boxel_wireframe)
+
+RESOLVED (2026-04-17):
+       Extracted wireframe_corners_and_edges(center, extent) as a
+       module-level function in visualization.py.  Uses precomputed
+       _SIGN_COMBOS array and _EDGE_INDICES list.  All three call
+       sites (draw_boxels, draw_boxel_data, _draw_boxel_wireframe)
+       now call the shared function instead of duplicating the
+       8-corner + 12-edge computation inline.
+
+
+================================================================================
+#28. HAND-ROLLED QUATERNION MATH — REPLACE WITH PYBULLET BUILTINS  [RESOLVED 2026-04-17]
+================================================================================
+(Moved from CODEBASE_AUDIT.txt 2026-04-24.)
+
+Priority: TIER 2 — Code quality / correctness risk
+Where:    streams.py (~lines 320-380, 476-487)
+
+RESOLVED (2026-04-17):
+       Replaced _euler_to_quat with p.getQuaternionFromEuler() in
+       sample_grasp().  Removed dead _direction_to_quat and
+       _rotation_matrix_to_quat (never called externally).  Also fixed
+       stale comment on grasp Z-offset list (said "0.05, 0.10, 0.15"
+       but actual list is [0.1]).
+
+
+================================================================================
+#35. BOXEL VS BOXELDATA DUAL REPRESENTATION                [RESOLVED 2026-04-19]
+================================================================================
+(Moved from CODEBASE_AUDIT.txt 2026-04-24.)
+
+Priority: TIER 2 — Code quality / architecture
+Where:    boxel_types.py (Boxel REMOVED), boxel_data.py (BoxelData unified),
+          boxel_env.py, free_space.py, cell_merger.py, shadow_calculator.py,
+          visualization.py, test_full_pipeline.py
+
+What:  Two separate data types represented boxels: Boxel (simple
+       center/extent dataclass from boxel_types.py) and BoxelData
+       (richer structure with registry ID, type, relationships from
+       boxel_data.py).  The bridge function
+       create_boxel_registry_from_boxels converted between them.
+
+       Every boundary crossing required conversion: reboxelize_free_space
+       created Boxel from BoxelData, passed to generate_free_space, got
+       Boxel back, then converted back to BoxelData.  This added
+       complexity and risked silent conversion mismatches.
+
+Resolution (2026-04-19):
+  - Boxel dataclass deleted from boxel_types.py.
+  - BoxelData refactored: kw_only=True, default empty id, default
+    BoxelType.FREE_SPACE, default-zero corners, and a from_center_extent
+    classmethod for the geometric call sites.
+  - BoxelRegistry.add_boxel now auto-assigns "free_NNN" / "obj_NNN" /
+    "shadow_NNN" when boxel.id == "".
+  - FreeSpaceGenerator, CellMerger, ShadowCalculator now produce and
+    consume BoxelData directly.
+  - boxel_env.generate_boxels emits BoxelData with semantic IDs
+    ("red_object", "shadow_of_red_object") and parent linkage already
+    set, so create_boxel_registry_from_boxels became unnecessary and
+    was deleted.
+  - BoxelVisualizer consumes BoxelData natively (color/label derived
+    via _color_for_boxel / _label_for_boxel helpers).
+  - test_full_pipeline.py drops Boxel/bridge usage end-to-end.
+  - Surface bookkeeping (on_surface, surface_z) was previously a side
+    effect of the bridge.  Re-introduced as a single-source-of-truth
+    helper boxel_env.annotate_free_space_surface, called once after
+    cell merging in Phase 3 and again inside reboxelize_free_space, so
+    the planner can still emit (on_surface ?b) for place actions.
+
+Verified: full pipeline runs to completion; planner finds plans for
+       hidden-target scenarios as before.

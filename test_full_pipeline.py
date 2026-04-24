@@ -473,12 +473,6 @@ def main(gui=True, run_logger=None, scene_config=None,
                 obj, shadow_id = params
                 print(f"    Sensing {shadow_id} (fixed camera)...")
 
-                # Retract arm to home so it doesn't block the camera's
-                # line of sight to the shadow region (audit #79, #3 deferred).
-                # home_joints = planner.home_config.joint_positions
-                # move_robot_smooth(robot_id, home_joints, gui, steps=40)
-                # current_config = planner.home_config
-
                 shadow_boxel = registry.get_boxel(str(shadow_id))
                 if shadow_boxel is None:
                     print(f"    WARNING: Shadow '{shadow_id}' not found in registry. Replanning...")
