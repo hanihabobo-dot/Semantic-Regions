@@ -110,6 +110,7 @@ class PDDLStreamPlanner:
             'sample-grasp': from_gen_fn(self.streams.sample_grasp),
             'plan-motion': from_gen_fn(self.streams.plan_motion),
             'compute-kin': from_gen_fn(self.streams.compute_kin_solution),
+            'compute-stack-kin': from_gen_fn(self.streams.compute_stack_kin_solution),
         }
     
     def create_problem(self, 
@@ -119,7 +120,9 @@ class PDDLStreamPlanner:
                        known_empty_shadows: List[str] = None,
                        moved_occluders: Dict[str, str] = None,
                        observed_clear_regions: Optional[List[str]] = None,
-                       visible_target_locations: Optional[Dict[str, str]] = None) -> PDDLProblem:
+                       visible_target_locations: Optional[Dict[str, str]] = None,
+                       on_relations: Optional[Dict[str, str]] = None,
+                       stackable_objects: Optional[List[str]] = None) -> PDDLProblem:
         """
         Create a PDDLStream problem from current state.
         
@@ -136,7 +139,16 @@ class PDDLStreamPlanner:
             visible_target_locations: Dict mapping target_name -> boxel_id for
                 targets that are visible from the camera and do not require
                 sensing.  Adds obj_at_boxel so pick is directly plannable.
-            
+            on_relations: Dict mapping stacked_obj -> support_obj for known
+                stack relations (audit #30).  Only meaningful when
+                ``stackable_objects`` is also supplied — else holding-goal
+                runs would still pay the grounding cost of (on/clear)
+                facts they never use.
+            stackable_objects: List of object/boxel IDs the planner may use
+                as cubes for stacking.  When None (the typical holding-goal
+                case), no (clear ?o) or (on ...) facts are emitted into
+                init at all (audit #30 perf gating).
+
         Returns:
             PDDLProblem for PDDLStream solver
         """
@@ -145,7 +157,9 @@ class PDDLStreamPlanner:
         init = self._build_init(target_objects, current_config,
                                 known_empty_shadows, moved_occluders,
                                 observed_clear_regions,
-                                visible_target_locations)
+                                visible_target_locations,
+                                on_relations,
+                                stackable_objects)
         
         constant_map = {}
         stream_map = self._get_stream_map()
@@ -314,7 +328,9 @@ class PDDLStreamPlanner:
                     known_empty_shadows: List[str] = None,
                     moved_occluders: Dict[str, str] = None,
                     observed_clear_regions: Optional[List[str]] = None,
-                    visible_target_locations: Optional[Dict[str, str]] = None) -> List[Tuple]:
+                    visible_target_locations: Optional[Dict[str, str]] = None,
+                    on_relations: Optional[Dict[str, str]] = None,
+                    stackable_objects: Optional[List[str]] = None) -> List[Tuple]:
         """
         Build the init state as a list of fact tuples.
 
@@ -466,6 +482,20 @@ class PDDLStreamPlanner:
         init.append(('at_config', current_config))
         init.append(('handempty',))
 
+        # Stacking facts (audit #30) — emitted ONLY when the caller is
+        # using --goal stack (signalled by passing stackable_objects).
+        # Holding-goal callers leave both args at None and pay zero extra
+        # grounding cost: no (clear ?o), no (on ?o ?x).  This was the
+        # main regression source in the earlier branch attempt.
+        if stackable_objects is not None:
+            on_relations = on_relations or {}
+            supports_with_obj_on_top = set(on_relations.values())
+            for obj_id in stackable_objects:
+                if obj_id not in supports_with_obj_on_top:
+                    init.append(('clear', obj_id))
+            for stacked, support in on_relations.items():
+                init.append(('on', stacked, support))
+
         random.shuffle(init)
         return init
 
@@ -478,7 +508,9 @@ class PDDLStreamPlanner:
              max_time: float = 30.0,
              verbose: bool = True,
              observed_clear_regions: Optional[List[str]] = None,
-             visible_target_locations: Optional[Dict[str, str]] = None) -> Optional[List[Tuple]]:
+             visible_target_locations: Optional[Dict[str, str]] = None,
+             on_relations: Optional[Dict[str, str]] = None,
+             stackable_objects: Optional[List[str]] = None) -> Optional[List[Tuple]]:
         """
         Generate a plan using PDDLStream.
         
@@ -494,7 +526,10 @@ class PDDLStreamPlanner:
                 _build_init() docstring (audit #67).
             visible_target_locations: Dict mapping target_name -> boxel_id for
                 visible targets (see _build_init docstring).
-            
+            on_relations: Known stack relations (see create_problem docstring).
+            stackable_objects: Stack participants (see create_problem
+                docstring).  Leave None for holding-goal runs.
+
         Returns:
             List of action tuples, or None if planning fails
         """
@@ -503,7 +538,9 @@ class PDDLStreamPlanner:
         problem = self.create_problem(target_objects, goal, current_config,
                                       known_empty_shadows, moved_occluders,
                                       observed_clear_regions,
-                                      visible_target_locations)
+                                      visible_target_locations,
+                                      on_relations,
+                                      stackable_objects)
         
         if verbose:
             print(f"\n--- PDDLStream Planning ---")
