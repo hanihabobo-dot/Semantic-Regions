@@ -450,21 +450,118 @@ Fix:   Add --random-scene flag that randomly selects from available
 
 
 ================================================================================
-#30. GOAL AS CLI PARAMETER
+#30. GOAL AS CLI PARAMETER — STACK GOAL ADDED, PERF DECISION OPEN [PARTIAL 2026-04-24]
 ================================================================================
 Priority: TIER 3 — Evaluation infrastructure / extensibility
-Where:    test_full_pipeline.py (main, CLI)
+Where:    test_full_pipeline.py (main, CLI), pddl/domain_pddlstream.pddl,
+          pddl/stream.pddl, streams.py, pddlstream_planner.py,
+          execution.py, boxel_env.py
 Depends:  None
-Effort:   <1 day
+Effort:   IMPLEMENTED 2026-04-24 (commit 0d5def7); keep/kill decision
+          pending mitigation experiment (split pick + unstack)
 
-What:  The goal is hardcoded as ('holding', target_name).  It should
-       be passable as a CLI parameter (like --show-free).
+What:  The goal was hardcoded as ('holding', target_name).  It should
+       be passable as a CLI parameter (like --show-free), with stacking
+       (('on', obj_a, obj_b) and conjunctions) as a first additional
+       goal kind.
 
-       Future goals include stacking (e.g. ('on', obj_a, obj_b)),
-       which requires the goal format to be configurable.
+DONE 2026-04-24 (commit 0d5def7):
+       Added --goal {holding,stack}, --stack-height (>=2), --n-objects.
+       Domain: new (on ?o1 ?o2), (clear ?o), (stack_kin ?o ?on ?g ?q)
+       predicates; new stack action; conditional pick effect re-clears
+       the support; :conditional-effects requirement added.
+       Stream: compute-stack-kin reads ?on_obj's live AABB so multi-step
+       stacks tolerate per-step settling.
+       Planner: _build_init emits (clear/on) ONLY when stackable_objects
+       is supplied.  Holding-goal callers leave it None and pay zero
+       extra grounding cost on the init side.
+       Execution: execute_stack mirrors execute_place but resolves
+       destination from live support AABB (60-step settle vs 30).
+       Scene: stack_scene + constrain_to_reach intersects safe on-table
+       window (_SAFE_TABLE_*_RANGE = (0.05..0.70, -0.40..0.40)) with
+       Panda reach disk so cubes never spawn off-table.
 
-Fix:   Add --goal flag with options like "holding" (default),
-       "stacking", etc.  Parse into the appropriate tuple format.
+       Smoke tests:
+         --goal stack --stack-height 2 --no-gui --seed 0  → 1 plan,
+           1.37 s, plan = move/pick/move/stack ✓
+         --goal stack --stack-height 3 --no-gui --seed 0  → 1 plan,
+           1.58 s, plan = move/pick/move/stack/move/pick/move/stack ✓
+           (collision warnings during 2nd pick are runtime artifacts of
+           the conditional pick effect not telling execution that
+           red_object will fall once orange_object is picked from under
+           it; goal is still achieved correctly)
+         --goal stack --stack-height 2 --gui --seed 0  → 1 plan,
+           1.17 s, identical plan ✓
+
+PERFORMANCE PROBLEM (audit #30 keep/kill measurement):
+       Even though init facts are gated, the holding-goal per-call
+       planning time roughly DOUBLES on the same scene/seed:
+
+         Baseline (commit fed063a, pre-stack), default scene, no-GUI:
+           seed 0  → 5 plans, 20.97s,  4.19 s/plan
+           seed 1  → 7 plans, 37.77s,  5.40 s/plan
+           seed 2  → 1 plan,   4.68s,  4.68 s/plan
+           seed 3  → 2 plans,  6.06s,  3.03 s/plan
+           Aggregate (15 calls): 4.63 s/call
+         GUI variant (seed 2):  13 plans, 58.98s, 4.54 s/plan
+           → confirms RenderingLock isolates plan() from GUI overhead.
+
+         After stack feature (commit 0d5def7), default scene, holding:
+           no-GUI seed 0 → 3 plans, 31.83s, 10.61 s/plan  (+153%)
+           GUI    seed 0 → 2 plans, 15.76s,  7.88 s/plan  (+88%)
+           GUI    seed 0 → 1 plan,   8.36s,  8.36 s/plan  (+99%)
+           Three independent seed-0 runs: 7.9–10.6 s/call vs 4.2 s/call.
+           Consistent ~2x per-call slowdown.  Way past the 10% budget
+           the user accepted before starting.
+
+       Plan COUNTS differ across runs because stack code introduces
+       extra random.shuffle paths in scene RNG (different targets get
+       picked); cumulative time isn't directly comparable, but the
+       per-call number is the headline regression metric.
+
+       Run-by-run timing summaries live in
+         logs/run_<timestamp>/timing_summary.json
+       (see commit fed063a for the instrumentation).
+
+LIKELY ROOT CAUSE:
+       The conditional pick effect
+
+         (forall (?x)
+           (when (on ?o ?x)
+             (and (not (on ?o ?x)) (clear ?x))))
+
+       grounds against every (Obj ?x) for every pick instantiation,
+       regardless of whether (on ?o ?x) is ever asserted.  Combined
+       with the :conditional-effects requirement (which switches
+       FastDownward to a slower translator path), this is the most
+       likely source of the ~2x per-call slowdown.  Init-side gating
+       does not help because the cost is in the domain grounder.
+
+PROPOSED MITIGATION (NOT YET TRIED — needs user approval):
+       Split pick into pick + unstack:
+         - Remove the forall from pick.
+         - Drop :conditional-effects from the requirements list.
+         - Add a separate (:action unstack) with precondition
+           (on ?o ?support) and effect that adds (clear ?support).
+         - Both pick and unstack map to the same execute_pick routine
+           in the dispatcher (symbolically different, physically same).
+       Holding-goal runs would then never see (on ?o ?x), the
+       grounder would discard unstack early, and the domain shape for
+       holding goals would be effectively identical to pre-stack.
+
+KEEP / KILL OPEN QUESTIONS:
+       - Will the split-pick mitigation recover holding-goal perf to
+         within 10% of the pre-stack baseline?  Needs measurement.
+       - If not, do we accept ~2x per-call slowdown for the sake of
+         supporting stacking goals in evaluation runs (audit #9)?
+       - Or revert commit 0d5def7 and revisit later when we have a
+         contingent planner / different domain encoding that avoids
+         the conditional-effects cost?
+
+Related: #9 (evaluation needs both 'holding' and 'stack' goal kinds for
+         baseline comparisons), #36 (holding goal terminates at contact
+         — stack goal is a natural extension that already implies an
+         upright lift via the next move).
 
 
 ================================================================================
@@ -755,7 +852,12 @@ TIER 3 — THESIS EVALUATION (independent of code fixes):
   #12  Scalability analysis                     depends #9  ~2-3 days
   #13  Recursive object discovery                           ~2-3 days
   #29  Scene selection / random scene CLI flag                <1 day
-  #30  Goal as CLI parameter                                 <1 day
+  #30  Goal as CLI parameter [PARTIAL — perf decision open]  ~0.5 day
+       (--goal stack implemented in commit 0d5def7; ~2x per-call
+        slowdown on holding-goal runs from the conditional pick effect.
+        Mitigation pending: split pick + unstack to drop
+        :conditional-effects.  Decision: keep mitigation, reject and
+        revert, or accept slowdown — see #30 entry for full numbers.)
   #36  Holding goal terminates at contact (no upright lift)   <1 day
   #37  execute_pick still re-solves IK (debate; see entry)   very low
 
