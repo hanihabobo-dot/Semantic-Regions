@@ -12,7 +12,7 @@ has been removed.
 
 import numpy as np
 import pybullet as p
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 from boxel_data import BoxelData, BoxelType
 
@@ -85,8 +85,10 @@ class BoxelVisualizer:
 
     def __init__(self):
         """Initialize the visualizer."""
-        self.debug_items: List[int] = []
-        self.shadow_bodies: List[int] = []
+        # Sets (audit #33): remove_boxel_viz() needs O(1) membership and
+        # removal because reboxelization can churn many entries per replan.
+        self.debug_items: Set[int] = set()
+        self.shadow_bodies: Set[int] = set()
         self._items_by_id: Dict[str, List[int]] = {}
         self._bodies_by_id: Dict[str, List[int]] = {}
 
@@ -108,7 +110,7 @@ class BoxelVisualizer:
             basePosition=center,
             baseOrientation=[0, 0, 0, 1],
         )
-        self.shadow_bodies.append(body_id)
+        self.shadow_bodies.add(body_id)
         return body_id
 
     def _draw_one_boxel(self, bd: BoxelData, *, duration: float,
@@ -134,7 +136,7 @@ class BoxelVisualizer:
                 lineWidth=1.0 if is_thin else 2.0,
                 lifeTime=duration,
             )
-            self.debug_items.append(line_id)
+            self.debug_items.add(line_id)
             item_ids.append(line_id)
 
         body_id = self._draw_boxel_phantom(c, e, color, fill_opacity)
@@ -151,7 +153,7 @@ class BoxelVisualizer:
                     textSize=label_size,
                     lifeTime=duration,
                 )
-                self.debug_items.append(text_id)
+                self.debug_items.add(text_id)
                 item_ids.append(text_id)
 
         return item_ids, body_ids
@@ -179,12 +181,12 @@ class BoxelVisualizer:
         """
         for body_id in self.shadow_bodies:
             p.removeBody(body_id)
-        self.shadow_bodies = []
+        self.shadow_bodies.clear()
 
         if clear_previous:
             for item_id in self.debug_items:
                 p.removeUserDebugItem(item_id)
-            self.debug_items = []
+            self.debug_items.clear()
             self._items_by_id.clear()
             self._bodies_by_id.clear()
 
@@ -242,21 +244,19 @@ class BoxelVisualizer:
         """Remove all debug lines, labels, and phantom bodies for one boxel."""
         for item_id in self._items_by_id.pop(boxel_id, []):
             p.removeUserDebugItem(item_id)
-            if item_id in self.debug_items:
-                self.debug_items.remove(item_id)
+            self.debug_items.discard(item_id)
         for body_id in self._bodies_by_id.pop(boxel_id, []):
             p.removeBody(body_id)
-            if body_id in self.shadow_bodies:
-                self.shadow_bodies.remove(body_id)
+            self.shadow_bodies.discard(body_id)
 
     def clear_all(self):
         """Clear all debug items and shadow bodies."""
         for body_id in self.shadow_bodies:
             p.removeBody(body_id)
-        self.shadow_bodies = []
+        self.shadow_bodies.clear()
 
         for item_id in self.debug_items:
             p.removeUserDebugItem(item_id)
-        self.debug_items = []
+        self.debug_items.clear()
         self._items_by_id.clear()
         self._bodies_by_id.clear()
