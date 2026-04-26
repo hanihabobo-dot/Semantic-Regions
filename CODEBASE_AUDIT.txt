@@ -431,22 +431,74 @@ Related: #5 (placement re-blocks cleared corridor), #4 (stale world model),
 
 
 ================================================================================
-#29. SCENE SELECTION — RANDOM SCENE CLI FLAG
+#29. SCENE PARAMETERS ON THE CLI + HIDDEN-TARGET GUARANTEE  [DONE 2026-04-26]
 ================================================================================
 Priority: TIER 3 — Evaluation infrastructure
-Where:    test_full_pipeline.py (CLI, __main__)
+Where:    test_full_pipeline.py (CLI, __main__), boxel_env.py
+          (scalability_scene, SceneConfig, _hidden_xy_positions,
+          _create_targets)
 Depends:  None
 Effort:   <1 day
 
-What:  The pipeline always starts with default_scene() unless --scene
-       is explicitly passed.  There is no --random-scene flag that picks
-       a random scene preset for evaluation diversity.
+What:  Originally scoped as a --random-scene flag.  Reframed during
+       implementation into a broader need: per-goal scene
+       parameterisation from the CLI (object counts, hidden-target
+       counts) with a hard guarantee that targets marked "hidden"
+       really are invisible from the camera at spawn time — not just
+       statistically occluded by RNG.
 
-       All scene presets should produce similarly sized objects within
-       the same workspace dimensions to ensure comparable results.
+Fix:   DONE 2026-04-26.
+       CLI (test_full_pipeline.py):
+         --n-hidden N added (holding + scalability only).  Implicit
+         scene promotion: if the user passes --n-occluders, --n-targets
+         or --n-hidden with --goal holding and no explicit --scene, the
+         scene auto-promotes default → scalability.  Validation errors
+         out on stack / non-scalability / n_occluders=0 combos; clamps
+         --n-hidden to --n-targets with a stderr warning.  run_config
+         logs n_hidden alongside existing params.
 
-Fix:   Add --random-scene flag that randomly selects from available
-       presets (default, mixed, scalability with random params).
+       SceneConfig: new field n_hidden_targets (int, default 0).
+       scalability_scene() gains n_hidden: int = 0 and forwards it.
+
+       Placement (boxel_env._hidden_xy_positions):
+         Samples each hidden target just BEHIND a chosen occluder along
+         the camera→occluder shadow axis.  Physical-overlap clearance
+         is sized from the actual bodies (occ_half + target_half +
+         5 mm buffer) and checked against every occluder, not just the
+         biased one.  Then verifies with p.rayTestBatch: 8 rays from
+         camera to the 8 shrunk AABB corners of the prospective target.
+         Accepts only if every corner ray is intercepted by a
+         non-background body (the plane/table/robot are background).
+         Same 8-corner criterion as oracle_detect_objects, so the
+         hidden-at-spawn guarantee is self-consistent with the
+         downstream visibility check.
+
+       Contract: single-shot.  If _hidden_xy_positions exhausts its
+       400-candidate/slot budget, _create_targets raises RuntimeError
+       with an actionable message ("try --n-occluders higher,
+       --n-hidden lower, or a different --seed").  No silent fallback,
+       no retry loop (an earlier retry layer was removed because it
+       tore down and rebuilt the PyBullet GUI, exhausting WSLg's X
+       server on repeat attempts).  A post-spawn sanity check in
+       main() re-runs oracle_detect_objects() for logging only — "OK"
+       when the count is met, "warn" on rare physics-settling drift —
+       and does NOT trigger retries.
+
+       Smoke tests:
+         run_boxels                                        → default scene, no promotion, OK
+         run_boxels --seed 0 --n-occluders 3 --n-targets 4 → auto-promoted to scalability, no hidden guarantee, OK
+         run_boxels --seed 0 --n-occluders 3 --n-targets 4 --n-hidden 2
+           → "Hidden-target guarantee OK: 2/4 hidden
+             (requested >= 2, seed=0)." then pipeline proceeds ✓
+         Infeasible configs (e.g. n_hidden > n_occluders with crowded
+         table / seed) raise the RuntimeError instead of silently
+         producing a visible "hidden" target.
+
+Not done here (intentional):
+       The literal --random-scene flag (pick a preset uniformly at
+       random) was not implemented.  The broader parameterisation
+       above covers the underlying evaluation-diversity need; add the
+       flag later only if batch-eval scripting specifically wants it.
 
 
 ================================================================================

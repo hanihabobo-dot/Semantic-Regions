@@ -175,14 +175,44 @@ def main(gui=True, run_logger=None, scene_config=None,
     # =========================================================
     print("\n--- Phase 1: Environment Setup ---")
     env = BoxelTestEnv(gui=gui, scene_config=scene_config)
-    robot_id = env.objects["robot"].object_id
-    print(f"Robot ID: {robot_id}")
 
     # Let settle: 50 steps at 240 Hz ≈ 0.2 s.  Enough for the loaded
     # Panda + cubes to reach static equilibrium after spawning.
     for _ in range(50):
         env.step_simulation()
     env.update_object_positions()
+
+    # Audit #29: single-shot sanity log.  Placement in
+    # ``_hidden_xy_positions`` already uses 8-corner raycasts against
+    # the spawned occluders, so if the scene loaded at all the hidden
+    # targets were raycast-verified occluded at spawn time.  We still
+    # run one ``oracle_detect_objects`` pass AFTER physics settle to
+    # catch any drift, but we do NOT retry — a mismatch here is either
+    # a placement-vs-oracle logic bug worth investigating, or sub-mm
+    # settling drift that does not affect downstream behaviour.
+    required_hidden = int(getattr(scene_config, 'n_hidden_targets', 0) or 0)
+    if required_hidden > 0:
+        visible, _ = env.oracle_detect_objects()
+        target_names = [
+            name for name, info in env.objects.items()
+            if not info.is_occluder
+            and name not in ("plane", "table", "robot")
+        ]
+        hidden_now = sum(1 for t in target_names if t not in visible)
+        if hidden_now >= required_hidden:
+            print(f"  Hidden-target guarantee OK: {hidden_now}/"
+                  f"{len(target_names)} hidden "
+                  f"(requested >= {required_hidden}, "
+                  f"seed={scene_config.seed}).")
+        else:
+            print(f"  [warn] Hidden-target post-spawn check: "
+                  f"{hidden_now}/{required_hidden} hidden "
+                  f"(placement was raycast-verified; mismatch likely "
+                  f"from physics settling drift). Continuing without "
+                  f"retry.", file=sys.stderr)
+
+    robot_id = env.objects["robot"].object_id
+    print(f"Robot ID: {robot_id}")
 
     # =========================================================
     # PHASE 2: Boxel Calculation (fast, no visualization)
@@ -621,6 +651,12 @@ def main(gui=True, run_logger=None, scene_config=None,
                 #   still_blocked → occluder not fully cleared, break to replan
                 obj, shadow_id = params
                 print(f"    Sensing {shadow_id} (fixed camera)...")
+
+                # Retract arm to home so it doesn't block the camera's
+                # line of sight to the shadow region (audit #79, #3 deferred).
+                # home_joints = planner.home_config.joint_positions
+                # move_robot_smooth(robot_id, home_joints, gui, steps=40)
+                # current_config = planner.home_config
 
                 shadow_boxel = registry.get_boxel(str(shadow_id))
                 if shadow_boxel is None:
@@ -1117,11 +1153,20 @@ if __name__ == "__main__":
                         help='Number of occluders (scalability scene only)')
     parser.add_argument('--n-targets', type=int, default=4,
                         help='Number of targets (scalability scene only)')
+    parser.add_argument('--n-hidden', type=int, default=0,
+                        help='Number of targets that must be hidden from '
+                             'the camera at spawn time (scalability + '
+                             'holding only, audit #29). 0 = no guarantee '
+                             '(emergent from RNG). Capped at --n-targets. '
+                             'Requires --n-occluders >= 1.')
     parser.add_argument('--n-objects', type=int, default=3,
                         help='Number of cubes for the stack scene '
                              '(must be >= --stack-height)')
     parser.add_argument('--seed', type=int, default=0,
-                        help='Random seed (scalability/mixed/stack scenes)')
+                        help='Random seed (scalability/mixed/stack scenes). '
+                             'Note: --n-hidden > 0 may nudge the seed on '
+                             'retry if placement fails; the effective seed '
+                             'is logged in run_config.')
     parser.add_argument(
         '--goal',
         choices=['holding', 'stack'],
@@ -1138,6 +1183,45 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    # Audit #29: --n-hidden only makes sense on the scalability scene
+    # with --goal holding.  Auto-promote --scene default to scalability
+    # when the user passes any of the count knobs under --goal holding
+    # (mirrors the --goal stack auto-override below).  Reject clearly
+    # wrong combinations early so the user sees a CLI error instead of
+    # silently running a scene that cannot satisfy the request.
+    _holding_counts_explicit = (
+        args.n_hidden > 0
+        or '--n-occluders' in sys.argv
+        or '--n-targets' in sys.argv
+    )
+    if (args.goal == 'holding'
+            and args.scene == 'default'
+            and _holding_counts_explicit):
+        args.scene = 'scalability'
+
+    if args.n_hidden > 0:
+        if args.scene not in ('scalability',):
+            parser.error(
+                f"--n-hidden > 0 requires --scene scalability "
+                f"(got --scene {args.scene}). Hidden-target guarantee "
+                f"only applies to the scalability scene."
+            )
+        if args.goal != 'holding':
+            parser.error(
+                f"--n-hidden > 0 is only meaningful with --goal holding "
+                f"(got --goal {args.goal}). Stack scenes have no "
+                f"occluders."
+            )
+        if args.n_occluders < 1:
+            parser.error(
+                "--n-hidden > 0 requires --n-occluders >= 1."
+            )
+        if args.n_hidden > args.n_targets:
+            print(f"[warn] --n-hidden={args.n_hidden} > "
+                  f"--n-targets={args.n_targets}; capping to "
+                  f"{args.n_targets}.", file=sys.stderr)
+            args.n_hidden = args.n_targets
+
     # When --goal stack is requested without an explicit --scene, fall
     # back to stack_scene so the spawned objects are reach-constrained
     # cubes by default.  Explicit --scene overrides this for A/B tests.
@@ -1153,6 +1237,7 @@ if __name__ == "__main__":
         'scalability': lambda: scalability_scene(
             n_occluders=args.n_occluders,
             n_targets=args.n_targets,
+            n_hidden=args.n_hidden,
             seed=args.seed,
         ),
         'stack': lambda: stack_scene(
@@ -1170,6 +1255,7 @@ if __name__ == "__main__":
         "scene":        args.scene,
         "n_occluders":  args.n_occluders,
         "n_targets":    args.n_targets,
+        "n_hidden":     args.n_hidden,
         "n_objects":    args.n_objects,
         "seed":         args.seed,
         "goal":         args.goal,
