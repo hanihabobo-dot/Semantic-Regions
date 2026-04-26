@@ -111,7 +111,7 @@ BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #4(partial), #6, #9–#14, #21, #29–#32, #34, #36–#38         #
+#  OPEN ISSUES — #4(partial), #6, #9–#14, #21, #29–#32, #34, #36–#42         #
 #                                                                              #
 ################################################################################
 
@@ -872,6 +872,239 @@ Related: #37 (pick/place IK re-solve — parent issue),
 
 
 ================================================================================
+#39. PICK DOES NOT REQUIRE (CLEAR ?O) — STACK-BASE PICK TOPPLES TOWER SILENTLY
+================================================================================
+Priority: TIER 0 — Correctness bug for --goal stack runs
+Where:    pddl/domain_pddlstream.pddl (:action pick ~line 188),
+          pddlstream_planner.py (_build_init — clear init for
+          stackable_objects, ~line 490-495)
+Depends:  None (but fix interacts with #30 "split pick + unstack"
+          mitigation — coordinate before committing)
+Effort:   ~0.5 day (precondition addition + holding-goal gating)
+
+What:  The pick action's preconditions do not include (clear ?o).
+       When a tower A-on-B-on-C-on-table exists and pick is invoked
+       on B or C, all preconditions remain satisfied: (obj_at_boxel
+       B B) is still true (the tower doesn't symbolically move B's
+       boxel); (handempty), (at_config ?q), and (kin_solution ...)
+       are independent of whether something is stacked on B.  The
+       forall (when (on ?o ?x) (and (not (on ?o ?x)) (clear ?x)))
+       only handles objects ?o was RESTING ON — it does not handle
+       objects resting ON ?o.
+
+       Observed failure (run 2026-04-26_11-11-08, --goal stack
+       --stack-height 5, seed 0):
+
+         Plan step 10: pick cyan  — cyan had red-on-orange stacked
+                                    on top.  Symbolic: succeeds.
+                                    Physical: orange+red tower
+                                    collapses onto the table.
+         Plan step 14: pick blue  — blue had cyan stacked on top by
+                                    then.  Same bug, again.
+
+         Execution log shows 13+ "COLLISION [...]" warnings during
+         the subsequent move and stack steps (the robot drags
+         through the fallen cubes), yet the run terminates with
+         SUCCESS because the final SYMBOLIC state matches the goal
+         (see #40 — the success check is symbolic, not physical).
+         Physically 3 of 4 (on ...) goal clauses were violated.
+
+Fix:   ONE COMMIT:
+       (a) Add (clear ?o) to pick's precondition in
+           pddl/domain_pddlstream.pddl (:action pick).
+       (b) Emit (clear X) in init for every Obj unconditionally, not
+           only when stackable_objects is supplied
+           (pddlstream_planner.py ~line 490-495).  Holding-goal runs
+           will pay a small grounding cost for extra atoms, but far
+           less than the conditional-effects cost already debated
+           in #30.
+           Alternative (ii): gate via a (stack_mode_enabled) marker
+           in init and wrap the precondition:
+             (or (not (stack_mode_enabled)) (clear ?o))
+           Option (i) is cleaner and symmetric with the forall
+           effect that already assumes (clear ?x) is well-defined.
+       (c) Re-run --goal stack --stack-height 5 --seed 0 and verify
+           the planner builds bottom-up (green base, blue on green,
+           cyan on blue, orange on cyan, red on orange) instead of
+           the observed stack-and-disassemble pattern.
+       (d) Coordinate with #30 mitigation: if "split pick + unstack"
+           is eventually pursued, unstack KEEPS (clear ?o) false
+           and (on ?o ?support) as its precondition; plain pick gets
+           (clear ?o).  Either fix should be consistent with that.
+
+Related: #30 (stack action that introduced stacking; conditional
+              effect and split-pick mitigation decisions),
+         #40 (false-success — downstream consequence; independent
+              fix recommended because other physics/symbolic
+              desyncs can also produce false-success),
+         #42 (collisions during execution not propagated to
+              replan — also surfaced by this bug's run).
+
+
+================================================================================
+#40. FALSE-SUCCESS IN STACK GOALS — SYMBOLIC STATE ACCEPTED OVER PHYSICS
+================================================================================
+Priority: TIER 0 — Correctness bug (reports SUCCESS on physically failed runs)
+Where:    test_full_pipeline.py (post-execution goal check, ~line 1009+;
+          on_relations tracking in the stack dispatch handler)
+Depends:  None.  Independent of #39 — even if pick is fixed, a cube can
+          slip off during subsequent physics settling and produce the
+          same desync.
+Effort:   ~0.5-1 day
+
+What:  After plan execution terminates, the pipeline compares an
+       on_relations dict (built by the executor from what each stack
+       action SAID happened) to the goal conjunction.  The dict is
+       never reconciled with physics.  Any PDDL-level symbolic
+       success is printed as SUCCESS regardless of physical state.
+
+       Failure observed (same run as #39):
+
+         Final on-relations logged by pipeline:
+           orange_object → cyan_object    (physically on floor)
+           red_object    → orange_object  (physically on floor)
+           cyan_object   → blue_object    (physically on floor)
+           blue_object   → green_object   (actually true)
+         Pipeline prints: SUCCESS!
+
+       Consequences:
+       (a) Evaluation runs (audit #9) would inflate success rates.
+       (b) Debugging is harder — the log says SUCCESS, so manual
+           GUI review is needed to know what really happened.
+       (c) Any PDDL-vs-physics desync (#39, grasp slip, settling
+           drift, adversarial scene state) produces false-success.
+
+Fix:   ONE COMMIT — add a physics-based goal verifier:
+       (a) After symbolic success, walk the goal AST.  For each
+           clause:
+             (on A B): query p.getAABB for both A and B; require
+               A's bottom_z ≈ B's top_z (ε ~5 mm) AND A's (x,y)
+               centre within B's (x,y) AABB.
+             (holding X): check the grasp constraint still exists
+               and targets X (body id match).
+             (at_config q): check current joints ≈ q (RRT
+               tolerance).
+             (on_table X)  (if added in #41): check X's bottom_z
+               ≈ table top_z.
+       (b) On mismatch, print "PHYSICAL_FAILURE: <clause> —
+           symbolic true but physics disagrees (<details>)" and
+           set the run exit status to failure.
+       (c) Log mismatch details in timing_summary.json so
+           evaluation tooling (#9) can filter false-positives.
+       (d) Choose tolerance ε carefully: too tight → physics-true
+           runs flagged; 5 mm on the AABB touch test is a
+           reasonable default for 40-mm cubes.
+
+       Optional: also run the verifier after EACH stack/place
+       action, break to replan on mismatch.  This would MASK #39
+       by replanning around the collapse — useful fallback but
+       does not remove the need for #39's precondition fix.
+
+Related: #39 (root cause of this run's false-success),
+         #9  (evaluation metrics depend on truthful success flags),
+         #21 (reactive policy after unexpected state — similar
+              loop-vs-planner design question),
+         #41 (on_table clause would also need a verifier case).
+
+
+================================================================================
+#41. STACK GOAL DOES NOT CONSTRAIN BASE TO BE ON THE TABLE
+================================================================================
+Priority: TIER 3 — Minor, related to #40
+Where:    test_full_pipeline.py (build_stack_goal ~line 111),
+          pddl/domain_pddlstream.pddl (new predicate or convention)
+Depends:  None.  Could ride with #40's verifier work.
+Effort:   <1 day
+
+What:  build_stack_goal produces goals of the form
+       (and (on t_1 t_2) (on t_2 t_3) ... (on t_{H-1} t_H))
+       with no clause asserting that t_H (the base) is on the
+       table.  Currently this is moot: all cubes start on the
+       table; no action lifts a cube off the table without
+       replacing it somewhere; so the base is always table-resting
+       by induction.
+
+       However it is still a correctness gap:
+       (a) If #39 is ever partially fixed but not consistently,
+           pick/place sequences could leave the base floating
+           (ungrounded stack).
+       (b) A future plan shape (e.g. pick the base cube, sense
+           under it, then re-stack) would let the base end up
+           anywhere.
+       (c) The goal is semantically incomplete: a reader cannot
+           tell from the goal whether "a tower" is intended or
+           just a chain of (on) relations in mid-air.
+
+Fix:   ONE COMMIT — options:
+       (a) Add an (on_table ?o) predicate to the domain, emit
+           (on_table X) in init for every cube, and have
+           pick/place/stack effects maintain it (pick removes,
+           stack removes, place emits).  build_stack_goal adds
+           (on_table t_H) to the conjunction.  Verifier (#40)
+           extends to this clause.
+       (b) Represent the table as an Obj (with is_table flag)
+           and use (on t_H table) with a is_table constant.  More
+           symmetric; bigger domain change.
+       Option (a) is lighter-touch and compatible with the
+       existing domain.
+
+Related: #40 (physics verifier should check the on_table clause),
+         #30 (stack feature that needs this completion),
+         pddl/domain_pddlstream.pddl comment at ~line 64:
+           "Objects not mentioned in any (on ?o ?x) fact is treated
+            as table-resting" — this convention becomes explicit.
+
+
+================================================================================
+#42. EXECUTION COLLISIONS ARE LOGGED BUT DO NOT TRIGGER REPLAN
+================================================================================
+Priority: TIER 3 — Robustness
+Where:    execution.py (collision detection around each action),
+          test_full_pipeline.py (execution loop break-to-replan logic)
+Depends:  None (but #4 re-boxelization work affects what a post-
+          collision replan would see)
+Effort:   ~1 day
+
+What:  When execute_pick / execute_place / execute_stack / move
+       detect robot-vs-object collisions, they print
+       "*** COLLISION [<context>]: robot link X <-> Y ***" and
+       continue execution.  Nothing in the execution loop
+       propagates the collision to a break-to-replan.
+
+       Observed in run 2026-04-26_11-11-08 (stack-height=5 run
+       that triggered #39/#40): 13+ collision warnings across
+       "after pick cyan_object", "move to blue_object", etc.,
+       as the robot ploughed through the debris from the #39
+       tower collapse.  Execution continued to the end and
+       reported SUCCESS via the #40 false-success path.
+
+       Even if #39 and #40 are fixed, collisions can arise from:
+       (a) settling drift (small; usually no damage)
+       (b) adversarial boxel/AABB inaccuracy after an occluder
+           relocation (#4 shadow recompute gap)
+       (c) multi-object dropping when a pick-under-tower bug
+           exists in any future action.
+
+Fix:   ONE COMMIT:
+       (a) Count collisions per action in execute_* routines;
+           return a collision_count alongside the return config.
+       (b) Execution loop: if collision_count > threshold (e.g.
+           >0 for pick/place/stack, >N for move), break to replan
+           and update BeliefState with the observed scene state
+           (object positions after settling).
+       (c) Make the threshold configurable via CLI (e.g.
+           --strict-collisions for thesis evaluation, relaxed
+           default for dev).
+
+Related: #4 (re-boxelization after unexpected state),
+         #21 (reactive policy for unexpected outcomes — same
+              loop-vs-planner design question),
+         #39/#40 (the toppling-tower class of failure this
+                  would catch even when #39 is fixed but a
+                  different physics bug emerges).
+
+
+================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without
@@ -889,7 +1122,7 @@ FOR LATER
   permits after core evaluation (#9–#12) is complete.
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-04-24)
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-04-26)
 ================================================================================
 
 Each issue is one commit.  Dependencies listed; work within a tier can
@@ -899,6 +1132,10 @@ TIER 0 — ACTIONABLE NOW (no dependencies):
   #14  Sparse visibility check (8 AABB corners)           ~1-2 days
   #21  Blocked sense switches shadows / false all_searched ~1-2 days
        (design direction: fix in PDDL model, not execution loop)
+  #39  pick missing (clear ?o) — stack-base topples silently ~0.5 day
+       (coordinate with #30 split-pick mitigation before committing)
+  #40  False-success: symbolic state accepted over physics  ~0.5-1 day
+       (independent of #39 — also catches future physics desyncs)
 
 TIER 1 — Mixed dependencies (see each issue):
   #4   Post-action re-boxelization [PARTIAL]                ~1-2 days remaining
@@ -923,13 +1160,17 @@ TIER 3 — THESIS EVALUATION (independent of code fixes):
   #36  Holding goal terminates at contact (no upright lift)   <1 day
   #37  execute_pick still re-solves IK (debate; see entry)   very low
   #38  execute_stack re-solves IK     depends #37            very low
+  #41  Stack goal: base not constrained on_table    <1 day
+       (minor; could ride with #40 verifier work)
+  #42  Execution collisions not propagated to replan  ~1 day
+       (robustness — catches residual desyncs after #39/#40)
 
 TIER 3 — CODE QUALITY (low priority):
   #31  Narration comments (restate code, not intent)        ~1-2 days
   #32  Comment/code drift (stale comments)                   <1 day
   #34  _compute_placement_view_blocks scalability           (if needed)
 
-Total: 14 open items (#4(partial), #6, #9–#14, #21, #29–#32, #34, #36–#38).
+Total: 18 open items (#4(partial), #6, #9–#14, #21, #29–#32, #34, #36–#42).
       Deferred: #2 → archive/CODEBASE_AUDIT_DEFERRED.txt.
       Resolved/subsumed: #1, #3, #5, #7, #8, #15–#20, #22–#28, #33, #35
         → archive/CODEBASE_AUDIT_RESOLVED.txt.
