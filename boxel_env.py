@@ -131,6 +131,13 @@ class SceneConfig:
             a disk around the robot base.  Used by stack_scene where
             every cube must be both pickable and a viable stack target
             (audit #30).
+        n_hidden_targets: When > 0, the first N targets (index-order)
+            are placed with XY biased to sit inside occluder footprints
+            so they fail the camera's 8-corner visibility check
+            (audit #29).  Requires at least one occluder.  The retry
+            layer in test_full_pipeline.main() verifies the guarantee
+            after spawn via oracle_detect_objects() and nudges the seed
+            if it is not met.
     """
     occluders: List[ObjectSpec]
     targets: List[ObjectSpec]
@@ -138,6 +145,7 @@ class SceneConfig:
     target_positions: Optional[List[List[float]]] = None
     seed: Optional[int] = None
     constrain_to_reach: bool = False
+    n_hidden_targets: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +263,7 @@ def stack_scene(n_objects: int = 3, seed: int = 0,
 
 
 def scalability_scene(n_occluders: int = 3, n_targets: int = 4,
+                      n_hidden: int = 0,
                       seed: int = 0) -> SceneConfig:
     """
     Randomly generated scene for scalability evaluation.
@@ -262,7 +271,20 @@ def scalability_scene(n_occluders: int = 3, n_targets: int = 4,
     Occluder and target shapes are drawn from a pool; positions are
     randomised within the table bounds.  Use different ``seed`` values
     to produce distinct instances for batch evaluation.
+
+    When ``n_hidden > 0``, the first ``n_hidden`` targets are placed
+    with XY biased toward occluder footprints so they fail the
+    camera's visibility check (audit #29).  The retry layer in
+    ``test_full_pipeline.main()`` verifies the guarantee post-spawn
+    and re-seeds if it is not met.  ``n_hidden`` is capped at
+    ``n_targets``; callers must ensure ``n_occluders >= 1`` when
+    requesting hidden targets.
     """
+    n_hidden = max(0, min(int(n_hidden), int(n_targets)))
+    if n_hidden > 0 and n_occluders < 1:
+        raise ValueError(
+            "scalability_scene: n_hidden > 0 requires n_occluders >= 1"
+        )
     rng = np.random.RandomState(seed)
 
     occ_pool = [
@@ -317,6 +339,7 @@ def scalability_scene(n_occluders: int = 3, n_targets: int = 4,
         occluders=occluders,
         targets=targets,
         seed=seed,
+        n_hidden_targets=n_hidden,
     )
 
 
@@ -572,7 +595,8 @@ class BoxelTestEnv:
     def _random_xy_positions(self, n: int, rng: np.random.RandomState,
                              margin: float = 0.10,
                              constrain_to_reach: bool = False,
-                             reach_radius: Optional[float] = None
+                             reach_radius: Optional[float] = None,
+                             reserved_xys: Optional[List[List[float]]] = None,
                              ) -> List[List[float]]:
         """
         Sample *n* non-overlapping XY positions within the table bounds.
@@ -587,6 +611,11 @@ class BoxelTestEnv:
         Both constraints are needed for scenes like ``stack`` where every
         object must be both pickable AND a viable stack destination
         (audit #30).
+
+        When ``reserved_xys`` is provided, samples must also stay at
+        least ``margin`` away from those pre-existing positions.  Used
+        by ``_create_targets`` to keep visible-target placements clear
+        of occluders and pre-placed hidden targets (audit #29).
         """
         if constrain_to_reach:
             x_lo, x_hi = self._SAFE_TABLE_X_RANGE
@@ -601,6 +630,7 @@ class BoxelTestEnv:
         bx, by = self._ROBOT_BASE_XY
         r_max = (reach_radius if reach_radius is not None
                  else self._PANDA_REACH_RADIUS)
+        reserved = list(reserved_xys) if reserved_xys else []
         positions = []
         for _ in range(n * 400):
             if len(positions) >= n:
@@ -608,6 +638,9 @@ class BoxelTestEnv:
             x = rng.uniform(x_lo, x_hi)
             y = rng.uniform(y_lo, y_hi)
             if constrain_to_reach and np.hypot(x - bx, y - by) > r_max:
+                continue
+            if any(np.hypot(x - px, y - py) < margin
+                   for px, py in reserved):
                 continue
             if all(np.hypot(x - px, y - py) >= margin
                    for px, py in positions):
@@ -651,6 +684,172 @@ class BoxelTestEnv:
                 size=spec.full_extents, is_visible=True, is_occluder=True
             )
 
+    def _hidden_xy_positions(
+        self,
+        target_specs: List[ObjectSpec],
+        occluder_info: List[Tuple[Tuple[float, float], float]],
+        rng: np.random.RandomState,
+        hidden_margin: float = 0.10,
+        reserved_xys: Optional[List[List[float]]] = None,
+    ) -> Optional[List[List[float]]]:
+        """
+        Sample XY positions that are GUARANTEED hidden from the camera
+        (audit #29).
+
+        For each target spec:
+          1. Pick a random occluder; compute a shadow-axis unit vector
+             pointing from the camera XY toward the occluder and
+             continuing away.
+          2. Sample a candidate XY slightly BEHIND the occluder along
+             that axis (distance = target_half + occluder_half + buffer
+             + small random radial + lateral jitter bounded by the
+             occluder's own width).  This places the target in the
+             occluder's shadow cone without physically overlapping it.
+          3. Verify with PyBullet raycasts: 8 rays from camera to the 8
+             shrunk AABB corners of the prospective target.  Accept
+             only if every corner ray is intercepted by a non-background
+             body (an occluder).  Same 8-corner criterion as
+             ``oracle_detect_objects`` → the scene is self-consistent
+             with the downstream visibility check.
+          4. Physical-overlap margin against ``reserved_xys`` is
+             computed per-occluder (occ_half + target_half + small
+             buffer); the ``hidden_margin`` only applies to spacing
+             between placed hidden targets, not to occluder clearance.
+
+        Occluders are already spawned in PyBullet when this runs
+        (``_create_occluders`` before ``_create_targets`` in
+        ``_setup_scene``), so the raycast has live geometry to test
+        against.
+
+        Returns ``None`` if the per-slot 400-candidate budget is
+        exhausted.  ``_create_targets`` then raises with an actionable
+        error — no silent fallback, no retry loop.
+
+        Args:
+            target_specs: ObjectSpec for each target slot to hide
+                (list length = N-hidden).  Needed to know each
+                prospective AABB's half-extents.
+            occluder_info: ``((x, y), horizontal_half_extent)`` tuples
+                for every already-placed occluder.
+            rng: Numpy RandomState for all sampling decisions.
+            hidden_margin: Minimum XY separation between two hidden
+                target centres, in metres.  Does NOT apply to
+                occluders — those use physical-overlap margins only.
+            reserved_xys: Pre-existing XY positions that the samples
+                must stay clear of.  Must match ``occluder_info`` in
+                order; entries beyond ``len(occluder_info)`` are
+                treated as additional reserved points kept at the
+                ``hidden_margin`` distance.
+        """
+        if not occluder_info or not target_specs:
+            return None
+        cam = [float(v) for v in self.camera_position]
+        cam_x, cam_y = cam[0], cam[1]
+        x_lo, x_hi = self.table_x_range
+        y_lo, y_hi = self.table_y_range
+        x_lo += hidden_margin
+        x_hi -= hidden_margin
+        y_lo += hidden_margin
+        y_hi -= hidden_margin
+
+        background_ids = set()
+        for k in ("plane", "table", "robot"):
+            if k in self.objects:
+                background_ids.add(self.objects[k].object_id)
+
+        # Shrink corners inward by EPS so rayTest does not touch the
+        # AABB surface exactly (PyBullet returns ambiguous fractions
+        # at grazing / coincident surfaces).
+        EPS = 1e-3
+        # Physical-overlap buffer between target and occluder bodies.
+        OVERLAP_BUFFER = 0.005
+
+        # Reserved entries BEYOND the known occluder list (hidden
+        # targets generated earlier in the same call, other reserved
+        # points the caller passed).  Those use hidden_margin.
+        non_occluder_reserved: List[List[float]] = []
+        if reserved_xys:
+            non_occluder_reserved = [
+                list(xy) for xy in reserved_xys[len(occluder_info):]
+            ]
+
+        positions: List[List[float]] = []
+        for spec in target_specs:
+            he = spec.aabb_half_extents
+            hx, hy, hz = float(he[0]), float(he[1]), float(he[2])
+            target_half = max(hx, hy)
+            cz = self.table_surface_height + hz
+            placed = False
+            for _ in range(400):
+                idx = int(rng.randint(len(occluder_info)))
+                (ox, oy), occ_half = occluder_info[idx]
+                dx = ox - cam_x
+                dy = oy - cam_y
+                norm = float(np.hypot(dx, dy))
+                if norm < 1e-6:
+                    continue
+                ux = dx / norm
+                uy = dy / norm
+                # Perpendicular for lateral jitter within the occluder
+                # silhouette width.
+                px_u = -uy
+                py_u = ux
+                # Distance BEHIND the occluder center: at least enough
+                # to clear physical overlap; add a small random bump so
+                # multiple hidden targets don't stack on one line.
+                base_d = occ_half + target_half + OVERLAP_BUFFER
+                d = base_d + float(rng.uniform(0.0, max(occ_half, 1e-3)))
+                lat_range = max(occ_half - target_half - OVERLAP_BUFFER,
+                                0.0)
+                lat = float(rng.uniform(-lat_range, lat_range))
+                tx = ox + ux * d + px_u * lat
+                ty = oy + uy * d + py_u * lat
+                if not (x_lo <= tx <= x_hi and y_lo <= ty <= y_hi):
+                    continue
+                # Physical-overlap check against EVERY occluder (not
+                # just the one we biased toward — the candidate may
+                # collide with a neighbouring occluder).
+                too_close_occ = False
+                for (ox2, oy2), occ_half2 in occluder_info:
+                    min_d = occ_half2 + target_half + OVERLAP_BUFFER
+                    if np.hypot(tx - ox2, ty - oy2) < min_d:
+                        too_close_occ = True
+                        break
+                if too_close_occ:
+                    continue
+                # Spacing margin against non-occluder reserved points
+                # and already-accepted hidden targets.
+                if any(np.hypot(tx - rx, ty - ry) < hidden_margin
+                       for rx, ry in non_occluder_reserved):
+                    continue
+                if any(np.hypot(tx - px, ty - py) < hidden_margin
+                       for px, py in positions):
+                    continue
+                corners = []
+                for sx in (-1, 1):
+                    for sy in (-1, 1):
+                        for sz in (-1, 1):
+                            corners.append([
+                                tx + sx * (hx - EPS),
+                                ty + sy * (hy - EPS),
+                                cz + sz * (hz - EPS),
+                            ])
+                hits = p.rayTestBatch([cam] * 8, corners)
+                all_occluded = True
+                for h in hits:
+                    hit_uid = h[0]
+                    if hit_uid < 0 or hit_uid in background_ids:
+                        all_occluded = False
+                        break
+                if not all_occluded:
+                    continue
+                positions.append([float(tx), float(ty)])
+                placed = True
+                break
+            if not placed:
+                return None
+        return positions
+
     def _create_targets(self):
         """Create target objects on the table from scene_config."""
         cfg = self.scene_config
@@ -661,10 +860,57 @@ class BoxelTestEnv:
         if cfg.target_positions is not None:
             xys = cfg.target_positions
         else:
-            xys = self._random_xy_positions(
-                len(cfg.targets), rng,
-                constrain_to_reach=cfg.constrain_to_reach,
-            )
+            n_total = len(cfg.targets)
+            n_hidden = max(0, min(int(cfg.n_hidden_targets), n_total))
+
+            # Pull live occluder XYs + horizontal half-extents from the
+            # already-spawned ObjectInfo records instead of threading a
+            # second data stream through SceneConfig.
+            occluder_info = [
+                ((float(info.position[0]), float(info.position[1])),
+                 float(max(info.size[0], info.size[1]) / 2.0))
+                for info in self.objects.values() if info.is_occluder
+            ]
+            reserved_xys: List[List[float]] = [
+                list(xy) for xy, _ in occluder_info
+            ]
+
+            hidden_xys: List[List[float]] = []
+            if n_hidden > 0 and occluder_info:
+                result = self._hidden_xy_positions(
+                    target_specs=cfg.targets[:n_hidden],
+                    occluder_info=occluder_info,
+                    rng=rng,
+                    hidden_margin=0.10,
+                    reserved_xys=reserved_xys,
+                )
+                if result is None:
+                    # Single-shot contract: if the raycast-verified
+                    # placement helper cannot satisfy the request, fail
+                    # immediately with an actionable error.  No silent
+                    # fallback to random placement — that would produce
+                    # a scene that does not match the --n-hidden promise
+                    # (audit #29).
+                    raise RuntimeError(
+                        f"Could not place {n_hidden} hidden targets "
+                        f"with {len(occluder_info)} occluders at "
+                        f"seed={cfg.seed}. Try --n-occluders higher, "
+                        f"--n-hidden lower, or a different --seed."
+                    )
+                hidden_xys = result
+                reserved_xys = reserved_xys + hidden_xys
+
+            n_remaining = n_total - len(hidden_xys)
+            if n_remaining > 0:
+                visible_xys = self._random_xy_positions(
+                    n_remaining, rng,
+                    constrain_to_reach=cfg.constrain_to_reach,
+                    reserved_xys=reserved_xys,
+                )
+            else:
+                visible_xys = []
+
+            xys = hidden_xys + visible_xys
 
         for i, (spec, xy) in enumerate(zip(cfg.targets, xys)):
             he = spec.aabb_half_extents
