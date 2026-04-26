@@ -1022,12 +1022,30 @@ class BoxelTestEnv:
         that knowledge to the call site.  Required by the planner so
         ``place`` actions (precondition: ``(on_surface ?b)``) can fire.
 
+        A free boxel is "on the table" only when BOTH:
+          (a) its bottom is within 0.01 m of the table z (existing test), AND
+          (b) its XY CENTRE lies within ``_SAFE_TABLE_*_RANGE`` — the
+              intersection of the physical table mesh and the Panda's
+              reach disk (same window used for spawning).
+        The logical voxel grid extends to x=-0.4 m (behind the robot) so
+        shadow volumes cover the near field; without (b) the planner
+        would pick FREE boxels whose centre is off the table mesh, and
+        execute_place (which drops at boxel.center) would release the
+        object over empty air.  Observed 2026-04-26: cubes falling off
+        the near edge in front of the robot (audit #43).
+
         Mutates ``free_boxels`` in place.  The 0.01 m tolerance accounts
         for PyBullet contact margin and AABB rounding.
         """
         table_z = self.table_surface_height
+        x_lo, x_hi = self._SAFE_TABLE_X_RANGE
+        y_lo, y_hi = self._SAFE_TABLE_Y_RANGE
         for b in free_boxels:
-            b.on_surface = "table" if b.min_corner[2] <= table_z + 0.01 else None
+            on_z = b.min_corner[2] <= table_z + 0.01
+            cx = 0.5 * (b.min_corner[0] + b.max_corner[0])
+            cy = 0.5 * (b.min_corner[1] + b.max_corner[1])
+            on_xy = (x_lo <= cx <= x_hi) and (y_lo <= cy <= y_hi)
+            b.on_surface = "table" if (on_z and on_xy) else None
             b.surface_z = table_z
 
     def _view_and_projection_matrices(self):
