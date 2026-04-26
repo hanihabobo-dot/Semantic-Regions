@@ -446,9 +446,21 @@ class BoxelTestEnv:
             self.camera_position, self.table_surface_height,
             table_x_range=self.table_x_range, table_y_range=self.table_y_range
         )
+        # Free-space workspace matches the safe placement footprint —
+        # intersection of the physical table mesh and the Panda reach
+        # disk (_SAFE_TABLE_*_RANGE, the same window used for spawning).
+        # NOT the wider logical voxel grid (self.table_*_range), which is
+        # deliberately extended past the near table edge for SHADOW
+        # coverage only.  Generating free boxels over that wider volume
+        # created cells overhanging the physical table edge (audit #44):
+        # #43 made them unplaceable, but the wireframes still extended
+        # into empty air past the near edge.  ShadowCalculator above
+        # keeps the wider range so near-field shadow volumes behind
+        # occluders remain covered.
         self.free_space_generator = FreeSpaceGenerator(
             self.table_surface_height,
-            table_x_range=self.table_x_range, table_y_range=self.table_y_range
+            table_x_range=self._SAFE_TABLE_X_RANGE,
+            table_y_range=self._SAFE_TABLE_Y_RANGE,
         )
         self.visualizer = BoxelVisualizer()
 
