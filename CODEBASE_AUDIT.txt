@@ -1253,7 +1253,81 @@ Related: #4 (post-action re-boxelization — fragments near the edge
          #30 (stack action — unaffected; stack targets object boxels,
               not free boxels),
          #39/#40 (separate physics/symbolic desync bugs; this one
-                  was strictly about a missing XY edge check).
+                  was strictly about a missing XY edge check),
+         #44 (follow-up — narrow FreeSpaceGenerator workspace so free
+              boxels themselves don't overhang the table edge).
+
+
+================================================================================
+#44. FREE BOXELS OVERHANG TABLE EDGE — FreeSpaceGenerator USED LOGICAL GRID
+                                                              [DONE 2026-04-26]
+================================================================================
+Priority: TIER 0 — Follow-up to #43 (same 2026-04-26 root cause)
+Where:    boxel_env.py (free_space_generator construction, ~line 449)
+Depends:  #43 [DONE] — place-side gate in place
+Effort:   <0.5 day
+
+DONE 2026-04-26:
+       boxel_env.py constructs FreeSpaceGenerator with XY bounds equal
+       to _SAFE_TABLE_X_RANGE / _SAFE_TABLE_Y_RANGE (the same window
+       used for spawning and by annotate_free_space_surface in #43).
+       ShadowCalculator still receives the wider self.table_*_range so
+       near-field shadow volumes behind occluders stay covered.
+       annotate_free_space_surface's XY check (from #43) remains as
+       defence-in-depth: it is now effectively a no-op for generator
+       output but protects against future regressions if the generator
+       ever receives a wider range.
+
+What:  Audit #43 gated (on_surface ?b) on the boxel centre lying
+       inside the safe placement window.  This fixed the PLACEMENT
+       bug (objects no longer drop off the near edge), but the free
+       boxels themselves were still generated across the full LOGICAL
+       voxel grid (table_x_range = (-0.4, 0.6), (-0.5, 0.5)) —
+       including the strip x in [-0.4, 0.05) that is behind or under
+       the robot base and entirely off the physical table mesh.
+
+       Observed 2026-04-26 (screenshot after #43 fix): free-boxel
+       wireframes clearly overhang the near table edge.  The planner
+       cannot place there (thanks to #43), but the generator is
+       producing ghost cells that waste boxel IDs, clutter the visual
+       partition, and semantically misrepresent "free space above the
+       table" as including air past the edge.
+
+Fix:   ONE COMMIT — narrow FreeSpaceGenerator's XY workspace to the
+       safe table footprint, keep ShadowCalculator on the wider grid:
+       (a) In BoxelTestEnv.__init__, pass _SAFE_TABLE_X_RANGE /
+           _SAFE_TABLE_Y_RANGE to FreeSpaceGenerator instead of
+           self.table_x_range / self.table_y_range.
+       (b) Leave ShadowCalculator on self.table_x_range /
+           self.table_y_range so shadows extending toward the robot
+           (near-field behind occluders) are still computable.
+       (c) Leave annotate_free_space_surface's XY check as a belt-
+           and-braces guard (it becomes a no-op on the new generator
+           output but protects the invariant going forward).
+
+Consistency notes (same as #43's follow-ups, tightened):
+       - Shadow vs. free asymmetry is now deliberate: shadows may
+         extend into x in [-0.4, 0.05] while no free boxel lives
+         there.  This is correct: that strip isn't "known-empty AND
+         supportable"; it's just hidden air behind the occluders.
+       - reboxelize_free_space uses env.generate_free_space, which
+         goes through the same narrowed generator — post-action
+         splits and rebuilds stay inside the safe window.
+       - split_free_boxel produces fragments that are subsets of the
+         already-narrow free boxel — no fragment can escape the safe
+         window.
+       - Hidden-target spawn in _hidden_xy_positions still clamps to
+         self.table_x_range (unrelated to free-space generation).
+       - Root octree extent shrinks from 1.0x1.0 to 0.65x0.80 in XY
+         (Z unchanged); with min_resolution 0.035 m, depth is
+         unchanged in practice.  Max free-boxel size decreases,
+         giving finer placement granularity.
+
+Related: #43 (placement gate — depends on this shared _SAFE_TABLE
+              window definition),
+         #4 (reboxelization — affected generator is the same one),
+         shadow_calculator.py (intentionally untouched — keeps wider
+              grid for near-field shadow coverage).
 
 
 ================================================================================
@@ -1322,9 +1396,9 @@ TIER 3 — CODE QUALITY (low priority):
 
 Total: 17 open items (#4(partial), #6, #9–#14, #21, #29–#32, #34, #36–#38, #40–#42).
       Deferred: #2 → archive/CODEBASE_AUDIT_DEFERRED.txt.
-      Resolved/subsumed: #1, #3, #5, #7, #8, #15–#20, #22–#28, #33, #35, #39, #43
-        → archive/CODEBASE_AUDIT_RESOLVED.txt (entries #39 and #43 retained
-          inline here with [DONE] tag; archive move optional).
+      Resolved/subsumed: #1, #3, #5, #7, #8, #15–#20, #22–#28, #33, #35, #39, #43, #44
+        → archive/CODEBASE_AUDIT_RESOLVED.txt (entries #39, #43, and #44
+          retained inline here with [DONE] tag; archive move optional).
 
 Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
