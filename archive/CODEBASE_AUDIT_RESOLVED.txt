@@ -2230,3 +2230,347 @@ Resolution (2026-04-19):
 
 Verified: full pipeline runs to completion; planner finds plans for
        hidden-target scenarios as before.
+
+================================================================================
+Archived: 2026-04-27 (moved from CODEBASE_AUDIT.txt: #29, #33, #39, #43, #44;
+         plus the #30 implementation debrief — the perf keep/kill decision
+         remains OPEN and stays inline in the main audit as a trimmed stub.)
+================================================================================
+
+
+================================================================================
+#29. SCENE PARAMETERS ON THE CLI + HIDDEN-TARGET GUARANTEE  [DONE 2026-04-26]
+================================================================================
+Priority: TIER 3 — Evaluation infrastructure
+Where:    test_full_pipeline.py (CLI, __main__), boxel_env.py
+          (scalability_scene, SceneConfig, _hidden_xy_positions,
+          _create_targets)
+Depends:  None
+Effort:   <1 day
+
+What:  Originally scoped as a --random-scene flag.  Reframed during
+       implementation into a broader need: per-goal scene
+       parameterisation from the CLI (object counts, hidden-target
+       counts) with a hard guarantee that targets marked "hidden"
+       really are invisible from the camera at spawn time — not just
+       statistically occluded by RNG.
+
+Fix:   DONE 2026-04-26.
+       CLI (test_full_pipeline.py):
+         --n-hidden N added (holding + scalability only).  Implicit
+         scene promotion: if the user passes --n-occluders, --n-targets
+         or --n-hidden with --goal holding and no explicit --scene, the
+         scene auto-promotes default -> scalability.  Validation errors
+         out on stack / non-scalability / n_occluders=0 combos; clamps
+         --n-hidden to --n-targets with a stderr warning.  run_config
+         logs n_hidden alongside existing params.
+
+       SceneConfig: new field n_hidden_targets (int, default 0).
+       scalability_scene() gains n_hidden: int = 0 and forwards it.
+
+       Placement (boxel_env._hidden_xy_positions):
+         Samples each hidden target just BEHIND a chosen occluder along
+         the camera->occluder shadow axis.  Physical-overlap clearance
+         is sized from the actual bodies (occ_half + target_half +
+         5 mm buffer) and checked against every occluder, not just the
+         biased one.  Then verifies with p.rayTestBatch: 8 rays from
+         camera to the 8 shrunk AABB corners of the prospective target.
+         Accepts only if every corner ray is intercepted by a
+         non-background body (the plane/table/robot are background).
+         Same 8-corner criterion as oracle_detect_objects, so the
+         hidden-at-spawn guarantee is self-consistent with the
+         downstream visibility check.
+
+       Contract: single-shot.  If _hidden_xy_positions exhausts its
+       400-candidate/slot budget, _create_targets raises RuntimeError
+       with an actionable message ("try --n-occluders higher,
+       --n-hidden lower, or a different --seed").  No silent fallback,
+       no retry loop (an earlier retry layer was removed because it
+       tore down and rebuilt the PyBullet GUI, exhausting WSLg's X
+       server on repeat attempts).  A post-spawn sanity check in
+       main() re-runs oracle_detect_objects() for logging only — "OK"
+       when the count is met, "warn" on rare physics-settling drift —
+       and does NOT trigger retries.
+
+       Smoke tests:
+         run_boxels                                        -> default scene, no promotion, OK
+         run_boxels --seed 0 --n-occluders 3 --n-targets 4 -> auto-promoted to scalability, no hidden guarantee, OK
+         run_boxels --seed 0 --n-occluders 3 --n-targets 4 --n-hidden 2
+           -> "Hidden-target guarantee OK: 2/4 hidden
+              (requested >= 2, seed=0)." then pipeline proceeds
+         Infeasible configs (e.g. n_hidden > n_occluders with crowded
+         table / seed) raise the RuntimeError instead of silently
+         producing a visible "hidden" target.
+
+Not done here (intentional):
+       The literal --random-scene flag (pick a preset uniformly at
+       random) was not implemented.  The broader parameterisation
+       above covers the underlying evaluation-diversity need; add the
+       flag later only if batch-eval scripting specifically wants it.
+
+
+================================================================================
+#30 (implementation debrief) — GOAL AS CLI PARAMETER, STACK GOAL IMPL
+                                                              [DONE 2026-04-24]
+================================================================================
+NOTE: this is the IMPLEMENTATION debrief for audit #30.  The perf
+keep/kill decision remains OPEN and stays inline in CODEBASE_AUDIT.txt
+as a trimmed stub (regression numbers, likely root cause, proposed
+split-pick mitigation).  What follows is the detailed "what was done"
+text moved here to shrink the open audit.
+
+Where:    test_full_pipeline.py (main, CLI), pddl/domain_pddlstream.pddl,
+          pddl/stream.pddl, streams.py, pddlstream_planner.py,
+          execution.py, boxel_env.py
+
+DONE 2026-04-24 (commit 0d5def7):
+       Added --goal {holding,stack}, --stack-height (>=2), --n-objects.
+       Domain: new (on ?o1 ?o2), (clear ?o), (stack_kin ?o ?on ?g ?q)
+       predicates; new stack action; conditional pick effect re-clears
+       the support; :conditional-effects requirement added.
+       Stream: compute-stack-kin reads ?on_obj's live AABB so multi-step
+       stacks tolerate per-step settling.
+       Planner: _build_init emits (clear/on) ONLY when stackable_objects
+       is supplied.  Holding-goal callers leave it None and pay zero
+       extra grounding cost on the init side.
+       Execution: execute_stack mirrors execute_place but resolves
+       destination from live support AABB (60-step settle vs 30).
+       Scene: stack_scene + constrain_to_reach intersects safe on-table
+       window (_SAFE_TABLE_*_RANGE = (0.05..0.70, -0.40..0.40)) with
+       Panda reach disk so cubes never spawn off-table.
+
+       Smoke tests:
+         --goal stack --stack-height 2 --no-gui --seed 0  -> 1 plan,
+           1.37 s, plan = move/pick/move/stack
+         --goal stack --stack-height 3 --no-gui --seed 0  -> 1 plan,
+           1.58 s, plan = move/pick/move/stack/move/pick/move/stack
+           (collision warnings during 2nd pick are runtime artifacts of
+           the conditional pick effect not telling execution that
+           red_object will fall once orange_object is picked from under
+           it; goal is still achieved correctly)
+         --goal stack --stack-height 2 --gui --seed 0  -> 1 plan,
+           1.17 s, identical plan
+
+Run-by-run timing summaries live in logs/run_<timestamp>/timing_summary.json
+(see commit fed063a for the instrumentation).
+
+
+================================================================================
+#33. REMOVE_BOXEL_VIZ USES O(N) LIST.REMOVE()  [DONE 2026-04-24]
+================================================================================
+Priority: TIER 3 — Performance (visualization)
+Where:    visualization.py (BoxelVisualizer.remove_boxel_viz, clear_all)
+Depends:  None
+Effort:   <1 day
+
+What:  remove_boxel_viz() called self.debug_items.remove(item_id) and
+       self.shadow_bodies.remove(body_id), both O(n) per call.  With
+       many boxels, incremental removal accumulated quadratic cost
+       across reboxelization bursts.
+
+Fix:   DONE 2026-04-24.  Converted BoxelVisualizer.debug_items and
+       BoxelVisualizer.shadow_bodies from List[int] to Set[int].
+       remove_boxel_viz() now uses set.discard() (single O(1) call,
+       no-op if missing — matches the previous `if x in s: s.remove(x)`
+       semantics).  `.append()` call sites switched to `.add()`;
+       `= []` resets switched to `.clear()`.  No external API change —
+       no consumer outside visualization.py touches these attributes.
+
+
+================================================================================
+#39. PICK DOES NOT REQUIRE (CLEAR ?O) — STACK-BASE PICK TOPPLES TOWER SILENTLY
+                                                              [DONE 2026-04-26]
+================================================================================
+Priority: TIER 0 — Correctness bug for --goal stack runs
+Where:    pddl/domain_pddlstream.pddl (:action pick ~line 188),
+          pddlstream_planner.py (_build_init — clear init for
+          stackable_objects, ~line 490-495)
+Depends:  None (but fix interacts with #30 "split pick + unstack"
+          mitigation — coordinate before committing)
+Effort:   ~0.5 day (precondition addition + holding-goal gating)
+
+DONE 2026-04-26:
+       (a) Added (clear ?o) to pick's precondition in
+           pddl/domain_pddlstream.pddl (:action pick).
+       (b) Lifted the `if stackable_objects is not None:` gate around
+           (clear X) emission in pddlstream_planner._build_init — the
+           fact is now emitted for every Obj unconditionally, using a
+           set comprehension over the already-populated Obj atoms to
+           avoid duplicates when a target has an OBJECT boxel.  The
+           (on ?o ?x) init facts remain gated behind stackable_objects
+           since holding-goal runs never reference them.  Docstring for
+           create_problem updated; comment block at the init-emission
+           site explains the new split.
+       (c) Forward-compatible with #30 split-pick mitigation: plain
+           pick gets (clear ?o) either way, so no later coordination
+           work is required.  The forall (when (on ?o ?x) ...) effect
+           and the stack action's (clear ?o) effect are unchanged.
+
+       Not done (out of scope for #39):
+         - Physics verifier for post-execution goal check (see #40).
+           Even with (clear ?o) enforced, settling drift or grasp slip
+           can still yield symbolic-vs-physical desync.
+
+What:  The pick action's preconditions do not include (clear ?o).
+       When a tower A-on-B-on-C-on-table exists and pick is invoked
+       on B or C, all preconditions remain satisfied: (obj_at_boxel
+       B B) is still true (the tower doesn't symbolically move B's
+       boxel); (handempty), (at_config ?q), and (kin_solution ...)
+       are independent of whether something is stacked on B.  The
+       forall (when (on ?o ?x) (and (not (on ?o ?x)) (clear ?x)))
+       only handles objects ?o was RESTING ON — it does not handle
+       objects resting ON ?o.
+
+       Observed failure (run 2026-04-26_11-11-08, --goal stack
+       --stack-height 5, seed 0):
+
+         Plan step 10: pick cyan  — cyan had red-on-orange stacked
+                                    on top.  Symbolic: succeeds.
+                                    Physical: orange+red tower
+                                    collapses onto the table.
+         Plan step 14: pick blue  — blue had cyan stacked on top by
+                                    then.  Same bug, again.
+
+         Execution log shows 13+ "COLLISION [...]" warnings during
+         the subsequent move and stack steps (the robot drags
+         through the fallen cubes), yet the run terminates with
+         SUCCESS because the final SYMBOLIC state matches the goal
+         (see #40 — the success check is symbolic, not physical).
+         Physically 3 of 4 (on ...) goal clauses were violated.
+
+Related: #30 (stack action that introduced stacking; conditional
+              effect and split-pick mitigation decisions),
+         #40 (false-success — downstream consequence; independent
+              fix recommended because other physics/symbolic
+              desyncs can also produce false-success),
+         #42 (collisions during execution not propagated to
+              replan — also surfaced by this bug's run).
+
+
+================================================================================
+#43. PLACE DROPS OBJECTS OFF TABLE EDGE — on_surface UNAWARE OF XY FOOTPRINT
+                                                              [DONE 2026-04-26]
+================================================================================
+Priority: TIER 0 — Correctness bug (objects placed off-table fall to the floor)
+Where:    boxel_env.py (annotate_free_space_surface, ~line 1015)
+Depends:  None
+Effort:   <0.5 day
+
+DONE 2026-04-26:
+       annotate_free_space_surface() now gates (on_surface ?b) on BOTH:
+         (a) the boxel's bottom being at table_z (pre-existing test), AND
+         (b) the boxel's XY CENTRE lying within _SAFE_TABLE_*_RANGE —
+             the same window used by _random_xy_positions for spawning
+             (intersection of physical table mesh and Panda reach disk).
+       The logical voxel grid (table_x_range = (-0.4, 0.6)) stays wide
+       for shadow/sensing coverage of the near field; only the place
+       destination set shrinks to the safe on-table footprint.  Free
+       boxels at x<0.05 (behind/under the robot) now keep on_surface=None
+       and the planner cannot choose them for place, so the place
+       action's precondition rejects them during grounding.  No PDDL
+       surface change; no stream change; reboxelization re-runs the
+       same helper on post-place fragments so split slivers near the
+       edge are classified consistently.
+
+What:  Free boxels were generated across the full LOGICAL workspace
+       (table_x_range = (-0.4, 0.6), (-0.5, 0.5)) which is WIDER than
+       the physical table mesh (centred at [0.5, 0], footprint roughly
+       x in [0, 1]).  The wider grid exists so shadow volumes cover
+       the near-field behind/near the robot (see boxel_env.py:502-506
+       comment).
+
+       (on_surface ?b) was set purely on Z height, with no XY footprint
+       check.  Free boxels at x in [-0.4, 0.05) therefore advertised
+       themselves as "on the table" even though their centres are off
+       the physical table mesh (behind/under the robot, past the near
+       edge).
+
+       The place precondition (on_surface ?b) + (boxel_fits ?o ?b)
+       accepted those boxels; execute_place (execution.py ~line 525)
+       uses boxel.center as the XY release target, so the object was
+       released over empty air and fell to the plane.
+
+       Observed 2026-04-26 (screenshots + run_2026-04-26_14-56-55,
+       run_2026-04-26_14-57-49): objects placed ~10-25 cm in front of
+       the robot base, falling off the near table edge onto the floor.
+
+Consistency notes:
+       - Reboxelization after place calls annotate_free_space_surface
+         on new fragments -> edge slivers get on_surface=None
+         consistently with initial scan.
+       - boxel_fits is unchanged (still a size-only test).
+       - Stack action unaffected: execute_stack uses another object's
+         AABB top, never a free boxel.
+       - Tight scenes (many occluders + shadows) may see the
+         placement set shrink; those same scenes would also struggle
+         to spawn via _random_xy_positions (same window), so the
+         failure mode is consistent across spawn and place.
+
+Related: #4 (post-action re-boxelization — fragments near the edge
+              now correctly classified via same helper),
+         #30 (stack action — unaffected; stack targets object boxels,
+              not free boxels),
+         #39/#40 (separate physics/symbolic desync bugs; this one
+                  was strictly about a missing XY edge check),
+         #44 (follow-up — narrow FreeSpaceGenerator workspace so free
+              boxels themselves don't overhang the table edge).
+
+
+================================================================================
+#44. FREE BOXELS OVERHANG TABLE EDGE — FreeSpaceGenerator USED LOGICAL GRID
+                                                              [DONE 2026-04-26]
+================================================================================
+Priority: TIER 0 — Follow-up to #43 (same 2026-04-26 root cause)
+Where:    boxel_env.py (free_space_generator construction, ~line 449)
+Depends:  #43 [DONE] — place-side gate in place
+Effort:   <0.5 day
+
+DONE 2026-04-26:
+       boxel_env.py constructs FreeSpaceGenerator with XY bounds equal
+       to _SAFE_TABLE_X_RANGE / _SAFE_TABLE_Y_RANGE (the same window
+       used for spawning and by annotate_free_space_surface in #43).
+       ShadowCalculator still receives the wider self.table_*_range so
+       near-field shadow volumes behind occluders stay covered.
+       annotate_free_space_surface's XY check (from #43) remains as
+       defence-in-depth: it is now effectively a no-op for generator
+       output but protects against future regressions if the generator
+       ever receives a wider range.
+
+What:  Audit #43 gated (on_surface ?b) on the boxel centre lying
+       inside the safe placement window.  This fixed the PLACEMENT
+       bug (objects no longer drop off the near edge), but the free
+       boxels themselves were still generated across the full LOGICAL
+       voxel grid (table_x_range = (-0.4, 0.6), (-0.5, 0.5)) —
+       including the strip x in [-0.4, 0.05) that is behind or under
+       the robot base and entirely off the physical table mesh.
+
+       Observed 2026-04-26 (screenshot after #43 fix): free-boxel
+       wireframes clearly overhang the near table edge.  The planner
+       cannot place there (thanks to #43), but the generator is
+       producing ghost cells that waste boxel IDs, clutter the visual
+       partition, and semantically misrepresent "free space above the
+       table" as including air past the edge.
+
+Consistency notes (same as #43's follow-ups, tightened):
+       - Shadow vs. free asymmetry is now deliberate: shadows may
+         extend into x in [-0.4, 0.05] while no free boxel lives
+         there.  This is correct: that strip isn't "known-empty AND
+         supportable"; it's just hidden air behind the occluders.
+       - reboxelize_free_space uses env.generate_free_space, which
+         goes through the same narrowed generator — post-action
+         splits and rebuilds stay inside the safe window.
+       - split_free_boxel produces fragments that are subsets of the
+         already-narrow free boxel — no fragment can escape the safe
+         window.
+       - Hidden-target spawn in _hidden_xy_positions still clamps to
+         self.table_x_range (unrelated to free-space generation).
+       - Root octree extent shrinks from 1.0x1.0 to 0.65x0.80 in XY
+         (Z unchanged); with min_resolution 0.035 m, depth is
+         unchanged in practice.  Max free-boxel size decreases,
+         giving finer placement granularity.
+
+Related: #43 (placement gate — depends on this shared _SAFE_TABLE
+              window definition),
+         #4 (reboxelization — affected generator is the same one),
+         shadow_calculator.py (intentionally untouched — keeps wider
+              grid for near-field shadow coverage).

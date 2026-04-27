@@ -674,3 +674,183 @@ ACTION ITEMS FROM MEETING (captured as open issues in CODEBASE_AUDIT.txt)
       is an intended capability.
   [ ] Consider Approach 2 (PDDL-level merge/split with active boxels) as
       future work / comparison baseline if time permits.
+
+================================================================================
+Archived: 2026-04-27 (moved from CODEBASE_AUDIT.txt: #37, #38.  Both are low-
+         priority "aesthetic / 1:1 PDDL-execution mapping" issues; current
+         code is correct, constraint grasp absorbs EE/object misalignment,
+         and many proposed refactors were already debated and rejected.
+         Relocated to the deferred file to slim the open audit.)
+================================================================================
+
+
+================================================================================
+#37. EXECUTE_PICK STILL RE-SOLVES IK INSTEAD OF USING PLANNER'S q
+================================================================================
+Priority: TIER 3 — Very low.  Long debate, no agreed conclusion.
+Where:    streams.py (compute_kin_solution, _GRASP_Z_OFFSETS),
+          execution.py (execute_pick, execute_place),
+          test_full_pipeline.py (pick/place dispatch handlers),
+          pddl/stream.pddl, pddl/domain_pddlstream.pddl
+Depends:  None (orthogonal to all other open issues)
+Effort:   Unknown — depends on which design wins.
+
+WARNING TO FUTURE AI SESSIONS:
+       This was discussed at length on 2026-04-22.  Many proposed
+       refactors were rejected after design review.  Re-read this entry
+       BEFORE proposing yet another redesign.  Specifically, the
+       following ideas were considered AND REJECTED (see "Rejected
+       directions" below); do not reintroduce them without new
+       evidence:
+         - Boxelizing the target after found_target sense outcome.
+         - A `get-object-pose(?o)` PDDLStream stream that yields live
+           env.objects poses.
+         - An `observed_objects: Set[str]` gate inside BoxelStreams.
+         - Restructuring pick into (?o ?b ?g ?p ?q1 ?q2 ?t) to mirror
+           the move action.
+
+What:  compute_kin_solution returns a config q solved against
+       boxel.center + grasp.position (with grasp.position[2] = 0.10 m,
+       i.e. the APPROACH pose, 10 cm above the boxel center).  The
+       planned `move` action delivers the arm to q.  execute_pick then
+       IGNORES q and locally re-solves IK for the actual contact pose
+       using env.objects[obj_name].position.  The same applies to
+       execute_place.  This duplicates work already done by the
+       planner and bypasses plan_motion's collision checks for the
+       lowering segment.
+
+       The 2026-04-22 series of refactor steps (1, 2 — completed)
+       removed the post-grasp lift and the redundant pre-contact
+       approach motion.  Step 5 was meant to remove the local IK
+       lowering as well, by changing _GRASP_Z_OFFSETS so that q
+       targets the contact point directly.  This step was DEFERRED
+       because of the gripper-state-during-move concern (see below).
+
+Rejected directions (do not re-propose):
+
+  (1) Boxelize the discovered target on found_target.
+      Asymmetry between `contains_nontarget` (creates OBJECT + SHADOW
+      boxels for newly-discovered non-targets) and `found_target`
+      (no registry change, just belief.mark_sensed) is INTENTIONAL.
+      Non-targets become future obstacles the planner must reason
+      about; targets are about to be picked and removed.  Creating a
+      registry entry just to delete it one action later is wasteful
+      and would force an extra replan cycle.  The pick handler's
+      `elif obj_str == target_name:` branch (test_full_pipeline.py
+      ~line 797) reads env.objects[target].position directly — this
+      is the ACCEPTED design.
+
+  (2) New `get-object-pose(?o)` stream that yields live env.objects
+      poses for use in compute-kin.  Rejected because compute-kin
+      already uses boxel.center, which is the correct abstraction
+      under the "trust boxel data freshness" assumption (see open
+      sub-issue below).  Reading env.objects from a stream would be
+      planning-time cheating: the planner would have access to
+      ground-truth positions of objects independent of what it has
+      observed.
+
+  (3) `observed_objects: Set[str]` partial-observability gate inside
+      BoxelStreams.  Unnecessary because registry membership already
+      gates compute-kin: hidden objects without OBJECT boxels cannot
+      be IK targets, so the gate is implicit in the data structure.
+
+  (4) Restructure pick to (?o ?b ?g ?p ?q1 ?q2 ?t) mirroring move.
+      Discussed but not pursued — too large a PDDL surgery for
+      the value gained, and the cleaner formulation depends on
+      decisions about place semantics (single compute-kin variant
+      vs. two, boxel-as-pose coercion) that were not resolved.
+
+Tentatively agreed but NOT implemented (option 5a):
+
+  (a) Set _GRASP_Z_OFFSETS = [0.02] (was [0.10]).  q now targets a
+      point 2 cm above the object — close enough that the lowering
+      segment can be a fixed linear interpolation rather than a
+      separate IK call.
+  (b) Replace the local solve_ik() call in execute_pick with a
+      simple 2 cm joint-space lower from the current pose, using
+      cached IK seeds or Cartesian linear interpolation.
+  (c) Same change to execute_place.
+  (d) Open question: gripper state during the planned move.  With
+      offset 0 the arm arrives at contact with whatever gripper
+      state it had — if closed, it would push the object during
+      the trajectory; if opened at contact, fingers spread inside
+      the object.  Two unresolved options:
+        (i) Keep small clearance (option 5a above, 2 cm) so opening
+            at the end of move is safe.
+        (ii) Pre-emptively open the gripper in the dispatcher when
+             the next planned action is `pick`, so the arm arrives
+             at contact already open.
+
+Sub-issue (related, also unresolved): boxel data staleness.
+       compute_kin_solution assumes boxel.center is current.  After
+       an object settles in physics, drifts, or is moved by a
+       previous plan iteration, the OBJECT boxel's center may be
+       stale until the next reboxelization.  Currently we accept this
+       drift; if it causes pick failures, add a periodic re-AABB
+       sync between actions (cheap p.getAABB() per OBJECT boxel,
+       no full reboxelization).  Not tracked as a separate audit
+       item — bundled here.
+
+Why this is low priority:  the current code works.  The local IK
+       in execute_pick gives correct contact poses, and the
+       constraint-based grasp absorbs small EE/object misalignment
+       (audit #1 / #98).  The refactor is an aesthetics + 1:1
+       PDDL-execution-mapping concern, not a correctness one.  Visit
+       only when there is a concrete reason (e.g. planning with a
+       different motion planner, or extending to a goal that requires
+       multiple consecutive pick/place chains).
+
+Related: execution.py refactor 2026-04-22 steps 1 & 2,
+         audit #1 (RESOLVED, archive — contact-height fix),
+         audit #36 (holding goal terminates at contact)
+
+
+================================================================================
+#38. EXECUTE_STACK RE-SOLVES IK — SAME ANTI-PATTERN AS #37
+================================================================================
+Priority: TIER 3 — Very low.  Tracked separately for visibility; any fix
+          MUST be coordinated with #37 (pick/place IK re-solve).
+Where:    execution.py (execute_stack, ~line 565, solve_ik call ~line 639),
+          streams.py (compute_stack_kin),
+          pddl/stream.pddl (compute-stack-kin stream, ~line 35),
+          pddl/domain_pddlstream.pddl (stack action)
+Depends:  #37 (same design decisions apply — do not fix in isolation)
+Effort:   Trivial once #37 is resolved; do not touch before then.
+
+What:  The stack action added in audit #30 (commit 0d5def7, 2026-04-24)
+       reproduces the same "planning-time cheating" pattern as #37.
+
+       The PDDL layer produces a config ?q via the compute-stack-kin
+       stream (pddl/stream.pddl line 35), certifying
+       (stack_kin ?o ?on_obj ?g ?q) against the support's CURRENT
+       AABB top.  The planned `move` delivers the arm to ?q.
+
+       execute_stack (execution.py:565) then IGNORES ?q and re-solves
+       IK locally from env.objects[on_obj].position + held-object
+       half-height + live EE->object Z offset (solve_ik call at
+       execution.py:639).  The in-code docstring at execution.py
+       lines 586-589 already flags this as an "audit #37 dependency":
+
+         "like execute_pick / execute_place, this helper re-solves IK
+          locally instead of using the planner's q.  If that audit is
+          ever resolved, this routine must be updated alongside
+          execute_pick/place to follow the same convention."
+
+       This audit entry (#38) exists so the linkage is visible in the
+       issue tracker, not just in code.  All design discussion lives
+       in #37 — "Rejected directions", "Tentatively agreed 5a", and
+       the sub-issue on boxel data staleness apply identically here.
+
+Fix:   When #37 is resolved, update execute_stack in the same commit
+       using the same convention (use planner's ?q; optionally a small
+       fixed Cartesian lowering if _GRASP_Z_OFFSETS keeps a clearance).
+       Do NOT touch execute_stack before #37 — the three executors
+       must keep a consistent contract.
+
+Why this is low priority:  same reasoning as #37 — current code works,
+       constraint-based grasp absorbs small EE/object misalignment,
+       and the 1:1 PDDL-execution-mapping gain is aesthetic.
+
+Related: #37 (pick/place IK re-solve — parent issue),
+         #30 (stack action that introduced this pattern),
+         execution.py:586-589 (in-code link comment)
