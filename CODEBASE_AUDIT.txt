@@ -2,39 +2,21 @@
 CODEBASE AUDIT — OPEN ISSUES
 ================================================================================
 Date: 2026-02-25 (original audit, merged from 3 audit passes)
-Restructured: 2026-03-24 — open issues renumbered #1-#13 in priority order.
-Slimmed:      2026-04-24 — moved RESOLVED inline entries (#3, #24, #25, #26,
-              #27, #28, #35) and the pre-2026-04-22 changelog journal to
+Restructured: 2026-03-24 — open issues renumbered in priority order.
+Slimmed:      2026-04-24 — moved older RESOLVED inline entries (#3, #24, #25,
+              #26, #27, #28, #35) and the pre-2026-04-22 changelog journal to
               archive/CODEBASE_AUDIT_RESOLVED.txt.
+Slimmed:      2026-04-27 — moved #29, #33, #39, #43, #44 (fully DONE) and the
+              #30 implementation debrief to archive/CODEBASE_AUDIT_RESOLVED.txt;
+              moved #37, #38 (low-priority deferred) to
+              archive/CODEBASE_AUDIT_DEFERRED.txt.  Collapsed the old
+              "META-ISSUE DISSOLUTION" block (old #95) into a one-line note
+              in the policy section — all four drift channels now live as
+              individual resolved/open entries.  Merged two overlapping
+              boxel_fits / static-init policy blocks.
 
-Open issues currently tracked here are listed in the SUMMARY at the bottom
-of this file.  All resolved/subsumed items live in the archive (with their
-full original text and resolution notes).  Deferred items (e.g. #2 full
-boxel merge) live in archive/CODEBASE_AUDIT_DEFERRED.txt.
-
-Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
+Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
-
-================================================================================
-META-ISSUE DISSOLUTION: old #95 (Systemic PDDL State Drift)
-================================================================================
-Old #95 described 4 drift channels between PDDL symbolic state and
-PyBullet physical state.  Not independently fixable — each channel is
-addressed by a specific issue:
-
-  (a) Robot config drift after pick/place:
-      old #86 [DONE], old #62 [ACCEPTED], old #7/#8 subsumed by audit #1
-      [RESOLVED 2026-04-16 — contact-height fix; see archive]
-  (b) Hidden move in sense:
-      #3 [RESOLVED 2026-04-24 — dead retract removed; see archive.
-         PDDL still does not constrain robot pose during sense, but the
-         executor performs no motion there, so no live drift.]
-  (c) Stale shadow geometry after occluder relocation:
-      old #44 [ACCEPTED], #4 [OPEN]
-  (d) Stale blocks_view_at facts:
-      old #73 [DONE]
-
-When #4 is complete, all practical drift channels are addressed.
 
 ================================================================================
 CODEBASE POLICY
@@ -84,34 +66,35 @@ WSL VIRTUAL ENVIRONMENT — DO NOT DELETE
        Deleting it breaks the entire pipeline.
        Recreate: python3 -m venv wsl_env && pip install numpy pybullet
 
-STATIC GEOMETRY IN INIT (e.g. boxel_fits) — NOW REBUILT EACH REPLAN
+BOXEL_FITS / STATIC INIT FACTS — REBUILT EACH REPLAN (old #102)
        Predicates such as (boxel_fits ?o ?b) are precomputed in
        pddlstream_planner._build_init() from the current BoxelRegistry
-       snapshot (old #102).  They are valid only for that partition and
-       geometry for one planning problem.
+       snapshot.  Not a PDDLStream test stream — an earlier implementation
+       used one (test-boxel-fits), but adaptive search re-evaluated it
+       heavily across skeletons and dominated runtime despite a cheap
+       per-call check.  stream.pddl no longer declares that stream; domain
+       and predicate are unchanged.  As of 2026-04-15, free-space boxels
+       ARE re-merged and re-split between replans (reboxelize_free_space
+       after sense); the registry is mutated in place before each
+       planner.plan() call, and shadow removal / new object creation after
+       sense also update the registry.  The planner is stateless between
+       calls — all context is passed in each plan() call.
 
-       As of 2026-04-15, free-space boxels ARE re-merged and re-split
-       between replans (reboxelize_free_space after sense).  The registry
-       is mutated in place before each planner.plan() call, so
-       _build_init() always reads the latest partition.  Shadow removal
-       and new object/shadow creation after sense also update the
-       registry before the next replan.  The planner is stateless
-       between calls — all context is passed in each plan() call.
-
-BOXEL_FITS (old #102) — STATIC INIT, NOT A TEST STREAM
-       The place precondition (boxel_fits ?o ?b) is satisfied by init facts
-       only.  BoxelStreams.test_boxel_fits() runs once per problem in
-       _build_init() for each (object, free_space) pair that geometrically
-       fits.  An earlier implementation used a PDDLStream test stream
-       (test-boxel-fits); adaptive search re-evaluated it heavily across
-       skeletons and dominated runtime despite a cheap per-call check.
-       stream.pddl no longer declares that stream; domain and predicate are
-       unchanged.
+META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
+       The 4 drift channels between PDDL symbolic state and PyBullet
+       physical state are tracked individually: (a) robot config drift
+       after pick/place — closed by audit #1 [RESOLVED, archive];
+       (b) hidden move in sense — audit #3 [RESOLVED, archive];
+       (c) stale shadow geometry after occluder relocation — audit #4
+       [OPEN, partial — shadow recompute remaining]; (d) stale
+       blocks_view_at facts — old #73 [DONE, archive].  When #4 is
+       complete, all practical drift channels are addressed.
 
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #4(partial), #6, #9–#14, #21, #29–#32, #34, #36–#42         #
+#  OPEN ISSUES — #4(partial), #6, #9–#14, #21, #30(perf-open), #31, #32,     #
+#                #34, #36, #40, #41, #42                                      #
 #                                                                              #
 ################################################################################
 
@@ -431,107 +414,22 @@ Related: #5 (placement re-blocks cleared corridor), #4 (stale world model),
 
 
 ================================================================================
-#29. SCENE PARAMETERS ON THE CLI + HIDDEN-TARGET GUARANTEE  [DONE 2026-04-26]
-================================================================================
-Priority: TIER 3 — Evaluation infrastructure
-Where:    test_full_pipeline.py (CLI, __main__), boxel_env.py
-          (scalability_scene, SceneConfig, _hidden_xy_positions,
-          _create_targets)
-Depends:  None
-Effort:   <1 day
-
-What:  Originally scoped as a --random-scene flag.  Reframed during
-       implementation into a broader need: per-goal scene
-       parameterisation from the CLI (object counts, hidden-target
-       counts) with a hard guarantee that targets marked "hidden"
-       really are invisible from the camera at spawn time — not just
-       statistically occluded by RNG.
-
-Fix:   DONE 2026-04-26.
-       CLI (test_full_pipeline.py):
-         --n-hidden N added (holding + scalability only).  Implicit
-         scene promotion: if the user passes --n-occluders, --n-targets
-         or --n-hidden with --goal holding and no explicit --scene, the
-         scene auto-promotes default → scalability.  Validation errors
-         out on stack / non-scalability / n_occluders=0 combos; clamps
-         --n-hidden to --n-targets with a stderr warning.  run_config
-         logs n_hidden alongside existing params.
-
-       SceneConfig: new field n_hidden_targets (int, default 0).
-       scalability_scene() gains n_hidden: int = 0 and forwards it.
-
-       Placement (boxel_env._hidden_xy_positions):
-         Samples each hidden target just BEHIND a chosen occluder along
-         the camera→occluder shadow axis.  Physical-overlap clearance
-         is sized from the actual bodies (occ_half + target_half +
-         5 mm buffer) and checked against every occluder, not just the
-         biased one.  Then verifies with p.rayTestBatch: 8 rays from
-         camera to the 8 shrunk AABB corners of the prospective target.
-         Accepts only if every corner ray is intercepted by a
-         non-background body (the plane/table/robot are background).
-         Same 8-corner criterion as oracle_detect_objects, so the
-         hidden-at-spawn guarantee is self-consistent with the
-         downstream visibility check.
-
-       Contract: single-shot.  If _hidden_xy_positions exhausts its
-       400-candidate/slot budget, _create_targets raises RuntimeError
-       with an actionable message ("try --n-occluders higher,
-       --n-hidden lower, or a different --seed").  No silent fallback,
-       no retry loop (an earlier retry layer was removed because it
-       tore down and rebuilt the PyBullet GUI, exhausting WSLg's X
-       server on repeat attempts).  A post-spawn sanity check in
-       main() re-runs oracle_detect_objects() for logging only — "OK"
-       when the count is met, "warn" on rare physics-settling drift —
-       and does NOT trigger retries.
-
-       Smoke tests:
-         run_boxels                                        → default scene, no promotion, OK
-         run_boxels --seed 0 --n-occluders 3 --n-targets 4 → auto-promoted to scalability, no hidden guarantee, OK
-         run_boxels --seed 0 --n-occluders 3 --n-targets 4 --n-hidden 2
-           → "Hidden-target guarantee OK: 2/4 hidden
-             (requested >= 2, seed=0)." then pipeline proceeds ✓
-         Infeasible configs (e.g. n_hidden > n_occluders with crowded
-         table / seed) raise the RuntimeError instead of silently
-         producing a visible "hidden" target.
-
-Not done here (intentional):
-       The literal --random-scene flag (pick a preset uniformly at
-       random) was not implemented.  The broader parameterisation
-       above covers the underlying evaluation-diversity need; add the
-       flag later only if batch-eval scripting specifically wants it.
-
-
-================================================================================
-#30. GOAL AS CLI PARAMETER — STACK GOAL ADDED, PERF DECISION OPEN [PARTIAL 2026-04-24]
+#30. STACK GOAL PERF REGRESSION — KEEP/KILL OPEN  [PARTIAL 2026-04-24]
 ================================================================================
 Priority: TIER 3 — Evaluation infrastructure / extensibility
-Where:    test_full_pipeline.py (main, CLI), pddl/domain_pddlstream.pddl,
-          pddl/stream.pddl, streams.py, pddlstream_planner.py,
-          execution.py, boxel_env.py
-Depends:  None
-Effort:   IMPLEMENTED 2026-04-24 (commit 0d5def7); keep/kill decision
-          pending mitigation experiment (split pick + unstack)
+Where:    pddl/domain_pddlstream.pddl (pick conditional effect,
+          :conditional-effects requirement)
+Depends:  None (stack feature shipped in commit 0d5def7)
+Effort:   Keep/kill decision pending mitigation experiment
 
-What:  The goal was hardcoded as ('holding', target_name).  It should
-       be passable as a CLI parameter (like --show-free), with stacking
-       (('on', obj_a, obj_b) and conjunctions) as a first additional
-       goal kind.
+Stack-goal implementation (--goal {holding,stack}, --stack-height,
+--n-objects, domain/stream/execution wiring, scene clamping to the
+Panda reach disk) was DONE 2026-04-24 (commit 0d5def7).  Full
+implementation debrief and smoke-test transcripts are in
+archive/CODEBASE_AUDIT_RESOLVED.txt.
 
-DONE 2026-04-24 (commit 0d5def7):
-       Added --goal {holding,stack}, --stack-height (>=2), --n-objects.
-       Domain: new (on ?o1 ?o2), (clear ?o), (stack_kin ?o ?on ?g ?q)
-       predicates; new stack action; conditional pick effect re-clears
-       the support; :conditional-effects requirement added.
-       Stream: compute-stack-kin reads ?on_obj's live AABB so multi-step
-       stacks tolerate per-step settling.
-       Planner: _build_init emits (clear/on) ONLY when stackable_objects
-       is supplied.  Holding-goal callers leave it None and pay zero
-       extra grounding cost on the init side.
-       Execution: execute_stack mirrors execute_place but resolves
-       destination from live support AABB (60-step settle vs 30).
-       Scene: stack_scene + constrain_to_reach intersects safe on-table
-       window (_SAFE_TABLE_*_RANGE = (0.05..0.70, -0.40..0.40)) with
-       Panda reach disk so cubes never spawn off-table.
+OPEN PROBLEM: the stack feature DOUBLES holding-goal per-call planning
+time on the same scene/seed, even though init facts are gated.
 
        Smoke tests:
          --goal stack --stack-height 2 --no-gui --seed 0  → 1 plan,
@@ -544,19 +442,10 @@ DONE 2026-04-24 (commit 0d5def7):
            it; goal is still achieved correctly)
          --goal stack --stack-height 2 --gui --seed 0  → 1 plan,
            1.17 s, identical plan ✓
+           
+  Baseline (pre-stack, commit fed063a), default scene, no-GUI:
+    seeds 0-3 aggregate (15 calls): 4.63 s/call.
 
-PERFORMANCE PROBLEM (audit #30 keep/kill measurement):
-       Even though init facts are gated, the holding-goal per-call
-       planning time roughly DOUBLES on the same scene/seed:
-
-         Baseline (commit fed063a, pre-stack), default scene, no-GUI:
-           seed 0  → 5 plans, 20.97s,  4.19 s/plan
-           seed 1  → 7 plans, 37.77s,  5.40 s/plan
-           seed 2  → 1 plan,   4.68s,  4.68 s/plan
-           seed 3  → 2 plans,  6.06s,  3.03 s/plan
-           Aggregate (15 calls): 4.63 s/call
-         GUI variant (seed 2):  13 plans, 58.98s, 4.54 s/plan
-           → confirms RenderingLock isolates plan() from GUI overhead.
 
          After stack feature (commit 0d5def7), default scene, holding:
            no-GUI seed 0 → 3 plans, 31.83s, 10.61 s/plan  (+153%)
@@ -574,7 +463,14 @@ PERFORMANCE PROBLEM (audit #30 keep/kill measurement):
        Run-by-run timing summaries live in
          logs/run_<timestamp>/timing_summary.json
        (see commit fed063a for the instrumentation).
-
+  After stack (commit 0d5def7), default scene, holding goal:
+    no-GUI seed 0 → 10.61 s/plan  (+153%)
+    GUI    seed 0 →  7.88 s/plan  (+88%)
+    GUI    seed 0 →  8.36 s/plan  (+99%)
+    Three independent runs: 7.9–10.6 s/call vs 4.2 s/call.  Consistent
+    ~2x per-call slowdown.  Way past the 10% budget the user accepted
+    before starting.  Run timings live in
+    logs/run_<timestamp>/timing_summary.json (commit fed063a).
 LIKELY ROOT CAUSE:
        The conditional pick effect
 
@@ -582,38 +478,34 @@ LIKELY ROOT CAUSE:
            (when (on ?o ?x)
              (and (not (on ?o ?x)) (clear ?x))))
 
-       grounds against every (Obj ?x) for every pick instantiation,
-       regardless of whether (on ?o ?x) is ever asserted.  Combined
-       with the :conditional-effects requirement (which switches
-       FastDownward to a slower translator path), this is the most
-       likely source of the ~2x per-call slowdown.  Init-side gating
-       does not help because the cost is in the domain grounder.
+       grounds against every (Obj ?x) per pick instantiation, and the
+       :conditional-effects requirement switches FastDownward to a
+       slower translator path.  Init-side gating does not help — cost
+       is in the domain grounder.
 
 PROPOSED MITIGATION (NOT YET TRIED — needs user approval):
        Split pick into pick + unstack:
-         - Remove the forall from pick.
-         - Drop :conditional-effects from the requirements list.
-         - Add a separate (:action unstack) with precondition
-           (on ?o ?support) and effect that adds (clear ?support).
-         - Both pick and unstack map to the same execute_pick routine
-           in the dispatcher (symbolically different, physically same).
-       Holding-goal runs would then never see (on ?o ?x), the
-       grounder would discard unstack early, and the domain shape for
-       holding goals would be effectively identical to pre-stack.
+         - Remove the forall from pick; drop :conditional-effects.
+         - Add (:action unstack) with precondition (on ?o ?support)
+           that emits (clear ?support) as effect.
+         - Both map to the same execute_pick routine.
+       Holding-goal runs would then never see (on ?o ?x); the grounder
+       would discard unstack early.  Forward-compatible with #39 (DONE
+       2026-04-26): plain pick already gets (clear ?o) either way.
 
-KEEP / KILL OPEN QUESTIONS:
-       - Will the split-pick mitigation recover holding-goal perf to
-         within 10% of the pre-stack baseline?  Needs measurement.
-       - If not, do we accept ~2x per-call slowdown for the sake of
-         supporting stacking goals in evaluation runs (audit #9)?
-       - Or revert commit 0d5def7 and revisit later when we have a
-         contingent planner / different domain encoding that avoids
-         the conditional-effects cost?
+KEEP / KILL OPEN:
+       - Does split-pick recover holding-goal perf to within 10%?
+         (needs measurement)
+       - If not, accept ~2x slowdown for stacking support (audit #9)?
+       - Or revert commit 0d5def7 and revisit with a different domain
+         encoding that avoids the conditional-effects cost?
 
-Related: #9 (evaluation needs both 'holding' and 'stack' goal kinds for
-         baseline comparisons), #36 (holding goal terminates at contact
-         — stack goal is a natural extension that already implies an
-         upright lift via the next move).
+Related: #9 (evaluation needs both 'holding' and 'stack' goal kinds),
+         #36 (holding goal terminates at contact — upright lift is a
+         natural next extension),
+         #39 [DONE 2026-04-26, archive] (pick precondition (clear ?o)
+         is forward-compatible with split-pick),
+         archive/CODEBASE_AUDIT_RESOLVED.txt (implementation debrief).
 
 
 ================================================================================
@@ -656,28 +548,6 @@ What:  Originally cited example: streams.py said "Yield one grasp per
 
 Fix:   Codebase-wide sweep for comment/code drift.  Cited streams.py
        case is already resolved.
-
-
-================================================================================
-#33. REMOVE_BOXEL_VIZ USES O(N) LIST.REMOVE()  [DONE 2026-04-24]
-================================================================================
-Priority: TIER 3 — Performance (visualization)
-Where:    visualization.py (BoxelVisualizer.remove_boxel_viz, clear_all)
-Depends:  None
-Effort:   <1 day
-
-What:  remove_boxel_viz() called self.debug_items.remove(item_id) and
-       self.shadow_bodies.remove(body_id), both O(n) per call.  With
-       many boxels, incremental removal accumulated quadratic cost
-       across reboxelization bursts.
-
-Fix:   DONE 2026-04-24.  Converted BoxelVisualizer.debug_items and
-       BoxelVisualizer.shadow_bodies from List[int] to Set[int].
-       remove_boxel_viz() now uses set.discard() (single O(1) call,
-       no-op if missing — matches the previous `if x in s: s.remove(x)`
-       semantics).  `.append()` call sites switched to `.add()`;
-       `= []` resets switched to `.clear()`.  No external API change —
-       no consumer outside visualization.py touches these attributes.
 
 
 ================================================================================
@@ -749,271 +619,6 @@ Fix:   ONE COMMIT:
        --goal holding-upright (new).
 
 Related: #30 (goal as CLI parameter), execution.py refactor 2026-04-22
-
-
-================================================================================
-#37. EXECUTE_PICK STILL RE-SOLVES IK INSTEAD OF USING PLANNER'S q
-================================================================================
-Priority: TIER 3 — Very low.  Long debate, no agreed conclusion.
-Where:    streams.py (compute_kin_solution, _GRASP_Z_OFFSETS),
-          execution.py (execute_pick, execute_place),
-          test_full_pipeline.py (pick/place dispatch handlers),
-          pddl/stream.pddl, pddl/domain_pddlstream.pddl
-Depends:  None (orthogonal to all other open issues)
-Effort:   Unknown — depends on which design wins.
-
-WARNING TO FUTURE AI SESSIONS:
-       This was discussed at length on 2026-04-22.  Many proposed
-       refactors were rejected after design review.  Re-read this entry
-       BEFORE proposing yet another redesign.  Specifically, the
-       following ideas were considered AND REJECTED (see "Rejected
-       directions" below); do not reintroduce them without new
-       evidence:
-         - Boxelizing the target after found_target sense outcome.
-         - A `get-object-pose(?o)` PDDLStream stream that yields live
-           env.objects poses.
-         - An `observed_objects: Set[str]` gate inside BoxelStreams.
-         - Restructuring pick into (?o ?b ?g ?p ?q1 ?q2 ?t) to mirror
-           the move action.
-
-What:  compute_kin_solution returns a config q solved against
-       boxel.center + grasp.position (with grasp.position[2] = 0.10 m,
-       i.e. the APPROACH pose, 10 cm above the boxel center).  The
-       planned `move` action delivers the arm to q.  execute_pick then
-       IGNORES q and locally re-solves IK for the actual contact pose
-       using env.objects[obj_name].position.  The same applies to
-       execute_place.  This duplicates work already done by the
-       planner and bypasses plan_motion's collision checks for the
-       lowering segment.
-
-       The 2026-04-22 series of refactor steps (1, 2 — completed)
-       removed the post-grasp lift and the redundant pre-contact
-       approach motion.  Step 5 was meant to remove the local IK
-       lowering as well, by changing _GRASP_Z_OFFSETS so that q
-       targets the contact point directly.  This step was DEFERRED
-       because of the gripper-state-during-move concern (see below).
-
-Rejected directions (do not re-propose):
-
-  (1) Boxelize the discovered target on found_target.
-      Asymmetry between `contains_nontarget` (creates OBJECT + SHADOW
-      boxels for newly-discovered non-targets) and `found_target`
-      (no registry change, just belief.mark_sensed) is INTENTIONAL.
-      Non-targets become future obstacles the planner must reason
-      about; targets are about to be picked and removed.  Creating a
-      registry entry just to delete it one action later is wasteful
-      and would force an extra replan cycle.  The pick handler's
-      `elif obj_str == target_name:` branch (test_full_pipeline.py
-      ~line 797) reads env.objects[target].position directly — this
-      is the ACCEPTED design.
-
-  (2) New `get-object-pose(?o)` stream that yields live env.objects
-      poses for use in compute-kin.  Rejected because compute-kin
-      already uses boxel.center, which is the correct abstraction
-      under the "trust boxel data freshness" assumption (see open
-      sub-issue below).  Reading env.objects from a stream would be
-      planning-time cheating: the planner would have access to
-      ground-truth positions of objects independent of what it has
-      observed.
-
-  (3) `observed_objects: Set[str]` partial-observability gate inside
-      BoxelStreams.  Unnecessary because registry membership already
-      gates compute-kin: hidden objects without OBJECT boxels cannot
-      be IK targets, so the gate is implicit in the data structure.
-
-  (4) Restructure pick to (?o ?b ?g ?p ?q1 ?q2 ?t) mirroring move.
-      Discussed but not pursued — too large a PDDL surgery for
-      the value gained, and the cleaner formulation depends on
-      decisions about place semantics (single compute-kin variant
-      vs. two, boxel-as-pose coercion) that were not resolved.
-
-Tentatively agreed but NOT implemented (option 5a):
-
-  (a) Set _GRASP_Z_OFFSETS = [0.02] (was [0.10]).  q now targets a
-      point 2 cm above the object — close enough that the lowering
-      segment can be a fixed linear interpolation rather than a
-      separate IK call.
-  (b) Replace the local solve_ik() call in execute_pick with a
-      simple 2 cm joint-space lower from the current pose, using
-      cached IK seeds or Cartesian linear interpolation.
-  (c) Same change to execute_place.
-  (d) Open question: gripper state during the planned move.  With
-      offset 0 the arm arrives at contact with whatever gripper
-      state it had — if closed, it would push the object during
-      the trajectory; if opened at contact, fingers spread inside
-      the object.  Two unresolved options:
-        (i) Keep small clearance (option 5a above, 2 cm) so opening
-            at the end of move is safe.
-        (ii) Pre-emptively open the gripper in the dispatcher when
-             the next planned action is `pick`, so the arm arrives
-             at contact already open.
-
-Sub-issue (related, also unresolved): boxel data staleness.
-       compute_kin_solution assumes boxel.center is current.  After
-       an object settles in physics, drifts, or is moved by a
-       previous plan iteration, the OBJECT boxel's center may be
-       stale until the next reboxelization.  Currently we accept this
-       drift; if it causes pick failures, add a periodic re-AABB
-       sync between actions (cheap p.getAABB() per OBJECT boxel,
-       no full reboxelization).  Not tracked as a separate audit
-       item — bundled here.
-
-Why this is low priority:  the current code works.  The local IK
-       in execute_pick gives correct contact poses, and the
-       constraint-based grasp absorbs small EE/object misalignment
-       (audit #1 / #98).  The refactor is an aesthetics + 1:1
-       PDDL-execution-mapping concern, not a correctness one.  Visit
-       only when there is a concrete reason (e.g. planning with a
-       different motion planner, or extending to a goal that requires
-       multiple consecutive pick/place chains).
-
-Related: execution.py refactor 2026-04-22 steps 1 & 2,
-         audit #1 (RESOLVED, archive — contact-height fix),
-         audit #36 (holding goal terminates at contact)
-
-
-================================================================================
-#38. EXECUTE_STACK RE-SOLVES IK — SAME ANTI-PATTERN AS #37
-================================================================================
-Priority: TIER 3 — Very low.  Tracked separately for visibility; any fix
-          MUST be coordinated with #37 (pick/place IK re-solve).
-Where:    execution.py (execute_stack, ~line 565, solve_ik call ~line 639),
-          streams.py (compute_stack_kin),
-          pddl/stream.pddl (compute-stack-kin stream, ~line 35),
-          pddl/domain_pddlstream.pddl (stack action)
-Depends:  #37 (same design decisions apply — do not fix in isolation)
-Effort:   Trivial once #37 is resolved; do not touch before then.
-
-What:  The stack action added in audit #30 (commit 0d5def7, 2026-04-24)
-       reproduces the same "planning-time cheating" pattern as #37.
-
-       The PDDL layer produces a config ?q via the compute-stack-kin
-       stream (pddl/stream.pddl line 35), certifying
-       (stack_kin ?o ?on_obj ?g ?q) against the support's CURRENT
-       AABB top.  The planned `move` delivers the arm to ?q.
-
-       execute_stack (execution.py:565) then IGNORES ?q and re-solves
-       IK locally from env.objects[on_obj].position + held-object
-       half-height + live EE→object Z offset (solve_ik call at
-       execution.py:639).  The in-code docstring at execution.py
-       lines 586-589 already flags this as an "audit #37 dependency":
-
-         "like execute_pick / execute_place, this helper re-solves IK
-          locally instead of using the planner's q.  If that audit is
-          ever resolved, this routine must be updated alongside
-          execute_pick/place to follow the same convention."
-
-       This audit entry (#38) exists so the linkage is visible in the
-       issue tracker, not just in code.  All design discussion lives
-       in #37 — "Rejected directions", "Tentatively agreed 5a", and
-       the sub-issue on boxel data staleness apply identically here.
-
-Fix:   When #37 is resolved, update execute_stack in the same commit
-       using the same convention (use planner's ?q; optionally a small
-       fixed Cartesian lowering if _GRASP_Z_OFFSETS keeps a clearance).
-       Do NOT touch execute_stack before #37 — the three executors
-       must keep a consistent contract.
-
-Why this is low priority:  same reasoning as #37 — current code works,
-       constraint-based grasp absorbs small EE/object misalignment,
-       and the 1:1 PDDL-execution-mapping gain is aesthetic.
-
-Related: #37 (pick/place IK re-solve — parent issue),
-         #30 (stack action that introduced this pattern),
-         execution.py:586-589 (in-code link comment)
-
-
-================================================================================
-#39. PICK DOES NOT REQUIRE (CLEAR ?O) — STACK-BASE PICK TOPPLES TOWER SILENTLY
-                                                              [DONE 2026-04-26]
-================================================================================
-Priority: TIER 0 — Correctness bug for --goal stack runs
-Where:    pddl/domain_pddlstream.pddl (:action pick ~line 188),
-          pddlstream_planner.py (_build_init — clear init for
-          stackable_objects, ~line 490-495)
-Depends:  None (but fix interacts with #30 "split pick + unstack"
-          mitigation — coordinate before committing)
-Effort:   ~0.5 day (precondition addition + holding-goal gating)
-
-DONE 2026-04-26:
-       (a) Added (clear ?o) to pick's precondition in
-           pddl/domain_pddlstream.pddl (:action pick).
-       (b) Lifted the `if stackable_objects is not None:` gate around
-           (clear X) emission in pddlstream_planner._build_init — the
-           fact is now emitted for every Obj unconditionally, using a
-           set comprehension over the already-populated Obj atoms to
-           avoid duplicates when a target has an OBJECT boxel.  The
-           (on ?o ?x) init facts remain gated behind stackable_objects
-           since holding-goal runs never reference them.  Docstring for
-           create_problem updated; comment block at the init-emission
-           site explains the new split.
-       (c) Forward-compatible with #30 split-pick mitigation: plain
-           pick gets (clear ?o) either way, so no later coordination
-           work is required.  The forall (when (on ?o ?x) ...) effect
-           and the stack action's (clear ?o) effect are unchanged.
-
-       Not done (out of scope for #39):
-         - Physics verifier for post-execution goal check (see #40).
-           Even with (clear ?o) enforced, settling drift or grasp slip
-           can still yield symbolic-vs-physical desync.
-
-What:  The pick action's preconditions do not include (clear ?o).
-       When a tower A-on-B-on-C-on-table exists and pick is invoked
-       on B or C, all preconditions remain satisfied: (obj_at_boxel
-       B B) is still true (the tower doesn't symbolically move B's
-       boxel); (handempty), (at_config ?q), and (kin_solution ...)
-       are independent of whether something is stacked on B.  The
-       forall (when (on ?o ?x) (and (not (on ?o ?x)) (clear ?x)))
-       only handles objects ?o was RESTING ON — it does not handle
-       objects resting ON ?o.
-
-       Observed failure (run 2026-04-26_11-11-08, --goal stack
-       --stack-height 5, seed 0):
-
-         Plan step 10: pick cyan  — cyan had red-on-orange stacked
-                                    on top.  Symbolic: succeeds.
-                                    Physical: orange+red tower
-                                    collapses onto the table.
-         Plan step 14: pick blue  — blue had cyan stacked on top by
-                                    then.  Same bug, again.
-
-         Execution log shows 13+ "COLLISION [...]" warnings during
-         the subsequent move and stack steps (the robot drags
-         through the fallen cubes), yet the run terminates with
-         SUCCESS because the final SYMBOLIC state matches the goal
-         (see #40 — the success check is symbolic, not physical).
-         Physically 3 of 4 (on ...) goal clauses were violated.
-
-Fix:   ONE COMMIT:
-       (a) Add (clear ?o) to pick's precondition in
-           pddl/domain_pddlstream.pddl (:action pick).
-       (b) Emit (clear X) in init for every Obj unconditionally, not
-           only when stackable_objects is supplied
-           (pddlstream_planner.py ~line 490-495).  Holding-goal runs
-           will pay a small grounding cost for extra atoms, but far
-           less than the conditional-effects cost already debated
-           in #30.
-           Alternative (ii): gate via a (stack_mode_enabled) marker
-           in init and wrap the precondition:
-             (or (not (stack_mode_enabled)) (clear ?o))
-           Option (i) is cleaner and symmetric with the forall
-           effect that already assumes (clear ?x) is well-defined.
-       (c) Re-run --goal stack --stack-height 5 --seed 0 and verify
-           the planner builds bottom-up (green base, blue on green,
-           cyan on blue, orange on cyan, red on orange) instead of
-           the observed stack-and-disassemble pattern.
-       (d) Coordinate with #30 mitigation: if "split pick + unstack"
-           is eventually pursued, unstack KEEPS (clear ?o) false
-           and (on ?o ?support) as its precondition; plain pick gets
-           (clear ?o).  Either fix should be consistent with that.
-
-Related: #30 (stack action that introduced stacking; conditional
-              effect and split-pick mitigation decisions),
-         #40 (false-success — downstream consequence; independent
-              fix recommended because other physics/symbolic
-              desyncs can also produce false-success),
-         #42 (collisions during execution not propagated to
-              replan — also surfaced by this bug's run).
 
 
 ================================================================================
@@ -1180,157 +785,6 @@ Related: #4 (re-boxelization after unexpected state),
 
 
 ================================================================================
-#43. PLACE DROPS OBJECTS OFF TABLE EDGE — on_surface UNAWARE OF XY FOOTPRINT
-                                                              [DONE 2026-04-26]
-================================================================================
-Priority: TIER 0 — Correctness bug (objects placed off-table fall to the floor)
-Where:    boxel_env.py (annotate_free_space_surface, ~line 1015)
-Depends:  None
-Effort:   <0.5 day
-
-DONE 2026-04-26:
-       annotate_free_space_surface() now gates (on_surface ?b) on BOTH:
-         (a) the boxel's bottom being at table_z (pre-existing test), AND
-         (b) the boxel's XY CENTRE lying within _SAFE_TABLE_*_RANGE —
-             the same window used by _random_xy_positions for spawning
-             (intersection of physical table mesh and Panda reach disk).
-       The logical voxel grid (table_x_range = (-0.4, 0.6)) stays wide
-       for shadow/sensing coverage of the near field; only the place
-       destination set shrinks to the safe on-table footprint.  Free
-       boxels at x<0.05 (behind/under the robot) now keep on_surface=None
-       and the planner cannot choose them for place, so the place
-       action's precondition rejects them during grounding.  No PDDL
-       surface change; no stream change; reboxelization re-runs the
-       same helper on post-place fragments so split slivers near the
-       edge are classified consistently.
-
-What:  Free boxels were generated across the full LOGICAL workspace
-       (table_x_range = (-0.4, 0.6), (-0.5, 0.5)) which is WIDER than
-       the physical table mesh (centred at [0.5, 0], footprint roughly
-       x in [0, 1]).  The wider grid exists so shadow volumes cover
-       the near-field behind/near the robot (see boxel_env.py:502-506
-       comment).
-
-       (on_surface ?b) was set purely on Z height, with no XY footprint
-       check.  Free boxels at x in [-0.4, 0.05) therefore advertised
-       themselves as "on the table" even though their centres are off
-       the physical table mesh (behind/under the robot, past the near
-       edge).
-
-       The place precondition (on_surface ?b) + (boxel_fits ?o ?b)
-       accepted those boxels; execute_place (execution.py ~line 525)
-       uses boxel.center as the XY release target, so the object was
-       released over empty air and fell to the plane.
-
-       Observed 2026-04-26 (screenshots + run_2026-04-26_14-56-55,
-       run_2026-04-26_14-57-49): objects placed ~10-25 cm in front of
-       the robot base, falling off the near table edge onto the floor.
-
-Fix:   ONE COMMIT — intersect on_surface with the safe XY window:
-       (a) Read _SAFE_TABLE_X_RANGE / _SAFE_TABLE_Y_RANGE (already
-           defined for spawning).
-       (b) Require boxel centre XY to lie inside that window in
-           addition to the existing Z test.
-       (c) Leave the wider table_x_range / table_y_range grid alone
-           — shadows, sensing, reboxelization, and reasoning about
-           "known-empty near the robot" still have the coverage they
-           need; only place destinations are gated.
-
-Consistency notes:
-       - Reboxelization after place calls annotate_free_space_surface
-         on new fragments → edge slivers get on_surface=None
-         consistently with initial scan.
-       - boxel_fits is unchanged (still a size-only test).
-       - Stack action unaffected: execute_stack uses another object's
-         AABB top, never a free boxel.
-       - Tight scenes (many occluders + shadows) may see the
-         placement set shrink; those same scenes would also struggle
-         to spawn via _random_xy_positions (same window), so the
-         failure mode is consistent across spawn and place.
-
-Related: #4 (post-action re-boxelization — fragments near the edge
-              now correctly classified via same helper),
-         #30 (stack action — unaffected; stack targets object boxels,
-              not free boxels),
-         #39/#40 (separate physics/symbolic desync bugs; this one
-                  was strictly about a missing XY edge check),
-         #44 (follow-up — narrow FreeSpaceGenerator workspace so free
-              boxels themselves don't overhang the table edge).
-
-
-================================================================================
-#44. FREE BOXELS OVERHANG TABLE EDGE — FreeSpaceGenerator USED LOGICAL GRID
-                                                              [DONE 2026-04-26]
-================================================================================
-Priority: TIER 0 — Follow-up to #43 (same 2026-04-26 root cause)
-Where:    boxel_env.py (free_space_generator construction, ~line 449)
-Depends:  #43 [DONE] — place-side gate in place
-Effort:   <0.5 day
-
-DONE 2026-04-26:
-       boxel_env.py constructs FreeSpaceGenerator with XY bounds equal
-       to _SAFE_TABLE_X_RANGE / _SAFE_TABLE_Y_RANGE (the same window
-       used for spawning and by annotate_free_space_surface in #43).
-       ShadowCalculator still receives the wider self.table_*_range so
-       near-field shadow volumes behind occluders stay covered.
-       annotate_free_space_surface's XY check (from #43) remains as
-       defence-in-depth: it is now effectively a no-op for generator
-       output but protects against future regressions if the generator
-       ever receives a wider range.
-
-What:  Audit #43 gated (on_surface ?b) on the boxel centre lying
-       inside the safe placement window.  This fixed the PLACEMENT
-       bug (objects no longer drop off the near edge), but the free
-       boxels themselves were still generated across the full LOGICAL
-       voxel grid (table_x_range = (-0.4, 0.6), (-0.5, 0.5)) —
-       including the strip x in [-0.4, 0.05) that is behind or under
-       the robot base and entirely off the physical table mesh.
-
-       Observed 2026-04-26 (screenshot after #43 fix): free-boxel
-       wireframes clearly overhang the near table edge.  The planner
-       cannot place there (thanks to #43), but the generator is
-       producing ghost cells that waste boxel IDs, clutter the visual
-       partition, and semantically misrepresent "free space above the
-       table" as including air past the edge.
-
-Fix:   ONE COMMIT — narrow FreeSpaceGenerator's XY workspace to the
-       safe table footprint, keep ShadowCalculator on the wider grid:
-       (a) In BoxelTestEnv.__init__, pass _SAFE_TABLE_X_RANGE /
-           _SAFE_TABLE_Y_RANGE to FreeSpaceGenerator instead of
-           self.table_x_range / self.table_y_range.
-       (b) Leave ShadowCalculator on self.table_x_range /
-           self.table_y_range so shadows extending toward the robot
-           (near-field behind occluders) are still computable.
-       (c) Leave annotate_free_space_surface's XY check as a belt-
-           and-braces guard (it becomes a no-op on the new generator
-           output but protects the invariant going forward).
-
-Consistency notes (same as #43's follow-ups, tightened):
-       - Shadow vs. free asymmetry is now deliberate: shadows may
-         extend into x in [-0.4, 0.05] while no free boxel lives
-         there.  This is correct: that strip isn't "known-empty AND
-         supportable"; it's just hidden air behind the occluders.
-       - reboxelize_free_space uses env.generate_free_space, which
-         goes through the same narrowed generator — post-action
-         splits and rebuilds stay inside the safe window.
-       - split_free_boxel produces fragments that are subsets of the
-         already-narrow free boxel — no fragment can escape the safe
-         window.
-       - Hidden-target spawn in _hidden_xy_positions still clamps to
-         self.table_x_range (unrelated to free-space generation).
-       - Root octree extent shrinks from 1.0x1.0 to 0.65x0.80 in XY
-         (Z unchanged); with min_resolution 0.035 m, depth is
-         unchanged in practice.  Max free-boxel size decreases,
-         giving finer placement granularity.
-
-Related: #43 (placement gate — depends on this shared _SAFE_TABLE
-              window definition),
-         #4 (reboxelization — affected generator is the same one),
-         shadow_calculator.py (intentionally untouched — keeps wider
-              grid for near-field shadow coverage).
-
-
-================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without
@@ -1348,7 +802,7 @@ FOR LATER
   permits after core evaluation (#9–#12) is complete.
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-04-26)
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-04-27)
 ================================================================================
 
 Each issue is one commit.  Dependencies listed; work within a tier can
@@ -1359,7 +813,7 @@ TIER 0 — ACTIONABLE NOW (no dependencies):
   #21  Blocked sense switches shadows / false all_searched ~1-2 days
        (design direction: fix in PDDL model, not execution loop)
   #40  False-success: symbolic state accepted over physics  ~0.5-1 day
-       (independent of #39 — also catches future physics desyncs)
+       (also catches future physics desyncs beyond #39)
 
 TIER 1 — Mixed dependencies (see each issue):
   #4   Post-action re-boxelization [PARTIAL]                ~1-2 days remaining
@@ -1368,37 +822,36 @@ TIER 1 — Mixed dependencies (see each issue):
         for relocated occluders at new positions.)
   #6   Multi-boxel free space placement                     ~1 week
 
-TIER 3 — THESIS EVALUATION (independent of code fixes):
+TIER 3 — THESIS EVALUATION:
   #9   Metric collection + experiment runner                ~3-5 days
   #10  Baseline: uniform voxelization           depends #9  ~3-5 days
   #11  Baseline: fixed semantic regions         depends #9  ~3-5 days
   #12  Scalability analysis                     depends #9  ~2-3 days
   #13  Recursive object discovery                           ~2-3 days
-  #29  Scene selection / random scene CLI flag                <1 day
-  #30  Goal as CLI parameter [PARTIAL — perf decision open]  ~0.5 day
-       (--goal stack implemented in commit 0d5def7; ~2x per-call
-        slowdown on holding-goal runs from the conditional pick effect.
-        Mitigation pending: split pick + unstack to drop
-        :conditional-effects.  Decision: keep mitigation, reject and
-        revert, or accept slowdown — see #30 entry for full numbers.)
+  #30  Stack-goal perf regression [PARTIAL — decision open]  ~0.5 day
+       (--goal stack shipped in 0d5def7; ~2x holding-goal slowdown from
+        :conditional-effects pick.  Decision: try split-pick mitigation,
+        accept the regression, or revert.  Full numbers in #30 entry;
+        implementation debrief in archive/CODEBASE_AUDIT_RESOLVED.txt.)
   #36  Holding goal terminates at contact (no upright lift)   <1 day
-  #37  execute_pick still re-solves IK (debate; see entry)   very low
-  #38  execute_stack re-solves IK     depends #37            very low
-  #41  Stack goal: base not constrained on_table    <1 day
+  #41  Stack goal: base not constrained on_table              <1 day
        (minor; could ride with #40 verifier work)
-  #42  Execution collisions not propagated to replan  ~1 day
-       (robustness — catches residual desyncs after #39/#40)
+  #42  Execution collisions not propagated to replan          ~1 day
+       (robustness — catches residual desyncs after #40)
 
 TIER 3 — CODE QUALITY (low priority):
   #31  Narration comments (restate code, not intent)        ~1-2 days
   #32  Comment/code drift (stale comments)                   <1 day
   #34  _compute_placement_view_blocks scalability           (if needed)
 
-Total: 17 open items (#4(partial), #6, #9–#14, #21, #29–#32, #34, #36–#38, #40–#42).
-      Deferred: #2 → archive/CODEBASE_AUDIT_DEFERRED.txt.
-      Resolved/subsumed: #1, #3, #5, #7, #8, #15–#20, #22–#28, #33, #35, #39, #43, #44
-        → archive/CODEBASE_AUDIT_RESOLVED.txt (entries #39, #43, and #44
-          retained inline here with [DONE] tag; archive move optional).
+Total open: 15 items (#4(partial), #6, #9–#14, #21, #30(perf-open), #31, #32,
+            #34, #36, #40, #41, #42).
 
-Resolved issues: archive/CODEBASE_AUDIT_RESOLVED.txt
-Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
+Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
+             #2  (full boxel merge condition),
+             #37 (execute_pick re-solves IK — very low, long debate),
+             #38 (execute_stack re-solves IK — depends #37).
+
+Resolved/subsumed → archive/CODEBASE_AUDIT_RESOLVED.txt:
+             #1, #3, #5, #7, #8, #15–#20, #22–#29, #33, #35, #39, #43, #44,
+             and the #30 implementation debrief.
