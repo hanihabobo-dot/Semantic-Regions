@@ -604,6 +604,20 @@ class BoxelTestEnv:
     _SAFE_TABLE_X_RANGE = (0.05, 0.70)
     _SAFE_TABLE_Y_RANGE = (-0.40, 0.40)
 
+    # Visibility ray grid for ``oracle_detect_objects`` (audit #14).  The
+    # previous 8-corner sample classified an object as invisible whenever
+    # all 8 AABB corners were occluded, even when a sliver between or
+    # above the occluders reached the camera.  An N×N×N parametric lattice
+    # over the AABB catches those slivers; N=4 → 64 rays/object, 8× denser
+    # than the original 8 corners.  ``rayTestBatch`` is a single C++ call,
+    # so the cost is microseconds either way.
+    VISIBILITY_GRID_N: int = 4
+    # Minimum number of grid rays that must terminate on the body for the
+    # object to count as visible.  ≥1 catches genuine slivers; raise above
+    # 1 to filter sub-pixel noise if a real perception module replaces the
+    # PyBullet ground-truth raycast.
+    VISIBILITY_HIT_THRESHOLD: int = 2
+
     def _random_xy_positions(self, n: int, rng: np.random.RandomState,
                              margin: float = 0.10,
                              constrain_to_reach: bool = False,
@@ -1177,53 +1191,64 @@ class BoxelTestEnv:
         """
         Oracle function to detect visible objects and their poses.
 
-        Visibility is determined by casting rays from the camera to the
-        8 corners of each object's AABB.  An object is visible if ANY ray
-        reaches it (hit body == object body).  This catches partial
-        visibility where an object edge sticks out from behind an occluder.
+        Visibility is determined by casting rays from the camera to a
+        ``VISIBILITY_GRID_N``³ parametric lattice over each object's AABB.
+        The object counts as visible when at least
+        ``VISIBILITY_HIT_THRESHOLD`` rays terminate on its body id.  See
+        the class-constant comments above for why the previous 8-corner
+        test (audit #14) missed partially visible objects and let
+        occluder_1 fall out of the BoxelRegistry on 2026-04-03.
 
         Only used for initial scene observation — the sensing action uses
         ``sense_shadow_raycasting()`` with its own ray grid.
-        
+
         Returns:
             Tuple of (visible object names, dict of all object poses)
         """
         visible_objects = []
         object_poses = {}
-        
+
+        cam = self.camera_position.tolist()
+        n = max(2, int(self.VISIBILITY_GRID_N))
+        # Parametric (0..1)^3 lattice reused for every object; scaled into
+        # each AABB below.  Built once per call, not per object.
+        axis = np.linspace(0.0, 1.0, n)
+        unit_grid = np.stack(
+            np.meshgrid(axis, axis, axis, indexing="ij"), axis=-1
+        ).reshape(-1, 3)
+        threshold = max(1, int(self.VISIBILITY_HIT_THRESHOLD))
+
         for name, obj_info in self.objects.items():
             if name in ["plane", "table", "robot"]:
                 continue
-            
+
             pos, orn = p.getBasePositionAndOrientation(obj_info.object_id)
             position = np.array(pos)
             orientation = np.array(orn)
-            
+
             obj_info.position = position
             obj_info.orientation = orientation
-            
+
             is_visible = True
             if check_occlusion:
                 aabb_min, aabb_max = p.getAABB(obj_info.object_id)
-                ray_targets = []
-                for x in (aabb_min[0], aabb_max[0]):
-                    for y in (aabb_min[1], aabb_max[1]):
-                        for z in (aabb_min[2], aabb_max[2]):
-                            ray_targets.append([x, y, z])
+                aabb_min = np.asarray(aabb_min)
+                aabb_max = np.asarray(aabb_max)
+                ray_targets = (
+                    aabb_min + unit_grid * (aabb_max - aabb_min)
+                ).tolist()
 
-                cam = self.camera_position.tolist()
                 results = p.rayTestBatch(
                     [cam] * len(ray_targets), ray_targets
                 )
-                is_visible = any(
-                    r[0] == obj_info.object_id for r in results
-                )
-            
+                hits = sum(1 for r in results if r[0] == obj_info.object_id)
+                is_visible = hits >= threshold
+
             obj_info.is_visible = is_visible
             if is_visible:
                 visible_objects.append(name)
             object_poses[name] = (position.copy(), orientation.copy())
-        
+
         return visible_objects, object_poses
 
     def update_object_positions(self):
