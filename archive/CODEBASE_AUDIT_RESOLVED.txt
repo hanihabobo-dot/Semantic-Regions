@@ -13,6 +13,11 @@ Archived: 2026-04-24 (moved from CODEBASE_AUDIT.txt: #3, #24, #25, #26, #27,
 Archived: 2026-04-28 (moved from CODEBASE_AUDIT_DEFERRED.txt: #37, #38.
          Path A applied as designed — see entries at end of file for
          the diff summary and rationale.)
+Updated:  2026-04-29 (#37/#38 follow-up: grasp Z-offset reverted from
+         2 cm back to 10 cm — the 2 cm choice parked the wrist inside
+         the camera→shadow ray paths and broke move→sense sequences.
+         IK seeding (the actual #37/#38 win) retained.  See #37's
+         "Follow-up" section for details.)
 
 These issues have been fixed, reclassified as not-an-issue, or corrected.
 The active audit with remaining open issues is in CODEBASE_AUDIT.txt.
@@ -2626,10 +2631,40 @@ Verification:   py_compile clean on all four code files.  No other
                 poses.  execute_stack has exactly one caller; both
                 pass `config`.
 
-Risks accepted: plan_motion now plans transit to a 2 cm clearance
-                pose instead of 10 cm; RRT-Connect collision-checks
-                the trajectory so unsafe paths fail planning rather
-                than silently colliding.  Smoke test recommended.
+Risks accepted: none material with the 10 cm offset retained
+                (see Follow-up below).  The IK seed parameter
+                preserves the planner's IK branch for the contact
+                lower regardless of Cartesian distance.
+
+Follow-up (2026-04-29):  The 2 cm offset shipped in commit 5279aa3
+                introduced a regression in move→sense sequences.
+                The wrist sat directly above the just-moved-to
+                object centre, intercepting the overhead camera's
+                rays through the shadow region behind that object.
+                sense_shadow_raycasting consistently returned
+                still_blocked because the arm itself was the
+                blocker, not the occluder.  The planner kept
+                replanning the same move→sense→pick skeleton and
+                made no progress.
+
+                Root cause: _GRASP_Z_OFFSETS was conflating two
+                roles — pre-pick approach offset (where 2 cm
+                made the contact lower a tight step) AND transit/
+                parking pose between actions (where 2 cm parked
+                the arm inside the camera line of sight).
+
+                Fix applied: streams.py _GRASP_Z_OFFSETS reverted
+                to [0.10].  The IK seed parameter is independent
+                of the offset and stays — solve_ik(seed=q) still
+                converges in the planner's IK branch over a 10 cm
+                Cartesian step (well within the 100-iter budget).
+                Comments in streams.py (sample_grasp,
+                grasp_ee_offset note) and execution.py docstrings
+                updated to match.  No PDDL change.
+
+                Files touched in the follow-up:
+                  streams.py, execution.py.
+                  archive/CODEBASE_AUDIT_RESOLVED.txt (this note).
 
 Related: #38 (twin entry for execute_stack — fixed in same commit),
          #1  (RESOLVED — contact-height fix from which this
