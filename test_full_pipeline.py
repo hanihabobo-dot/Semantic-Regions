@@ -686,9 +686,16 @@ def main(gui=True, run_logger=None, scene_config=None,
                     belief.mark_sensed(sid_str, found=False)
 
                     registry.remove_boxel(sid_str)
+                    if viz is not None:
+                        # Drop wireframe + label for the cleared shadow so
+                        # the GUI doesn't keep the old SHADOW outline alive
+                        # alongside whatever the next refresh draws.
+                        # remove_boxel_viz is a no-op on unknown ids.
+                        viz.remove_boxel_viz(sid_str)
                     if sid_str in shadows:
                         shadows.remove(sid_str)
                     shadow_occluder_map.pop(sid_str, None)
+                    boxel_centers.pop(sid_str, None)
 
                     if sense_outcome == "contains_nontarget":
                         # Non-target objects discovered inside the shadow.
@@ -710,6 +717,28 @@ def main(gui=True, run_logger=None, scene_config=None,
                             aabb_min, aabb_max = p.getAABB(bid)
                             aabb_min = np.array(aabb_min)
                             aabb_max = np.array(aabb_max)
+
+                            # Discovery may re-trigger for an object_name we
+                            # already know about (e.g. previous re-sense pass
+                            # added it; current sense saw it through a second
+                            # shadow).  Without this cleanup the registry
+                            # silently overwrites the OBJECT entry but the old
+                            # wireframe + ALL prior shadow entries (both registry
+                            # and viz) survive — that's the "two boxels under
+                            # one name" trace.  Clean both before recreating
+                            # so only the accurate (live-AABB) entry stays.
+                            old_obj = registry.get_boxel(obj_name)
+                            if old_obj is not None:
+                                for old_sid in list(old_obj.shadow_boxel_ids):
+                                    registry.remove_boxel(old_sid)
+                                    if viz is not None:
+                                        viz.remove_boxel_viz(old_sid)
+                                    if old_sid in shadows:
+                                        shadows.remove(old_sid)
+                                    shadow_occluder_map.pop(old_sid, None)
+                                    boxel_centers.pop(old_sid, None)
+                                if viz is not None:
+                                    viz.remove_boxel_viz(obj_name)
 
                             obj_bd = BoxelData(
                                 id=obj_name,
@@ -1140,9 +1169,14 @@ if __name__ == "__main__":
         action='store_true',
         help='Include free-space boxels in the visualisation overlay',
     )
-    parser.add_argument('--log-level', choices=['quiet', 'normal', 'verbose'],
-                        default='normal',
-                        help='Console verbosity (log file always captures everything)')
+    parser.add_argument('--log-level',
+                        choices=['smart', 'normal', 'quiet', 'verbose'],
+                        default='smart',
+                        help='Console verbosity. "smart" (default) renders a '
+                             'Claude-Code-style narrative and drops PyBullet / '
+                             'PDDLStream boilerplate. "normal", "quiet", and '
+                             '"verbose" leave stdout untouched. The log file '
+                             'always captures everything.')
     parser.add_argument('--scene', choices=['default', 'mixed',
                                             'scalability', 'stack'],
                         default='default',

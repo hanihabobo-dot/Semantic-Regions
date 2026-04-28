@@ -142,12 +142,14 @@ class PDDLStreamPlanner:
             on_relations: Dict mapping stacked_obj -> support_obj for known
                 stack relations (audit #30).  Only meaningful when
                 ``stackable_objects`` is also supplied — else holding-goal
-                runs would still pay the grounding cost of (on/clear)
+                runs would still pay the grounding cost of (on)
                 facts they never use.
             stackable_objects: List of object/boxel IDs the planner may use
                 as cubes for stacking.  When None (the typical holding-goal
-                case), no (clear ?o) or (on ...) facts are emitted into
-                init at all (audit #30 perf gating).
+                case), no (on ...) facts are emitted into init.  NOTE
+                (audit #39): (clear ?o) is now emitted for every Obj
+                unconditionally because pick requires it, irrespective
+                of stackable_objects.
 
         Returns:
             PDDLProblem for PDDLStream solver
@@ -482,17 +484,33 @@ class PDDLStreamPlanner:
         init.append(('at_config', current_config))
         init.append(('handempty',))
 
-        # Stacking facts (audit #30) — emitted ONLY when the caller is
-        # using --goal stack (signalled by passing stackable_objects).
-        # Holding-goal callers leave both args at None and pay zero extra
-        # grounding cost: no (clear ?o), no (on ?o ?x).  This was the
-        # main regression source in the earlier branch attempt.
+        # Stacking facts (audit #30 + #39).
+        #   (clear ?o)  now emitted for EVERY object unconditionally,
+        #               because pick requires it (audit #39 — prevents
+        #               silent tower collapse when picking a stack-base).
+        #               Holding-goal runs pay one atom per Obj of extra
+        #               grounding cost, far cheaper than the
+        #               :conditional-effects penalty debated in #30.
+        #   (on ?o ?x)  still emitted ONLY when the caller supplied
+        #               stackable_objects + on_relations (i.e. an
+        #               explicit stack run).  Holding goals see no (on).
+        on_relations = on_relations or {}
+        supports_with_obj_on_top = set(on_relations.values())
+
+        # Clear candidates = every Obj already in init (dedup across the
+        # OBJECT-boxel loop above and the target_objects loop).  Using a
+        # set to avoid duplicate (clear X) atoms when a target also has
+        # an OBJECT boxel registered.  init contains tuples of varying
+        # arity (e.g. ('handempty',), ('blocks_view_at', o, b, r)), so
+        # we filter by first element length-safely rather than
+        # destructuring.
+        all_obj_ids = {fact[1] for fact in init
+                       if len(fact) == 2 and fact[0] == 'Obj'}
+        for obj_id in all_obj_ids:
+            if obj_id not in supports_with_obj_on_top:
+                init.append(('clear', obj_id))
+
         if stackable_objects is not None:
-            on_relations = on_relations or {}
-            supports_with_obj_on_top = set(on_relations.values())
-            for obj_id in stackable_objects:
-                if obj_id not in supports_with_obj_on_top:
-                    init.append(('clear', obj_id))
             for stacked, support in on_relations.items():
                 init.append(('on', stacked, support))
 
