@@ -367,21 +367,28 @@ class BoxelStreams:
     # Called first during planning: "how can I grab this object?"
     #
     # Fixed top-down grasp clearance above the object center (m).
-    # 0.02 m (audit #37/#38, Path A): the planner certifies an approach
-    # pose 2 cm above the object centre, then execution lowers the
-    # remaining 2 cm seeded from the planner's q (see execution.py).
-    # Keeps the contact lower a tight, single-IK-branch step instead of
-    # snapping to a different IK solution.  Was 0.10 m before #37/#38.
-    _GRASP_Z_OFFSETS = [0.02]
+    # 0.10 m: the planner certifies an approach pose 10 cm above the
+    # object centre.  Execution then lowers to contact via solve_ik
+    # seeded from the planner's q (audit #37/#38) so the contact pose
+    # stays in the same IK branch the planner validated.
+    #
+    # The 2 cm experiment (briefly tried in the original #37/#38 fix)
+    # was reverted on 2026-04-29: a 2 cm clearance parked the wrist
+    # inside the camera→shadow ray path, so any move→sense sequence
+    # had the arm itself blocking the view and sense_shadow_raycasting
+    # always returned still_blocked.  IK seeding (the actual #37/#38
+    # win) is independent of this offset and is retained.
+    _GRASP_Z_OFFSETS = [0.10]
 
     def sample_grasp(self, obj_id: str) -> Iterator[Tuple[Grasp]]:
         """
         Generate grasp poses for an object with varying clearance.
 
-        Yields a single top-down grasp at a fixed 0.02 m above the
-        object center (audit #37/#38).  Execution uses a constraint-
-        based weld so grip security is independent of the exact EE
-        height.
+        Yields a single top-down grasp at a fixed 0.10 m above the
+        object center.  Execution uses a constraint-based weld so grip
+        security is independent of the exact EE height; the contact-
+        pose IK is seeded from the planner's q (audit #37/#38) so it
+        stays in the same IK branch.
 
         PDDLStream declaration (see pddl/stream.pddl):
             (:stream sample-grasp
@@ -398,9 +405,10 @@ class BoxelStreams:
         """
         # Top-down orientation: pitch=180deg = gripper pointing straight down
         orn = np.array(p.getQuaternionFromEuler([0, np.pi, 0]))
-        # Yield one grasp per Z-offset (currently 0.02 m above object,
-        # audit #37/#38).  Execution lowers the remaining 2 cm seeded
-        # from this q so the contact pose stays in the same IK branch.
+        # Yield one grasp per Z-offset (currently 0.10 m above object).
+        # Execution lowers from this height to contact via solve_ik
+        # seeded from this q (audit #37/#38) so the contact pose stays
+        # in the same IK branch the planner validated.
         # position=[0,0,z] means no X/Y offset — directly above boxel center.
         # compute_kin_solution later adds this to boxel.center to get the
         # world-frame EE target position.
@@ -496,8 +504,8 @@ class BoxelStreams:
         held_body_ids = q1.ignored_body_ids & q2.ignored_body_ids
 
         # grasp_ee_offset describes where the held body sits relative to the
-        # EE (e.g. [0, 0, 0.02] = 2 cm below EE for a top-down grasp at the
-        # current _GRASP_Z_OFFSETS — see audit #37/#38).
+        # EE (e.g. [0, 0, 0.10] = 10 cm below EE for a top-down grasp at the
+        # current _GRASP_Z_OFFSETS).
         # Without this, the planning-time checker places the held body AT the
         # EE, which is too high and misses collisions at the real object height.
         held_body_ee_offset = None

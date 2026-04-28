@@ -353,11 +353,12 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
 
     Assumes the planned `move` action has already delivered the arm to
     the compute_kin_solution config (boxel.center + grasp.position,
-    2 cm above the object after audit #37/#38).  This routine only
-    handles the final lower-and-grasp:
+    10 cm above the object).  This routine only handles the final
+    lower-and-grasp:
 
-      IK (seeded from `config`) + lower to contact  →  close gripper
-      →  weld via createConstraint with the live EE-to-object transform.
+      IK (seeded from `config`, audit #37/#38) + lower to contact  →
+      close gripper  →  weld via createConstraint with the live
+      EE-to-object transform.
 
     The contact waypoint is computed from the object's actual AABB so
     the Panda's finger pads physically wrap around the object.
@@ -387,9 +388,12 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
         final joint configuration (contact position with object held).
     """
     # --- Contact height from object geometry, not the planning offset --------
-    # grasp.position[2] is 0.02 m (audit #37/#38: a thin clearance above
-    # the object centre; the planner reaches it via `move`, execution
-    # lowers the remaining 2 cm seeded from `config`).
+    # grasp.position[2] is 0.10 m (the planner reaches that approach
+    # height via `move`; execution lowers to contact via solve_ik
+    # seeded from `config` so the contact pose stays in the same IK
+    # branch — audit #37/#38).  10 cm clearance also keeps the wrist
+    # out of the camera→shadow ray paths so a subsequent sense action
+    # is not blocked by the arm itself.
     # For execution we need the grasptarget at the object, not above it.
     #
     # panda_grasptarget (link 11) sits at the center of the finger-pad
@@ -410,11 +414,12 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # No pre-contact approach motion (refactor step 2).  The prior
     # planned `move` action already delivered the arm to `config`, the
     # compute_kin_solution config — which targets boxel.center +
-    # grasp.position (now 2 cm above object, audit #37/#38).  We seed
-    # the contact-pose IK with `config.joint_positions` so the solver
-    # stays in the same IK branch the planner already validated; the
-    # contact pose is just 2 cm below `config`, so a small in-branch
-    # joint step suffices.
+    # grasp.position (10 cm above object).  We seed the contact-pose
+    # IK with `config.joint_positions` so the solver stays in the same
+    # IK branch the planner already validated (audit #37/#38).  10 cm
+    # is a Cartesian distance well within IK's 100-iteration limit
+    # given the seed, and it keeps the wrist out of the camera's view
+    # so move→sense sequences aren't blocked by the arm itself.
     pc = env.client_id
     contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc,
                               seed=config.joint_positions)
@@ -477,11 +482,11 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
 
     Assumes the planned `move` action has already delivered the arm to
     the compute_kin_solution config (boxel.center + grasp.position,
-    2 cm above the destination after audit #37/#38).  This routine
-    only handles the final lower-and-release:
+    10 cm above the destination).  This routine only handles the
+    final lower-and-release:
 
-      IK (seeded from `config`) + lower to release height  →
-      open gripper  →  removeConstraint  →  settle.
+      IK (seeded from `config`, audit #37/#38) + lower to release
+      height  →  open gripper  →  removeConstraint  →  settle.
 
     The release height is computed so the held object's bottom rests on
     the table surface, using the live EE-to-object offset from the
@@ -537,9 +542,10 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     # No pre-contact approach motion (refactor step 2).  The prior
     # planned `move` action already delivered the arm to `config`, the
     # compute_kin_solution config — which targets place_pos +
-    # grasp.position (now 2 cm above destination, audit #37/#38).  We
-    # seed the contact-pose IK with `config.joint_positions` so the
-    # solver stays in the same IK branch the planner already validated.
+    # grasp.position (10 cm above destination).  We seed the contact-
+    # pose IK with `config.joint_positions` so the solver stays in
+    # the same IK branch the planner already validated (audit
+    # #37/#38).
     pc = env.client_id
     contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc,
                               seed=config.joint_positions)
@@ -593,7 +599,8 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
 
     The contact-pose IK is seeded with the planner's ``config`` (audit
     #37/#38) so the solver stays in the same IK branch the planner
-    already validated — the lower is just ~2 cm in joint space.
+    already validated — the Cartesian lower is ~10 cm and stays well
+    within IK's iteration budget given the seed.
 
     Args:
         robot_id: PyBullet body ID of the robot.
@@ -602,7 +609,7 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
         on_obj_name: Support object's name (must be in env.objects).
         grasp: Grasp from the planner (provides EE→object offset).
         config: RobotConfig from the planner's compute_stack_kin (the
-            approach pose 2 cm above the support top).  Used as the
+            approach pose 10 cm above the support top).  Used as the
             IK seed for the contact-pose lower (audit #37/#38).
         grasp_constraint_id: Constraint id from the prior pick.  Required —
             execute_stack queries it to find the held body.
@@ -669,10 +676,4 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     actual_joints = np.array(
         [p.getJointState(robot_id, i)[0] for i in range(7)]
     )
-    return RobotConfig(joint_positions=actual_joints,
-                       name=f"post_stack_{obj_name}_on_{on_obj_name}")
-
-
-# compute_push_displacement() removed (#53): push superseded by pick-and-place.
-# The function teleported occluders via p.resetBasePositionAndOrientation without
-# involving the robot arm. Occluder relocation now uses pick â move â place.
+    return RobotConfi
