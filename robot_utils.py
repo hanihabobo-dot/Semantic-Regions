@@ -383,15 +383,22 @@ def detect_execution_collisions(robot_id: int,
 # =============================================================================
 
 def solve_ik(robot_id: int, target_pos: np.ndarray,
-             target_orn=None, physics_client: int = 0):
+             target_orn=None, physics_client: int = 0,
+             seed=None):
     """
-    Null-space IK with rest-pose seed for consistent results.
+    Null-space IK with configurable seed for consistent results.
 
-    Saves the robot's current joint state, resets to REST_POSES to give
-    the iterative solver a deterministic seed, runs IK with null-space
-    bias, then restores the original state.  This makes results
-    independent of where execution left the arm — critical for
-    replanning after the robot has moved.
+    Saves the robot's current joint state, resets to ``seed`` (or
+    ``REST_POSES`` if no seed is given) to give the iterative solver
+    a deterministic starting point, runs IK with null-space bias, then
+    restores the original state.
+
+    Without a seed the call is independent of where execution left the
+    arm — critical for fresh replans.  With a seed the call preserves
+    the IK branch the seed already lives in — used by execute_pick /
+    execute_place / execute_stack to lower the arm a couple of
+    centimetres into contact without snapping to a different IK
+    solution between move and contact (audit #37 / #38).
 
     Applies the same validation as ``BoxelStreams._pybullet_ik()`` in
     streams.py: null-check, joint-limit check (0.1 rad tolerance), and
@@ -404,6 +411,12 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
                     any sequence accepted by PyBullet.
                     Defaults to gripper pointing straight down.
         physics_client: PyBullet physics client ID.
+        seed:   Optional joint-angle seed (length 7, list or ndarray).
+                When provided, the solver resets the model to ``seed``
+                and uses it as ``restPoses`` for the null-space bias —
+                so the returned solution stays in the same IK branch.
+                When ``None`` (default), behaviour is identical to the
+                previous version: reset to ``REST_POSES``.
 
     Returns:
         Array of 7 joint angles, or ``None`` if IK failed.
@@ -414,6 +427,8 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
     orn_list = (target_orn.tolist() if isinstance(target_orn, np.ndarray)
                 else list(target_orn))
 
+    seed_poses = (list(seed) if seed is not None else list(REST_POSES))
+
     saved = None
     with RenderingLock(physics_client):
         try:
@@ -421,7 +436,7 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
                                      physicsClientId=physics_client)[0]
                      for i in ARM_JOINT_INDICES]
 
-            for i, angle in zip(ARM_JOINT_INDICES, REST_POSES):
+            for i, angle in zip(ARM_JOINT_INDICES, seed_poses):
                 p.resetJointState(robot_id, i, angle,
                                   physicsClientId=physics_client)
 
@@ -431,7 +446,7 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
                 lowerLimits=JOINT_LIMITS_LOW.tolist(),
                 upperLimits=JOINT_LIMITS_HIGH.tolist(),
                 jointRanges=JOINT_RANGES.tolist(),
-                restPoses=REST_POSES,
+                restPoses=seed_poses,
                 maxNumIterations=100,
                 residualThreshold=1e-4,
                 physicsClientId=physics_client,

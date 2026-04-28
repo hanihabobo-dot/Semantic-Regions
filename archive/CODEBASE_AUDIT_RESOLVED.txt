@@ -10,6 +10,9 @@ Archived: 2026-04-16 (moved from CODEBASE_AUDIT.txt: #1 pick contact / execution
 Archived: 2026-04-24 (moved from CODEBASE_AUDIT.txt: #3, #24, #25, #26, #27,
          #28, #35.  All previously RESOLVED inline; relocated to slim the
          open audit.  #3 reclassified DEFERRED → RESOLVED at the same time.)
+Archived: 2026-04-28 (moved from CODEBASE_AUDIT_DEFERRED.txt: #37, #38.
+         Path A applied as designed — see entries at end of file for
+         the diff summary and rationale.)
 
 These issues have been fixed, reclassified as not-an-issue, or corrected.
 The active audit with remaining open issues is in CODEBASE_AUDIT.txt.
@@ -2574,3 +2577,83 @@ Related: #43 (placement gate — depends on this shared _SAFE_TABLE
          #4 (reboxelization — affected generator is the same one),
          shadow_calculator.py (intentionally untouched — keeps wider
               grid for near-field shadow coverage).
+
+================================================================================
+#37. EXECUTE_PICK STILL RE-SOLVES IK INSTEAD OF USING PLANNER'S q  [DONE]
+================================================================================
+Resolved: 2026-04-28 (Path A applied; entry moved from
+          archive/CODEBASE_AUDIT_DEFERRED.txt).
+
+What was wrong:
+       compute_kin_solution returned a config q (boxel.center +
+       grasp.position) and the planned `move` action delivered the arm
+       to q.  execute_pick / execute_place / execute_stack then DISCARDED
+       q and re-solved IK locally for the actual contact pose, seeding
+       the solver from REST_POSES.  This duplicated work the planner
+       already did, bypassed plan_motion's collision checks for the
+       lowering segment, and could snap the arm to a different IK branch
+       between move and contact (a 2 cm Cartesian motion can swing the
+       elbow halfway across the workspace if the branch flips).
+
+Fix (Path A — minimal blast radius, four files):
+       (a) robot_utils.py: solve_ik() gained an optional `seed` parameter.
+           When provided, the solver resets the model to `seed` and uses
+           it as restPoses for the null-space bias; default behaviour
+           (None → REST_POSES) is unchanged.
+       (b) streams.py: _GRASP_Z_OFFSETS = [0.10] → [0.02].  The planner
+           now certifies an approach pose 2 cm above the object centre,
+           and execution lowers the remaining 2 cm seeded from q.
+           Comment/docstring drift in sample_grasp and plan_motion's
+           grasp_ee_offset note also updated.
+       (c) execution.py: execute_pick / execute_place / execute_stack
+           contact-pose solve_ik() calls now pass
+           seed=config.joint_positions.  The defensive open_gripper
+           at the start of execute_pick was removed (gripper state
+           propagates implicitly via the (holding ?o) PDDL predicate;
+           init = open, only pick/place/stack change it; the
+           dispatcher already refuses pick-on-pick).
+       (d) test_full_pipeline.py: stack dispatcher now passes `config`
+           into execute_stack (the dispatcher already had it from the
+           PDDL params, just wasn't forwarding it).
+
+Files touched:  robot_utils.py, streams.py, execution.py,
+                test_full_pipeline.py.  Audit-only files:
+                archive/CODEBASE_AUDIT_DEFERRED.txt (entries removed),
+                archive/CODEBASE_AUDIT_RESOLVED.txt (entries added).
+
+Verification:   py_compile clean on all four code files.  No other
+                solve_ik() callers exist outside execution.py contact
+                poses.  execute_stack has exactly one caller; both
+                pass `config`.
+
+Risks accepted: plan_motion now plans transit to a 2 cm clearance
+                pose instead of 10 cm; RRT-Connect collision-checks
+                the trajectory so unsafe paths fail planning rather
+                than silently colliding.  Smoke test recommended.
+
+Related: #38 (twin entry for execute_stack — fixed in same commit),
+         #1  (RESOLVED — contact-height fix from which this
+              builds), #36 (holding goal terminates at contact —
+              orthogonal, unchanged here).
+
+================================================================================
+#38. EXECUTE_STACK RE-SOLVES IK — SAME ANTI-PATTERN AS #37  [DONE]
+================================================================================
+Resolved: 2026-04-28 (fixed alongside #37 in the same commit, as
+          mandated by the deferred entry's coordination note).
+
+What was wrong:
+       Same anti-pattern as #37 in execute_stack: the compute-stack-kin
+       config was discarded and IK was re-solved locally from REST_POSES.
+       The in-code docstring at execution.py lines 586–589 already
+       flagged this as an "audit #37 dependency" — that note has been
+       removed.
+
+Fix:   execute_stack signature gained a `config` parameter; its
+       contact-pose solve_ik() now passes seed=config.joint_positions.
+       The dispatcher in test_full_pipeline.py was updated to forward
+       the planner's config (it already unpacked it from the action
+       params).  See #37 above for the shared design rationale.
+
+Related: #37 (parent issue — same commit),
+         #30 (stack action that introduced this pattern).
