@@ -195,10 +195,34 @@ class BoxelRegistry:
         If ``boxel.id`` is empty, a sequential ID is generated using a
         prefix derived from ``boxel.boxel_type`` (see ``_PREFIX_FOR_TYPE``).
         Returns the final ID under which the boxel was stored.
+
+        Invariant (OBJECT boxels): no two registry entries may share the
+        same ``object_name``.  Current callers key OBJECT boxels by their
+        physical name (``id == object_name``), so duplicates collapse via
+        dict overwrite — but if a future caller ever generates a fresh
+        sequential id for an existing ``object_name`` we want to fail
+        loudly rather than silently fork the world model into two stale
+        entries.  See test_full_pipeline.py contains_nontarget branch for
+        the explicit-cleanup pattern.
         """
         if not boxel.id:
             prefix = self._PREFIX_FOR_TYPE.get(boxel.boxel_type, "boxel")
             boxel.id = self.generate_id(prefix)
+
+        if (boxel.boxel_type == BoxelType.OBJECT
+                and boxel.object_name is not None):
+            for existing in self.boxels.values():
+                if (existing.boxel_type == BoxelType.OBJECT
+                        and existing.object_name == boxel.object_name
+                        and existing.id != boxel.id):
+                    raise ValueError(
+                        f"Refusing to add OBJECT boxel id={boxel.id!r} for "
+                        f"object_name={boxel.object_name!r}: a different "
+                        f"OBJECT boxel id={existing.id!r} already claims "
+                        f"that name. Remove the old entry first (and its "
+                        f"viz) so only the accurate one stays."
+                    )
+
         self.boxels[boxel.id] = boxel
         return boxel.id
     

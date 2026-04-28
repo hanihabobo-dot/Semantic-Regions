@@ -676,4 +676,10 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     actual_joints = np.array(
         [p.getJointState(robot_id, i)[0] for i in range(7)]
     )
-    return RobotConfi
+    return RobotConfig(joint_positions=actual_joints,
+                       name=f"post_stack_{obj_name}_on_{on_obj_name}")
+
+
+# compute_push_displacement() removed (#53): push superseded by pick-and-place.
+# The function teleported occluders via p.resetBasePositionAndOrientation without
+# involving the robot arm. Occluder relocation now uses pick â move â place.

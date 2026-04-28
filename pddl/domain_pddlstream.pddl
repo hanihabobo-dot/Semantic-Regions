@@ -194,6 +194,7 @@
       (Config ?q)
       (handempty)
       (at_config ?q)
+      (clear ?o)                      ; audit #39 — can't pick an object with something stacked on top
       (obj_at_boxel_KIF ?o ?b)        ; Must know
       (obj_at_boxel ?o ?b)            ; Must be there
       (kin_solution ?o ?b ?g ?q)
