@@ -984,7 +984,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                 print(f"    Stacking {obj_str} on {on_obj_str}...")
 
                 stack_result = execute_stack(
-                    robot_id, env, obj_str, on_obj_str, grasp,
+                    robot_id, env, obj_str, on_obj_str, grasp, config,
                     grasp_constraint_id, gui)
                 if stack_result is None:
                     print(f"    IK failure during stack — replanning (audit #30)")
