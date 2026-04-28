@@ -28,8 +28,11 @@ Oracle perception isolates the planning contribution from perception
 noise.  A real perception module could replace `oracle_detect_objects`
 without changing the planning architecture.
 
-**References**: Archive #56 (dead computation), audit #14 (sparse
-visibility check — the oracle itself has limitations).
+**References**: Archive #56 (dead computation), archive #14 (deferred
+2026-04-28: a 4×4×4 dense AABB ray lattice fixes the sliver-visibility
+gap but ~triples per-call planning time on the default scene by
+inflating the FastDownward grounded state — kept for the §evaluation
+precision/planning-cost study, see thesis section 14 below).
 
 ---
 
@@ -221,3 +224,62 @@ Examples include:
 **Thesis framing**: These constants were empirically tuned for the specific evaluation scenario to ensure stable simulation and planning times. Generalizing these parameters (e.g., dynamic grasp sampling based on object geometry) is orthogonal to the core contribution and left as future work.
 
 **References**: Audit #69, #84 (resolved), `streams.py`, `execution.py`, and `boxel_env.py`.
+
+---
+
+## 14. Perception Density vs Planning Cost (Dense Visibility Trade-off)
+
+`oracle_detect_objects()` in `boxel_env.py` currently classifies an
+object as visible if **any** of 8 AABB-corner rays from the camera
+reaches its body id. This is known to miss sliver-visible occluders
+(audit #14, observed 2026-04-03 mission failure).
+
+A drop-in fix using a 4×4×4 = 64-point parametric lattice over each
+AABB was implemented and **measurably correct**: previously-missed
+occluders re-enter the `BoxelRegistry`, their shadows get computed,
+and the planner gains the option to relocate them.
+
+That implementation lives on branch `audit-14-dense-lattice-attempt`
+(commit `92b37fc`, pushed to both remotes) but is **not on `main`**.
+On the default scene with seed 0 (2026-04-28 measurements):
+
+| variant       | scene found      | plans | avg per-call | per-call (s)                          |
+| ------------- | ---------------- | ----- | ------------ | ------------------------------------- |
+| 8-corner      | 3 occl / 4 shad  | 1     |  ~9 s        | post-stack baseline, see audit #30    |
+| 64-ray, run A | 3 occl / 4 shad  | 5     |  8.90 s      | 9.06, 3.47, 13.21, 11.66, 7.08        |
+| 64-ray, run B | 3 occl / 4 shad  | 1     |  8.91 s      | 8.91                                  |
+| 64-ray, run C | **6 occl / 6 shad** (dense lattice discovers slivers) | 5 | **12.32 s** | 21.04, 6.55, 9.02, 7.81, 17.19 |
+
+The cost is purely **planner-side**: more visible objects → more
+`(Obj ?o)`, `(Shadow ?s)`, `(boxel_fits ?o ?b)`, and
+`(blocks_view_at ?s ?o)` facts in the initial state → larger
+FastDownward grounding → longer translator + search. The same
+mechanism drives the audit #30 stack-goal slowdown (extra `(on ?o ?x)`
+groundings), so this is not a perception-specific phenomenon — it is a
+recurring "init-state size dominates planning cost" theme.
+
+**Thesis framing** — this is exactly the kind of cross-layer
+interaction the semantic boxel approach is meant to expose:
+
+1. **Perception density is a tunable knob** that the experiment
+   runner (audit #9) can sweep: `VISIBILITY_GRID_N ∈ {2, 3, 4, 5}`
+   plus an upper-bound depth-buffer-segmentation oracle. Report
+   (success rate, planning time, # discovered occluders, # init
+   facts) per setting.
+2. **Cross-baseline relevance**: the uniform-voxelization baseline
+   (audit #10) suffers the same fact-count blowup; the
+   fixed-semantic-regions baseline (audit #11) does not. Comparing
+   the three under varying perception density isolates whether the
+   planner's cost comes from the partition strategy or from
+   perception completeness.
+3. **Honest reporting**: the project does NOT silently accept the
+   sliver-blindness on `main`. The fix exists, was measured, and is
+   shelved for principled measurement instead of unprincipled
+   inclusion. A single sentence in the thesis is enough to disclose
+   this; the §evaluation chapter then quantifies the trade-off.
+
+**References**: Branch `audit-14-dense-lattice-attempt` (commit
+`92b37fc`), `archive/CODEBASE_AUDIT_DEFERRED.txt` section "#14",
+audit #9 (experiment runner), audit #10/#11 (baselines), audit #30
+(parallel "init facts dominate planner cost" finding), audit #15
+(shadow splitting still affected on main).
