@@ -93,7 +93,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #4(partial), #6, #9–#14, #21, #30(perf-open), #31, #32,     #
+#  OPEN ISSUES — #4(partial), #6, #9–#13, #21, #30(perf-open), #31, #32,     #
 #                #34, #36, #40, #41, #42                                      #
 #                                                                              #
 ################################################################################
@@ -303,56 +303,6 @@ Fix:   ONE COMMIT — add recursive discovery pass:
        fixed-camera scenario and note as future work in the thesis.
 
 Related: #4 (re-boxelization could trigger re-discovery)
-
-
-================================================================================
-#14. SPARSE VISIBILITY CHECK — 8 AABB CORNERS MISS PARTIALLY VISIBLE OBJECTS
-================================================================================
-Priority: TIER 0 — Root cause of persistent sensing failures
-Where:    boxel_env.py (oracle_detect_objects, ~line 900)
-Depends:  None
-Effort:   1-2 days
-
-What:  oracle_detect_objects() determines whether an object is visible
-       by casting exactly 8 rays from the camera to the 8 corners of
-       the object's AABB.  If ANY ray reaches the object, it is
-       visible; if ALL 8 are intercepted, the object is classified as
-       invisible.
-
-       8 corners is too sparse.  When an object is partially visible
-       (e.g. a sliver sticks out between two occluders, or the top
-       protrudes above a shorter occluder), none of the 8 corners may
-       land in the visible gap.  The object is then classified as
-       invisible despite being partially visible from the camera.
-
-       Observed failure (run 2026-04-03): occluder_1 at (0.5, 0.2)
-       was classified as invisible because all 8 AABB corner rays
-       were intercepted by occluder_2 and occluder_3 in front.
-       Consequences:
-       (a) occluder_1 never entered the BoxelRegistry as an object
-           boxel — the planner had no knowledge of it.
-       (b) Shadow volumes from other occluders extended through
-           occluder_1's position unsplit (#15).
-       (c) The planner could never plan to relocate occluder_1,
-           causing ALL subsequent sense actions to report 49-58%
-           ray blockage.  10 plans executed, all failed — total
-           mission failure.
-
-Fix:   ONE COMMIT — increase ray density in oracle_detect_objects():
-       (a) Replace 8-corner rays with a denser grid over the AABB
-           surface (e.g. 4×4 grid per face = 96 rays, or N×N on the
-           camera-facing face only).
-       (b) Alternative: use the rendered depth buffer to check if
-           any pixel corresponds to the object's body ID (segmentation
-           mask approach — PyBullet's getCameraImage returns a
-           segmentation buffer).  This is both cheaper and catches
-           any visible pixel, no matter how small.
-       (c) Either approach should use a visibility THRESHOLD: an
-           object may be "visible" if ≥ K% of sample points reach
-           it, to filter noise from sub-pixel slivers.
-
-Related: #15 (shadow splitting depends on correct visibility),
-         #16 (camera angle exacerbates this)
 
 
 ================================================================================
@@ -809,7 +759,6 @@ Each issue is one commit.  Dependencies listed; work within a tier can
 be parallelized where no dependency exists.
 
 TIER 0 — ACTIONABLE NOW (no dependencies):
-  #14  Sparse visibility check (8 AABB corners)           ~1-2 days
   #21  Blocked sense switches shadows / false all_searched ~1-2 days
        (design direction: fix in PDDL model, not execution loop)
   #40  False-success: symbolic state accepted over physics  ~0.5-1 day
@@ -844,11 +793,14 @@ TIER 3 — CODE QUALITY (low priority):
   #32  Comment/code drift (stale comments)                   <1 day
   #34  _compute_placement_view_blocks scalability           (if needed)
 
-Total open: 15 items (#4(partial), #6, #9–#14, #21, #30(perf-open), #31, #32,
+Total open: 14 items (#4(partial), #6, #9–#13, #21, #30(perf-open), #31, #32,
             #34, #36, #40, #41, #42).
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2  (full boxel merge condition),
+             #14 (dense AABB visibility lattice — works but trips planner
+                  state-space explosion; kept for evaluation analysis,
+                  see branch audit-14-dense-lattice-attempt),
              #37 (execute_pick re-solves IK — very low, long debate),
              #38 (execute_stack re-solves IK — depends #37).
 

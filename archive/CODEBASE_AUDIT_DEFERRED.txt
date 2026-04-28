@@ -8,6 +8,15 @@ Contents of this file:
   - DEFERRED full boxel merge condition (#2 / old #103): convex-only merge is
     accepted for current scope; identical blocks_view_at, observability, and
     back-to-front order deferred.  See section "#2" below (2026-04-05).
+  - DEFERRED dense visibility lattice (#14, 2026-04-28): the 4x4x4=64-ray
+    lattice for oracle_detect_objects() works correctly and recovers the
+    sliver-visible occluders the 8-corner test misses, but it inflates
+    the planner's grounded state space (more objects -> more shadows ->
+    more facts) and roughly triples per-call planning time on the default
+    scene.  Implementation lives on branch audit-14-dense-lattice-attempt
+    (commit 92b37fc) for revival when the evaluation framework (#9) can
+    quantify the precision/planning-cost trade-off.  See section "#14"
+    below.
   - DEFERRED scene infrastructure (#55): parameterization is done, no batch
     evaluation runner needed until #76 scaffolding exists.
   - DEFERRED dead method bodies (#56): _depth_buffer_to_meters,
@@ -854,3 +863,104 @@ Why this is low priority:  same reasoning as #37 — current code works,
 Related: #37 (pick/place IK re-solve — parent issue),
          #30 (stack action that introduced this pattern),
          execution.py:586-589 (in-code link comment)
+
+
+================================================================================
+#14. SPARSE VISIBILITY CHECK — DENSE-LATTICE FIX DEFERRED FOR EVALUATION
+================================================================================
+Archived: 2026-04-28 — implementation works, but reveals a precision/
+planning-cost trade-off worth measuring rather than silently absorbing.
+Source numbering: open issue #14 (TIER 0 in CODEBASE_AUDIT.txt).
+
+Where:    boxel_env.py (oracle_detect_objects)
+Branch:   audit-14-dense-lattice-attempt (commit 92b37fc)
+          — pushed to both `github` and `origin` remotes.
+
+WHAT IT WAS: oracle_detect_objects() determines whether an object is
+visible by casting rays from the camera to a sample of points on the
+object's AABB.  An object is visible if at least K rays terminate on
+its body id.
+
+       Original (still in main): K=1 over the 8 AABB corners.  Misses
+       partially visible objects when no corner lands in the visible
+       gap (the 2026-04-03 mission failure: occluder_1 was classified
+       invisible because all 8 of its corners were intercepted by
+       occluder_2/3 in front; the planner never got a chance to
+       relocate it; 10 plans, all failed).
+
+       Dense lattice (branch only): K=1 over a 4x4x4 = 64-point
+       parametric lattice (VISIBILITY_GRID_N**3).  Catches sliver
+       visibility correctly.
+
+WHY DEFERRED — measured planner cost (default scene, holding goal,
+seed 0, GUI on, 2026-04-28 runs):
+
+       8-corner baseline (commit 0d5def7+, see audit #30 for context):
+         Avg per call ~7-10 s (post-stack baseline, archived #30).
+
+       64-ray lattice on the same scene:
+         Run A:  3 occluders / 4 targets, 5 plans, [9.06, 3.47,
+                 13.21, 11.66, 7.08] s -> avg 8.90 s/plan.
+         Run B:  same scene, easier seed, 1 plan, 8.91 s.
+         Run C:  scene re-spawned to 6 occluders / 6 shadows because
+                 the dense lattice now SEES the sliver-visible
+                 occluders that the 8-corner test missed.  5 plans,
+                 [21.04, 6.55, 9.02, 7.81, 17.19] s -> avg 12.32
+                 s/plan, with PLAN #1 at 21 s.
+
+       Mechanism: more visible objects -> more (Obj ?o), (Shadow ?s),
+       (boxel_fits ?o ?b), (blocks_view_at ?s ?o), (obj_at_boxel_KIF
+       ?o ?b) facts in the initial state -> larger FastDownward
+       grounding -> longer translator + search.  Same root pattern
+       as audit #30 (conditional-effects pick), but driven by
+       perception completeness instead of action expressivity.
+
+WHY THIS IS INTERESTING (kept for thesis evaluation, not discarded):
+
+       (a) PRECISION/PLANNING-COST TRADE-OFF: the lattice IS more
+           accurate.  The cost is purely planner-side, not perception-
+           side.  This is the kind of cross-layer interaction the
+           semantic boxel approach is supposed to expose.
+       (b) NATURAL EVALUATION AXIS: sweep VISIBILITY_GRID_N over
+           {2 (=8 corners), 3 (=27), 4 (=64), 5 (=125), depth-buffer
+           segmentation oracle} on identical seeds and report
+           (success rate, planning time, # discovered occluders,
+           # shadows in init state).  Slot directly into the
+           experiment runner planned in audit #9.
+       (c) MOTIVATES BASELINE COMPARISON: the dense lattice's cost
+           comes from MORE OBJECTS -> MORE BOXELS -> MORE FACTS.
+           The "uniform voxelization" baseline (#10) would suffer
+           the same blowup; the "fixed semantic regions" baseline
+           (#11) would not.  This makes the perception-density
+           dimension a useful comparator across all three.
+       (d) MOTIVATES MULTI-BOXEL PLACEMENT (#6) AND STACK PERF (#30)
+           DEEPER LOOK: planner cost scaling with init facts is now
+           a recurring theme; addressing it once may help all three.
+
+REVIVAL CHECKLIST (when evaluation framework #9 lands):
+       1. git cherry-pick 92b37fc onto a measurement branch.
+       2. Add CLI flag --visibility-grid-n exposing
+          BoxelTestEnv.VISIBILITY_GRID_N (default 2 to match main).
+       3. Run the audit #9 experiment matrix across N in
+          {2, 3, 4} x {default, scalability(--n-occluders 1..6)}
+          x at least 5 seeds.
+       4. Report (success rate, avg per-call planning time,
+          # init facts) per (N, scene, seed).
+       5. Update THESIS_NOTES.md section 14 with the measured curve.
+
+WHAT IS NOT DEFERRED:
+       The CONSISTENCY GAP between _hidden_xy_positions (8-corner
+       acceptance) and oracle_detect_objects (lattice rejection)
+       documented in the 2026-04-28 design discussion is moot while
+       this fix is shelved — main still uses 8-corner everywhere.
+
+Related: #9  (evaluation framework — natural place to measure this),
+         #10 (uniform voxelization baseline — same cost mechanism),
+         #11 (fixed regions baseline — control for the cost),
+         #15 (shadow splitting depends on correct visibility —
+              still affected on main, just not via this fix),
+         #29 (_hidden_xy_positions uses 8-corner raycasts — would
+              need re-checking if the lattice is ever revived),
+         #30 (stack-goal planner cost — same FastDownward grounding
+              theme).
+
