@@ -357,18 +357,14 @@ def main(gui=True, run_logger=None, scene_config=None,
     shadow_occluder_map = compute_shadow_blockers(
         env.camera_position, registry, shadows, occluders, env
     )
-    # Fallback: if raycasting found no blockers for a shadow (can happen
-    # when the occluder sits exactly at a ray grid boundary), use the
-    # parent relationship recorded during boxel creation.
+    # compute_shadow_blockers now applies the parent-relationship fallback
+    # internally for any shadow whose ray-grid produced no blockers, so
+    # there's nothing to do here per shadow EXCEPT warn when even the
+    # parent linkage is missing — those shadows are unreachable by the
+    # planner and would silently be treated as view_clear.
     for shadow_id in shadows:
-        if shadow_id not in shadow_occluder_map or not shadow_occluder_map[shadow_id]:
-            shadow_boxel = registry.get_boxel(shadow_id)
-            if shadow_boxel and shadow_boxel.created_by_boxel_id:
-                shadow_occluder_map.setdefault(shadow_id, []).append(
-                    shadow_boxel.created_by_boxel_id
-                )
-            else:
-                print(f"  WARNING: Shadow {shadow_id} has no linked occluder — skipping")
+        if not shadow_occluder_map.get(shadow_id):
+            print(f"  WARNING: Shadow {shadow_id} has no linked occluder — skipping")
 
     # Bridge between the symbolic (PDDL) and physical (PyBullet) worlds.
     # The planner reasons about boxel IDs like "obj_000"; execution needs
@@ -762,6 +758,18 @@ def main(gui=True, run_logger=None, scene_config=None,
                                 'pybullet_id': bid,
                                 'position': np.array(obj_info.position),
                             }
+                            # Keep the `occluders` snapshot in sync with the
+                            # registry: compute_shadow_blockers iterates this
+                            # list to build its body_id → boxel_id map.  If
+                            # we don't append the freshly discovered object
+                            # here, any ray that hits it is silently treated
+                            # as "not a blocker" and the planner thinks the
+                            # new shadow region is view_clear — leading to
+                            # (move, sense, pick) plans against shadows whose
+                            # occluder is still in front, which sense->reveals
+                            # the same occluder again with zero progress.
+                            if obj_name not in occluders:
+                                occluders.append(obj_name)
 
                             # Compute shadow for this newly visible object.
                             # ShadowCalculator now accepts BoxelData directly,

@@ -135,6 +135,22 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
     relocated, a DIFFERENT object may now block the camera's view of a
     shadow that was originally created by something else.
 
+    Why we ALSO consult the parent relationship as a fallback: the 5x5
+    z-slice ray grid is geometrically incomplete — for shadows that
+    share a face with their occluder and extend past the occluder under
+    perspective skew (e.g. yellow ↔ shadow_of_yellow_object), the rays
+    can graze the occluder's AABB along the shared face and miss it
+    entirely.  Without a fallback those shadows would be reported with
+    an empty blocker list, the planner would treat them as view_clear,
+    and `(move, sense, pick)` plans would target a region whose
+    occluder is still in front — sensing then re-discovers the same
+    occluder, a fresh shadow boxel materialises in the same place, and
+    nothing has changed.  We guard against that by ensuring every
+    shadow's `created_by_boxel_id` (when known and still in the
+    registry) is at least listed as a blocker — the post-place refresh
+    no longer relies on a separate caller-side fallback the way the
+    initial setup did.
+
     Args:
         camera_pos: Camera position [x, y, z].
         registry: BoxelRegistry with all boxels.
@@ -179,6 +195,17 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
         for hit_id, _link, _frac, _pos, _normal in results:
             if hit_id in pybullet_to_boxel:
                 blocker_set.add(pybullet_to_boxel[hit_id])
+
+        # Parent-relationship fallback: if raycasting found nothing for
+        # this shadow but we know the creating occluder, add it.  The
+        # creator is by construction the geometry that cast the shadow,
+        # so it remains a valid blocker until either (a) it is moved or
+        # (b) the shadow itself is removed.  We re-confirm it is still
+        # an OBJECT in the registry to avoid resurrecting stale links.
+        if not blocker_set and sb.created_by_boxel_id:
+            creator = registry.get_boxel(sb.created_by_boxel_id)
+            if creator is not None:
+                blocker_set.add(sb.created_by_boxel_id)
 
         blockers[shadow_id] = list(blocker_set)
 
