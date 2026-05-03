@@ -18,6 +18,7 @@ Updated:  2026-04-29 (#37/#38 follow-up: grasp Z-offset reverted from
          the camera→shadow ray paths and broke move→sense sequences.
          IK seeding (the actual #37/#38 win) retained.  See #37's
          "Follow-up" section for details.)
+Archived: 2026-05-03 (moved from CODEBASE_AUDIT.txt: #45, #46.)
 
 These issues have been fixed, reclassified as not-an-issue, or corrected.
 The active audit with remaining open issues is in CODEBASE_AUDIT.txt.
@@ -2670,6 +2671,220 @@ Related: #38 (twin entry for execute_stack — fixed in same commit),
          #1  (RESOLVED — contact-height fix from which this
               builds), #36 (holding goal terminates at contact —
               orthogonal, unchanged here).
+
+================================================================================
+#45. STALE OCCLUDERS LIST + LOST BLOCKER FALLBACK — SENSE LOOPS ON SAME SHADOW
+     [DONE 2026-05-02]
+================================================================================
+Priority: TIER 0 — Control-loop correctness bug (was a live regression)
+Where:    test_full_pipeline.py (occluders snapshot, discovery branch),
+          execution.py (compute_shadow_blockers)
+Depends:  None
+Effort:   Done — two surgical edits + one cleanup.
+
+What:  After the first sense reveals a non-target object, subsequent
+       plans degenerate into (move, sense, pick) against shadows whose
+       occluder is still physically in front.  Each such plan re-discovers
+       the same occluder, the registry overwrites the OBJECT entry in
+       place, and a fresh shadow boxel materialises with essentially the
+       same AABB as the one we just removed.  Re-boxelize then reports
+       "0 removed, 0 new, N unchanged" and the loop spins.
+
+       Symptom in run 2026-05-02_09-27-04 (target purple_object,
+       oracle hidden in shadow_of_orange_object):
+
+         PLAN #1: pick green → place → sense shadow_of_green   (ok, reveals cyan)
+         PLAN #2: pick red   → place → sense shadow_of_red     (ok, reveals blue)
+         PLAN #3:                       sense shadow_040       (cyan's new shadow,
+                                                                cyan never picked)
+                                                                → 0/0/58 reboxelize
+         PLAN #4:                       sense shadow_of_yellow (yellow never
+                                                                picked)
+                                                                → 0/0/58 reboxelize
+         PLAN #6:                       sense shadow_109       (cyan's third shadow,
+                                                                cyan never picked)
+                                                                → 0/0/56 reboxelize
+         PLAN #7: pick cyan → place → sense → … (run finally makes progress)
+
+       This is distinct from #21.  #21 fires on the still_blocked sense
+       outcome (raycast detects an occluder in the LOS).  Here the planner
+       believed the shadow was view_clear, so sense was "legal" — and it
+       returned contains_nontarget where the nontarget WAS the shadow's
+       own occluder.
+
+ROOT CAUSE — two cooperating bugs:
+
+       (1) Stale `occluders` snapshot (test_full_pipeline.py L262).
+           The list is built ONCE before the replan loop and never
+           updated when sense reveals new OBJECTs (cyan, blue, …).
+           compute_shadow_blockers builds its body_id → boxel_id map
+           solely from this list, so any ray that hits a discovered
+           object is silently treated as "not a blocker", the new
+           shadow gets blocker_set == ∅, and the planner sees
+           view_clear for it.  Sense then re-discovers the same
+           occluder, ad infinitum.
+
+       (2) Lost blocker fallback after post-place refresh.
+           The created_by_boxel_id fallback was applied only at
+           initial setup (test_full_pipeline.py L363-371), NOT after
+           the post-place compute_shadow_blockers call (L972).  For
+           shadows whose 5x5 z-mid ray grid grazes the occluder along
+           a shared face under perspective skew (e.g. yellow ↔
+           shadow_of_yellow_object: shadow's y_min == yellow's y_max,
+           shadow extends past yellow on +x), raycasting can return
+           zero hits even though the occluder is physically in front.
+           Without the fallback, those shadows became view_clear too,
+           producing the same bare (move, sense, pick) plan.
+
+FIX (commit 2026-05-02):
+
+       (a) test_full_pipeline.py — discovery branch (~L771):
+             if obj_name not in occluders:
+                 occluders.append(obj_name)
+           Keeps compute_shadow_blockers' object_id list in sync with
+           the registry as objects are revealed.
+
+       (b) execution.py — compute_shadow_blockers (~L199):
+           Folded the parent-relationship fallback inside the function
+           so EVERY call (initial AND post-place refresh) guarantees
+           each shadow with a known created_by_boxel_id gets at least
+           its creator listed when the ray grid finds nothing.
+
+       (c) test_full_pipeline.py — initial setup (~L360):
+           Removed the now-redundant caller-side fallback; kept the
+           single warning for shadows that are orphaned (no
+           created_by_boxel_id and no raycast hits).
+
+VERIFICATION — what to look for in the next run:
+       - Shadow blockers audit after every place lists every remaining
+         shadow with its blocker (no silently-empty entries).
+       - Plans that target a shadow whose occluder is still in front
+         now begin with pick(occluder) → place, not bare sense.
+       - "Re-boxelize: 0 removed, 0 new, N unchanged" after a sense
+         disappears except in the legitimate "no new geometry" case.
+
+Related: #21 (still_blocked policy — orthogonal failure mode in the
+              same loop; this fix does not subsume #21 but reduces
+              the frequency it can trigger), #4(c-partial)
+              (re-boxelize / discovery bookkeeping — same code path),
+              old #78 (compute_shadow_blockers introduction).
+
+
+================================================================================
+#46. TWO-CLIENT PYBULLET (GUI + DIRECT) — STOP TELEPORTING THE VISIBLE ARM
+     [DONE 2026-05-02]
+================================================================================
+Priority: TIER 1 — Architecture / UX
+Where:    boxel_env.py (BoxelTestEnv), test_full_pipeline.py (Phase 5 setup
+          + replan loop), streams.py / robot_utils.py (use plan client via
+          existing physics_client parameter — no signature changes)
+Depends:  None
+Effort:   Done — one BoxelTestEnv refactor + a few callsite tweaks.
+
+What:  The single-client design ran IK, RRT, and collision checks on the
+       same PyBullet world the GUI was rendering.  Each candidate config
+       did save → reset → check → restore on the live robot's joints,
+       which forced a tabletop policy of:
+         * `RenderingLock` wrapped around planner.plan() to suppress the
+           OpenGL buffer swap that resetJointState triggers, freezing the
+           GUI for the entire planning duration (often 30-130 s).
+         * Per-IK save/restore handshake to keep the visible arm from
+           snapping to whatever the last IK candidate was.
+         * Audit-#60 policy comments warning about the freeze and
+           even an XIO crash mode when WSLg's Weston compositor times
+           out during long planning calls.
+
+       That whole class of complications is an artifact of having one
+       world.  The standard pattern in pybullet-planning (Garrett — same
+       author as PDDLStream) is to use TWO clients: a GUI world that
+       only execution mutates, and a DIRECT world that only streams
+       mutate.  Sync at replan boundaries.
+
+FIX (commit 2026-05-02):
+
+       (a) BoxelTestEnv.__init__ — add a second p.connect(p.DIRECT) as
+           self.plan_client_id, configure gravity / search path / time
+           on it, initialise self._gui_to_plan = {} and
+           self.plan_robot_id = None.
+
+       (b) Mirroring helpers (audit #46 in boxel_env.py):
+             _mirror_load_urdf(*args, **kwargs)
+             _mirror_spawn_object(spec, position)
+           Both load/create the body in BOTH clients with identical
+           args, register the gui→plan mapping, and return the GUI body
+           id (so existing ObjectInfo / execution code is untouched).
+
+       (c) plan_body_id(gui_id) — translate at the planner boundary.
+
+       (d) sync_to_plan_client(held_body_id=None) — copy every mirrored
+           body's base pose and every robot joint state from the GUI
+           client to the plan client.  Cheap (≈ a few dozen p.* calls);
+           runs once per replan.  Held bodies inherit the EE pose via
+           their base-pose sync; is_config_collision_free already
+           repositions them per hypothetical EE config.
+
+       (e) test_full_pipeline.py:
+             * Build object_body_ids using env.plan_body_id() so streams
+               see plan-side ids end-to-end.
+             * Add planner_support_body_ids (plan-side) for the planner;
+               keep support_body_ids (GUI-side) for detect_execution_-
+               collisions / release_held_object_in_place.
+             * Construct PDDLStreamPlanner with robot_id=env.plan_robot_id
+               and physics_client=env.plan_client_id.
+             * Discovery branch (~L771): translate newly discovered GUI
+               body ids to plan ids before exposing them to streams.
+             * Drop the outer `with RenderingLock(env.client_id):` around
+               planner.plan() — no longer necessary.  Replace with a
+               single env.sync_to_plan_client(held_body_id=held_body_id)
+               call.
+
+       (f) BoxelTestEnv.{step_simulation, reset, close} — physics still
+           lives on the GUI client (we never step plan_client); reset
+           clears both clients; close disconnects both.
+
+       Streams (BoxelStreams, robot_utils.is_config_collision_free,
+       solve_ik) needed NO body changes — they already accepted a
+       physics_client / robot_id and used them everywhere.  The internal
+       per-call save/restore handshake stays (cheap, no GUI cost on a
+       DIRECT client) so multiple IK calls within one planner.plan() are
+       deterministic w.r.t. each other.
+
+VERIFICATION — what to look for in the next run:
+       - GUI window stays interactive during planner.plan() (pan / zoom /
+         rotate work).
+       - No visible arm teleporting during planning; the robot only moves
+         when execute_* drives it.
+       - No more "Window closing in 4 seconds…" → XIO error mode for very
+         long plans (the WSLg X11 timeout mode goes away because the GUI
+         is no longer locked).
+       - Per-IK overhead drops slightly (no rendering toggle on the plan
+         client; configureDebugVisualizer is a no-op there).
+       - object_body_ids / support_body_ids passed to PDDLStreamPlanner
+         contain ONLY plan-side ids; mixing GUI ids would silently
+         become a no-op in collision checks (different bodies in the
+         plan client) — discovery branch fix in (e) closes that hole.
+
+CAVEATS / FOLLOW-UPS:
+       - solve_ik in execute_pick / execute_place / execute_stack still
+         runs on the GUI client (we WANT the contact-pose IK to match
+         what the live arm achieves).  Each such call still triggers one
+         RenderingLock toggle on the GUI; this is one toggle per action
+         vs. thousands per plan, so the visible flicker is gone.
+       - No grasp constraint is mirrored on the plan client.  We don't
+         step the plan client, so the held body stays where sync put it
+         (≈ EE pose).  is_config_collision_free repositions it per
+         candidate config.  If we ever start stepping the plan client
+         (e.g. for forward simulation), we'll need to mirror the
+         constraint as well.
+       - The open-audit #60 policy block was updated 2026-05-03 when #46
+         was archived to describe the new split (DIRECT planning vs. GUI
+         execution).
+
+Related: old #60 (RenderingLock origin, now superseded for planning),
+         #4(c-remainder) (re-boxelize / belief consistency — independent),
+         #45 (blocker fallback, also depends on shadow_occluder_map being
+              consistent, also independent).
+
 
 ================================================================================
 #38. EXECUTE_STACK RE-SOLVES IK — SAME ANTI-PATTERN AS #37  [DONE]

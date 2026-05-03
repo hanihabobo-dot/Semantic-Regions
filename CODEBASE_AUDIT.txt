@@ -14,10 +14,8 @@ Slimmed:      2026-04-27 — moved #29, #33, #39, #43, #44 (fully DONE) and the
               in the policy section — all four drift channels now live as
               individual resolved/open entries.  Merged two overlapping
               boxel_fits / static-init policy blocks.
-Added:        2026-05-02 — #45 [DONE] (stale `occluders` snapshot + lost
-              parent-relationship fallback in compute_shadow_blockers caused
-              repeated bare-sense plans against shadows whose occluder was
-              still in front; reduces #21's trigger surface).
+Slimmed:      2026-05-03 — moved #45, #46 (fully DONE) to
+              archive/CODEBASE_AUDIT_RESOLVED.txt.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -52,18 +50,14 @@ ARCHIVE — TRACKED AND PUSHED
        archive/ contains superseded implementations and audit history.
        Tracked by git.  Must NOT contain personal information.
 
-PYBULLET GUI FREEZES DURING PLANNING — THIS IS NORMAL
-       The RenderingLock (robot_utils.py) disables COV_ENABLE_RENDERING
-       for the entire planning phase (test_full_pipeline.py ~line 346,
-       audit #60).  While planning runs (often 30-130 s), the PyBullet
-       window appears frozen — no zoom, pan, or rotation works.
-       The GUI unfreezes when planning finishes.
-       If planning takes very long, WSLg's Weston compositor may drop
-       the X11 connection, crashing the process with:
-         XIO: fatal IO error 11 (Resource temporarily unavailable) on X server ":0"
-       Fix: restart WSL (wsl --shutdown from PowerShell, then reopen
-       terminal).  Keyboard camera controls (R/F for zoom, WASD for
-       pan) also do not work while rendering is locked.
+PYBULLET — PLANNING VS. GUI (audit #46 supersedes old #60 full-plan lock)
+       PDDLStream planning runs against a separate DIRECT PyBullet client
+       (boxel_env.plan_client_id); the GUI window stays interactive during
+       long planner.plan() calls.  RenderingLock may still wrap brief IK
+       solves on the GUI client during execution (execute_pick / place /
+       stack), so a short flicker is possible per action — not a multi-
+       minute freeze.  If WSLg/X11 still drops under heavy load, restart
+       WSL (wsl --shutdown from PowerShell, then reopen terminal).
 
 WSL VIRTUAL ENVIRONMENT — DO NOT DELETE
        wsl_env/ is the WSL Python venv (gitignored, local only).
@@ -747,104 +741,6 @@ Related: #4 (re-boxelization after unexpected state),
 
 
 ================================================================================
-#45. STALE OCCLUDERS LIST + LOST BLOCKER FALLBACK — SENSE LOOPS ON SAME SHADOW
-     [DONE 2026-05-02]
-================================================================================
-Priority: TIER 0 — Control-loop correctness bug (was a live regression)
-Where:    test_full_pipeline.py (occluders snapshot, discovery branch),
-          execution.py (compute_shadow_blockers)
-Depends:  None
-Effort:   Done — two surgical edits + one cleanup.
-
-What:  After the first sense reveals a non-target object, subsequent
-       plans degenerate into (move, sense, pick) against shadows whose
-       occluder is still physically in front.  Each such plan re-discovers
-       the same occluder, the registry overwrites the OBJECT entry in
-       place, and a fresh shadow boxel materialises with essentially the
-       same AABB as the one we just removed.  Re-boxelize then reports
-       "0 removed, 0 new, N unchanged" and the loop spins.
-
-       Symptom in run 2026-05-02_09-27-04 (target purple_object,
-       oracle hidden in shadow_of_orange_object):
-
-         PLAN #1: pick green → place → sense shadow_of_green   (ok, reveals cyan)
-         PLAN #2: pick red   → place → sense shadow_of_red     (ok, reveals blue)
-         PLAN #3:                       sense shadow_040       (cyan's new shadow,
-                                                                cyan never picked)
-                                                                → 0/0/58 reboxelize
-         PLAN #4:                       sense shadow_of_yellow (yellow never
-                                                                picked)
-                                                                → 0/0/58 reboxelize
-         PLAN #6:                       sense shadow_109       (cyan's third shadow,
-                                                                cyan never picked)
-                                                                → 0/0/56 reboxelize
-         PLAN #7: pick cyan → place → sense → … (run finally makes progress)
-
-       This is distinct from #21.  #21 fires on the still_blocked sense
-       outcome (raycast detects an occluder in the LOS).  Here the planner
-       believed the shadow was view_clear, so sense was "legal" — and it
-       returned contains_nontarget where the nontarget WAS the shadow's
-       own occluder.
-
-ROOT CAUSE — two cooperating bugs:
-
-       (1) Stale `occluders` snapshot (test_full_pipeline.py L262).
-           The list is built ONCE before the replan loop and never
-           updated when sense reveals new OBJECTs (cyan, blue, …).
-           compute_shadow_blockers builds its body_id → boxel_id map
-           solely from this list, so any ray that hits a discovered
-           object is silently treated as "not a blocker", the new
-           shadow gets blocker_set == ∅, and the planner sees
-           view_clear for it.  Sense then re-discovers the same
-           occluder, ad infinitum.
-
-       (2) Lost blocker fallback after post-place refresh.
-           The created_by_boxel_id fallback was applied only at
-           initial setup (test_full_pipeline.py L363-371), NOT after
-           the post-place compute_shadow_blockers call (L972).  For
-           shadows whose 5x5 z-mid ray grid grazes the occluder along
-           a shared face under perspective skew (e.g. yellow ↔
-           shadow_of_yellow_object: shadow's y_min == yellow's y_max,
-           shadow extends past yellow on +x), raycasting can return
-           zero hits even though the occluder is physically in front.
-           Without the fallback, those shadows became view_clear too,
-           producing the same bare (move, sense, pick) plan.
-
-FIX (commit 2026-05-02):
-
-       (a) test_full_pipeline.py — discovery branch (~L771):
-             if obj_name not in occluders:
-                 occluders.append(obj_name)
-           Keeps compute_shadow_blockers' object_id list in sync with
-           the registry as objects are revealed.
-
-       (b) execution.py — compute_shadow_blockers (~L199):
-           Folded the parent-relationship fallback inside the function
-           so EVERY call (initial AND post-place refresh) guarantees
-           each shadow with a known created_by_boxel_id gets at least
-           its creator listed when the ray grid finds nothing.
-
-       (c) test_full_pipeline.py — initial setup (~L360):
-           Removed the now-redundant caller-side fallback; kept the
-           single warning for shadows that are orphaned (no
-           created_by_boxel_id and no raycast hits).
-
-VERIFICATION — what to look for in the next run:
-       - Shadow blockers audit after every place lists every remaining
-         shadow with its blocker (no silently-empty entries).
-       - Plans that target a shadow whose occluder is still in front
-         now begin with pick(occluder) → place, not bare sense.
-       - "Re-boxelize: 0 removed, 0 new, N unchanged" after a sense
-         disappears except in the legitimate "no new geometry" case.
-
-Related: #21 (still_blocked policy — orthogonal failure mode in the
-              same loop; this fix does not subsume #21 but reduces
-              the frequency it can trigger), #4(c-partial)
-              (re-boxelize / discovery bookkeeping — same code path),
-              old #78 (compute_shadow_blockers introduction).
-
-
-================================================================================
 FOR LATER
 ================================================================================
 - Incremental boxel recomputation after occluder relocation (without
@@ -914,4 +810,4 @@ Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
 
 Resolved/subsumed → archive/CODEBASE_AUDIT_RESOLVED.txt:
              #1, #3, #5, #7, #8, #15–#20, #22–#29, #33, #35, #37, #38,
-             #39, #43, #44, and the #30 implementation debrief.
+             #39, #43, #44, #45, #46, and the #30 implementation debrief.
