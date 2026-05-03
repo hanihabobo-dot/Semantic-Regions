@@ -62,7 +62,7 @@ from cell_merger import merge_free_space_cells
 from free_space import split_free_boxel  # noqa: F401  (kept for future use)
 from pddlstream_planner import PDDLStreamPlanner
 from streams import RobotConfig
-from robot_utils import (RenderingLock, move_robot_smooth,
+from robot_utils import (move_robot_smooth,
                          detect_execution_collisions)
 from run_logger import RunLogger
 from visualization import BoxelVisualizer
@@ -394,14 +394,28 @@ def main(gui=True, run_logger=None, scene_config=None,
     # vs. immovable support surfaces (always present in collision checks).
     # Both human-readable names ("red_object") and boxel IDs ("obj_000")
     # map to the same body ID, so streams can look up either form.
-    object_body_ids = {}
+    #
+    # Audit #46: streams operate on env.plan_client_id (a separate DIRECT-
+    # mode PyBullet world) so that the visible GUI arm is never teleported
+    # during planning.  Body ids do NOT match between clients — we translate
+    # GUI ids to plan ids via env.plan_body_id() at the planner boundary.
+    # Execution-side code (execute_pick / detect_execution_collisions /
+    # compute_shadow_blockers) keeps using GUI ids unchanged.
+    object_body_ids = {}        # plan-side, consumed by BoxelStreams
     for name, obj_info in env.objects.items():
         if name not in ("plane", "table", "robot"):
-            object_body_ids[name] = obj_info.object_id
+            object_body_ids[name] = env.plan_body_id(obj_info.object_id)
     for boxel in registry.boxels.values():
         if boxel.object_name and boxel.object_name in object_body_ids:
             object_body_ids[boxel.id] = object_body_ids[boxel.object_name]
 
+    # Two parallel support-id sets: planner needs plan-side ids (its
+    # collision checks run on plan_client_id); execution needs the GUI ids
+    # (detect_execution_collisions runs on client_id).
+    planner_support_body_ids = frozenset({
+        env.plan_body_id(env.objects["plane"].object_id),
+        env.plan_body_id(env.objects["table"].object_id),
+    })
     support_body_ids = frozenset({
         env.objects["plane"].object_id,
         env.objects["table"].object_id,
@@ -416,11 +430,11 @@ def main(gui=True, run_logger=None, scene_config=None,
     # in each plan() call so replanning always starts from scratch with
     # the latest world state.
     belief = BeliefState(shadows, target_name)
-    planner = PDDLStreamPlanner(registry, robot_id=robot_id,
+    planner = PDDLStreamPlanner(registry, robot_id=env.plan_robot_id,
                                 shadow_occluder_map=shadow_occluder_map,
-                                physics_client=env.client_id,
+                                physics_client=env.plan_client_id,
                                 object_body_ids=object_body_ids,
-                                support_body_ids=support_body_ids,
+                                support_body_ids=planner_support_body_ids,
                                 camera_pos=env.camera_position)
 
     # The planner needs to reason about every object that may participate
@@ -544,28 +558,32 @@ def main(gui=True, run_logger=None, scene_config=None,
         if registry.dirty:
             reboxelize_free_space(registry, env, boxel_centers, viz, show_free)
 
-        # Disable rendering for the entire planning phase (audit #60).
-        # All IK and collision-check calls inside planner.plan() nest
-        # harmlessly via RenderingLock's reference count.
-        with RenderingLock(env.client_id):
-            plan_t0 = time.perf_counter()
-            plan = planner.plan(
-                target_objects=planner_target_objects,
-                goal=goal,
-                current_config=current_config,
-                known_empty_shadows=known_empty,
-                moved_occluders=dict(belief.occluders_moved),
-                max_time=120.0,
-                verbose=False,
-                visible_target_locations=visible_target_locations,
-                # on/clear facts only emitted into init when stackable
-                # objects is supplied — holding-goal runs pay nothing.
-                on_relations=(on_relations if goal_kind == 'stack'
-                              else None),
-                stackable_objects=(stack_target_objects
-                                   if goal_kind == 'stack' else None),
-            )
-            plan_dt = time.perf_counter() - plan_t0
+        # Audit #46: mirror the live GUI scene into the plan client and let
+        # planner.plan() run unwrapped.  All IK/RRT/collision-check calls
+        # inside the streams target env.plan_client_id (a DIRECT-mode world),
+        # so the visible arm is no longer teleported and the OpenGL window
+        # stays interactive throughout planning.  The old outer
+        # `with RenderingLock(env.client_id):` block was the source of the
+        # GUI freeze — it's no longer needed.
+        env.sync_to_plan_client(held_body_id=held_body_id)
+        plan_t0 = time.perf_counter()
+        plan = planner.plan(
+            target_objects=planner_target_objects,
+            goal=goal,
+            current_config=current_config,
+            known_empty_shadows=known_empty,
+            moved_occluders=dict(belief.occluders_moved),
+            max_time=120.0,
+            verbose=False,
+            visible_target_locations=visible_target_locations,
+            # on/clear facts only emitted into init when stackable
+            # objects is supplied — holding-goal runs pay nothing.
+            on_relations=(on_relations if goal_kind == 'stack'
+                          else None),
+            stackable_objects=(stack_target_objects
+                               if goal_kind == 'stack' else None),
+        )
+        plan_dt = time.perf_counter() - plan_t0
         total_plan_time += plan_dt
         plan_times.append(plan_dt)
         print(f"  [timing] planner.plan() #{plan_count}: {plan_dt:.3f}s "
@@ -752,7 +770,11 @@ def main(gui=True, run_logger=None, scene_config=None,
                             )
                             registry.add_boxel(obj_bd)
                             boxel_centers[obj_name] = obj_bd.center
-                            object_body_ids[obj_name] = bid
+                            # object_body_ids is the planner-side mapping
+                            # (audit #46): translate the GUI body id to the
+                            # plan client's body id before exposing the new
+                            # OBJECT to BoxelStreams' compute_kin / plan_motion.
+                            object_body_ids[obj_name] = env.plan_body_id(bid)
                             boxel_to_pybullet[obj_name] = {
                                 'name': obj_name,
                                 'pybullet_id': bid,

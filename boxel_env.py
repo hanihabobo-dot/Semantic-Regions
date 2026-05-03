@@ -430,14 +430,32 @@ class BoxelTestEnv:
         self._gui = gui
 
         # Reset simulation
-        p.resetSimulation()
-        p.setGravity(0, 0, -9.81)  # standard gravitational acceleration
-        p.setRealTimeSimulation(0)
-        p.setAdditionalSearchPath(pybullet_data.getDataPath())
-        
+        p.resetSimulation(physicsClientId=self.client_id)
+        p.setGravity(0, 0, -9.81, physicsClientId=self.client_id)
+        p.setRealTimeSimulation(0, physicsClientId=self.client_id)
+        p.setAdditionalSearchPath(pybullet_data.getDataPath(),
+                                  physicsClientId=self.client_id)
+
+        # Plan client (audit #46): a separate DIRECT-mode PyBullet world that
+        # mirrors the live scene.  All planning-time work — IK, RRT-Connect,
+        # plan_motion, and is_config_collision_free — runs against this client
+        # so the visible arm in self.client_id is never teleported during
+        # planner.plan().  The GUI no longer freezes; the per-IK rendering
+        # toggle is moot on a DIRECT client.  Body ids do NOT match between
+        # clients, so we keep self._gui_to_plan to translate at the planner
+        # boundary; execution-side code keeps using the GUI ids unchanged.
+        self.plan_client_id = p.connect(p.DIRECT)
+        p.resetSimulation(physicsClientId=self.plan_client_id)
+        p.setGravity(0, 0, -9.81, physicsClientId=self.plan_client_id)
+        p.setRealTimeSimulation(0, physicsClientId=self.plan_client_id)
+        p.setAdditionalSearchPath(pybullet_data.getDataPath(),
+                                  physicsClientId=self.plan_client_id)
+        self._gui_to_plan: Dict[int, int] = {}
+        self.plan_robot_id: Optional[int] = None
+
         # Store object information
         self.objects: Dict[str, ObjectInfo] = {}
-        
+
         # Initialize the scene
         self._setup_scene()
         
@@ -495,20 +513,136 @@ class BoxelTestEnv:
         print(f"Targets:   {len(tgt_shapes)} ({', '.join(tgt_shapes)})")
         print(f"Objects in scene: {list(self.objects.keys())}")
 
+    # ------------------------------------------------------------------
+    # Plan-client mirroring helpers (audit #46)
+    # ------------------------------------------------------------------
+    # _mirror_load_urdf and _mirror_spawn_object load/create the same body
+    # in BOTH clients so motion planning sees the same scene as physics
+    # execution.  Both helpers register the gui→plan body-id mapping so
+    # callers that need to translate at the planner boundary can use
+    # self.plan_body_id(gui_id).
+
+    def _mirror_load_urdf(self, *args, **kwargs) -> int:
+        """Load the same URDF in self.client_id and self.plan_client_id.
+
+        Returns the GUI body id (callers store this in ObjectInfo and pass
+        it to execution code unchanged).  The plan-side body id is recorded
+        in self._gui_to_plan and looked up via plan_body_id().
+        """
+        kwargs.pop("physicsClientId", None)
+        gid = p.loadURDF(*args, **kwargs, physicsClientId=self.client_id)
+        pid = p.loadURDF(*args, **kwargs, physicsClientId=self.plan_client_id)
+        self._gui_to_plan[gid] = pid
+        return gid
+
+    def _mirror_spawn_object(self, spec: 'ObjectSpec',
+                             position: List[float]) -> int:
+        """Create an ObjectSpec body in both clients; return the GUI body id."""
+        gid = pid = None
+        for cid in (self.client_id, self.plan_client_id):
+            shape = spec.shape
+            if shape == ObjectShape.BOX:
+                half = list(spec.size)
+                vis = p.createVisualShape(p.GEOM_BOX, halfExtents=half,
+                                          rgbaColor=spec.color,
+                                          physicsClientId=cid)
+                col = p.createCollisionShape(p.GEOM_BOX, halfExtents=half,
+                                             physicsClientId=cid)
+            elif shape == ObjectShape.CYLINDER:
+                r, hz = spec.size
+                vis = p.createVisualShape(p.GEOM_CYLINDER, radius=r,
+                                          length=hz * 2,
+                                          rgbaColor=spec.color,
+                                          physicsClientId=cid)
+                col = p.createCollisionShape(p.GEOM_CYLINDER, radius=r,
+                                             height=hz * 2,
+                                             physicsClientId=cid)
+            elif shape == ObjectShape.SPHERE:
+                r = spec.size[0]
+                vis = p.createVisualShape(p.GEOM_SPHERE, radius=r,
+                                          rgbaColor=spec.color,
+                                          physicsClientId=cid)
+                col = p.createCollisionShape(p.GEOM_SPHERE, radius=r,
+                                             physicsClientId=cid)
+            else:
+                raise ValueError(f"Unsupported shape: {shape}")
+            body_id = p.createMultiBody(
+                baseMass=spec.mass,
+                baseCollisionShapeIndex=col,
+                baseVisualShapeIndex=vis,
+                basePosition=position,
+                physicsClientId=cid,
+            )
+            if spec.lateral_friction != 0.5:
+                p.changeDynamics(body_id, -1,
+                                 lateralFriction=spec.lateral_friction,
+                                 physicsClientId=cid)
+            if cid == self.client_id:
+                gid = body_id
+            else:
+                pid = body_id
+        self._gui_to_plan[gid] = pid
+        return gid
+
+    def plan_body_id(self, gui_id: int) -> int:
+        """Translate a GUI-client body id to the plan client's body id.
+
+        Raises KeyError if gui_id wasn't created via the mirror helpers
+        (i.e. exists only in the GUI world).  Use this at the planner
+        boundary to build object_body_ids / support_body_ids.
+        """
+        return self._gui_to_plan[gui_id]
+
+    def sync_to_plan_client(self, held_body_id: Optional[int] = None) -> None:
+        """Mirror the live GUI-client state into the plan client.
+
+        Call this once per replan (right before planner.plan()).  Cheap —
+        a few dozen p.* calls — and avoids the per-IK save/restore handshake
+        that the single-client design needed.
+
+        Copies:
+          * Base pose of every mirrored body (objects, plane, table, robot
+            base — the latter is fixed but cheap to refresh).
+          * All robot joint states (arm 0-6 + fingers + any fixed joints).
+          * The held body (if any) inherits the EE pose via its base-pose
+            sync; planning-time collision checks reposition it to each
+            hypothetical EE config in is_config_collision_free.
+
+        held_body_id is accepted for symmetry with execute_pick / pre-replan
+        bookkeeping; it isn't required for correctness because the held
+        body's base pose is already covered by the loop above.
+        """
+        for gid, pid in self._gui_to_plan.items():
+            pos, orn = p.getBasePositionAndOrientation(
+                gid, physicsClientId=self.client_id)
+            p.resetBasePositionAndOrientation(
+                pid, pos, orn, physicsClientId=self.plan_client_id)
+        if self.plan_robot_id is not None:
+            gui_robot = self.objects["robot"].object_id
+            n_joints = p.getNumJoints(gui_robot,
+                                      physicsClientId=self.client_id)
+            for j in range(n_joints):
+                angle, vel = p.getJointState(
+                    gui_robot, j, physicsClientId=self.client_id)[:2]
+                p.resetJointState(self.plan_robot_id, j, angle,
+                                  targetVelocity=vel,
+                                  physicsClientId=self.plan_client_id)
+
     def _setup_scene(self):
         """Set up the simulation scene with plane, table, robot, and objects."""
         # Load ground plane
-        plane_id = p.loadURDF("plane.urdf", [0, 0, 0], [0, 0, 0, 1])
+        plane_id = self._mirror_load_urdf("plane.urdf", [0, 0, 0], [0, 0, 0, 1])
         self.objects["plane"] = ObjectInfo(
             object_id=plane_id, name="plane",
             position=np.array([0, 0, 0]), orientation=np.array([0, 0, 0, 1]),
             size=np.array([10, 10, 0.1]), is_visible=True, is_occluder=False
         )
-        
+
         # Load table
         table_z_offset = -0.3
         table_position = [0.5, 0.0, table_z_offset]
-        table_id = p.loadURDF("table/table.urdf", table_position, [0, 0, 0, 1], useFixedBase=True)
+        table_id = self._mirror_load_urdf("table/table.urdf", table_position,
+                                          [0, 0, 0, 1], useFixedBase=True)
         self.table_surface_height = 0.625 + table_z_offset
 
         # XY bounds for voxelization / shadows / free-space (logical workspace).
@@ -516,34 +650,36 @@ class BoxelTestEnv:
         # in X so the voxel grid encloses objects near the robot without clipping.
         self.table_x_range = (-0.4, 0.6)
         self.table_y_range = (-0.5, 0.5)
-        
+
         self.objects["table"] = ObjectInfo(
             object_id=table_id, name="table",
             position=np.array(table_position), orientation=np.array([0, 0, 0, 1]),
             size=np.array([1.0, 1.0, 0.8]), is_visible=True, is_occluder=False
         )
-        
+
         # Load robot
         robot_pos = [-0.4, 0.0, 0.0]
-        robot_id = p.loadURDF("franka_panda/panda.urdf", robot_pos, [0, 0, 0, 1], useFixedBase=True)
+        robot_id = self._mirror_load_urdf("franka_panda/panda.urdf", robot_pos,
+                                          [0, 0, 0, 1], useFixedBase=True)
+        self.plan_robot_id = self._gui_to_plan[robot_id]
         self.objects["robot"] = ObjectInfo(
             object_id=robot_id, name="robot",
             position=np.array(robot_pos), orientation=np.array([0, 0, 0, 1]),
             size=np.array([0.5, 0.5, 0.8]), is_visible=True, is_occluder=False
         )
-        
+
         # Create occluders
         self._create_occluders()
-        
+
         # Create targets
         self._create_targets()
-        
+
         # Let objects settle under gravity after placement.
         # 10 steps at 240 Hz ≈ 0.04 s — sufficient for cubes on a flat
         # table to reach static equilibrium.
         for _ in range(10):
-            p.stepSimulation()
-        
+            p.stepSimulation(physicsClientId=self.client_id)
+
         self.update_object_positions()
     
     # ------------------------------------------------------------------
@@ -688,7 +824,7 @@ class BoxelTestEnv:
             z = self.table_surface_height + float(he[2])
             pos = [xy[0], xy[1], z]
 
-            body_id = self._spawn_object(spec, pos)
+            body_id = self._mirror_spawn_object(spec, pos)
             name = spec.name if spec.name is not None else f"occluder_{i + 1}"
             self.objects[name] = ObjectInfo(
                 object_id=body_id, name=name,
@@ -929,7 +1065,7 @@ class BoxelTestEnv:
             z = self.table_surface_height + float(he[2])
             pos = [xy[0], xy[1], z]
 
-            body_id = self._spawn_object(spec, pos)
+            body_id = self._mirror_spawn_object(spec, pos)
             name = spec.name if spec.name is not None else f"target_{i + 1}"
             self.objects[name] = ObjectInfo(
                 object_id=body_id, name=name,
@@ -1242,10 +1378,10 @@ class BoxelTestEnv:
             obj_info.orientation = np.array(orn)
 
     def step_simulation(self, num_steps: int = 1):
-        """Step the simulation forward."""
+        """Step the simulation forward (GUI client only — physics lives there)."""
         for _ in range(num_steps):
-            p.stepSimulation()
-    
+            p.stepSimulation(physicsClientId=self.client_id)
+
     def reset(self, scene_config: Optional[SceneConfig] = None):
         """
         Reset the environment to initial state.
@@ -1256,13 +1392,24 @@ class BoxelTestEnv:
         """
         if scene_config is not None:
             self.scene_config = scene_config
-        p.resetSimulation()
-        p.setGravity(0, 0, -9.81)  # standard gravitational acceleration
-        p.setRealTimeSimulation(0)
-        p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        for cid in (self.client_id, self.plan_client_id):
+            p.resetSimulation(physicsClientId=cid)
+            p.setGravity(0, 0, -9.81, physicsClientId=cid)
+            p.setRealTimeSimulation(0, physicsClientId=cid)
+            p.setAdditionalSearchPath(pybullet_data.getDataPath(),
+                                      physicsClientId=cid)
+        self._gui_to_plan.clear()
+        self.plan_robot_id = None
         self.objects.clear()
         self._setup_scene()
-    
+
     def close(self):
-        """Close the PyBullet connection."""
-        p.disconnect(self.client_id)
+        """Close both PyBullet connections (GUI + plan client)."""
+        try:
+            p.disconnect(self.client_id)
+        except Exception:
+            pass
+        try:
+            p.disconnect(self.plan_client_id)
+        except Exception:
+            pass
