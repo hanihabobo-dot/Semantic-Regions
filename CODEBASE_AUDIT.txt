@@ -19,7 +19,9 @@ Slimmed:      2026-05-03 — moved #45, #46 (fully DONE) to
 Added:        2026-05-03 — CODEBASE POLICY: always push to both remotes
               (`github` = GitHub, `origin` = RWTH GitLab).
 Restructured: 2026-05-03 — roadmap (pre-eval / eval); archive #4; drop #6;
-              accept #41; defer #42 collisions; refresh FOR LATER.
+              defer #42 collisions; refresh FOR LATER.
+Reopened:     #41 — stack base / explicit on_table goal (removed from open list
+              same day in 7003dca; restored by project decision).
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -105,7 +107,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #11–#13, #21, #30, #31, #32, #34, #36, #40          #
+#  OPEN ISSUES — #9, #10, #11–#13, #21, #30, #31, #32, #34, #36, #40, #41       #
 #                                                                              #
 ################################################################################
 
@@ -132,7 +134,6 @@ Parallel / non-blocking:
 Closed / relocated since last summary:
   #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
   #6  removed — multi-boxel place not pursued
-  #41 archive header + THESIS_NOTES.md (implicit stack base on table)
   #42 archive/CODEBASE_AUDIT_DEFERRED.txt (collisions logged, no replan)
 
 ================================================================================
@@ -586,6 +587,8 @@ Fix:   ONE COMMIT — add a physics-based goal verifier:
                and targets X (body id match).
              (at_config q): check current joints ≈ q (RRT
                tolerance).
+             (on_table X)  (once #41 adds this atom to goals/init): check
+               X's bottom_z ≈ table top_z.
        (b) On mismatch, print "PHYSICAL_FAILURE: <clause> —
            symbolic true but physics disagrees (<details>)" and
            set the run exit status to failure.
@@ -603,7 +606,56 @@ Fix:   ONE COMMIT — add a physics-based goal verifier:
 Related: #39 (root cause of this run's false-success),
          #9  (evaluation metrics depend on truthful success flags),
          #21 (reactive policy after unexpected state — similar
-              loop-vs-planner design question).
+              loop-vs-planner design question),
+         #41 (on_table clause in goal — verifier case above).
+
+
+================================================================================
+#41. STACK GOAL DOES NOT CONSTRAIN BASE TO BE ON THE TABLE
+================================================================================
+Priority: TIER 3 — Minor, related to #40
+Where:    test_full_pipeline.py (build_stack_goal ~line 111),
+          pddl/domain_pddlstream.pddl (new predicate or convention)
+Depends:  None.  Could ride with #40's verifier work.
+Effort:   <1 day
+
+What:  build_stack_goal produces goals of the form
+       (and (on t_1 t_2) (on t_2 t_3) ... (on t_{H-1} t_H))
+       with no clause asserting that t_H (the base) is on the
+       table.  Currently this is moot: all cubes start on the
+       table; no action lifts a cube off the table without
+       replacing it somewhere; so the base is always table-resting
+       by induction.
+
+       However it is still a correctness gap:
+       (a) If #39 is ever partially fixed but not consistently,
+           pick/place sequences could leave the base floating
+           (ungrounded stack).
+       (b) A future plan shape (e.g. pick the base cube, sense
+           under it, then re-stack) would let the base end up
+           anywhere.
+       (c) The goal is semantically incomplete: a reader cannot
+           tell from the goal whether "a tower" is intended or
+           just a chain of (on) relations in mid-air.
+
+Fix:   ONE COMMIT — options:
+       (a) Add an (on_table ?o) predicate to the domain, emit
+           (on_table X) in init for every cube, and have
+           pick/place/stack effects maintain it (pick removes,
+           stack removes, place emits).  build_stack_goal adds
+           (on_table t_H) to the conjunction.  Verifier (#40)
+           extends to this clause.
+       (b) Represent the table as an Obj (with is_table flag)
+           and use (on t_H table) with a is_table constant.  More
+           symmetric; bigger domain change.
+       Option (a) is lighter-touch and compatible with the
+       existing domain.
+
+Related: #40 (physics verifier should check the on_table clause),
+         #30 (stack feature that needs this completion),
+         pddl/domain_pddlstream.pddl comment at ~line 64:
+           "Objects not mentioned in any (on ?o ?x) fact is treated
+            as table-resting" — this convention becomes explicit.
 
 
 ================================================================================
@@ -646,6 +698,8 @@ TIER 0 — BEFORE EVAL (correctness):
   #40  False-success: symbolic stack success vs PyBullet        ~0.5–1 day
 
 TIER 3 — PRE-EVAL / EXTENSION:
+  #41  Stack goal: base not constrained on_table    <1 day
+       (minor; could ride with #40 verifier work)
   #30  Stack-goal planner slowdown (:conditional-effects) — split-pick experiment
        or accept ~2×; see entry
   #36  Holding goal: optional upright / home pose after pick
@@ -660,7 +714,7 @@ TIER 3 — EVALUATION (runner #9–#10, then #11–#13):
   #12  Scalability matrix + plots
   #13  Recursive free-space discovery (implement or thesis future-work)
 
-Total open: 12 items (#9–#13, #21, #30, #31, #32, #34, #36, #40).
+Total open: 13 items (#9–#13, #21, #30, #31, #32, #34, #36, #40, #41).
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
@@ -668,5 +722,5 @@ Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
 
 Resolved/subsumed → archive/CODEBASE_AUDIT_RESOLVED.txt:
              #1, #3, #4 (accepted shadow AABB remainder), #5, #7, #8, #15–#20,
-             #22–#29, #33, #35, #37, #38, #39, #41 (implicit stack base on table),
+             #22–#29, #33, #35, #37, #38, #39,
              #43, #44, #45, #46, and the #30 implementation debrief.
