@@ -152,22 +152,27 @@ This is functionally safe because:
 recomputation would require re-running the camera observation
 pipeline, which is a separate future-work item.
 
-**References**: Audit #4 (remaining work), old #44 (accepted).
+**References**: Resolved archive #4 (post-action re-boxelization /
+stale shadow partition accepted 2026-05-03,
+`archive/CODEBASE_AUDIT_RESOLVED.txt`), old #44 (accepted).
 
 ---
 
-## 9. No Stacking Goals
+## 9. Primary goal is holding; stack is an optional extension
 
-The goal is always `('holding', target_name)` — pick up a specific
-target object.  There is no stacking, sorting, or multi-object
-arrangement goal.
+The default narrative experiments use `('holding', target_name)`.
+The codebase also implements `--goal stack` with stack height and
+related PDDL `on(?a, ?b)` wiring (see audit #30 and the resolved
+implementation debrief).
 
-**Thesis framing**: The semantic boxel representation supports
-arbitrary spatial goals in principle.  Stacking would require
-extending the PDDL domain with `on(?a, ?b)` predicates and
-corresponding streams.  This is noted as future work.
+**Thesis framing**: The core contribution is semantic boxels and
+TAMP under partial observability; holding goals are enough to tell
+that story.  Stack goals are a shipped extension with known planner
+cost regression (#30) and symbolic-vs-physics verification gaps (open
+#40), not a prerequisite for the main thesis claim.
 
-**References**: Audit #30 (goal as CLI parameter).
+**References**: `CODEBASE_AUDIT.txt` #30, #40,
+`archive/CODEBASE_AUDIT_RESOLVED.txt` (2026-04-24 stack debrief).
 
 ---
 
@@ -283,3 +288,31 @@ interaction the semantic boxel approach is meant to expose:
 audit #9 (experiment runner), audit #10/#11 (baselines), audit #30
 (parallel "init facts dominate planner cost" finding), audit #15
 (shadow splitting still affected on main).
+
+---
+
+## 15. Stack support chain — implicit base / table anchoring (#41)
+
+Stack goals are expressed with `(on ?object ?support)` in the PDDL
+domain; the bottom of a tower is connected to the scene (including
+the table) through the initial-state and action-effect wiring rather
+than requiring a separate thesis-level treatment of a dedicated
+`(on_table ?o)` atom everywhere.  That modeling shortcut is accepted
+for thesis scope (2026-05-03).
+
+**References**: `archive/CODEBASE_AUDIT_RESOLVED.txt` (header note:
+#41 accepted), open `CODEBASE_AUDIT.txt` #40 (physics verifier for
+`(on A B)` vs executor-tracked relations).
+
+---
+
+## 16. Execution collision logs — no automatic replan (#42)
+
+When motion or `execute_pick` / `execute_place` / `execute_stack`
+detects collisions, the code may print collision diagnostics and
+continue.  The main loop does **not** break out to replan based on a
+collision counter; residual physical desync is acknowledged and left
+to logging, manual review, and the planned physics-based goal check
+(open #40).
+
+**References**: `archive/CODEBASE_AUDIT_DEFERRED.txt` #42.

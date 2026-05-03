@@ -33,6 +33,9 @@ Contents of this file:
   - DISCUSSION NOTES 2026-03-22: full meeting transcript from supervisor session.
     Key decisions from this meeting are captured as open issues #102-#105 in
     CODEBASE_AUDIT.txt; this is the raw source transcript.
+  - ACCEPTED runtime policy (#42, 2026-05-03): logged PyBullet collisions during
+    execute_* / move do NOT trigger break-to-replan.  See section "#42" below
+    and THESIS_NOTES.md.
 
 ================================================================================
 56. DEAD COMPUTATION — POINT CLOUD AND NEIGHBORS NEVER USED  [PARTIALLY DONE, DEFERRED]
@@ -782,4 +785,23 @@ Related: #9  (evaluation framework — natural place to measure this),
               need re-checking if the lattice is ever revived),
          #30 (stack-goal planner cost — same FastDownward grounding
               theme).
+
+
+================================================================================
+#42. EXECUTION COLLISIONS LOGGED — NO REPLAN  [ACCEPTED / DEFERRED 2026-05-03]
+================================================================================
+Source: CODEBASE_AUDIT.txt (formerly open; moved by project decision).
+
+Policy: When execute_pick / execute_place / execute_stack / move detect
+robot–object collisions, the code may print "*** COLLISION ... ***" and
+continue.  The execution loop does NOT break to replan on collision count.
+
+Rationale (2026-05-03): Collision-driven replanning was judged out of scope
+for the thesis delivery path.  Residual physical desync is instead handled
+by the planned physics-based goal verifier (open #40) and by honest logging.
+If revisiting later, the original open-audit fix sketch was: return
+collision_count from execute_* and break-to-replan above a CLI threshold.
+
+Related: #40 (symbolic-vs-physics success), open #21 (belief / replan policy),
+         THESIS_NOTES.md (accepted execution policy).
 
