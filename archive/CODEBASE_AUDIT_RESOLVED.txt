@@ -18,7 +18,8 @@ Updated:  2026-04-29 (#37/#38 follow-up: grasp Z-offset reverted from
          the camera→shadow ray paths and broke move→sense sequences.
          IK seeding (the actual #37/#38 win) retained.  See #37's
          "Follow-up" section for details.)
-Archived: 2026-05-03 (moved from CODEBASE_AUDIT.txt: #45, #46.)
+Archived: 2026-05-03 (from CODEBASE_AUDIT.txt: #45, #46; #4 remainder accepted
+         to thesis; #41 stack base / on_table ACCEPTED, see THESIS_NOTES.md.)
 
 These issues have been fixed, reclassified as not-an-issue, or corrected.
 The active audit with remaining open issues is in CODEBASE_AUDIT.txt.
@@ -2907,3 +2908,51 @@ Fix:   execute_stack signature gained a `config` parameter; its
 
 Related: #37 (parent issue — same commit),
          #30 (stack action that introduced this pattern).
+
+
+================================================================================
+#4. POST-ACTION RE-BOXELIZATION — STALE PARTITION  [ARCHIVED / ACCEPTED 2026-05-03]
+================================================================================
+Formerly [PARTIAL 2026-04-15] in CODEBASE_AUDIT.txt.  All actionable pipeline
+work (free-space octree+merge, shadow→free, nontarget discovery, registry
+mutation before each plan) is DONE.
+
+REMAINING (now a thesis simplification, not an open code issue):
+       Shadow AABBs for relocated occluders are not recomputed at new poses.
+       sense_shadow_raycasting uses PyBullet body IDs; occluders leave the
+       shadow volume physically; shadow_occluder_map is refreshed after place.
+
+Full historical text preserved below (identical to last open-audit version):
+
+--------------------------------------------------------------------------------
+Priority: TIER 1
+Where:    test_full_pipeline.py (execution loop, reboxelize_free_space),
+          boxel_data.py (BoxelRegistry)
+Depends:  None
+Effort:   Was ~1-2 days (shadow recomputation) — closed as accepted gap.
+
+What:  After a pick-and-place action, the boxel partition must be
+       recomputed so the planner sees accurate geometry on replan.
+
+DONE (2026-04-15):
+       (a) OCCUPIED→FREE: after place, registry.update_after_place()
+           removes consumed free boxel and updates object AABB.
+       (b) FREE→OCCUPIED: octree re-run correctly marks placed object's
+           footprint as occupied.
+       (c-partial) Sensed-empty shadows are removed from registry and
+           converted to free space.  Non-target objects discovered
+           inside shadows get OBJECT + SHADOW boxels created.
+       (d) Merge structure: reboxelize_free_space() re-runs the full
+           octree + merge pipeline (same CellMerger as Phase 2 initial
+           scan).  Only changed boxels are removed/added (diff against
+           previous state).  Belief history survives — BeliefState is
+           independent of boxel IDs.
+       (e) Registry is mutated before each planner.plan() call.
+
+REMAINING (accepted, documented in THESIS_NOTES.md §8):
+       (c-remainder) Shadow geometry for relocated occluders is NOT
+           recomputed at their new positions.
+
+Related: old #44 [ACCEPTED] (stale shadow AABBs),
+         old #73 [DONE] (stale shadow_occluder_map).
+--------------------------------------------------------------------------------

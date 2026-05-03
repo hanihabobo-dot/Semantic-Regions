@@ -18,6 +18,8 @@ Slimmed:      2026-05-03 — moved #45, #46 (fully DONE) to
               archive/CODEBASE_AUDIT_RESOLVED.txt.
 Added:        2026-05-03 — CODEBASE POLICY: always push to both remotes
               (`github` = GitHub, `origin` = RWTH GitLab).
+Restructured: 2026-05-03 — roadmap (pre-eval / eval); archive #4; drop #6;
+              accept #41; defer #42 collisions; refresh FOR LATER.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -96,90 +98,42 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
        after pick/place — closed by audit #1 [RESOLVED, archive];
        (b) hidden move in sense — audit #3 [RESOLVED, archive];
        (c) stale shadow geometry after occluder relocation — audit #4
-       [OPEN, partial — shadow recompute remaining]; (d) stale
-       blocks_view_at facts — old #73 [DONE, archive].  When #4 is
-       complete, all practical drift channels are addressed.
+       [RESOLVED as accepted simplification, archive 2026-05-03]; (d) stale
+       blocks_view_at facts — old #73 [DONE, archive].  See THESIS_NOTES.md
+       for accepted geometric / symbolic gaps (including stale shadow AABBs).
 
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #4(partial), #6, #9–#13, #21, #30(perf-open), #31, #32,     #
-#                #34, #36, #40, #41, #42                                      #
+#  OPEN ISSUES — #9, #10, #11–#13, #21, #30, #31, #32, #34, #36, #40          #
 #                                                                              #
 ################################################################################
 
 
 ================================================================================
-#4. POST-ACTION RE-BOXELIZATION — STALE PARTITION [PARTIAL 2026-04-15]
+ROADMAP — PRE-EVALUATION VS. EVALUATION (2026-05-03)
 ================================================================================
-Priority: TIER 1
-Where:    test_full_pipeline.py (execution loop, reboxelize_free_space),
-          boxel_data.py (BoxelRegistry)
-Depends:  None
-Effort:   Remaining ~1-2 days (shadow recomputation at new positions)
+Pre-evaluation (intended order before the eval sweep):
+  #21 → #40 → #30 → #36 → #31 → #32
 
-What:  After a pick-and-place action, the boxel partition must be
-       recomputed so the planner sees accurate geometry on replan.
+Evaluation prerequisites (runner + uniform baseline for thesis comparison):
+  #9  metric hooks + batch experiment runner
+  #10 uniform voxelization baseline
 
-DONE (2026-04-15):
-       (a) OCCUPIED→FREE: after place, registry.update_after_place()
-           removes consumed free boxel and updates object AABB.
-       (b) FREE→OCCUPIED: octree re-run correctly marks placed object's
-           footprint as occupied.
-       (c-partial) Sensed-empty shadows are removed from registry and
-           converted to free space.  Non-target objects discovered
-           inside shadows get OBJECT + SHADOW boxels created.
-       (d) Merge structure: reboxelize_free_space() re-runs the full
-           octree + merge pipeline (same CellMerger as Phase 2 initial
-           scan).  Only changed boxels are removed/added (diff against
-           previous state).  Belief history survives — BeliefState is
-           independent of boxel IDs.
-       (e) Registry is mutated before each planner.plan() call.
+Evaluation phase (Results chapter — user-scoped sweep):
+  #11 fixed semantic regions baseline
+  #12 scalability matrix, metrics, plots
+  #13 recursive free-space discovery (implement or cite explicitly as future work)
 
-REMAINING:
-       (c-remainder) Shadow geometry for relocated occluders is NOT
-           recomputed at their new positions.  The old shadow AABBs
-           describe pre-relocation geometry.  This is an accepted
-           simplification (audit #44) because:
-           - sense_shadow_raycasting uses PyBullet body IDs, not AABBs
-           - The occluder has been physically removed from the shadow
-           - shadow_occluder_map is refreshed after place (#73, #24 fixed
-             2026-04-17).
-           Full shadow recomputation would require re-running
-           shadow_calculator for the moved occluder at its new position.
+Parallel / non-blocking:
+  #34  ray×free-boxel precompute in _build_init — revisit only if #12 shows it
+       dominating latency.
 
-Related: old #44 [ACCEPTED] (stale shadow AABBs),
-         old #73 [DONE] (stale shadow_occluder_map — but see #24)
-
-
-================================================================================
-#6. MULTI-BOXEL FREE SPACE PLACEMENT
-================================================================================
-Priority: TIER 1 — Implement if convex merge leaves regions too small
-Where:    domain_pddlstream.pddl, stream.pddl, streams.py,
-          pddlstream_planner.py
-Depends:  None (aggressive semantic merge deferred — archive #2)
-Effort:   ~1 week
-
-What:  The place action targets a SINGLE boxel.  If no single free
-       boxel is large enough, the planner cannot reason about placing
-       across multiple adjacent free boxels.
-
-       Convex-only free-space merge may leave smaller regions than a
-       full semantic merge would; multi-boxel placement is needed for
-       objects at occlusion boundaries or when single boxels are too
-       small.  If testing shows placement failures due to boxel size,
-       implement the fix below.
-
-Fix:   ONE COMMIT — multi-variant place actions (agreed in meeting):
-       (a) Add place-in-2-boxels action to domain_pddlstream.pddl:
-           precondition requires both target boxels are adjacent
-           and FREE; PDDLStream certifier verifies object fits in
-           the union.
-       (b) Add corresponding stream in stream.pddl.
-       (c) Implement adjacency + union-fitness test in streams.py.
-       (d) Optionally generalise to place-in-N-boxels.
-
+Closed / relocated since last summary:
+  #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
+  #6  removed — multi-boxel place not pursued
+  #41 archive header + THESIS_NOTES.md (implicit stack base on table)
+  #42 archive/CODEBASE_AUDIT_DEFERRED.txt (collisions logged, no replan)
 
 ================================================================================
 #9. EVALUATION — METRIC COLLECTION AND EXPERIMENT RUNNER
@@ -312,8 +266,8 @@ Fix:   ONE COMMIT — add recursive discovery pass:
        Alternatively, document as an accepted simplification for the
        fixed-camera scenario and note as future work in the thesis.
 
-Related: #4 (re-boxelization could trigger re-discovery)
-
+Related: archived #4 (re-boxelization — recursive pass optional if
+         partial-coverage perception is added).
 
 ================================================================================
 #21. BLOCKED SENSE CAUSES SHADOW SWITCHING AND FALSE "SEARCHED ALL" TERMINATION
@@ -377,7 +331,7 @@ Fix:   ONE COMMIT — design decision needed:
        - The execution loop must NEVER mark an unobserved shadow as
          not_here under any circumstance (remove the 3-strike give-up).
 
-Related: #5 (placement re-blocks cleared corridor), #4 (stale world model),
+Related: #5 (placement re-blocks cleared corridor),
          archive resolved #78(c) (3-strike give-up behavior)
 
 
@@ -632,8 +586,6 @@ Fix:   ONE COMMIT — add a physics-based goal verifier:
                and targets X (body id match).
              (at_config q): check current joints ≈ q (RRT
                tolerance).
-             (on_table X)  (if added in #41): check X's bottom_z
-               ≈ table top_z.
        (b) On mismatch, print "PHYSICAL_FAILURE: <clause> —
            symbolic true but physics disagrees (<details>)" and
            set the run exit status to failure.
@@ -651,175 +603,70 @@ Fix:   ONE COMMIT — add a physics-based goal verifier:
 Related: #39 (root cause of this run's false-success),
          #9  (evaluation metrics depend on truthful success flags),
          #21 (reactive policy after unexpected state — similar
-              loop-vs-planner design question),
-         #41 (on_table clause would also need a verifier case).
-
-
-================================================================================
-#41. STACK GOAL DOES NOT CONSTRAIN BASE TO BE ON THE TABLE
-================================================================================
-Priority: TIER 3 — Minor, related to #40
-Where:    test_full_pipeline.py (build_stack_goal ~line 111),
-          pddl/domain_pddlstream.pddl (new predicate or convention)
-Depends:  None.  Could ride with #40's verifier work.
-Effort:   <1 day
-
-What:  build_stack_goal produces goals of the form
-       (and (on t_1 t_2) (on t_2 t_3) ... (on t_{H-1} t_H))
-       with no clause asserting that t_H (the base) is on the
-       table.  Currently this is moot: all cubes start on the
-       table; no action lifts a cube off the table without
-       replacing it somewhere; so the base is always table-resting
-       by induction.
-
-       However it is still a correctness gap:
-       (a) If #39 is ever partially fixed but not consistently,
-           pick/place sequences could leave the base floating
-           (ungrounded stack).
-       (b) A future plan shape (e.g. pick the base cube, sense
-           under it, then re-stack) would let the base end up
-           anywhere.
-       (c) The goal is semantically incomplete: a reader cannot
-           tell from the goal whether "a tower" is intended or
-           just a chain of (on) relations in mid-air.
-
-Fix:   ONE COMMIT — options:
-       (a) Add an (on_table ?o) predicate to the domain, emit
-           (on_table X) in init for every cube, and have
-           pick/place/stack effects maintain it (pick removes,
-           stack removes, place emits).  build_stack_goal adds
-           (on_table t_H) to the conjunction.  Verifier (#40)
-           extends to this clause.
-       (b) Represent the table as an Obj (with is_table flag)
-           and use (on t_H table) with a is_table constant.  More
-           symmetric; bigger domain change.
-       Option (a) is lighter-touch and compatible with the
-       existing domain.
-
-Related: #40 (physics verifier should check the on_table clause),
-         #30 (stack feature that needs this completion),
-         pddl/domain_pddlstream.pddl comment at ~line 64:
-           "Objects not mentioned in any (on ?o ?x) fact is treated
-            as table-resting" — this convention becomes explicit.
-
-
-================================================================================
-#42. EXECUTION COLLISIONS ARE LOGGED BUT DO NOT TRIGGER REPLAN
-================================================================================
-Priority: TIER 3 — Robustness
-Where:    execution.py (collision detection around each action),
-          test_full_pipeline.py (execution loop break-to-replan logic)
-Depends:  None (but #4 re-boxelization work affects what a post-
-          collision replan would see)
-Effort:   ~1 day
-
-What:  When execute_pick / execute_place / execute_stack / move
-       detect robot-vs-object collisions, they print
-       "*** COLLISION [<context>]: robot link X <-> Y ***" and
-       continue execution.  Nothing in the execution loop
-       propagates the collision to a break-to-replan.
-
-       Observed in run 2026-04-26_11-11-08 (stack-height=5 run
-       that triggered #39/#40): 13+ collision warnings across
-       "after pick cyan_object", "move to blue_object", etc.,
-       as the robot ploughed through the debris from the #39
-       tower collapse.  Execution continued to the end and
-       reported SUCCESS via the #40 false-success path.
-
-       Even if #39 and #40 are fixed, collisions can arise from:
-       (a) settling drift (small; usually no damage)
-       (b) adversarial boxel/AABB inaccuracy after an occluder
-           relocation (#4 shadow recompute gap)
-       (c) multi-object dropping when a pick-under-tower bug
-           exists in any future action.
-
-Fix:   ONE COMMIT:
-       (a) Count collisions per action in execute_* routines;
-           return a collision_count alongside the return config.
-       (b) Execution loop: if collision_count > threshold (e.g.
-           >0 for pick/place/stack, >N for move), break to replan
-           and update BeliefState with the observed scene state
-           (object positions after settling).
-       (c) Make the threshold configurable via CLI (e.g.
-           --strict-collisions for thesis evaluation, relaxed
-           default for dev).
-
-Related: #4 (re-boxelization after unexpected state),
-         #21 (reactive policy for unexpected outcomes — same
-              loop-vs-planner design question),
-         #39/#40 (the toppling-tower class of failure this
-                  would catch even when #39 is fixed but a
-                  different physics bug emerges).
+              loop-vs-planner design question).
 
 
 ================================================================================
 FOR LATER
 ================================================================================
-- Incremental boxel recomputation after occluder relocation (without
-  redoing everything from scratch).  See #4 for the full re-evaluation
-  requirement; this is about the INCREMENTAL optimisation.
-- Physics-based pushing as an alternative to pick-and-place for objects
-  too large or heavy to grasp.  Push logic is commented out, not deleted.
-- Pick-observe-replace strategy: after picking an object to clear a view
-  corridor, observe immediately and place the object back in its original
-  location.  Open question from 2026-03-22 meeting.
-- APPROACH 2: PDDL-level merge/split with active/representative boxels.
-  Deferred in favour of simpler Approach 1 (opaque re-boxelization +
-  replan).  Could serve as a comparison baseline if time permits.
-- POMDP comparison baseline: significant effort, only viable if time
-  permits after core evaluation (#9–#12) is complete.
+ backlog (not scheduled — cross-reference open/resolved/deferred audits):
+
+- Incremental boxel recomputation after occluder relocation (optimisation of
+  reboxelize_free_space / octree pass).  Shadow AABB staleness is an accepted
+  thesis gap; see archive/CODEBASE_AUDIT_RESOLVED.txt (#4) and THESIS_NOTES.md.
+
+- Physics-based pushing instead of pick-and-place for heavy objects.  Push
+  logic remains commented out in-repo (historical experiment).
+
+- Pick–observe–replace (clear corridor, sense, place object back).  Raised
+  2026-03-22; not modeled in PDDL.  Related reactive behaviour: open #21
+  (still_blocked / search policy) touches the same execution loop.
+
+- "Approach 2": PDDL-level merge/split with active representative boxels.
+  Superseded by opaque re-boxelize + replan (Approach 1).  Full semantic merge
+  condition: deferred #2 in archive/CODEBASE_AUDIT_DEFERRED.txt.
+
+- Dense camera→AABB visibility lattice (64-ray variant): deferred #14 — branch
+  audit-14-dense-lattice-attempt; precision vs planner grounding cost.
+
+- Multi-boxel `place` (old open #6): removed from scope 2026-05-03 — not pursued.
+
+- POMDP / contingent baseline: large effort; only if time after eval sweep
+  (#9–#13) and thesis-critical fixes (#21, #40, … per ROADMAP).
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-04-27)
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-03)
 ================================================================================
 
-Each issue is one commit.  Dependencies listed; work within a tier can
-be parallelized where no dependency exists.
+Aligns with the ROADMAP banner above (pre-eval → eval prerequisites → eval).
+Each issue is ideally one commit; parallelise where dependencies allow.
 
-TIER 0 — ACTIONABLE NOW (no dependencies):
-  #21  Blocked sense switches shadows / false all_searched ~1-2 days
-       (design direction: fix in PDDL model, not execution loop)
-  #40  False-success: symbolic state accepted over physics  ~0.5-1 day
-       (also catches future physics desyncs beyond #39)
+TIER 0 — BEFORE EVAL (correctness):
+  #21  Blocked sense / shadow switching / false all_searched  ~1–2 days
+  #40  False-success: symbolic stack success vs PyBullet        ~0.5–1 day
 
-TIER 1 — Mixed dependencies (see each issue):
-  #4   Post-action re-boxelization [PARTIAL]                ~1-2 days remaining
-       (DONE: free-space octree+merge after sense, shadow→free conversion,
-        nontarget object discovery.  REMAINING: shadow geometry recompute
-        for relocated occluders at new positions.)
-  #6   Multi-boxel free space placement                     ~1 week
+TIER 3 — PRE-EVAL / EXTENSION:
+  #30  Stack-goal planner slowdown (:conditional-effects) — split-pick experiment
+       or accept ~2×; see entry
+  #36  Holding goal: optional upright / home pose after pick
+  #31  Narration-style comments sweep
+  #32  Comment/code drift sweep
+  #34  _compute_placement_view_blocks — optimise only if #12 shows cost
 
-TIER 3 — THESIS EVALUATION:
-  #9   Metric collection + experiment runner                ~3-5 days
-  #10  Baseline: uniform voxelization           depends #9  ~3-5 days
-  #11  Baseline: fixed semantic regions         depends #9  ~3-5 days
-  #12  Scalability analysis                     depends #9  ~2-3 days
-  #13  Recursive object discovery                           ~2-3 days
-  #30  Stack-goal perf regression [PARTIAL — decision open]  ~0.5 day
-       (--goal stack shipped in 0d5def7; ~2x holding-goal slowdown from
-        :conditional-effects pick.  Decision: try split-pick mitigation,
-        accept the regression, or revert.  Full numbers in #30 entry;
-        implementation debrief in archive/CODEBASE_AUDIT_RESOLVED.txt.)
-  #36  Holding goal terminates at contact (no upright lift)   <1 day
-  #41  Stack goal: base not constrained on_table              <1 day
-       (minor; could ride with #40 verifier work)
-  #42  Execution collisions not propagated to replan          ~1 day
-       (robustness — catches residual desyncs after #40)
+TIER 3 — EVALUATION (runner #9–#10, then #11–#13):
+  #9   Experiment runner + metric hooks
+  #10  Uniform voxelization baseline
+  #11  Fixed semantic regions baseline
+  #12  Scalability matrix + plots
+  #13  Recursive free-space discovery (implement or thesis future-work)
 
-TIER 3 — CODE QUALITY (low priority):
-  #31  Narration comments (restate code, not intent)        ~1-2 days
-  #32  Comment/code drift (stale comments)                   <1 day
-  #34  _compute_placement_view_blocks scalability           (if needed)
-
-Total open: 14 items (#4(partial), #6, #9–#13, #21, #30(perf-open), #31, #32,
-            #34, #36, #40, #41, #42).
+Total open: 12 items (#9–#13, #21, #30, #31, #32, #34, #36, #40).
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
-             #2  (full boxel merge condition),
-             #14 (dense AABB visibility lattice — works but trips planner
-                  state-space explosion; kept for evaluation analysis,
-                  see branch audit-14-dense-lattice-attempt).
+             #2, #14, #42 (logged collisions do not trigger replan — accepted;
+                  see DEFERRED section #42 and THESIS_NOTES.md).
 
 Resolved/subsumed → archive/CODEBASE_AUDIT_RESOLVED.txt:
-             #1, #3, #5, #7, #8, #15–#20, #22–#29, #33, #35, #37, #38,
-             #39, #43, #44, #45, #46, and the #30 implementation debrief.
+             #1, #3, #4 (accepted shadow AABB remainder), #5, #7, #8, #15–#20,
+             #22–#29, #33, #35, #37, #38, #39, #41 (implicit stack base on table),
+             #43, #44, #45, #46, and the #30 implementation debrief.
