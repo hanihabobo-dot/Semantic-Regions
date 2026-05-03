@@ -291,18 +291,20 @@ audit #9 (experiment runner), audit #10/#11 (baselines), audit #30
 
 ---
 
-## 15. Stack support chain — implicit base / table anchoring (#41)
+## 15. Stack support chain — implicit base today, explicit `on_table` open (#41)
 
-Stack goals are expressed with `(on ?object ?support)` in the PDDL
-domain; the bottom of a tower is connected to the scene (including
-the table) through the initial-state and action-effect wiring rather
-than requiring a separate thesis-level treatment of a dedicated
-`(on_table ?o)` atom everywhere.  That modeling shortcut is accepted
-for thesis scope (2026-05-03).
+Stack goals are expressed with `(on ?object ?support)` only; the base
+cube is **not** named as resting on the table in the goal tuple today
+(`build_stack_goal` documents implicit table support).  The domain
+comments describe the same convention: objects absent from any `(on ?o ?x)`
+fact are treated as table-resting.
 
-**References**: `archive/CODEBASE_AUDIT_RESOLVED.txt` (header note:
-#41 accepted), open `CODEBASE_AUDIT.txt` #40 (physics verifier for
-`(on A B)` vs executor-tracked relations).
+Making that constraint **explicit** in the PDDL goal (e.g. `(on_table ?o)`
+or a table object) is tracked as **open** `CODEBASE_AUDIT.txt` **#41**
+and pairs with the physics verifier in **#40**.
+
+**References**: `CODEBASE_AUDIT.txt` #41, #40; `pddl/domain_pddlstream.pddl`
+(~lines 61–65); `test_full_pipeline.py` `build_stack_goal`.
 
 ---
 
