@@ -737,7 +737,7 @@ class BoxelTestEnv:
     # actual table mesh and the cube would fall instantly when physics
     # starts.  This tighter window is only used by stack_scene-style
     # scenes that demand every object be both pickable and on-table.
-    _SAFE_TABLE_X_RANGE = (0.05, 0.70)
+    _SAFE_TABLE_X_RANGE = (-0.1, 0.70)
     _SAFE_TABLE_Y_RANGE = (-0.40, 0.40)
 
     def _random_xy_positions(self, n: int, rng: np.random.RandomState,
