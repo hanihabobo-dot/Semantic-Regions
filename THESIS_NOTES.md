@@ -349,3 +349,56 @@ fallback if the cost bias proves insufficient at scale.
 **References**: `pddl/domain_pddlstream.pddl` (action cost effects);
 commit `6f91d0c`; `CODEBASE_AUDIT.txt` FOR LATER (stack_allowed
 fallback).
+
+---
+
+## 18. Shadow Give-Up After Repeated Still-Blocked (Audit #21 / #47)
+
+When `sense_shadow_raycasting` returns `still_blocked` three times in a
+row for the same shadow, the execution loop calls
+`belief.mark_sensed(sid, found=False)` and the shadow is treated as
+`not_here` for the rest of the run.  The shadow is NEVER directly
+observed; the loop concludes from outside that it is unreachable for
+the current scene.
+
+This is a **lying-to-progress** simplification accepted to keep the
+sense-plan-act loop bounded.  Without it, runs that hit a still_blocked
+configuration the planner cannot resolve spin indefinitely on the same
+`(move, sense, pick)` skeleton (observed in the reverted attempt on
+branch `claude/friendly-chandrasekhar-a27be5`, commit `689169e`,
+14+ replans on the same blocked shadow before the user killed the run).
+
+**What the run report says today** (after audit-#21 log fix): the
+final FAILED message distinguishes
+- shadows actually observed empty (`clear_but_empty` /
+  `contains_nontarget` outcomes), from
+- shadows given up after repeated `still_blocked` (the lying case).
+
+`exit_reason` remains `"all_searched"` for both cases (no behavior
+change), but the printed breakdown is honest.
+
+**Real remedy (future work, audit #47)**: after N still_blocked
+outcomes, re-ground the planner's view-blocking atoms from current
+physics (re-run `compute_shadow_blockers` with up-to-date AABBs and
+sense-grade ray density) and re-emit `blocks_view_at` facts that match
+the **current** blockers, not the ones at planning time.  The user's
+original framing was that a shadow can still be blocked by a NEW object
+that drifted into the corridor or was placed there on the previous
+step, but the planner reasons against the blocker map computed before
+the still_blocked event.  Re-grounding lets the planner see the new
+blocker and plan around it, instead of spinning until the give-up
+mechanism fires.
+
+**Thesis framing**: the partial-observability search is sound only as
+long as belief reflects observation.  The 3-strike give-up violates
+this invariant for unreachable shadows.  Acceptable for tabletop with
+small N — the false-not_here only mis-labels physically unreachable
+shadows; the run still terminates and the report distinguishes the two
+failure modes.  In a real deployment the give-up is replaced by the
+atom-regrounding remedy above.
+
+**References**: `archive/CODEBASE_AUDIT_RESOLVED.txt` #21 (log-only
+band-aid), `CODEBASE_AUDIT.txt` #47 (real fix, open),
+`belief.py` `mark_sensed`, `test_full_pipeline.py` sense-handler
+still_blocked branch, `archive/CODEBASE_AUDIT_RESOLVED.txt` #78(c)
+(3-strike behavior historical context).

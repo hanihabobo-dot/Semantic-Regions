@@ -23,6 +23,12 @@ Restructured: 2026-05-03 — roadmap (pre-eval / eval); archive #4; drop #6;
               defer #42 collisions; refresh FOR LATER.
 Corrected:    #41 — back in open audit (was dropped in error in 7003dca;
               user had asked for open/closed status only, not closure).
+Slimmed:      2026-05-05 — moved #21 to archive/CODEBASE_AUDIT_RESOLVED.txt
+              (log-only band-aid landed: print messages distinguish
+              observed-empty shadows from blocked-unresolved 3-strike
+              give-ups; behavior unchanged); added #47 to the open list
+              (real fix — re-ground planner blocker atoms after repeated
+              still_blocked).
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -108,7 +114,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #11–#13, #21, #30, #31, #32, #34, #36, #40, #41       #
+#  OPEN ISSUES — #9, #10, #11–#13, #30, #31, #32, #34, #36, #40, #41, #47       #
 #                                                                              #
 ################################################################################
 
@@ -117,7 +123,10 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 ROADMAP — PRE-EVALUATION VS. EVALUATION (2026-05-03)
 ================================================================================
 Pre-evaluation (intended order before the eval sweep):
-  #21 → #40 → #30 → #36 → #31 → #32
+  #47 → #40 → #30 → #36 → #31 → #32
+  (#47 supersedes archived #21: the log-only band-aid for #21 landed
+   2026-05-05; #47 is the real fix that re-grounds planner blocker
+   atoms after repeated still_blocked.)
 
 Evaluation prerequisites (runner + uniform baseline for thesis comparison):
   #9  metric hooks + batch experiment runner
@@ -270,122 +279,6 @@ Fix:   ONE COMMIT — add recursive discovery pass:
 
 Related: archived #4 (re-boxelization — recursive pass optional if
          partial-coverage perception is added).
-
-================================================================================
-#21. BLOCKED SENSE CAUSES SHADOW SWITCHING AND FALSE "SEARCHED ALL" TERMINATION
-================================================================================
-Priority: TIER 0 — Control-loop correctness bug
-Where:    test_full_pipeline.py, belief.py, execution.py
-Depends:  None
-Effort:   1-2 days
-
-STATUS (2026-05-05): OPEN.  First attempt regressed and was reverted.
-       Re-design pending.  PDDL-domain solutions are rejected by the user
-       (no new predicates / no blocked_unresolved status); the design space
-       is execution-loop / planner-init-fact only.
-
-ATTEMPTED FIX (2026-05-04, REVERTED 2026-05-05):
-       Approach: refresh init facts from physics before each replan.
-         - execution.refresh_world_facts re-read live AABBs and recomputed
-           shadow_occluder_map via compute_shadow_blockers each iteration.
-         - Sense handler split: still_blocked / contains_nontarget stopped
-           mutating belief about target presence.
-         - Removed the 3-strike mark_sensed(found=False) give-up.
-         - BeliefState gained attempted_blocked / get_unreachable_shadows
-           — diagnostic only, NOT fed to the planner.
-         - Termination split into all_eliminated vs unreachable_remain.
-
-       Regression (default scene, seed 0, --goal holding, GUI):
-         Plan #1 placed orange_object at free_009 and tried to sense
-         shadow_of_orange_object.  Sense returned still_blocked at a
-         steady 2% (≈3 of 147 rays).  No "blocked by robot arm" note —
-         this was occluder_hits, i.e. orange_object itself grazing the
-         corridor at free_009.  Without the 3-strike give-up the run
-         spun 14+ replans on the same (move, sense, pick) skeleton before
-         the user killed it.  Pre-fix code masked this by lying
-         (mark_sensed False after 3 strikes) so the run made progress.
-
-       Two underlying gaps the attempt exposed:
-       (a) audit #79: home-retract before sense at
-           test_full_pipeline.py ~671-673 is still commented out.  The
-           gripper / held-object can sit in the camera→shadow corridor
-           at sense time.  Not the cause of THIS regression but a
-           parallel failure mode the next attempt must address.
-       (b) _compute_placement_view_blocks at pddlstream_planner.py ~295
-           uses a coarser ray sample than sense_shadow_raycasting, so
-           the planner can pick a "non-blocking" placement destination
-           that still grazes the actual sense corridor.  The planner
-           thinks view_clear; sense disagrees; loop spins.
-
-       Preserved: branch claude/friendly-chandrasekhar-a27be5 at commit
-       689169e (rebased onto main 148f39f), worktree
-       .claude/worktrees/friendly-chandrasekhar-a27be5.  Code is salvageable
-       if the next design wants to reuse refresh_world_facts.
-
-       Lesson: the "rebuild geometry from physics" mechanism alone is
-       not enough.  Either the planner's placement-blocking precision
-       must match sense's ray density, OR the loop must have an honest
-       unstick mechanism (cap + unreachable bin actually fed to the
-       planner) so that runs make progress past unsenseable shadows
-       without lying about target presence.
-
-What:  After a pick/place intended to clear a shadow, sensing can still return
-       "still_blocked".  The execution loop then breaks to replan, but it does
-       NOT preserve an obligation to keep clearing that SAME shadow.
-
-       Current behavior:
-       (a) belief.occluders_moved records the relocated occluder.
-       (b) The blocked shadow remains unknown unless blocked_counts reaches 3.
-       (c) The next plan is free to target a DIFFERENT unknown shadow instead
-           of identifying and relocating the blocker that still obstructs the
-           current one.
-       (d) After 3 consecutive "still_blocked" outcomes on the same shadow,
-           the loop marks that shadow as not_here even though the view was
-           never clear and the shadow was never actually observed.
-       (e) The run can then terminate with "Searched all shadows but target not
-           found" even though some shadows were only blocked, not searched.
-
-       This is different from #5.  #5 is about choosing a placement
-       destination that re-blocks a corridor.  This issue is about the
-       REACTIVE POLICY after sensing reports that a corridor is still blocked:
-       the system switches search targets instead of continuing to clear the
-       active shadow.
-
-Fix:   ONE COMMIT — design decision needed:
-
-       OPTION A — Introduce a belief/planning obligation to continue clearing
-       the same shadow after still_blocked, until view_clear or clear_but_empty.
-       OPTION B — Add a distinct shadow status such as blocked_unresolved;
-       do NOT map it to not_here, and prioritize it before untouched shadows.
-       OPTION C — On still_blocked, identify the current blocking object(s)
-       for that same shadow and force replanning around one of those blockers.
-
-       OPTION B + C is likely the most practical: preserve truthful belief
-       state and bias replanning toward the active blocked shadow.
-
-       UPDATE (2026-05-02, see #45): the contains_nontarget variant of
-       the same observable failure (sense reveals an object that turns
-       out to be the shadow's own occluder) is now blocked at the
-       blocker-detection layer — compute_shadow_blockers no longer
-       reports view_clear for those shadows, so the planner picks the
-       occluder before sensing.  The still_blocked control-loop bug
-       described below is not subsumed by that fix and remains open.
-
-       DESIGN DIRECTION (2026-04-17): The fix MUST be in the PDDL model,
-       not in the execution loop.  The planner should reason about blocked
-       shadows.  Specifically:
-       - Add a blocked_unresolved shadow status (distinct from unknown
-         and not_here) in both BeliefState and the PDDL model.
-       - The PDDL domain must represent that a shadow is blocked and
-         needs further occluder removal before sensing can succeed.
-       - The planner should be responsible for selecting which shadow to
-         clear next — not the reactive execution loop.
-       - The execution loop must NEVER mark an unobserved shadow as
-         not_here under any circumstance (remove the 3-strike give-up).
-
-Related: #5 (placement re-blocks cleared corridor),
-         archive resolved #78(c) (3-strike give-up behavior)
-
 
 ================================================================================
 #30. STACK GOAL PERF REGRESSION — KEEP/KILL OPEN  [PARTIAL 2026-04-24]
@@ -656,8 +549,11 @@ Fix:   ONE COMMIT — add a physics-based goal verifier:
 
 Related: #39 (root cause of this run's false-success),
          #9  (evaluation metrics depend on truthful success flags),
-         #21 (reactive policy after unexpected state — similar
-              loop-vs-planner design question),
+         archive resolved #21 (reactive policy after unexpected state
+              — similar loop-vs-planner design question; log-only
+              band-aid landed 2026-05-05, real fix tracked as #47),
+         #47 (re-ground blocker atoms — same "atoms vs. physics
+              desync" theme as #40),
          #41 (on_table clause in goal — verifier case above).
 
 
@@ -710,6 +606,91 @@ Related: #40 (physics verifier should check the on_table clause),
 
 
 ================================================================================
+#47. RE-GROUND VIEW-BLOCKER ATOMS AFTER REPEATED STILL-BLOCKED
+================================================================================
+Priority: TIER 0 — Correctness; currently masked by archive resolved
+          #21's 3-strike give-up + lying belief (log-only band-aid landed
+          2026-05-05; behavior unchanged).
+Where:    test_full_pipeline.py (sense handler still_blocked branch,
+          ~line 849-870 after #21 log fix),
+          pddlstream_planner.py (init-fact emission for blocks_view_at,
+          ~lines 414-454; _compute_placement_view_blocks, ~line 289-325),
+          execution.py (sense_shadow_raycasting ~line 36-122,
+          compute_shadow_blockers ~line 125-217)
+Depends:  Behaviorally independent of #21's log-only fix.  Functionally
+          supersedes it — once #47 lands, the give-up + lie should be
+          removed and replaced by honest belief plus planner feedback.
+Effort:   1-2 days
+
+What:  When sense_shadow_raycasting returns still_blocked, the planner
+       has no automatic way to learn WHICH object is currently in the
+       camera→shadow corridor.  Today's blocks_view_at facts are emitted
+       once per replan from compute_shadow_blockers, which uses a coarse
+       5x5 single-z-slice ray grid against current physics — sense uses
+       3 z-levels x 7x7 = 147 rays.  Mismatch cases (planner thinks
+       view_clear, sense disagrees) loop the same (move, sense, pick)
+       skeleton until the archive #21 3-strike give-up lies the shadow
+       into not_here.
+
+       Original framing: a shadow can still be blocked by a NEW object
+       that drifted or was placed into the corridor on the previous
+       step, but the planner reasons against the blocker map computed
+       before the still_blocked event.  Re-grounding the atoms from
+       current physics after N failures — including matching sense's
+       ray density — lets the planner see the actual obstruction and
+       plan around it, rather than re-issuing the same skeleton.
+
+Fix:   ONE COMMIT — three pieces:
+       (a) Modify sense_shadow_raycasting to return the set of body
+           IDs that contributed to still_blocked (currently set() is
+           returned for that branch, execution.py line 117).
+       (b) On still_blocked in the dispatcher, before increment-and-
+           break:
+             - Resolve blocker body IDs to OBJECT boxel IDs via
+               body_id_to_name + registry.
+             - Re-run compute_shadow_blockers (or a denser variant
+               matching sense's 147-ray density) with the updated
+               registry.
+             - Push the refreshed map to planner.shadow_occluder_map.
+             - Optionally extend the planner with an
+               observed_placement_blocks set: tuples
+               (occluder_id, dest_boxel_id, shadow_id) for placements
+               that empirically did not clear the corridor.
+               _build_init emits one extra
+               (blocks_view_at occluder dest shadow) per entry so
+               view_clear(shadow) becomes false on the next plan and
+               the planner is forced to relocate the occluder.
+       (c) Once (a) and (b) work, remove the 3-strike give-up and the
+           blocked_giveup_shadows tracking added by archive #21's
+           log-only fix.  Replace with an honest
+           exit_reason="blocked_unresolved" when the augmented init
+           facts make the goal unreachable.
+
+       Care points:
+       - The 5x5 grid in _compute_placement_view_blocks
+         (pddlstream_planner.py ~line 304) should ALSO be raised to
+         the 147-ray density (or AABB-dilated by ~2 cm) so the
+         planner does not repeatedly nominate the same corridor-
+         grazing placement.  Can ride with #47 or split out.
+       - Persistence of observed_placement_blocks across replans:
+         keep indefinitely (geometric truth — "if X were at F, view
+         to S would be blocked").  Cleanup hook only when the shadow
+         itself is removed from the registry.
+       - Robot self-blocks (R1 in archive #21's analysis) are NOT
+         addressed here — they need the home_retract uncomment at
+         test_full_pipeline.py ~line 671-673 (audit #79).  Worth
+         re-enabling alongside #47 since both target the same
+         still_blocked outcome.
+
+Related: archive resolved #21 (this issue's enabling pre-fix; the
+              log-only band-aid for the false 'all_searched' message),
+         #40 (shared "PDDL atoms vs. physics desync" theme — false-
+              success in stack goals; same root cause class),
+         #79 (home-retract before sense, also commented out),
+         archive resolved #78(c) (3-strike give-up historical context).
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -722,8 +703,10 @@ FOR LATER
   logic remains commented out in-repo (historical experiment).
 
 - Pick–observe–replace (clear corridor, sense, place object back).  Raised
-  2026-03-22; not modeled in PDDL.  Related reactive behaviour: open #21
-  (still_blocked / search policy) touches the same execution loop.
+  2026-03-22; not modeled in PDDL.  Related reactive behaviour: archive
+  resolved #21 (still_blocked / search policy; log-only band-aid landed
+  2026-05-05) and open #47 (real fix — re-ground blocker atoms after
+  repeated still_blocked) touch the same execution loop.
 
 - "Approach 2": PDDL-level merge/split with active representative boxels.
   Superseded by opaque re-boxelize + replan (Approach 1).  Full semantic merge
@@ -739,7 +722,8 @@ FOR LATER
   (stack=2, others=1) is insufficient to suppress place-rescue stacks.
 
 - POMDP / contingent baseline: large effort; only if time after eval sweep
-  (#9–#13) and thesis-critical fixes (#21, #40, … per ROADMAP).
+  (#9–#13) and thesis-critical fixes (#40, #47, … per ROADMAP; #21 was
+  archived 2026-05-05 with a log-only band-aid, #47 is the real fix).
 
 ================================================================================
 SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-03)
@@ -749,7 +733,8 @@ Aligns with the ROADMAP banner above (pre-eval → eval prerequisites → eval).
 Each issue is ideally one commit; parallelise where dependencies allow.
 
 TIER 0 — BEFORE EVAL (correctness):
-  #21  Blocked sense / shadow switching / false all_searched  ~1–2 days
+  #47  Re-ground view-blocker atoms after repeated still_blocked ~1–2 days
+       (real fix; supersedes archive resolved #21's log-only band-aid)
   #40  False-success: symbolic stack success vs PyBullet        ~0.5–1 day
 
 TIER 3 — PRE-EVAL / EXTENSION:
@@ -769,7 +754,7 @@ TIER 3 — EVALUATION (runner #9–#10, then #11–#13):
   #12  Scalability matrix + plots
   #13  Recursive free-space discovery (implement or thesis future-work)
 
-Total open: 13 items (#9–#13, #21, #30, #31, #32, #34, #36, #40, #41).
+Total open: 13 items (#9–#13, #30, #31, #32, #34, #36, #40, #41, #47).
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
@@ -777,5 +762,6 @@ Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
 
 Resolved/subsumed → archive/CODEBASE_AUDIT_RESOLVED.txt:
              #1, #3, #4 (accepted shadow AABB remainder), #5, #7, #8, #15–#20,
+             #21 (log-only band-aid 2026-05-05; real fix open as #47),
              #22–#29, #33, #35, #37, #38, #39,
              #43, #44, #45, #46, and the #30 implementation debrief.
