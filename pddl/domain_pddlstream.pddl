@@ -15,7 +15,7 @@
 ;; Object types are encoded as predicates: (Boxel ?x), (Obj ?x), etc.
 
 (define (domain boxel-tamp)
-  (:requirements :strips :equality :derived-predicates :conditional-effects)
+  (:requirements :strips :equality :derived-predicates :conditional-effects :action-costs)
   
   (:predicates
     ;; --- Type predicates ---
@@ -72,7 +72,17 @@
     (clear ?o)
     (stack_kin ?o ?on_obj ?g ?q)  ; IK config ?q to place ?o on top of ?on_obj
   )
-  
+
+  ;; =========================================================================
+  ;; ACTION COSTS: bias planner toward place over stack (audit follow-up)
+  ;; =========================================================================
+  ;; All actions cost 1 except stack (cost 2).  Without this, the planner
+  ;; treated stack and place as equally cheap and chose stack as a "rescue"
+  ;; whenever motion planning to a particular free boxel failed, instead of
+  ;; trying other free boxels.  Higher stack cost forces the search to
+  ;; exhaust place destinations before falling back to stack.
+  (:functions (total-cost))
+
   ;; =========================================================================
   ;; DERIVED PREDICATES: Visibility from object positions
   ;; =========================================================================
@@ -151,6 +161,7 @@
       (obj_at_boxel_KIF ?o ?region)        ; Now we know
       (obj_at_boxel ?o ?region)            ; OPTIMISTIC: assume found
       (obj_pose_known ?o)
+      (increase (total-cost) 1)
     )
   )
   
@@ -173,6 +184,7 @@
     :effect (and
       (at_config ?q2)
       (not (at_config ?q1))
+      (increase (total-cost) 1)
     )
   )
   
@@ -211,6 +223,7 @@
       (forall (?x)
         (when (on ?o ?x)
           (and (not (on ?o ?x)) (clear ?x))))
+      (increase (total-cost) 1)
     )
   )
   
@@ -243,6 +256,7 @@
       (obj_at_boxel_KIF ?o ?b)
       (not (holding ?o))
       (not (is_free_space ?b))
+      (increase (total-cost) 1)
     )
   )
 
@@ -277,6 +291,7 @@
       (obj_at_boxel_KIF ?o ?o)
       (not (holding ?o))
       (not (clear ?on_obj))
+      (increase (total-cost) 2)
     )
   )
 )
