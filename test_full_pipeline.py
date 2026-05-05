@@ -108,6 +108,89 @@ def goal_satisfied(goal, on_relations=None, target_found=False) -> bool:
     return False
 
 
+def _verify_cube_on(env, obj_name, support_name, eps_z=0.005):
+    """
+    Physics check that ``obj_name`` rests on top of ``support_name``
+    (audit #40).  Used both per-action (gate the on_relations write
+    after execute_stack) and at end-of-run (walk the goal AST).
+
+    Tolerance ε = 5 mm is the audit's chosen default for 40-mm cubes.
+    XY-centre check uses the support's plain AABB; tightening to a
+    safe-inset (centre minus half cube footprint) is a FOR LATER
+    refinement.
+
+    Returns:
+        (ok, reason) — reason is "" on success, a short
+        diagnostic on failure.
+    """
+    if obj_name not in env.objects or support_name not in env.objects:
+        return False, (f"missing body ('{obj_name}' or "
+                       f"'{support_name}' not in env.objects)")
+    o_min, o_max = p.getAABB(env.objects[obj_name].object_id)
+    s_min, s_max = p.getAABB(env.objects[support_name].object_id)
+    dz = abs(o_min[2] - s_max[2])
+    if dz > eps_z:
+        return False, (f"bottom_z={o_min[2]:.4f} not ≈ top_z="
+                       f"{s_max[2]:.4f} (Δ={dz:.4f} > ε={eps_z})")
+    o_cx = (o_min[0] + o_max[0]) / 2.0
+    o_cy = (o_min[1] + o_max[1]) / 2.0
+    if not (s_min[0] <= o_cx <= s_max[0]
+            and s_min[1] <= o_cy <= s_max[1]):
+        return False, (f"centre ({o_cx:.3f},{o_cy:.3f}) not within "
+                       f"support XY AABB "
+                       f"({s_min[0]:.3f}..{s_max[0]:.3f}, "
+                       f"{s_min[1]:.3f}..{s_max[1]:.3f})")
+    return True, ""
+
+
+def _verify_goal_physics(goal, env):
+    """
+    Walk a goal AST and physics-check each ``(on a b)`` clause
+    (audit #40).
+
+    Heads currently handled: ``and`` (recurse), ``on`` (AABB check).
+    ``holding`` is intentionally NOT checked here — that desync is
+    in scope for audit #47.  Other heads (e.g. future predicates
+    like ``on_table``/``at_config``) trigger a one-line warning so
+    coverage gaps surface in the run log instead of silently
+    passing.
+
+    Returns:
+        list[str] — human-readable failure descriptions, empty on
+        full pass.  Logged into timing_summary.json so eval tooling
+        (#9) can filter false-positive successes.
+    """
+    failures = []
+    # Defensive: PDDLStream goal ASTs are always tuples; a bare
+    # string atom or None would crash on goal[0].  Return clean
+    # instead so the verifier never bricks a run.
+    if not isinstance(goal, tuple):
+        return failures
+    head = goal[0]  # predicate name; remaining tuple elements are args
+    if head == 'and':
+        # Conjunction: ('and', clause1, clause2, ...).  Recurse into
+        # each subgoal and flatten failure lists with extend (not
+        # append) so the caller sees a single flat list, not a list
+        # of lists.
+        for sub in goal[1:]:
+            failures.extend(_verify_goal_physics(sub, env))
+    elif head == 'on':
+        a, b = str(goal[1]), str(goal[2])
+        ok, reason = _verify_cube_on(env, a, b)
+        if not ok:
+            failures.append(f"(on {a} {b}) — {reason}")
+    elif head == 'holding':
+        # Deferred to audit #47 (atoms-vs-physics for held object).
+        pass
+    else:
+        # Unknown predicate — verifier coverage gap.  Surface it in
+        # the log so a new goal predicate without a verifier doesn't
+        # quietly pass.
+        print(f"  WARNING: _verify_goal_physics: unhandled goal "
+              f"head '{head}' — clause not physics-verified")
+    return failures
+
+
 def build_stack_goal(stackable_objects, stack_height, rng=None):
     """
     Pick ``stack_height`` distinct objects from ``stackable_objects`` and
@@ -297,6 +380,7 @@ def main(gui=True, run_logger=None, scene_config=None,
 
     visible_target_locations = {}
     on_relations: Dict[str, str] = {}      # stacked_obj -> support_obj
+    physical_failures: list = []           # audit #40 — per-action verifier log
     stack_target_objects = []              # populated only for --goal stack
 
     if goal_kind == 'holding':
@@ -1104,10 +1188,27 @@ def main(gui=True, run_logger=None, scene_config=None,
                             viz.remove_boxel_viz(obj_str)
                             viz.draw_boxel_data(bd)
 
-                # Track the relation so goal_satisfied() / next replan
-                # see the live stack.  Replace any prior support of
-                # obj_str (re-stacking) — the conditional pick effect in
-                # the domain already cleared the old support symbolically.
+                # Audit #40: gate the on_relations write on a physics
+                # check.  execute_stack's 60-step settle can leave a
+                # cube wobbling or already on the floor; writing the
+                # relation in that case would lie to goal_satisfied(),
+                # the next _build_init, AND the end-of-run summary.
+                stack_ok, stack_reason = _verify_cube_on(
+                    env, obj_str, on_obj_str)
+                if not stack_ok:
+                    print(f"    PHYSICAL_FAILURE: stack {obj_str} on "
+                          f"{on_obj_str} — {stack_reason}")
+                    physical_failures.append({
+                        "action": "stack",
+                        "obj": obj_str,
+                        "on": on_obj_str,
+                        "reason": stack_reason,
+                        "plan": plan_count,
+                    })
+                    break  # replan — on_relations stays as-is
+                # Replace any prior support of obj_str (re-stacking) —
+                # the conditional pick effect in the domain already
+                # cleared the old support symbolically.
                 on_relations[obj_str] = on_obj_str
                 # Stacking does NOT consume free space (we placed onto
                 # an OBJECT, not a FREE_SPACE), so reboxelize_free_space
@@ -1126,10 +1227,21 @@ def main(gui=True, run_logger=None, scene_config=None,
     # the loop tells us exactly why we stopped: target found, all shadows
     # exhausted, planner failure, or replan budget exceeded.
     print("\n" + "=" * 60)
+    physics_failures: list = []
     if goal_kind == 'holding':
         success = belief.is_target_found()
     else:
-        success = goal_satisfied(goal, on_relations)
+        symbolic_ok = goal_satisfied(goal, on_relations)
+        if symbolic_ok:
+            # Audit #40: verify each (on a b) goal clause against
+            # PyBullet AABBs before declaring success.  Catches
+            # post-stack collapses that slipped past the per-action
+            # gate (e.g. a tower falling later under a subsequent
+            # action's vibration).
+            physics_failures = _verify_goal_physics(goal, env)
+            for pf in physics_failures:
+                print(f"  PHYSICAL_FAILURE (goal): {pf}")
+        success = symbolic_ok and not physics_failures
     if success:
         print(f"SUCCESS!")
         if goal_kind == 'holding':
@@ -1196,6 +1308,10 @@ def main(gui=True, run_logger=None, scene_config=None,
                 "plan_count": plan_count,
                 "total_planning_time_s": round(total_plan_time, 3),
                 "per_call_planning_time_s": [round(t, 3) for t in plan_times],
+                # Audit #40: structured physics-vs-symbolic failure log
+                # so eval tooling (#9) can filter false-positive successes.
+                "physical_failures_per_action": physical_failures,
+                "physical_failures_at_goal": physics_failures,
             }, indent=2))
             print(f"  Timing summary written to {summary_path}")
         except Exception as e:
