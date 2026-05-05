@@ -29,6 +29,13 @@ Slimmed:      2026-05-05 — moved #21 to archive/CODEBASE_AUDIT_RESOLVED.txt
               give-ups; behavior unchanged); added #47 to the open list
               (real fix — re-ground planner blocker atoms after repeated
               still_blocked).
+Updated:      2026-05-05 — #40 marked [DONE] (per-action _verify_cube_on
+              gate on the on_relations write + end-of-run
+              _verify_goal_physics walk over the goal AST; both feed
+              timing_summary.json via physical_failures_per_action /
+              physical_failures_at_goal); added #48 (pick from a stack
+              does not clear on_relations[X] — write-side counterpart
+              to #40); added FOR LATER bullet for safe-inset XY check.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -114,7 +121,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #11–#13, #30, #31, #32, #34, #36, #40, #41, #47       #
+#  OPEN ISSUES — #9, #10, #11–#13, #30, #31, #32, #34, #36, #41, #47, #48       #
 #                                                                              #
 ################################################################################
 
@@ -123,10 +130,11 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 ROADMAP — PRE-EVALUATION VS. EVALUATION (2026-05-03)
 ================================================================================
 Pre-evaluation (intended order before the eval sweep):
-  #47 → #40 → #30 → #36 → #31 → #32
-  (#47 supersedes archived #21: the log-only band-aid for #21 landed
-   2026-05-05; #47 is the real fix that re-grounds planner blocker
-   atoms after repeated still_blocked.)
+  #47 → #30 → #36 → #31 → #32
+  (#40 landed 2026-05-05 — physics verifier for stack goals; will
+   move to archive on next slim.  #47 supersedes archived #21: the
+   log-only band-aid for #21 landed 2026-05-05; #47 is the real fix
+   that re-grounds planner blocker atoms after repeated still_blocked.)
 
 Evaluation prerequisites (runner + uniform baseline for thesis comparison):
   #9  metric hooks + batch experiment runner
@@ -145,6 +153,7 @@ Closed / relocated since last summary:
   #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
   #6  removed — multi-boxel place not pursued
   #42 archive/CODEBASE_AUDIT_DEFERRED.txt (collisions logged, no replan)
+  #40 [DONE 2026-05-05] — physics verifier landed; awaiting archive slim
 
 ================================================================================
 #9. EVALUATION — METRIC COLLECTION AND EXPERIMENT RUNNER
@@ -489,9 +498,20 @@ Related: #30 (goal as CLI parameter), execution.py refactor 2026-04-22
 
 
 ================================================================================
-#40. FALSE-SUCCESS IN STACK GOALS — SYMBOLIC STATE ACCEPTED OVER PHYSICS
+#40. FALSE-SUCCESS IN STACK GOALS — SYMBOLIC STATE ACCEPTED OVER PHYSICS  [DONE 2026-05-05]
 ================================================================================
 Priority: TIER 0 — Correctness bug (reports SUCCESS on physically failed runs)
+Status:   [DONE 2026-05-05]  test_full_pipeline.py now runs
+          _verify_cube_on() per stack action (gates the on_relations
+          write; failure → log PHYSICAL_FAILURE, append to
+          physical_failures, break to replan) AND walks the goal AST
+          via _verify_goal_physics() at end-of-run.  Both layers feed
+          timing_summary.json (physical_failures_per_action,
+          physical_failures_at_goal).  Holding-goal verification
+          intentionally deferred to #47.  Safe-inset XY refinement
+          tracked in FOR LATER.  Pick-clears-on_relations gap tracked
+          as new audit #48.  Will move to archive on next slim.
+
 Where:    test_full_pipeline.py (post-execution goal check, ~line 1009+;
           on_relations tracking in the stack dispatch handler)
 Depends:  None.  Independent of #39 — even if pick is fixed, a cube can
@@ -691,6 +711,53 @@ Related: archive resolved #21 (this issue's enabling pre-fix; the
 
 
 ================================================================================
+#48. PICK DOES NOT CLEAR on_relations[X] AFTER REMOVING X FROM A STACK
+================================================================================
+Priority: TIER 3 — Latent correctness gap; not triggered by current plan
+          shapes but fragile if pick→re-stack with the same cube ever appears.
+Where:    test_full_pipeline.py pick handler (~line 891-946),
+          on_relations dict (~line 299)
+Depends:  None.  Independent of #40 (which gates the WRITE side; this is
+          the missing CLEAR side).
+Effort:   <0.5 day
+
+What:  The PDDL pick action's conditional effect
+
+         (forall (?x)
+           (when (on ?o ?x)
+             (and (not (on ?o ?x)) (clear ?x))))
+
+       symbolically clears (on ?o ?x) for any support ?x.  The Python
+       on_relations dict — passed to planner.plan() and read by
+       goal_satisfied() — is NOT cleared.  After picking X off Y,
+       on_relations[X] = Y persists.
+
+       Today's plan shapes don't loop pick→sense→re-stack with the
+       same cube, so this is currently moot.  But:
+       (a) The next plan's _build_init re-emits a stale (on X Y)
+           fact, contradicting the planner's own (handempty) /
+           (holding X) state from the previous pick.
+       (b) goal_satisfied() could in principle false-positive if a
+           future plan shape leaves a held cube but the goal contains
+           a stale (on X Y) clause that hasn't been refuted.
+       (c) Symmetric to #40 — same "executor-tracked symbolic state
+           goes stale vs. physics" theme.
+
+Fix:   ONE COMMIT — in the pick handler, after the *** PICKED UP ***
+       log line, clear obj_str's entry:
+
+         on_relations.pop(obj_str, None)
+
+       No domain change.  Place handler unchanged (place doesn't write
+       on_relations).  Stack handler unchanged (#40's gate already
+       handles the write side).
+
+Related: #40 (write-side gate; this is the clear-side counterpart),
+         #47 (atoms-vs-physics theme),
+         pddl/domain_pddlstream.pddl pick conditional effect.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -721,12 +788,17 @@ FOR LATER
   when the goal demands stacking) — fallback if the action-cost bias
   (stack=2, others=1) is insufficient to suppress place-rescue stacks.
 
+- Tighten stack physics check to a safe-inset XY test: centre within
+  (support AABB shrunk by half the cube footprint) instead of plain
+  center-within-AABB.  Audit #40 introduced the loose check; refinement
+  only matters if eval (#12) shows edge-perching false-positives.
+
 - POMDP / contingent baseline: large effort; only if time after eval sweep
   (#9–#13) and thesis-critical fixes (#40, #47, … per ROADMAP; #21 was
   archived 2026-05-05 with a log-only band-aid, #47 is the real fix).
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-03)
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-05)
 ================================================================================
 
 Aligns with the ROADMAP banner above (pre-eval → eval prerequisites → eval).
@@ -735,7 +807,6 @@ Each issue is ideally one commit; parallelise where dependencies allow.
 TIER 0 — BEFORE EVAL (correctness):
   #47  Re-ground view-blocker atoms after repeated still_blocked ~1–2 days
        (real fix; supersedes archive resolved #21's log-only band-aid)
-  #40  False-success: symbolic stack success vs PyBullet        ~0.5–1 day
 
 TIER 3 — PRE-EVAL / EXTENSION:
   #41  Stack goal: base not constrained on_table    <1 day
@@ -746,6 +817,7 @@ TIER 3 — PRE-EVAL / EXTENSION:
   #31  Narration-style comments sweep
   #32  Comment/code drift sweep
   #34  _compute_placement_view_blocks — optimise only if #12 shows cost
+  #48  Pick does not clear on_relations[X] (write-side counterpart to #40)
 
 TIER 3 — EVALUATION (runner #9–#10, then #11–#13):
   #9   Experiment runner + metric hooks
@@ -754,7 +826,7 @@ TIER 3 — EVALUATION (runner #9–#10, then #11–#13):
   #12  Scalability matrix + plots
   #13  Recursive free-space discovery (implement or thesis future-work)
 
-Total open: 13 items (#9–#13, #30, #31, #32, #34, #36, #40, #41, #47).
+Total open: 13 items (#9–#13, #30, #31, #32, #34, #36, #41, #47, #48).
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
@@ -764,4 +836,5 @@ Resolved/subsumed → archive/CODEBASE_AUDIT_RESOLVED.txt:
              #1, #3, #4 (accepted shadow AABB remainder), #5, #7, #8, #15–#20,
              #21 (log-only band-aid 2026-05-05; real fix open as #47),
              #22–#29, #33, #35, #37, #38, #39,
+             #40 (DONE 2026-05-05 — moves to archive on next slim),
              #43, #44, #45, #46, and the #30 implementation debrief.
