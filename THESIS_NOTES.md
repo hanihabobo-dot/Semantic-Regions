@@ -318,3 +318,34 @@ to logging, manual review, and the planned physics-based goal check
 (open #40).
 
 **References**: `archive/CODEBASE_AUDIT_DEFERRED.txt` #42.
+
+---
+
+## 17. Action costs: `stack`=2, all others=1
+
+The PDDL domain assigns unit cost 1 to `move` / `pick` / `place` /
+`sense` and cost 2 to `stack`.  Without these costs all actions are
+free, and the PDDLStream `adaptive` algorithm will select `stack` as a
+"rescue" whenever motion planning to a chosen free boxel fails — even
+when the goal is `holding` and the user did not request stacking.
+Observed in run `2026-05-05_10-25-00`: `place(green_object,
+free_004)` failed kinematic feasibility for several IK seeds, and the
+planner replaced it with `stack(green_object, orange_object)` rather
+than trying another free boxel.
+
+Making `stack` strictly more expensive than `place` (2 > 1) forces the
+planner to exhaust place destinations before falling back to stack.
+Confirmed in run `2026-05-05_11-05-43`: two consecutive plans both
+chose `place` (cost 7.000), no stack rescue.
+
+**Thesis framing**: This is a planner-search bias, not a domain
+semantic change.  `stack` remains a legal action whenever the goal
+demands it; the cost only resolves ties between functionally
+equivalent skeletons.  An alternative — hard-gating `:action stack`
+with a `(stack_allowed)` precondition that is set only when the goal
+contains an `(on ...)` literal — is recorded under FOR LATER as a
+fallback if the cost bias proves insufficient at scale.
+
+**References**: `pddl/domain_pddlstream.pddl` (action cost effects);
+commit `6f91d0c`; `CODEBASE_AUDIT.txt` FOR LATER (stack_allowed
+fallback).
