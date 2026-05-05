@@ -275,9 +275,59 @@ Related: archived #4 (re-boxelization — recursive pass optional if
 #21. BLOCKED SENSE CAUSES SHADOW SWITCHING AND FALSE "SEARCHED ALL" TERMINATION
 ================================================================================
 Priority: TIER 0 — Control-loop correctness bug
-Where:    test_full_pipeline.py (BeliefState, replanning loop, still_blocked handling)
+Where:    test_full_pipeline.py, belief.py, execution.py
 Depends:  None
 Effort:   1-2 days
+
+STATUS (2026-05-05): OPEN.  First attempt regressed and was reverted.
+       Re-design pending.  PDDL-domain solutions are rejected by the user
+       (no new predicates / no blocked_unresolved status); the design space
+       is execution-loop / planner-init-fact only.
+
+ATTEMPTED FIX (2026-05-04, REVERTED 2026-05-05):
+       Approach: refresh init facts from physics before each replan.
+         - execution.refresh_world_facts re-read live AABBs and recomputed
+           shadow_occluder_map via compute_shadow_blockers each iteration.
+         - Sense handler split: still_blocked / contains_nontarget stopped
+           mutating belief about target presence.
+         - Removed the 3-strike mark_sensed(found=False) give-up.
+         - BeliefState gained attempted_blocked / get_unreachable_shadows
+           — diagnostic only, NOT fed to the planner.
+         - Termination split into all_eliminated vs unreachable_remain.
+
+       Regression (default scene, seed 0, --goal holding, GUI):
+         Plan #1 placed orange_object at free_009 and tried to sense
+         shadow_of_orange_object.  Sense returned still_blocked at a
+         steady 2% (≈3 of 147 rays).  No "blocked by robot arm" note —
+         this was occluder_hits, i.e. orange_object itself grazing the
+         corridor at free_009.  Without the 3-strike give-up the run
+         spun 14+ replans on the same (move, sense, pick) skeleton before
+         the user killed it.  Pre-fix code masked this by lying
+         (mark_sensed False after 3 strikes) so the run made progress.
+
+       Two underlying gaps the attempt exposed:
+       (a) audit #79: home-retract before sense at
+           test_full_pipeline.py ~671-673 is still commented out.  The
+           gripper / held-object can sit in the camera→shadow corridor
+           at sense time.  Not the cause of THIS regression but a
+           parallel failure mode the next attempt must address.
+       (b) _compute_placement_view_blocks at pddlstream_planner.py ~295
+           uses a coarser ray sample than sense_shadow_raycasting, so
+           the planner can pick a "non-blocking" placement destination
+           that still grazes the actual sense corridor.  The planner
+           thinks view_clear; sense disagrees; loop spins.
+
+       Preserved: branch claude/friendly-chandrasekhar-a27be5 at commit
+       689169e (rebased onto main 148f39f), worktree
+       .claude/worktrees/friendly-chandrasekhar-a27be5.  Code is salvageable
+       if the next design wants to reuse refresh_world_facts.
+
+       Lesson: the "rebuild geometry from physics" mechanism alone is
+       not enough.  Either the planner's placement-blocking precision
+       must match sense's ray density, OR the loop must have an honest
+       unstick mechanism (cap + unreachable bin actually fed to the
+       planner) so that runs make progress past unsenseable shadows
+       without lying about target presence.
 
 What:  After a pick/place intended to clear a shadow, sensing can still return
        "still_blocked".  The execution loop then breaks to replan, but it does
