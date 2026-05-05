@@ -31,12 +31,15 @@ Or as a context manager::
         ...
 """
 
+import argparse
+import json
 import logging
 import os
 import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from smart_filter import SmartConsoleFilter
 
@@ -193,3 +196,237 @@ class RunLogger:
     def __exit__(self, *exc):
         self.close()
         return False
+
+
+# ---------------------------------------------------------------------------
+# Run outcome reporting (extracted from test_full_pipeline.py 2026-05-05)
+# ---------------------------------------------------------------------------
+
+
+def report_run_outcome(
+    *,
+    success: bool,
+    exit_reason: Optional[str],
+    goal_kind: str,
+    goal,
+    target_name: Optional[str],
+    on_relations: dict,
+    belief,
+    plan_count: int,
+    shadows: list,
+    blocked_giveup_shadows: set,
+    max_replans: int,
+    plan_times: list,
+    total_plan_time: float,
+    physical_failures: list,
+    physics_failures: list,
+    run_config: Optional[dict],
+    run_logger: Optional["RunLogger"],
+):
+    """Print success/failure classification, planning timing summary,
+    and write timing_summary.json into the run logger's run directory.
+
+    Caller is responsible for computing ``success`` and
+    ``physics_failures`` (those depend on goal_kind + domain helpers
+    in the orchestrator).  This function only formats and persists
+    the result.
+    """
+    print("\n" + "=" * 60)
+    if success:
+        print(f"SUCCESS!")
+        if goal_kind == 'holding':
+            print(f"  Target: {target_name}")
+            print(f"  Found in: {belief.target_found_in}")
+            print(f"  Plans executed: {plan_count}")
+            print(f"  Shadows searched: {len(shadows) - len(belief.get_unknown_shadows())}")
+        else:
+            print(f"  Stack goal: {goal}")
+            print(f"  Final on-relations: {on_relations}")
+            print(f"  Plans executed: {plan_count}")
+    else:
+        remaining = belief.get_unknown_shadows()
+        if exit_reason is None:
+            exit_reason = "replan_limit"
+        if exit_reason == "all_searched":
+            if blocked_giveup_shadows:
+                # Audit #21: distinguish observed-empty shadows from
+                # blocked-unresolved ones so the run report does not
+                # claim a complete search when some shadows were never
+                # actually observed.
+                observed_empty = len(shadows) - len(blocked_giveup_shadows)
+                print(f"FAILED: {observed_empty} shadow(s) observed "
+                      f"empty, {len(blocked_giveup_shadows)} "
+                      f"blocked-unresolved (target may still be there): "
+                      f"{sorted(blocked_giveup_shadows)} — see audit #21, "
+                      f"real fix tracked as #47")
+            else:
+                print(f"FAILED: All {len(shadows)} shadows searched — target not found")
+        elif exit_reason == "planner_failed":
+            print(f"FAILED: Planner returned no plan "
+                  f"({len(remaining)} unsearched shadows remaining)")
+        elif exit_reason == "drop_failed":
+            print(f"FAILED: Could not release held object after retries — "
+                  f"aborted to avoid double-grasp "
+                  f"({len(remaining)} unsearched shadows remaining)")
+        elif goal_kind == 'stack':
+            print(f"FAILED: Stack goal not reached after {plan_count} plans "
+                  f"(goal {goal}, achieved {on_relations})")
+        else:
+            print(f"FAILED: Replan limit reached ({max_replans}) with "
+                  f"{len(remaining)} unsearched shadows remaining")
+        print(f"  Plans executed: {plan_count}")
+
+    print(f"\n--- Planning timing summary ---")
+    print(f"  Total plan() calls       : {len(plan_times)}")
+    print(f"  Cumulative planning time : {total_plan_time:.3f}s")
+    if plan_times:
+        avg = total_plan_time / len(plan_times)
+        print(f"  Average per call         : {avg:.3f}s")
+        per_call_str = ', '.join(f'{t:.3f}' for t in plan_times)
+        print(f"  Per-call (s)             : [{per_call_str}]")
+
+    # Machine-readable summary alongside the full text log so multi-run
+    # comparisons (baseline vs. stack feature, GUI vs. no-GUI, etc.)
+    # don't require parsing the prose log.
+    if run_logger is not None:
+        summary_path = run_logger.run_dir / "timing_summary.json"
+        try:
+            summary_path.write_text(json.dumps({
+                "run_config": run_config or {},
+                "success": bool(success),
+                "exit_reason": exit_reason,
+                "plan_count": plan_count,
+                "total_planning_time_s": round(total_plan_time, 3),
+                "per_call_planning_time_s": [round(t, 3) for t in plan_times],
+                # Audit #40: structured physics-vs-symbolic failure log
+                # so eval tooling (#9) can filter false-positive successes.
+                "physical_failures_per_action": physical_failures,
+                "physical_failures_at_goal": physics_failures,
+            }, indent=2))
+            print(f"  Timing summary written to {summary_path}")
+        except Exception as e:
+            print(f"  WARNING: could not write timing_summary.json: {e}")
+    print("=" * 60)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline CLI argument parsing (extracted from test_full_pipeline.py
+# 2026-05-05).  Lives here rather than in test_full_pipeline.py so the
+# entry-point block stays short; the scene-builder dispatch and main()
+# call remain in the orchestrator.
+# ---------------------------------------------------------------------------
+
+
+def parse_pipeline_args(argv=None):
+    """Parse the pipeline CLI args and return the validated Namespace.
+
+    Performs post-parse validation (scene auto-promotion under
+    --n-hidden / --goal stack, --n-hidden vs --n-occluders/--n-targets
+    sanity checks).  ``parser.error`` exits the process on bad input.
+    """
+    parser = argparse.ArgumentParser(description='Full PDDLStream Pipeline with Replanning')
+    parser.add_argument('--no-gui', action='store_true', help='Run without GUI')
+    parser.add_argument(
+        '--no-boxel-viz',
+        action='store_true',
+        help='Keep PyBullet GUI but skip drawing boxel AABBs/labels (debug clutter)',
+    )
+    parser.add_argument(
+        '--show-free',
+        action='store_true',
+        help='Include free-space boxels in the visualisation overlay',
+    )
+    parser.add_argument('--log-level',
+                        choices=['smart', 'normal', 'quiet', 'verbose'],
+                        default='smart',
+                        help='Console verbosity. "smart" (default) renders a '
+                             'Claude-Code-style narrative and drops PyBullet / '
+                             'PDDLStream boilerplate. "normal", "quiet", and '
+                             '"verbose" leave stdout untouched. The log file '
+                             'always captures everything.')
+    parser.add_argument('--scene', choices=['default', 'mixed',
+                                            'scalability', 'stack'],
+                        default='default',
+                        help='Scene preset: default (original cubes), mixed (diverse '
+                             'shapes), scalability (random for evaluation), '
+                             'stack (N identical cubes, no occluders).')
+    parser.add_argument('--n-occluders', type=int, default=3,
+                        help='Number of occluders (scalability scene only)')
+    parser.add_argument('--n-targets', type=int, default=4,
+                        help='Number of targets (scalability scene only)')
+    parser.add_argument('--n-hidden', type=int, default=0,
+                        help='Number of targets that must be hidden from '
+                             'the camera at spawn time (scalability + '
+                             'holding only, audit #29). 0 = no guarantee '
+                             '(emergent from RNG). Capped at --n-targets. '
+                             'Requires --n-occluders >= 1.')
+    parser.add_argument('--n-objects', type=int, default=3,
+                        help='Number of cubes for the stack scene '
+                             '(must be >= --stack-height)')
+    parser.add_argument('--seed', type=int, default=0,
+                        help='Random seed (scalability/mixed/stack scenes). '
+                             'Note: --n-hidden > 0 may nudge the seed on '
+                             'retry if placement fails; the effective seed '
+                             'is logged in run_config.')
+    parser.add_argument(
+        '--goal',
+        choices=['holding', 'stack'],
+        default='holding',
+        help="Goal kind. 'holding' picks the (hidden or visible) target; "
+             "'stack' builds a randomised tower of cubes (audit #30).",
+    )
+    parser.add_argument(
+        '--stack-height',
+        type=int,
+        default=2,
+        help='Stack tower height in cubes (>= 2). Only used with '
+             '--goal stack. Defaults to 2 (one stacking action).',
+    )
+    args = parser.parse_args(argv)
+
+    # Audit #29: --n-hidden only makes sense on the scalability scene
+    # with --goal holding.  Auto-promote --scene default to scalability
+    # when the user passes any of the count knobs under --goal holding
+    # (mirrors the --goal stack auto-override below).  Reject clearly
+    # wrong combinations early so the user sees a CLI error instead of
+    # silently running a scene that cannot satisfy the request.
+    _holding_counts_explicit = (
+        args.n_hidden > 0
+        or '--n-occluders' in sys.argv
+        or '--n-targets' in sys.argv
+    )
+    if (args.goal == 'holding'
+            and args.scene == 'default'
+            and _holding_counts_explicit):
+        args.scene = 'scalability'
+
+    if args.n_hidden > 0:
+        if args.scene not in ('scalability',):
+            parser.error(
+                f"--n-hidden > 0 requires --scene scalability "
+                f"(got --scene {args.scene}). Hidden-target guarantee "
+                f"only applies to the scalability scene."
+            )
+        if args.goal != 'holding':
+            parser.error(
+                f"--n-hidden > 0 is only meaningful with --goal holding "
+                f"(got --goal {args.goal}). Stack scenes have no "
+                f"occluders."
+            )
+        if args.n_occluders < 1:
+            parser.error(
+                "--n-hidden > 0 requires --n-occluders >= 1."
+            )
+        if args.n_hidden > args.n_targets:
+            print(f"[warn] --n-hidden={args.n_hidden} > "
+                  f"--n-targets={args.n_targets}; capping to "
+                  f"{args.n_targets}.", file=sys.stderr)
+            args.n_hidden = args.n_targets
+
+    # When --goal stack is requested without an explicit --scene, fall
+    # back to stack_scene so the spawned objects are reach-constrained
+    # cubes by default.  Explicit --scene overrides this for A/B tests.
+    if args.goal == 'stack' and args.scene == 'default':
+        args.scene = 'stack'
+
+    return args
