@@ -484,6 +484,13 @@ def main(gui=True, run_logger=None, scene_config=None,
     # Detect infinite-replan loops: if sensing the same shadow stays
     # "still_blocked" 3+ times, give up on it (audit #78c).
     blocked_counts = {}  # shadow_id → consecutive-block count
+    # Audit #21: shadows we gave up on after 3 still_blocked outcomes
+    # are NOT observed empty — the loop only LIES about them being
+    # not_here so the planner stops re-attempting them.  Track the IDs
+    # so the run report can distinguish observed-empty shadows from
+    # blocked-unresolved ones (no false "Searched all" claim).  The
+    # real fix is tracked as audit #47 (re-ground blocker atoms).
+    blocked_giveup_shadows: set = set()
 
     def _loop_done() -> bool:
         # Holding goals stop when belief.target_found flips; stack goals
@@ -501,8 +508,20 @@ def main(gui=True, run_logger=None, scene_config=None,
         if goal_kind == 'holding':
             print(f"Unknown shadows remaining: {len(unknown_shadows)}")
             if not unknown_shadows:
+                # Audit #21: 'all_searched' is the loop-termination tag,
+                # but with the still_blocked 3-strike give-up some of
+                # the shadows below were never observed empty.  The
+                # final FAILED message classifies on blocked_giveup_shadows.
                 exit_reason = "all_searched"
-                print("ERROR: Searched all shadows but target not found!")
+                if blocked_giveup_shadows:
+                    print(f"ERROR: No unknown shadows remain — but "
+                          f"{len(blocked_giveup_shadows)} of "
+                          f"{len(shadows)} were given up after repeated "
+                          f"still_blocked outcomes (audit #21), not "
+                          f"observed empty.  Target may still be hiding "
+                          f"in: {sorted(blocked_giveup_shadows)}")
+                else:
+                    print("ERROR: Searched all shadows but target not found!")
                 break
         else:
             print(f"Stack progress: {on_relations} (goal {goal})")
@@ -856,8 +875,14 @@ def main(gui=True, run_logger=None, scene_config=None,
                           f"({blocked_fraction:.0%} rays hit occluder). "
                           f"[attempt {blocked_counts[sid_str]}]")
                     if blocked_counts[sid_str] >= 3:
-                        print(f"    ERROR: {shadow_id} blocked {blocked_counts[sid_str]} "
-                              f"times — giving up on this shadow (audit #78c)")
+                        print(f"    ERROR: {shadow_id} blocked "
+                              f"{blocked_counts[sid_str]} times — giving "
+                              f"up (audit #21).  Shadow is NOT observed "
+                              f"empty; marking not_here so the planner "
+                              f"stops re-attempting it.  Real remedy: "
+                              f"re-ground blocker atoms after repeated "
+                              f"failure — tracked as audit #47.")
+                        blocked_giveup_shadows.add(sid_str)
                         belief.mark_sensed(sid_str, found=False)
                     else:
                         print(f"    -> REPLANNING without marking shadow empty...")
@@ -1121,7 +1146,19 @@ def main(gui=True, run_logger=None, scene_config=None,
         if exit_reason is None:
             exit_reason = "replan_limit"
         if exit_reason == "all_searched":
-            print(f"FAILED: All {len(shadows)} shadows searched — target not found")
+            if blocked_giveup_shadows:
+                # Audit #21: distinguish observed-empty shadows from
+                # blocked-unresolved ones so the run report does not
+                # claim a complete search when some shadows were never
+                # actually observed.
+                observed_empty = len(shadows) - len(blocked_giveup_shadows)
+                print(f"FAILED: {observed_empty} shadow(s) observed "
+                      f"empty, {len(blocked_giveup_shadows)} "
+                      f"blocked-unresolved (target may still be there): "
+                      f"{sorted(blocked_giveup_shadows)} — see audit #21, "
+                      f"real fix tracked as #47")
+            else:
+                print(f"FAILED: All {len(shadows)} shadows searched — target not found")
         elif exit_reason == "planner_failed":
             print(f"FAILED: Planner returned no plan "
                   f"({len(remaining)} unsearched shadows remaining)")
