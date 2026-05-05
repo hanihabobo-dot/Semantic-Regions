@@ -21,6 +21,12 @@ Updated:  2026-04-29 (#37/#38 follow-up: grasp Z-offset reverted from
 Archived: 2026-05-03 (from CODEBASE_AUDIT.txt: #45, #46; #4 remainder accepted
          to thesis.  #41 was incorrectly dropped from the open list the same day
          in 7003dca and restored in a follow-up commit — it stays open.)
+Archived: 2026-05-05 (moved from CODEBASE_AUDIT.txt: #21 — log-only band-aid
+         landed for the false "all_searched" termination message and the
+         3-strike give-up.  Behavior unchanged; print messages now distinguish
+         observed-empty shadows from blocked-unresolved ones.  Real fix —
+         re-grounding planner blocker atoms after repeated still_blocked —
+         tracked as new audit #47 on the open list.)
 
 These issues have been fixed, reclassified as not-an-issue, or corrected.
 The active audit with remaining open issues is in CODEBASE_AUDIT.txt.
@@ -2956,4 +2962,147 @@ REMAINING (accepted, documented in THESIS_NOTES.md §8):
 
 Related: old #44 [ACCEPTED] (stale shadow AABBs),
          old #73 [DONE] (stale shadow_occluder_map).
+--------------------------------------------------------------------------------
+
+
+================================================================================
+#21. BLOCKED SENSE CAUSES SHADOW SWITCHING AND FALSE "SEARCHED ALL" TERMINATION
+                                                  [LOG-ONLY BAND-AID 2026-05-05]
+================================================================================
+Resolved: 2026-05-05 — log-only band-aid landed.  Behavior unchanged: the
+          3-strike give-up + belief.mark_sensed(False) for repeatedly-
+          blocked shadows still fires.  What changed: the printed run
+          report now distinguishes observed-empty shadows (clear_but_empty
+          / contains_nontarget) from blocked-unresolved ones (3-strike
+          give-up).  exit_reason stays "all_searched" for both cases — no
+          eval-tooling break.  See test_full_pipeline.py
+          blocked_giveup_shadows tracking + the give-up branch print +
+          Phase 6 FAILED-message branch + the early-exit "no unknown
+          shadows" print.
+
+Real fix — re-ground planner view-blocker atoms after repeated
+          still_blocked so the planner reasons about CURRENT blockers
+          (the user's original framing: a shadow may still be blocked by
+          a NEW object that drifted in or was placed there on the
+          previous step) — tracked as audit #47 on the open list.  Once
+          #47 lands, the 3-strike give-up + blocked_giveup_shadows
+          tracking should be removed in favour of honest belief plus
+          planner-feedback init facts.
+
+Full historical text preserved below (identical to last open-audit version):
+
+--------------------------------------------------------------------------------
+Priority: TIER 0 — Control-loop correctness bug
+Where:    test_full_pipeline.py, belief.py, execution.py
+Depends:  None
+Effort:   1-2 days
+
+STATUS (2026-05-05): OPEN.  First attempt regressed and was reverted.
+       Re-design pending.  PDDL-domain solutions are rejected by the user
+       (no new predicates / no blocked_unresolved status); the design space
+       is execution-loop / planner-init-fact only.
+
+ATTEMPTED FIX (2026-05-04, REVERTED 2026-05-05):
+       Approach: refresh init facts from physics before each replan.
+         - execution.refresh_world_facts re-read live AABBs and recomputed
+           shadow_occluder_map via compute_shadow_blockers each iteration.
+         - Sense handler split: still_blocked / contains_nontarget stopped
+           mutating belief about target presence.
+         - Removed the 3-strike mark_sensed(found=False) give-up.
+         - BeliefState gained attempted_blocked / get_unreachable_shadows
+           — diagnostic only, NOT fed to the planner.
+         - Termination split into all_eliminated vs unreachable_remain.
+
+       Regression (default scene, seed 0, --goal holding, GUI):
+         Plan #1 placed orange_object at free_009 and tried to sense
+         shadow_of_orange_object.  Sense returned still_blocked at a
+         steady 2% (≈3 of 147 rays).  No "blocked by robot arm" note —
+         this was occluder_hits, i.e. orange_object itself grazing the
+         corridor at free_009.  Without the 3-strike give-up the run
+         spun 14+ replans on the same (move, sense, pick) skeleton before
+         the user killed it.  Pre-fix code masked this by lying
+         (mark_sensed False after 3 strikes) so the run made progress.
+
+       Two underlying gaps the attempt exposed:
+       (a) audit #79: home-retract before sense at
+           test_full_pipeline.py ~671-673 is still commented out.  The
+           gripper / held-object can sit in the camera→shadow corridor
+           at sense time.  Not the cause of THIS regression but a
+           parallel failure mode the next attempt must address.
+       (b) _compute_placement_view_blocks at pddlstream_planner.py ~295
+           uses a coarser ray sample than sense_shadow_raycasting, so
+           the planner can pick a "non-blocking" placement destination
+           that still grazes the actual sense corridor.  The planner
+           thinks view_clear; sense disagrees; loop spins.
+
+       Preserved: branch claude/friendly-chandrasekhar-a27be5 at commit
+       689169e (rebased onto main 148f39f), worktree
+       .claude/worktrees/friendly-chandrasekhar-a27be5.  Code is salvageable
+       if the next design wants to reuse refresh_world_facts.
+
+       Lesson: the "rebuild geometry from physics" mechanism alone is
+       not enough.  Either the planner's placement-blocking precision
+       must match sense's ray density, OR the loop must have an honest
+       unstick mechanism (cap + unreachable bin actually fed to the
+       planner) so that runs make progress past unsenseable shadows
+       without lying about target presence.
+
+What:  After a pick/place intended to clear a shadow, sensing can still return
+       "still_blocked".  The execution loop then breaks to replan, but it does
+       NOT preserve an obligation to keep clearing that SAME shadow.
+
+       Current behavior:
+       (a) belief.occluders_moved records the relocated occluder.
+       (b) The blocked shadow remains unknown unless blocked_counts reaches 3.
+       (c) The next plan is free to target a DIFFERENT unknown shadow instead
+           of identifying and relocating the blocker that still obstructs the
+           current one.
+       (d) After 3 consecutive "still_blocked" outcomes on the same shadow,
+           the loop marks that shadow as not_here even though the view was
+           never clear and the shadow was never actually observed.
+       (e) The run can then terminate with "Searched all shadows but target not
+           found" even though some shadows were only blocked, not searched.
+
+       This is different from #5.  #5 is about choosing a placement
+       destination that re-blocks a corridor.  This issue is about the
+       REACTIVE POLICY after sensing reports that a corridor is still blocked:
+       the system switches search targets instead of continuing to clear the
+       active shadow.
+
+Fix:   ONE COMMIT — design decision needed:
+
+       OPTION A — Introduce a belief/planning obligation to continue clearing
+       the same shadow after still_blocked, until view_clear or clear_but_empty.
+       OPTION B — Add a distinct shadow status such as blocked_unresolved;
+       do NOT map it to not_here, and prioritize it before untouched shadows.
+       OPTION C — On still_blocked, identify the current blocking object(s)
+       for that same shadow and force replanning around one of those blockers.
+
+       OPTION B + C is likely the most practical: preserve truthful belief
+       state and bias replanning toward the active blocked shadow.
+
+       UPDATE (2026-05-02, see #45): the contains_nontarget variant of
+       the same observable failure (sense reveals an object that turns
+       out to be the shadow's own occluder) is now blocked at the
+       blocker-detection layer — compute_shadow_blockers no longer
+       reports view_clear for those shadows, so the planner picks the
+       occluder before sensing.  The still_blocked control-loop bug
+       described below is not subsumed by that fix and remains open.
+
+       DESIGN DIRECTION (2026-04-17): The fix MUST be in the PDDL model,
+       not in the execution loop.  The planner should reason about blocked
+       shadows.  Specifically:
+       - Add a blocked_unresolved shadow status (distinct from unknown
+         and not_here) in both BeliefState and the PDDL model.
+       - The PDDL domain must represent that a shadow is blocked and
+         needs further occluder removal before sensing can succeed.
+       - The planner should be responsible for selecting which shadow to
+         clear next — not the reactive execution loop.
+       - The execution loop must NEVER mark an unobserved shadow as
+         not_here under any circumstance (remove the 3-strike give-up).
+
+Related: #5 (placement re-blocks cleared corridor),
+         archive resolved #78(c) (3-strike give-up behavior),
+         open #47 (real fix — re-ground blocker atoms after repeated
+                   still_blocked).
 --------------------------------------------------------------------------------
