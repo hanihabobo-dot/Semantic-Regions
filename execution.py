@@ -17,17 +17,25 @@ run between actions:
     incremental stacks tolerate per-step settling (audit #30).
   - release_held_object_in_place: emergency drop with verification when
     the planner needs to be invoked while still holding an object.
+  - handle_sense_action: dispatch-loop wrapper around sense_shadow_raycasting
+    that owns the post-sense bookkeeping (belief, registry, viz, occluder
+    map, blocked counts).  Returns an ActionResult; see its docstring for
+    the break/release contract (audit S-01).
 
 The orchestration loop in test_full_pipeline.py composes these — it owns
 the BeliefState, the registry, and the high-level decision logic, while
-this module owns the geometry/physics primitives.
+this module owns the geometry/physics primitives plus the sense action
+handler.
 """
 
+from dataclasses import dataclass
 from typing import Optional, Set, Tuple
 
 import numpy as np
 import pybullet as p
 
+from boxel_data import BoxelData, BoxelType
+from reboxelize import reboxelize_free_space
 from streams import RobotConfig
 from robot_utils import (END_EFFECTOR_LINK, solve_ik, move_robot_smooth,
                          open_gripper, close_gripper)
@@ -710,3 +718,281 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
 # compute_push_displacement() removed (#53): push superseded by pick-and-place.
 # The function teleported occluders via p.resetBasePositionAndOrientation without
 # involving the robot arm. Occluder relocation now uses pick â move â place.
+
+
+# ---------------------------------------------------------------------------
+# Action-dispatch handler (extracted from test_full_pipeline.py 2026-05-05)
+# ---------------------------------------------------------------------------
+# When a handler returns continue_=False, the dispatch loop in
+# test_full_pipeline.py breaks and the outer replan loop runs
+# release_held_object_in_place BEFORE the next planner.plan().  That
+# release is a hidden side-channel — no PDDL action represents it
+# (audit S-01) — so the typed return value is what keeps the contract
+# visible.  Do not collapse it back to a bare True/False without
+# preserving the reason tag for trace auditing.
+
+
+@dataclass(frozen=True)
+class ActionResult:
+    """Outcome of a single action handler.
+
+    continue_ = True   action succeeded; dispatch loop runs the next action.
+    continue_ = False  action interrupted; dispatch loop breaks and the
+                       outer replan loop will drop any held object before
+                       re-planning.  ``reason`` tags the cause for
+                       debugging/audit traces.
+    """
+    continue_: bool
+    reason: str = ""
+
+
+def handle_sense_action(
+    *,
+    action_params,
+    env,
+    registry,
+    belief,
+    viz,
+    target_name,
+    robot_id,
+    support_body_ids,
+    shadows,
+    occluders,
+    shadow_occluder_map,
+    blocked_counts,
+    blocked_giveup_shadows,
+    boxel_centers,
+    boxel_to_pybullet,
+    object_body_ids,
+    body_id_to_name,
+    show_free,
+):
+    """Execute one PDDL ``sense`` action.
+
+    Casts rays from ``env.camera_position`` through the shadow volume;
+    branches on the outcome:
+
+      * found_target           → belief updated; continue plan.
+      * clear_but_empty
+        / contains_nontarget   → registry/viz/shadows cleaned up;
+                                  OBJECT+SHADOW boxels created for newly-
+                                  discovered bodies (audit S-09:
+                                  perception expansion outside PDDL);
+                                  free-space re-boxelized; break to replan.
+      * still_blocked          → blocked_counts incremented; after 3
+                                  strikes the shadow is given up
+                                  (audit #21); break to replan.
+      * unknown shadow id      → warn and break to replan.
+    """
+    # SENSE: cast rays from the fixed camera through the
+    # shadow volume to determine what's inside.
+    # Three possible outcomes drive the control flow:
+    #   found_target  → belief updated, plan continues to pick
+    #   clear_but_empty → shadow eliminated, break to replan
+    #   still_blocked → occluder not fully cleared, break to replan
+    obj, shadow_id = action_params
+    print(f"    Sensing {shadow_id} (fixed camera)...")
+
+    # Retract arm to home so it doesn't block the camera's
+    # line of sight to the shadow region (audit #79, #3 deferred).
+    # home_joints = planner.home_config.joint_positions
+    # move_robot_smooth(robot_id, home_joints, gui, steps=40)
+    # current_config = planner.home_config
+
+    shadow_boxel = registry.get_boxel(str(shadow_id))
+    if shadow_boxel is None:
+        print(f"    WARNING: Shadow '{shadow_id}' not found in registry. Replanning...")
+        return ActionResult(continue_=False, reason="sense_missing_shadow")
+
+    target_pybullet_id = env.objects[target_name].object_id
+    occluder_pybullet_ids = set()
+    for blocker_bid in shadow_occluder_map.get(str(shadow_id), []):
+        if blocker_bid in boxel_to_pybullet:
+            occluder_pybullet_ids.add(boxel_to_pybullet[blocker_bid]['pybullet_id'])
+
+    sense_outcome, blocked_fraction, detected_bodies = sense_shadow_raycasting(
+        env.camera_position,
+        shadow_boxel,
+        target_pybullet_id,
+        occluder_pybullet_ids,
+        robot_id=robot_id,
+        support_body_ids=support_body_ids,
+    )
+
+    if sense_outcome == "found_target":
+        belief.mark_sensed(str(shadow_id), found=True)
+        print(f"    *** TARGET FOUND in {shadow_id}! (ray-cast) ***")
+        return ActionResult(continue_=True, reason="sense_found_target")
+
+    if sense_outcome in ("clear_but_empty", "contains_nontarget"):
+        sid_str = str(shadow_id)
+        belief.mark_sensed(sid_str, found=False)
+
+        registry.remove_boxel(sid_str)
+        if viz is not None:
+            # Drop wireframe + label for the cleared shadow so
+            # the GUI doesn't keep the old SHADOW outline alive
+            # alongside whatever the next refresh draws.
+            # remove_boxel_viz is a no-op on unknown ids.
+            viz.remove_boxel_viz(sid_str)
+        if sid_str in shadows:
+            shadows.remove(sid_str)
+        shadow_occluder_map.pop(sid_str, None)
+        boxel_centers.pop(sid_str, None)
+
+        if sense_outcome == "contains_nontarget":
+            # Non-target objects discovered inside the shadow.
+            # Create OBJECT + SHADOW boxels for each one so the
+            # planner knows about them on the next replan.
+            discovered_names = [
+                body_id_to_name[bid]
+                for bid in detected_bodies
+                if bid in body_id_to_name
+            ]
+            print(f"    Shadow {shadow_id} contains non-target "
+                  f"object(s): {discovered_names}")
+
+            for obj_name in discovered_names:
+                obj_info = env.objects.get(obj_name)
+                if obj_info is None:
+                    continue
+                bid = obj_info.object_id
+                aabb_min, aabb_max = p.getAABB(bid)
+                aabb_min = np.array(aabb_min)
+                aabb_max = np.array(aabb_max)
+
+                # Discovery may re-trigger for an object_name we
+                # already know about (e.g. previous re-sense pass
+                # added it; current sense saw it through a second
+                # shadow).  Without this cleanup the registry
+                # silently overwrites the OBJECT entry but the old
+                # wireframe + ALL prior shadow entries (both registry
+                # and viz) survive — that's the "two boxels under
+                # one name" trace.  Clean both before recreating
+                # so only the accurate (live-AABB) entry stays.
+                old_obj = registry.get_boxel(obj_name)
+                if old_obj is not None:
+                    for old_sid in list(old_obj.shadow_boxel_ids):
+                        registry.remove_boxel(old_sid)
+                        if viz is not None:
+                            viz.remove_boxel_viz(old_sid)
+                        if old_sid in shadows:
+                            shadows.remove(old_sid)
+                        shadow_occluder_map.pop(old_sid, None)
+                        boxel_centers.pop(old_sid, None)
+                    if viz is not None:
+                        viz.remove_boxel_viz(obj_name)
+
+                obj_bd = BoxelData(
+                    id=obj_name,
+                    boxel_type=BoxelType.OBJECT,
+                    min_corner=aabb_min,
+                    max_corner=aabb_max,
+                    object_name=obj_name,
+                    is_occluder=False,
+                    on_surface=(
+                        "table"
+                        if aabb_min[2] <= env.table_surface_height + 0.01
+                        else None
+                    ),
+                    surface_z=env.table_surface_height,
+                )
+                registry.add_boxel(obj_bd)
+                boxel_centers[obj_name] = obj_bd.center
+                # object_body_ids is the planner-side mapping
+                # (audit #46): translate the GUI body id to the
+                # plan client's body id before exposing the new
+                # OBJECT to BoxelStreams' compute_kin / plan_motion.
+                object_body_ids[obj_name] = env.plan_body_id(bid)
+                boxel_to_pybullet[obj_name] = {
+                    'name': obj_name,
+                    'pybullet_id': bid,
+                    'position': np.array(obj_info.position),
+                }
+                # Keep the `occluders` snapshot in sync with the
+                # registry: compute_shadow_blockers iterates this
+                # list to build its body_id → boxel_id map.  If
+                # we don't append the freshly discovered object
+                # here, any ray that hits it is silently treated
+                # as "not a blocker" and the planner thinks the
+                # new shadow region is view_clear — leading to
+                # (move, sense, pick) plans against shadows whose
+                # occluder is still in front, which sense->reveals
+                # the same occluder again with zero progress.
+                if obj_name not in occluders:
+                    occluders.append(obj_name)
+
+                # Compute shadow for this newly visible object.
+                # ShadowCalculator now accepts BoxelData directly,
+                # so we can pass obj_bd and the OBJECT registry
+                # entries with no conversion (audit #35).
+                other_solids = [
+                    bd for bd in registry.boxels.values()
+                    if (bd.boxel_type == BoxelType.OBJECT
+                        and bd.id != obj_name)
+                ]
+                shadow_parts = env.shadow_calculator.calculate_shadow_boxel(
+                    obj_bd, other_solids)
+
+                if shadow_parts:
+                    obj_bd.is_occluder = True
+                    table_z = env.table_surface_height
+                    for sp in shadow_parts:
+                        sp.created_by_boxel_id = obj_name
+                        sp.created_by_object = obj_name
+                        sp.on_surface = (
+                            "table"
+                            if sp.min_corner[2] <= table_z + 0.01
+                            else None
+                        )
+                        sp.surface_z = table_z
+                        s_id = registry.add_boxel(sp)  # auto-assigns "shadow_NNN"
+                        obj_bd.shadow_boxel_ids.append(s_id)
+                        shadows.append(s_id)
+                        shadow_occluder_map[s_id] = [obj_name]
+                        boxel_centers[s_id] = sp.center
+
+                if viz is not None:
+                    viz.draw_boxel_data(obj_bd)
+                    for s_id in obj_bd.shadow_boxel_ids:
+                        s_bd = registry.get_boxel(s_id)
+                        if s_bd is not None:
+                            viz.draw_boxel_data(s_bd)
+
+                print(f"      -> {obj_name}: object boxel + "
+                      f"{len(shadow_parts)} shadow(s)")
+        else:
+            print(f"    Target NOT in {shadow_id} "
+                  f"(ray-cast: view clear but no target hit)")
+
+        # Re-run octree + merge now that the shadow is gone
+        # (and possibly new object/shadow boxels were added).
+        if viz is not None:
+            viz.remove_boxel_viz(sid_str)
+        reboxelize_free_space(
+            registry, env, boxel_centers, viz, show_free)
+
+        print(f"    -> REPLANNING with updated belief...")
+        return ActionResult(continue_=False, reason=f"sense_{sense_outcome}")
+
+    # Occluder (or robot arm) still blocks the view.
+    # Track repeated failures; after 3 attempts, assume
+    # the shadow is unreachable and give up on it.
+    sid_str = str(shadow_id)
+    blocked_counts[sid_str] = blocked_counts.get(sid_str, 0) + 1
+    print(f"    View to {shadow_id} still blocked "
+          f"({blocked_fraction:.0%} rays hit occluder). "
+          f"[attempt {blocked_counts[sid_str]}]")
+    if blocked_counts[sid_str] >= 3:
+        print(f"    ERROR: {shadow_id} blocked "
+              f"{blocked_counts[sid_str]} times — giving "
+              f"up (audit #21).  Shadow is NOT observed "
+              f"empty; marking not_here so the planner "
+              f"stops re-attempting it.  Real remedy: "
+              f"re-ground blocker atoms after repeated "
+              f"failure — tracked as audit #47.")
+        blocked_giveup_shadows.add(sid_str)
+        belief.mark_sensed(sid_str, found=False)
+    else:
+        print(f"    -> REPLANNING without marking shadow empty...")
+    return ActionResult(continue_=False, reason="sense_still_blocked")

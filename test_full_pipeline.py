@@ -24,16 +24,22 @@ GUI on but no boxel wireframes/labels (PyBullet only):
 
 PDDLStream path is added to sys.path via the hardcoded PDDLSTREAM_PATH constant below.
 
-Architecture (post-#26 refactor, 2026-04-19):
+Architecture (post-#26 refactor, 2026-04-19; sense-handler split 2026-05-05):
     belief.py       BeliefState — partial-observability bookkeeping.
-    execution.py    execute_pick / execute_place / sense_shadow_raycasting /
-                    compute_shadow_blockers / release_held_object_in_place.
+    execution.py    execute_pick / execute_place / execute_stack /
+                    sense_shadow_raycasting / compute_shadow_blockers /
+                    release_held_object_in_place / handle_sense_action.
+                    handle_sense_action is the dispatch-loop wrapper that
+                    owns post-sense bookkeeping; see its docstring for the
+                    break/release contract (audit S-01).
     reboxelize.py   reboxelize_free_space — octree+merge diff after mutations.
     THIS FILE       Phase 1-6 orchestration + CLI.  Reads top-down: setup,
                     boxel calc, registry, scenario selection, replan loop,
-                    results.  Action handlers live next to the loop because
-                    they own the cross-cutting bookkeeping (registry, viz,
-                    belief, planner state).
+                    results.  Move/pick/place/stack handlers remain inline
+                    because they share rebound locals (current_config,
+                    held_body_id, grasp_constraint_id, shadow_occluder_map)
+                    with the loop; sense was extracted because it owns no
+                    rebound locals — only mutates containers.
 """
 
 import sys
@@ -57,7 +63,7 @@ import pybullet as p
 from boxel_env import (BoxelTestEnv, SceneConfig,
                        default_scene, mixed_shapes_scene,
                        scalability_scene, stack_scene)
-from boxel_data import BoxelData, BoxelRegistry, BoxelType
+from boxel_data import BoxelRegistry, BoxelType
 from cell_merger import merge_free_space_cells
 from free_space import split_free_boxel  # noqa: F401  (kept for future use)
 from pddlstream_planner import PDDLStreamPlanner
@@ -69,9 +75,10 @@ from visualization import BoxelVisualizer
 
 from belief import BeliefState
 from reboxelize import reboxelize_free_space
-from execution import (sense_shadow_raycasting, compute_shadow_blockers,
+from execution import (compute_shadow_blockers,
                        release_held_object_in_place,
-                       execute_pick, execute_place, execute_stack)
+                       execute_pick, execute_place, execute_stack,
+                       handle_sense_action)
 
 
 def goal_satisfied(goal, on_relations=None, target_found=False) -> bool:
@@ -760,217 +767,32 @@ def main(gui=True, run_logger=None, scene_config=None,
                 print(f"    -> Arrived at {dest_boxel_id}")
 
             elif action_name == 'sense':
-                # SENSE: cast rays from the fixed camera through the
-                # shadow volume to determine what's inside.
-                # Three possible outcomes drive the control flow:
-                #   found_target  → belief updated, plan continues to pick
-                #   clear_but_empty → shadow eliminated, break to replan
-                #   still_blocked → occluder not fully cleared, break to replan
-                obj, shadow_id = params
-                print(f"    Sensing {shadow_id} (fixed camera)...")
-
-                # Retract arm to home so it doesn't block the camera's
-                # line of sight to the shadow region (audit #79, #3 deferred).
-                # home_joints = planner.home_config.joint_positions
-                # move_robot_smooth(robot_id, home_joints, gui, steps=40)
-                # current_config = planner.home_config
-
-                shadow_boxel = registry.get_boxel(str(shadow_id))
-                if shadow_boxel is None:
-                    print(f"    WARNING: Shadow '{shadow_id}' not found in registry. Replanning...")
-                    break
-
-                target_pybullet_id = env.objects[target_name].object_id
-                occluder_pybullet_ids = set()
-                for blocker_bid in shadow_occluder_map.get(str(shadow_id), []):
-                    if blocker_bid in boxel_to_pybullet:
-                        occluder_pybullet_ids.add(boxel_to_pybullet[blocker_bid]['pybullet_id'])
-
-                sense_outcome, blocked_fraction, detected_bodies = sense_shadow_raycasting(
-                    env.camera_position,
-                    shadow_boxel,
-                    target_pybullet_id,
-                    occluder_pybullet_ids,
+                # See pipeline_actions.handle_sense_action for the full
+                # body.  When result.continue_ is False the dispatch
+                # loop breaks → outer replan loop drops any held object
+                # before the next planner.plan() (audit S-01 contract).
+                sense_result = handle_sense_action(
+                    action_params=params,
+                    env=env,
+                    registry=registry,
+                    belief=belief,
+                    viz=viz,
+                    target_name=target_name,
                     robot_id=robot_id,
                     support_body_ids=support_body_ids,
+                    shadows=shadows,
+                    occluders=occluders,
+                    shadow_occluder_map=shadow_occluder_map,
+                    blocked_counts=blocked_counts,
+                    blocked_giveup_shadows=blocked_giveup_shadows,
+                    boxel_centers=boxel_centers,
+                    boxel_to_pybullet=boxel_to_pybullet,
+                    object_body_ids=object_body_ids,
+                    body_id_to_name=body_id_to_name,
+                    show_free=show_free,
                 )
-
-                if sense_outcome == "found_target":
-                    belief.mark_sensed(str(shadow_id), found=True)
-                    print(f"    *** TARGET FOUND in {shadow_id}! (ray-cast) ***")
-                elif sense_outcome in ("clear_but_empty", "contains_nontarget"):
-                    sid_str = str(shadow_id)
-                    belief.mark_sensed(sid_str, found=False)
-
-                    registry.remove_boxel(sid_str)
-                    if viz is not None:
-                        # Drop wireframe + label for the cleared shadow so
-                        # the GUI doesn't keep the old SHADOW outline alive
-                        # alongside whatever the next refresh draws.
-                        # remove_boxel_viz is a no-op on unknown ids.
-                        viz.remove_boxel_viz(sid_str)
-                    if sid_str in shadows:
-                        shadows.remove(sid_str)
-                    shadow_occluder_map.pop(sid_str, None)
-                    boxel_centers.pop(sid_str, None)
-
-                    if sense_outcome == "contains_nontarget":
-                        # Non-target objects discovered inside the shadow.
-                        # Create OBJECT + SHADOW boxels for each one so the
-                        # planner knows about them on the next replan.
-                        discovered_names = [
-                            body_id_to_name[bid]
-                            for bid in detected_bodies
-                            if bid in body_id_to_name
-                        ]
-                        print(f"    Shadow {shadow_id} contains non-target "
-                              f"object(s): {discovered_names}")
-
-                        for obj_name in discovered_names:
-                            obj_info = env.objects.get(obj_name)
-                            if obj_info is None:
-                                continue
-                            bid = obj_info.object_id
-                            aabb_min, aabb_max = p.getAABB(bid)
-                            aabb_min = np.array(aabb_min)
-                            aabb_max = np.array(aabb_max)
-
-                            # Discovery may re-trigger for an object_name we
-                            # already know about (e.g. previous re-sense pass
-                            # added it; current sense saw it through a second
-                            # shadow).  Without this cleanup the registry
-                            # silently overwrites the OBJECT entry but the old
-                            # wireframe + ALL prior shadow entries (both registry
-                            # and viz) survive — that's the "two boxels under
-                            # one name" trace.  Clean both before recreating
-                            # so only the accurate (live-AABB) entry stays.
-                            old_obj = registry.get_boxel(obj_name)
-                            if old_obj is not None:
-                                for old_sid in list(old_obj.shadow_boxel_ids):
-                                    registry.remove_boxel(old_sid)
-                                    if viz is not None:
-                                        viz.remove_boxel_viz(old_sid)
-                                    if old_sid in shadows:
-                                        shadows.remove(old_sid)
-                                    shadow_occluder_map.pop(old_sid, None)
-                                    boxel_centers.pop(old_sid, None)
-                                if viz is not None:
-                                    viz.remove_boxel_viz(obj_name)
-
-                            obj_bd = BoxelData(
-                                id=obj_name,
-                                boxel_type=BoxelType.OBJECT,
-                                min_corner=aabb_min,
-                                max_corner=aabb_max,
-                                object_name=obj_name,
-                                is_occluder=False,
-                                on_surface=(
-                                    "table"
-                                    if aabb_min[2] <= env.table_surface_height + 0.01
-                                    else None
-                                ),
-                                surface_z=env.table_surface_height,
-                            )
-                            registry.add_boxel(obj_bd)
-                            boxel_centers[obj_name] = obj_bd.center
-                            # object_body_ids is the planner-side mapping
-                            # (audit #46): translate the GUI body id to the
-                            # plan client's body id before exposing the new
-                            # OBJECT to BoxelStreams' compute_kin / plan_motion.
-                            object_body_ids[obj_name] = env.plan_body_id(bid)
-                            boxel_to_pybullet[obj_name] = {
-                                'name': obj_name,
-                                'pybullet_id': bid,
-                                'position': np.array(obj_info.position),
-                            }
-                            # Keep the `occluders` snapshot in sync with the
-                            # registry: compute_shadow_blockers iterates this
-                            # list to build its body_id → boxel_id map.  If
-                            # we don't append the freshly discovered object
-                            # here, any ray that hits it is silently treated
-                            # as "not a blocker" and the planner thinks the
-                            # new shadow region is view_clear — leading to
-                            # (move, sense, pick) plans against shadows whose
-                            # occluder is still in front, which sense->reveals
-                            # the same occluder again with zero progress.
-                            if obj_name not in occluders:
-                                occluders.append(obj_name)
-
-                            # Compute shadow for this newly visible object.
-                            # ShadowCalculator now accepts BoxelData directly,
-                            # so we can pass obj_bd and the OBJECT registry
-                            # entries with no conversion (audit #35).
-                            other_solids = [
-                                bd for bd in registry.boxels.values()
-                                if (bd.boxel_type == BoxelType.OBJECT
-                                    and bd.id != obj_name)
-                            ]
-                            shadow_parts = env.shadow_calculator.calculate_shadow_boxel(
-                                obj_bd, other_solids)
-
-                            if shadow_parts:
-                                obj_bd.is_occluder = True
-                                table_z = env.table_surface_height
-                                for sp in shadow_parts:
-                                    sp.created_by_boxel_id = obj_name
-                                    sp.created_by_object = obj_name
-                                    sp.on_surface = (
-                                        "table"
-                                        if sp.min_corner[2] <= table_z + 0.01
-                                        else None
-                                    )
-                                    sp.surface_z = table_z
-                                    s_id = registry.add_boxel(sp)  # auto-assigns "shadow_NNN"
-                                    obj_bd.shadow_boxel_ids.append(s_id)
-                                    shadows.append(s_id)
-                                    shadow_occluder_map[s_id] = [obj_name]
-                                    boxel_centers[s_id] = sp.center
-
-                            if viz is not None:
-                                viz.draw_boxel_data(obj_bd)
-                                for s_id in obj_bd.shadow_boxel_ids:
-                                    s_bd = registry.get_boxel(s_id)
-                                    if s_bd is not None:
-                                        viz.draw_boxel_data(s_bd)
-
-                            print(f"      -> {obj_name}: object boxel + "
-                                  f"{len(shadow_parts)} shadow(s)")
-                    else:
-                        print(f"    Target NOT in {shadow_id} "
-                              f"(ray-cast: view clear but no target hit)")
-
-                    # Re-run octree + merge now that the shadow is gone
-                    # (and possibly new object/shadow boxels were added).
-                    if viz is not None:
-                        viz.remove_boxel_viz(sid_str)
-                    reboxelize_free_space(
-                        registry, env, boxel_centers, viz, show_free)
-
-                    print(f"    -> REPLANNING with updated belief...")
+                if not sense_result.continue_:
                     break
-
-                else:
-                    # Occluder (or robot arm) still blocks the view.
-                    # Track repeated failures; after 3 attempts, assume
-                    # the shadow is unreachable and give up on it.
-                    sid_str = str(shadow_id)
-                    blocked_counts[sid_str] = blocked_counts.get(sid_str, 0) + 1
-                    print(f"    View to {shadow_id} still blocked "
-                          f"({blocked_fraction:.0%} rays hit occluder). "
-                          f"[attempt {blocked_counts[sid_str]}]")
-                    if blocked_counts[sid_str] >= 3:
-                        print(f"    ERROR: {shadow_id} blocked "
-                              f"{blocked_counts[sid_str]} times — giving "
-                              f"up (audit #21).  Shadow is NOT observed "
-                              f"empty; marking not_here so the planner "
-                              f"stops re-attempting it.  Real remedy: "
-                              f"re-ground blocker atoms after repeated "
-                              f"failure — tracked as audit #47.")
-                        blocked_giveup_shadows.add(sid_str)
-                        belief.mark_sensed(sid_str, found=False)
-                    else:
-                        print(f"    -> REPLANNING without marking shadow empty...")
-                    break  # Exit action loop to replan
 
             elif action_name == 'pick':
                 # PICK: approach → open gripper → lower to contact →
