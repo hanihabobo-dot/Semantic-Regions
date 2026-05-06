@@ -410,31 +410,33 @@ final FAILED message distinguishes
 `exit_reason` remains `"all_searched"` for both cases (no behavior
 change), but the printed breakdown is honest.
 
-**Real remedy (future work, audit #47)**: after N still_blocked
-outcomes, re-ground the planner's view-blocking atoms from current
-physics (re-run `compute_shadow_blockers` with up-to-date AABBs and
-sense-grade ray density) and re-emit `blocks_view_at` facts that match
-the **current** blockers, not the ones at planning time.  The user's
-original framing was that a shadow can still be blocked by a NEW object
-that drifted into the corridor or was placed there on the previous
-step, but the planner reasons against the blocker map computed before
-the still_blocked event.  Re-grounding lets the planner see the new
-blocker and plan around it, instead of spinning until the give-up
-mechanism fires.
+**Real remedy (deferred out of scope, audit #47)**: the principled
+fix would re-ground the planner's view-blocking atoms from current
+physics after N `still_blocked` outcomes — re-run
+`compute_shadow_blockers` with up-to-date AABBs and sense-grade ray
+density and re-emit `blocks_view_at` facts that match the **current**
+blockers, not the ones at planning time.  This was tracked as open
+audit #47 but **deferred out of scope 2026-05-06 per user decision**:
+the log-only band-aid is the accepted level of correctness for the
+thesis, and evaluation tooling (#9–#12) filters gave-up cases as
+failures rather than masking them as successes.
 
 **Thesis framing**: the partial-observability search is sound only as
 long as belief reflects observation.  The 3-strike give-up violates
-this invariant for unreachable shadows.  Acceptable for tabletop with
-small N — the false-not_here only mis-labels physically unreachable
-shadows; the run still terminates and the report distinguishes the two
-failure modes.  In a real deployment the give-up is replaced by the
-atom-regrounding remedy above.
+this invariant for unreachable shadows — disclosed honestly as an
+accepted simplification rather than fixed.  The false-not_here only
+mis-labels physically unreachable shadows; the run still terminates,
+the report distinguishes the two failure modes, and eval treats the
+gave-up case as a failure outcome.  In a real deployment the
+give-up would be replaced by the atom-regrounding remedy described
+above; that work is out of scope for this thesis.
 
 **References**: `archive/CODEBASE_AUDIT_RESOLVED.txt` #21 (log-only
-band-aid), `CODEBASE_AUDIT.txt` #47 (real fix, open),
-`belief.py` `mark_sensed`, `test_full_pipeline.py` sense-handler
-still_blocked branch, `archive/CODEBASE_AUDIT_RESOLVED.txt` #78(c)
-(3-strike behavior historical context).
+band-aid), `CODEBASE_AUDIT.txt` #47 [DEFERRED OUT OF SCOPE 2026-05-06]
+(real fix abandoned), `belief.py` `mark_sensed`,
+`test_full_pipeline.py` sense-handler still_blocked branch,
+`archive/CODEBASE_AUDIT_RESOLVED.txt` #78(c) (3-strike behavior
+historical context).
 
 ---
 
