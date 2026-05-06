@@ -382,6 +382,16 @@ def parse_pipeline_args(argv=None):
         help='Stack tower height in cubes (>= 2). Only used with '
              '--goal stack. Defaults to 2 (one stacking action).',
     )
+    parser.add_argument(
+        '--unit-costs',
+        action='store_true',
+        help='Pass unit_costs=True to PDDLStream solve(): override the '
+             'domain numeric (increase (total-cost) ...) effects so every '
+             'action is cost 1. Default off keeps the domain costs '
+             '(stack=2, others=1; see THESIS_NOTES section 17). Useful '
+             'for evaluation sweeps that compare planner behaviour with '
+             'and without the stack-cost bias.',
+    )
     args = parser.parse_args(argv)
 
     # Audit #29: --n-hidden only makes sense on the scalability scene
