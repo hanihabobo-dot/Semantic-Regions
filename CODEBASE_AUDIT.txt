@@ -81,6 +81,15 @@ Updated:      2026-05-06 (triage) — merged #32 (comment/code drift
               out and not thought about" before the substantive
               pre-eval work begins.  #32 now [MERGED INTO #31] —
               moves to RESOLVED on next slim.  Open count: 13 → 12.
+Updated:      2026-05-06 (triage) — killed #34 [WONTFIX] per user
+              decision: redundant with #50 (planner perf
+              investigation).  #34's own fix instructions already
+              conditioned on "if #12 reveals this as a bottleneck,"
+              which is exactly #50's profile-then-fix flow.  If
+              profiling shows _compute_placement_view_blocks as a
+              real bottleneck, the fix lands in #50 with measurements
+              rather than as a speculative one-off.  Open count:
+              12 → 11.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -166,7 +175,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #11–#13, #31, #34, #36, #41, #48, #49, #50            #
+#  OPEN ISSUES — #9, #10, #11–#13, #31, #36, #41, #48, #49, #50                 #
 #                                                                              #
 ################################################################################
 
@@ -195,10 +204,10 @@ Evaluation phase (Results chapter — user-scoped sweep):
   #13 recursive free-space discovery (implement or cite explicitly as future work)
 
 Parallel / non-blocking:
-  #34  ray×free-boxel precompute in _build_init — revisit only if #12 shows it
-       dominating latency.
   #50  planner perf investigation — can run alongside the eval sweep; any wins
-       feed back into #12 plots.
+       feed back into #12 plots.  Subsumes the per-hotspot questions formerly
+       tracked as #34 (ray×free-boxel precompute) — those land here as
+       profiler hits, not as separate audit items.
 
 Closed / relocated since last summary:
   #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
@@ -529,23 +538,22 @@ Status:   [MERGED INTO #31 2026-05-06]  User decision: fold the
 
 
 ================================================================================
-#34. _COMPUTE_PLACEMENT_VIEW_BLOCKS SCALABILITY
+#34. _COMPUTE_PLACEMENT_VIEW_BLOCKS SCALABILITY  [WONTFIX 2026-05-06 — REDUNDANT WITH #50]
 ================================================================================
 Priority: TIER 3 — Scalability concern
+Status:   [WONTFIX 2026-05-06]  User triage decision: kill in place
+          as redundant with #50 (planner perf investigation —
+          profile-driven redundancy hunt).  #34's own fix instructions
+          already conditioned on "if #12 reveals this as a bottleneck"
+          — the new #50 issue covers exactly that profile-then-fix
+          flow for every planner hotspot, including this one.  Keeping
+          #34 separate creates two hunting permits for one suspect.
+          If profiling under #50 shows _compute_placement_view_blocks
+          as a real bottleneck, the fix lands there with measurements
+          rather than as a speculative one-off.  Will move to
+          archive/CODEBASE_AUDIT_RESOLVED.txt on next slim.
 Where:    pddlstream_planner.py (~lines 287-323)
-Depends:  None
-Effort:   1-2 days (if needed)
-
-What:  Runs per-replan inside _build_init().  For S shadows × 25 rays
-       × F free boxels: all pure-Python ray-AABB intersection tests.
-       At current scale (3 shadows, 15 free = 1,125 tests) it is fast.
-       At evaluation scale (6 shadows, 50 free = 7,500 tests) it is
-       still under 50 ms.  At 10+ shadows with many free boxels it
-       would need spatial indexing (AABB tree).
-
-Fix:   No action needed at current scale.  If scalability evaluation
-       (#12) reveals this as a bottleneck, add an AABB tree or
-       vectorized numpy ray-box test.
+Effort:   N/A — closed
 
 
 ================================================================================
@@ -1223,7 +1231,6 @@ TIER 3 — PRE-EVAL / EXTENSION:
        (primary — gives the next plan_motion safe headroom over the freshly
        placed/stacked cube); pick lift cosmetic only.  Supervisor-approved
        workaround; replaces the dropped at_config-q_home goal-clause proposal.
-  #34  _compute_placement_view_blocks — optimise only if #12 / #50 show cost
   #48  Pick does not clear on_relations[X] (write-side counterpart to #40)
 
 TIER 3 — EVALUATION (runner #9–#10, then #11–#13):
@@ -1233,7 +1240,7 @@ TIER 3 — EVALUATION (runner #9–#10, then #11–#13):
   #12  Scalability matrix + plots                      (CONFIRMED 2026-05-06)
   #13  Recursive free-space discovery (implement or thesis future-work)
 
-Total open: 12 items (#9–#13, #31, #34, #36, #41, #48, #49, #50).
+Total open: 11 items (#9–#13, #31, #36, #41, #48, #49, #50).
 
 Closed since previous summary:
   #30 [WONTFIX 2026-05-06] — split-pick mitigation scrapped per supervisor;
@@ -1244,6 +1251,9 @@ Closed since previous summary:
   #32 [MERGED INTO #31 2026-05-06] — comment/code drift sweep absorbed
        into the broader code-comment quality sweep (#31).  Awaiting
        archive slim → CODEBASE_AUDIT_RESOLVED.txt.
+  #34 [WONTFIX 2026-05-06] — placement-view-blocks scalability folded
+       into #50 (profile-driven redundancy hunt).  Awaiting archive
+       slim → CODEBASE_AUDIT_RESOLVED.txt.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
