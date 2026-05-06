@@ -158,21 +158,43 @@ stale shadow partition accepted 2026-05-03,
 
 ---
 
-## 9. Primary goal is holding; stack is an optional extension
+## 9. Primary goal is holding; stack and tray-stack are extensions
 
 The default narrative experiments use `('holding', target_name)`.
 The codebase also implements `--goal stack` with stack height and
 related PDDL `on(?a, ?b)` wiring (see audit #30 and the resolved
-implementation debrief).
+implementation debrief).  A third goal mode — `--goal find-and-tray-
+stack` (audit #49, requested 2026-05-06 by user + supervisor) — adds
+a fixed tray entity to the scene and asks the system to discover
+hidden targets via sense and stack them on the tray.  The tray goal
+is the natural cross-product of existing capabilities (sense + stack
++ placement on a non-cube support) and is the simplest concrete
+instance of the fixed-semantic-region baseline (audit #11).
+
+**Stack goal planner cost is accepted, not optimised**: enabling the
+stack feature roughly doubles per-call planning time on holding-goal
+runs, traced to the `:conditional-effects` requirement on the pick
+action's `forall` clause (audit #30, debrief in
+`archive/CODEBASE_AUDIT_RESOLVED.txt`).  A "split-pick" mitigation
+was sketched (move the `forall` into a separate `unstack` action,
+drop `:conditional-effects`) but **scrapped 2026-05-06 per supervisor
+decision** as "not interesting or relevant for the thesis."  The ~2×
+slowdown is the accepted cost of having the stack/tray-stack feature.
+Audit #30 is therefore [WONTFIX]; the broader planner-perf question
+moved to audit #50 (profile-driven redundancy hunt).
 
 **Thesis framing**: The core contribution is semantic boxels and
-TAMP under partial observability; holding goals are enough to tell
-that story.  Stack goals are a shipped extension with known planner
-cost regression (#30) and symbolic-vs-physics verification gaps (open
-#40), not a prerequisite for the main thesis claim.
+TAMP under partial observability; holding goals tell that story.
+Stack and tray-stack are shipped extensions that give the evaluation
+chapter (#9–#13) more goal diversity — particularly the place-down
+case which holding alone does not exercise.  The known planner-cost
+regression (#30 [WONTFIX]) and symbolic-vs-physics verification gaps
+(landed #40, open #48) are disclosed honestly and do not block the
+main thesis claim.
 
-**References**: `CODEBASE_AUDIT.txt` #30, #40,
-`archive/CODEBASE_AUDIT_RESOLVED.txt` (2026-04-24 stack debrief).
+**References**: `CODEBASE_AUDIT.txt` #30 [WONTFIX], #40 [DONE], #41,
+#48, #49, #50; `archive/CODEBASE_AUDIT_RESOLVED.txt` (2026-04-24 stack
+debrief).
 
 ---
 
@@ -402,3 +424,95 @@ band-aid), `CODEBASE_AUDIT.txt` #47 (real fix, open),
 `belief.py` `mark_sensed`, `test_full_pipeline.py` sense-handler
 still_blocked branch, `archive/CODEBASE_AUDIT_RESOLVED.txt` #78(c)
 (3-strike behavior historical context).
+
+---
+
+## 19. Hardcoded post-action lift — workaround for motion-planning fragility (#36)
+
+After the 2026-04-22 execution refactor, none of `execute_pick` /
+`execute_place` / `execute_stack` lift the arm before returning.
+Every action ends at its contact pose.  The original design intent
+was that the next planned `move` action's `plan_motion` would lift
+naturally as part of its collision-free trajectory, keeping execution
+strictly one-to-one with PDDL actions (no hidden motion the planner
+does not see).
+
+In practice the existing motion planner is fragile when the start
+config places the EE in contact with a cube — particularly after
+`place` (gripper sitting on the just-placed cube) and `stack`
+(gripper on top of a freshly stacked column).  The fragility is a
+property of the chosen sampling-based motion planner, not of the
+TAMP integration; supervisor framing 2026-05-06: "this is not
+cheating, it's a workaround for the shotty motion planning."
+
+**Resolution (audit #36)**: a small (~10 cm) hardcoded Z-lift is
+added at the END of `execute_place` and `execute_stack`, before
+reading `actual_joints` into `final_config`.  The lift IK is seeded
+from the contact joints; if it fails it falls through silently to
+the contact pose — the surrounding place/stack is never aborted by
+the cosmetic lift.  An optional smaller lift in `execute_pick`
+(~5 cm) is purely cosmetic for the holding-goal terminate-at-contact
+case.
+
+**Why `place` and `stack` matter more than `pick`**: after pick the
+next `move`'s plan_motion runs in genuine free space (the cube is
+attached to the EE and everything below is what the planner already
+saw); after place/stack the EE starts on top of a cube that the
+planner now treats as a placement obstacle.  The lift gives that
+plan_motion safe headroom.
+
+**Earlier proposal that was DROPPED** (2026-05-06): an alternative
+fix would have added `(at_config q_home)` to the holding goal so the
+planner chains `pick → move(home)` and the second move's
+plan_motion does the lift "for free" — principled and one-to-one
+with PDDL.  Skipped per supervisor decision because relying on the
+existing motion planner for the second move is exactly the
+fragility this workaround is sidestepping.
+
+**Thesis framing**: this is a deliberate, scoped departure from the
+"execution one-to-one with PDDL" invariant.  The lift is invisible
+to the planner — `final_config` carries the lifted pose forward as
+the seed for the next move's plan_motion, so PDDL state remains
+consistent.  Acceptable because the lift is along the gravity axis
+only (no sideways manoeuvre), produces no PDDL state change, and
+its sole purpose is to give the downstream motion planner a
+non-pathological start.
+
+**References**: `CODEBASE_AUDIT.txt` #36; `execution.py`
+`execute_place` / `execute_stack` / `execute_pick`; #49 (every tray-
+goal run terminates in place or stack — this lift directly improves
+the tray-goal evaluation experience).
+
+---
+
+## 20. Single-pass perception — recursive free-space discovery deferred (#13)
+
+The proposal (Section 4.2) describes recursive object discovery: "If
+new objects are found within a partition, the process repeats —
+bound the biggest object and define its occluded space."  The
+current `FreeSpaceGenerator` does a single-pass octree that marks
+cells as FREE or OCCUPIED; it never detects new objects inside
+partitions.  All objects are detected upfront by
+`oracle_detect_objects` from a fixed overhead viewpoint.
+
+For the tabletop scenario with a fixed overhead camera, every object
+that exists is visible (modulo sliver occluders — see §14).  The
+recursive pass is therefore not triggered by any current scene.  It
+would matter only for:
+- partial-coverage sensors (e.g. a robot-mounted camera that has to
+  move to see the back of the table);
+- objects hidden inside containers, cupboards, or other concave
+  geometry not present in the tabletop scenes.
+
+**Thesis framing**: documented as an accepted simplification for the
+fixed-overhead-camera scenario.  The semantic-boxel representation
+itself does not preclude recursion — the registry would simply gain
+new object/shadow boxels mid-run and re-trigger reboxelize.  The
+gap is in perception scope, not in the planning architecture.  Cited
+as future work in the perception chapter and not as a TAMP
+limitation.
+
+**References**: `CODEBASE_AUDIT.txt` #13; `free_space.py`
+`FreeSpaceGenerator`; section 1 (oracle perception) and section 14
+(perception density vs planning cost) of this file establish the
+related "all objects detected upfront" assumption.
