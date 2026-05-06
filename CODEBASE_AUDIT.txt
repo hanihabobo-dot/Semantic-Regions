@@ -36,6 +36,29 @@ Updated:      2026-05-05 — #40 marked [DONE] (per-action _verify_cube_on
               physical_failures_at_goal); added #48 (pick from a stack
               does not clear on_relations[X] — write-side counterpart
               to #40); added FOR LATER bullet for safe-inset XY check.
+Updated:      2026-05-06 — supervisor sync.  Added #49 (find-hidden-then-
+              stack-on-tray goal — new evaluation goal mode requested by
+              user/supervisor: discover targets via sense and stack them
+              on a designated tray entity); added #50 (planner perf
+              investigation — find and remove big redundancies in
+              pddlstream_planner / streams; user-flagged "planner is
+              too slow").  Updated #36: recommended fix is now a
+              hardcoded small post-action lift in execute_place /
+              execute_stack (primary — plan_motion has to start clear
+              of the freshly placed/stacked cube; pick lift is cosmetic
+              only).  Supervisor: "this is not cheating, it's a
+              workaround for shotty motion planning."  The prior
+              at_config-q_home goal-clause approach is dropped.  Marked #30 [WONTFIX
+              2026-05-06] — supervisor scrapped the split-pick / strip-
+              stack-action mitigation experiment as "not interesting or
+              relevant for the thesis"; the ~2× holding-goal slowdown
+              is accepted as the cost of the stack feature.  Confirmed
+              archive-deferred #42 stance (no replan on collisions —
+              "no need to track knocked-down objects").  Confirmed #10
+              (uniform-vox baseline) and #12 (scalability eval) remain
+              in scope.  Added LW1 / TAMPURA empirical comparison to
+              FOR LATER (post-thesis-writing, conditional on ≥1 free
+              week).
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -121,39 +144,47 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #11–#13, #30, #31, #32, #34, #36, #41, #47, #48       #
+#  OPEN ISSUES — #9, #10, #11–#13, #31, #32, #34, #36, #41, #47, #48, #49, #50  #
 #                                                                              #
 ################################################################################
 
 
 ================================================================================
-ROADMAP — PRE-EVALUATION VS. EVALUATION (2026-05-03)
+ROADMAP — PRE-EVALUATION VS. EVALUATION (updated 2026-05-06)
 ================================================================================
 Pre-evaluation (intended order before the eval sweep):
-  #47 → #30 → #36 → #31 → #32
+  #47 → #36 (hardcoded place/stack lift) → #49 (tray goal) → #50 (planner perf) → #31 → #32
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 supersedes archived #21: the
    log-only band-aid for #21 landed 2026-05-05; #47 is the real fix
-   that re-grounds planner blocker atoms after repeated still_blocked.)
+   that re-grounds planner blocker atoms after repeated still_blocked.
+   #30 [WONTFIX 2026-05-06] — split-pick mitigation scrapped per
+   supervisor; ~2× holding-goal slowdown accepted.)
 
 Evaluation prerequisites (runner + uniform baseline for thesis comparison):
   #9  metric hooks + batch experiment runner
-  #10 uniform voxelization baseline
+  #10 uniform voxelization baseline  (CONFIRMED in scope 2026-05-06)
 
 Evaluation phase (Results chapter — user-scoped sweep):
   #11 fixed semantic regions baseline
-  #12 scalability matrix, metrics, plots
+  #12 scalability matrix, metrics, plots  (CONFIRMED in scope 2026-05-06)
   #13 recursive free-space discovery (implement or cite explicitly as future work)
 
 Parallel / non-blocking:
   #34  ray×free-boxel precompute in _build_init — revisit only if #12 shows it
        dominating latency.
+  #50  planner perf investigation — can run alongside the eval sweep; any wins
+       feed back into #12 plots.
 
 Closed / relocated since last summary:
   #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
   #6  removed — multi-boxel place not pursued
-  #42 archive/CODEBASE_AUDIT_DEFERRED.txt (collisions logged, no replan)
+  #42 archive/CODEBASE_AUDIT_DEFERRED.txt (collisions logged, no replan;
+       supervisor reconfirmed 2026-05-06 — "no need to track knocked-down
+       objects")
   #40 [DONE 2026-05-05] — physics verifier landed; awaiting archive slim
+  #30 [WONTFIX 2026-05-06] — split-pick scrapped per supervisor; awaiting
+       archive slim
 
 ================================================================================
 #9. EVALUATION — METRIC COLLECTION AND EXPERIMENT RUNNER
@@ -290,13 +321,21 @@ Related: archived #4 (re-boxelization — recursive pass optional if
          partial-coverage perception is added).
 
 ================================================================================
-#30. STACK GOAL PERF REGRESSION — KEEP/KILL OPEN  [PARTIAL 2026-04-24]
+#30. STACK GOAL PERF REGRESSION — KEEP/KILL OPEN  [WONTFIX 2026-05-06]
 ================================================================================
 Priority: TIER 3 — Evaluation infrastructure / extensibility
+Status:   [WONTFIX 2026-05-06]  Supervisor (sync 2026-05-06) decided to
+          scrap the proposed split-pick mitigation: "stripping of the
+          stack action doesn't say much about anything and is not
+          interesting or relevant for the thesis."  The ~2× per-call
+          holding-goal slowdown is accepted as the cost of the stack
+          feature.  Planner perf will instead be approached from the
+          generic-redundancy angle in new audit #50.  Will move to
+          archive/CODEBASE_AUDIT_RESOLVED.txt on next slim.
 Where:    pddl/domain_pddlstream.pddl (pick conditional effect,
           :conditional-effects requirement)
 Depends:  None (stack feature shipped in commit 0d5def7)
-Effort:   Keep/kill decision pending mitigation experiment
+Effort:   N/A — closed
 
 Stack-goal implementation (--goal {holding,stack}, --stack-height,
 --n-objects, domain/stream/execution wiring, scene clamping to the
@@ -447,54 +486,104 @@ Fix:   No action needed at current scale.  If scalability evaluation
 
 
 ================================================================================
-#36. HOLDING GOAL TERMINATES AT CONTACT — NO LIFT TO UPRIGHT POSE
+#36. HARDCODE SMALL POST-RELEASE / POST-GRASP LIFT (PLACE & STACK PRIMARILY, PICK COSMETIC)
 ================================================================================
-Priority: TIER 3 — Quality-of-life, low priority
-Where:    test_full_pipeline.py (goal construction, ~line 296),
-          pddl/domain_pddlstream.pddl (goal predicate / new fluent),
-          pddlstream_planner.py (_build_init / goal handling)
-Depends:  None (orthogonal to in-progress execution refactor steps 3-7)
-Effort:   <1 day
+Priority: TIER 3 — Robustness workaround for motion-planning fragility
+Where:    execution.py execute_place (~line 605, just before reading
+          actual_joints — primary target),
+          execution.py execute_stack (~line 710, mirror of execute_place
+          — primary target, even more important because the freshly
+          stacked cube sits on a tall support),
+          execution.py execute_pick (~line 499, optional cosmetic
+          add-on so the holding-goal terminate-at-contact does not look
+          weird).
+Depends:  None
+Effort:   <0.5 day
 
-What:  After the execution.py refactor (2026-04-22, steps 1 & 2), the
-       pick action no longer lifts the arm after createConstraint.  The
-       run terminates with the held object at contact height — fingers
-       wrapped, object near the table surface.  This is symbolically
-       correct ((holding ?o) is true) and physically safe, but visually
-       incomplete.
+What:  After the 2026-04-22 execution refactor, none of execute_pick /
+       execute_place / execute_stack lift the arm before returning.
+       Every action ends at its contact pose:
+         - pick:  arm at object centre, fingers wrapped, cube hovering
+                  near the table.
+         - place: arm at release pose, gripper open, EE sitting on top
+                  of the just-placed cube.
+         - stack: arm at release pose, gripper open, EE sitting on top
+                  of the freshly stacked cube on top of the support.
 
-       In an ideal world the goal would express:
-         - target object held by the gripper, AND
-         - arm in an "upright" / clear-of-clutter pose.
+       Why the lift matters MOSTLY for place / stack:
+         The next planned `move` action's plan_motion runs from
+         wherever the arm currently sits.  After place/stack that
+         start config is "EE in contact with a cube the planner
+         hasn't accounted for as an obstacle yet" — the motion
+         planner is fragile here ("shotty motion planning" per
+         supervisor).  Stack is the worst case: the EE starts on top
+         of a tall column and any motion has to clear the column.
+         A small Z-lift before returning gives plan_motion safe
+         headroom and is the pragmatic workaround.
 
-       The planner would then chain  pick  ->  move  back to a
-       safe upright config (e.g. q_home or any free-space config above
-       the workspace), satisfying both clauses.  No lift logic needed
-       in execution — the second `move` does it via plan_motion, which
-       already keeps execution one-to-one with PDDL actions.
+       Why the lift is COSMETIC for pick:
+         After pick the next `move` is in free space (the cube has
+         become attached to the EE; everything beneath is what the
+         planner already saw).  The terminate-at-contact for the
+         holding goal is visually weird (cube near table) but does
+         not create a follow-on motion-planning hazard.  Add the
+         lift here only if visual polish matters.
 
-Fix:   ONE COMMIT:
-       (a) Pick a representation for "upright": either
-           - reuse (at_config q_home) with q_home declared as a
-             constant in init, or
-           - introduce a derived predicate (arm_clear) parameterised on
-             a pose-height threshold, certified by a new stream
-             test-config-upright(?q).
-           Option (a) is cheaper and matches the existing home_config
-           plumbing.
-       (b) Change goal builder in test_full_pipeline.py from
-             ('holding', target)
-           to
-             ('and', ('holding', target), ('at_config', q_home))
-           when --goal holding is selected.
-       (c) Verify planner produces  ... pick -> move(home) on success
-           and that current_config tracking still works (audit #86).
+       Earlier proposal (DROPPED 2026-05-06):
+         Add (at_config q_home) to the holding goal so the planner
+         chains pick → move(home), and the second move's plan_motion
+         does the lift "for free" with no execution-side hidden
+         motion.  Principled / one-to-one-with-PDDL.  Skipped per
+         supervisor sync 2026-05-06 because the existing motion
+         planner is too flaky to rely on for the second move;
+         a hardcoded execution-side lift is the pragmatic answer.
+         Supervisor's framing: "this is not cheating, it's a
+         workaround for the shotty motion planning."
 
-       Combine with #30 (goal as CLI parameter) so the upright clause
-       is opt-in: --goal holding (current behavior) vs
-       --goal holding-upright (new).
+Fix:   ONE COMMIT — common helper + three call sites:
+       (a) Add a private helper in execution.py:
+             def _apply_post_action_lift(robot_id, contact_ee,
+                                         orientation, contact_joints,
+                                         pc, gui,
+                                         lift_height=0.10) -> joints:
+               lift_ee = contact_ee + [0, 0, lift_height]
+               lift_joints = solve_ik(robot_id, lift_ee, orientation,
+                                       pc, seed=contact_joints)
+               if lift_joints is None: return contact_joints  # fail-safe
+               move_robot_smooth(robot_id, lift_joints, gui)
+               return lift_joints
+           If lift IK fails, fall through silently to the contact
+           config — never abort the surrounding pick/place/stack just
+           because the cosmetic lift can't reach.
+       (b) Call it in execute_place AFTER the 30-step settle and
+           BEFORE reading actual_joints — so final_config reflects
+           the lifted pose for the next move's plan_motion seed.
+       (c) Call it in execute_stack AFTER the 60-step settle and
+           BEFORE reading actual_joints — same reasoning, taller
+           support means the lift matters more.
+       (d) Optional: call it in execute_pick AFTER createConstraint
+           and BEFORE reading actual_joints, with a smaller lift
+           (~5 cm).  Cosmetic only; skip if it complicates the
+           refactor invariant.
+       (e) Read actual_joints AFTER the lift in every call site
+           (audit #86, current_config tracking).
+       (f) Update each docstring to note the hardcoded execution-side
+           lift as an accepted thesis simplification (see
+           THESIS_NOTES.md §19).
 
-Related: #30 (goal as CLI parameter), execution.py refactor 2026-04-22
+       NB: this is a deliberate departure from the refactor's
+       "execution one-to-one with PDDL actions" invariant.  The lift
+       is invisible to the planner — that is the whole point — so
+       the next move's plan_motion seed (final_config) carries the
+       lifted pose forward.
+
+Related: execution.py refactor 2026-04-22 (originally REMOVED the lift —
+         this restores it with a different rationale and at the
+         place/stack sites that actually need it),
+         THESIS_NOTES.md §19 (entry for the workaround),
+         #49 (tray goal: every successful run ends with place or
+              stack, so this lift directly improves the tray-goal
+              evaluation experience).
 
 
 ================================================================================
@@ -758,6 +847,216 @@ Related: #40 (write-side gate; this is the clear-side counterpart),
 
 
 ================================================================================
+#49. NEW GOAL — FIND HIDDEN OBJECTS, THEN STACK ON A TRAY
+================================================================================
+Priority: TIER 2 — New evaluation goal mode (user + supervisor 2026-05-06)
+Where:    boxel_env.py (scene construction — add tray entity);
+          boxel_data.py / boxel_types.py (tray as a TABLE-like surface
+          object, separate from cubes);
+          pddl/domain_pddlstream.pddl (tray as an Obj with a flag /
+          predicate (is_tray ?o), or extend (on ?cube ?support) so a
+          tray is a valid support);
+          pddlstream_planner.py _build_init (emit (is_tray tray),
+          (clear tray), and treat the tray as a placement support);
+          test_full_pipeline.py (new --goal find-and-tray-stack mode in
+          build_*_goal; goal AST = sense-discovered targets stacked on
+          tray);
+          streams.py (sample placement / stack poses on the tray's top
+          surface);
+          execution.py execute_place / execute_stack (tray top-surface
+          height as the support_z analogue to a cube top);
+          end-of-run physics verifier (#40, landed) — extend
+          _verify_cube_on / on_table check to recognise the tray.
+
+Depends:  - Symbolic side: #40 done (verifier walks goal AST — needs to
+            handle (on cube tray) and (on cube_a cube_b) clauses where
+            cube_b ultimately rests on tray).
+          - Execution side: #36's hardcoded post-place / post-stack
+            lift directly improves every tray-goal run (every
+            successful tray run ends in place or stack).
+          - Sense side: existing sense + shadow pipeline already
+            exposes hidden cubes — no perception change needed.
+Effort:   2-4 days (scene + domain + goal builder + verifier extension
+          + smoke tests on default and scalability scenes).
+
+What:  Original idea (user, 2026-05-06):
+         "Add a special designated area to the scene where we can
+          place the object instead of holding it.  Maybe one of the
+          goals would be to discover two or more objects and to put
+          them in that area, maybe in a stack."
+
+       Supervisor (sync 2026-05-06) crystallised this into a concrete
+       new goal mode:
+         "Find hidden object and then stack on a tray should be a new
+          goal."
+
+       This goal is the natural cross-product of the existing
+       capabilities:
+         - sense / shadow uncovering — already in pipeline (#21 archive,
+           #47 open) reveals targets that start out behind occluders.
+         - stack of N cubes — already in pipeline (commit 0d5def7,
+           #30 [WONTFIX] for the perf cost).
+         - placement-on-non-cube support — NEW; tray is a fixed-pose
+           rectangular surface in the workspace, semantically a
+           "support" but not a cube.  No (holding) clause in the goal
+           — terminates with cubes resting on the tray, robot free.
+
+       Why it matters for the thesis:
+         (a) Closes the long-standing "no place-down goal" gap.  Today
+             every target run ends with --goal holding (cube in
+             gripper) or --goal stack (tower whose base happens to be
+             on the table by induction, see #41).  A tray goal forces
+             the planner to actually release the cube onto a sampled
+             pose and physically settle.
+         (b) Exercises sense → pick → place / stack chains rather than
+             sense → pick → terminate.  Different action mix; useful
+             scalability data point for #12.
+         (c) Makes the spatial-region claim concrete: "designated
+             area" is a labelled boxel / surface that the planner
+             treats specially.  Maps cleanly onto the semantic-region
+             baseline (#11) — the tray is the simplest possible fixed
+             semantic region.
+
+Fix:   PROPOSED INCREMENTS — one commit each:
+       (a) Scene: add a tray (e.g. flat thin box, 0.20 × 0.15 × 0.01 m)
+           at a fixed pose well within the Panda reach disk; load via
+           boxel_env in the same path that loads the table/cubes; mark
+           with a distinct visual colour.
+       (b) Symbolic: introduce the tray as an Obj with a (is_tray ?o)
+           static predicate (or (is_support ?o) to allow future
+           non-cube supports).  Allow (on ?cube tray) in pick / place /
+           stack preconditions and effects without breaking the
+           cube-as-support case.  Adjust _build_init and the planner
+           init facts so (clear tray) is true at start.
+       (c) Stream / placement: extend streams.py (placement sampler)
+           to sample (x,y) within the tray's top-surface footprint
+           when the support is the tray.  Reuse the existing safe-
+           inset logic (FOR LATER bullet) so the cube does not perch
+           on the tray rim.
+       (d) Goal: add --goal find-and-tray-stack to
+           test_full_pipeline.py.  Goal builder constructs:
+             (and (on t_1 tray)
+                  (on t_2 t_1)
+                  ...
+                  (on t_H t_{H-1}))
+           where t_1..t_H are the discovered targets in stack order.
+           If only one target is requested, the goal collapses to
+           (on t_1 tray) — i.e. "find this and put it on the tray"
+           (equivalent to a place-down goal).
+       (e) Verifier (#40 extension): the goal-AST walker already
+           handles (on A B); just ensure tray's top-surface height
+           is computed from p.getAABB(tray_id) the same way cubes are.
+           Also extend the on_table convention (#41) so the tray base
+           is asserted on_table at init.
+       (f) Smoke tests: --n-targets 1, 2, 3 with tray goal on the
+           default scene and on scalability_scene().  Confirm sense
+           runs at least once when targets are pre-placed in shadows.
+
+Related: #11 (fixed semantic regions baseline — the tray IS the
+              simplest such region; this issue is its concrete
+              prerequisite),
+         #12 (scalability eval — add the tray-stack goal as a third
+              data series alongside holding and stack),
+         #30 [WONTFIX] (the existing stack feature; tray goal reuses
+              the conditional pick effect — same ~2× perf cost
+              accepted),
+         #36 (hardcoded post-place / post-stack lift makes every
+              tray-goal final pose safe for the next plan_motion),
+         #40 (physics verifier extends to (on cube tray)),
+         #41 (on_table convention — tray base sits on table),
+         #47 (sense-side correctness underwrites "find hidden object"),
+         FOR LATER bullet (safe-inset XY check — applies to tray
+              placements too).
+
+
+================================================================================
+#50. PLANNER PERFORMANCE INVESTIGATION — REDUNDANCY HUNT
+================================================================================
+Priority: TIER 2 — Affects every eval-run wall-clock time;
+          user-flagged 2026-05-06 ("planner is too slow").
+Where:    pddlstream_planner.py (_build_init, planner.plan, stream
+          stitching), streams.py (test/gen streams; per-call cost),
+          execution.py (between-replan re-grounding paths), and the
+          adaptive search inner loop (FastDownward grounder).
+Depends:  None (independent investigation).  Pairs naturally with
+          #9 / #12 — any wins should show up in the scalability plots.
+Effort:   1 week of focused profiling, then variable per-redundancy fix.
+
+What:  User raised at 2026-05-06 sync:
+         "Personally I think the planner is too slow and want to find
+          out ways to make it faster or at least discover and remove
+          some big redundancies."
+
+       This is broader than #30 (which targeted one specific
+       conditional-effect cost in the pick action and is now
+       [WONTFIX]).  #50 is a profiling-driven sweep — find ALL the
+       big redundancies, regardless of whether they live in the
+       grounder, the streams, or the Python init-fact construction.
+
+       Known suspects (no measurement yet — confirm with profiler
+       before fixing):
+       (a) _build_init re-emits ALL static facts every replan.  Many
+           of them (boxel_fits, semantics, geometry-derived
+           predicates) are invariant under sense / pick / place and
+           could be cached across replans of the same run.  Cf.
+           archive note "BOXEL_FITS / STATIC INIT FACTS — REBUILT
+           EACH REPLAN" — that note explained WHY the test-stream
+           variant was abandoned, but did not rule out caching the
+           Python-side computation.
+       (b) _compute_placement_view_blocks runs every _build_init at
+           O(S × 25 × F) ray-AABB tests (#34 audit).  Cache by
+           (shadow geometry, free-boxel layout) hash; invalidate only
+           when reboxelize_free_space mutates the registry.
+       (c) The placement sampler in streams.py may be re-sampling
+           geometrically equivalent poses; check if pose-level
+           dedup would help.
+       (d) `test_*` streams that fire many times per skeleton against
+           Python-side data that doesn't change between calls — fold
+           the test result into init facts and drop the stream.
+       (e) Any per-action Python loop in execute_* that scales with
+           registry size (look for O(N^2) over object/shadow lists).
+       (f) FastDownward grounder cost: how much grounded-state size
+           is inflated by predicates that have only a handful of
+           true ground atoms at runtime?  candidate for
+           negative-precondition / typing tightening.
+
+Fix:   APPROACH (no single commit — investigation first):
+       (a) Land a profiling pass: cProfile around planner.plan() and
+           around _build_init separately; aggregate over a fixed seed
+           sweep on the default scene and on scalability_scene (small
+           and large).  Output a Python-side flame graph + a
+           FastDownward translator-time / search-time / total-time
+           breakdown (the translator already prints these; capture
+           them into timing_summary.json).
+       (b) For each hotspot ≥ 10% of total time, decide:
+             - Cache (input is deterministic and stable across replans)
+             - Vectorise / numpy-ify (pure-Python ray loops, etc.)
+             - Drop / replace (dead code path or redundant fact)
+       (c) Land each redundancy fix as its own commit with a before-
+           after timing entry in the commit message + a one-line
+           note in THESIS_NOTES.md "evaluation methodology" if it
+           changes the per-call time used in the Results chapter.
+       (d) Re-run the seed sweep after each fix to make sure the
+           change does not regress success rate.
+
+Care: Do not start optimising before profiling.  The planner has many
+       plausible-looking suspects (init build, streams, grounder) and
+       only one of them is likely to dominate at any given scene size.
+       Premature optimisation will make the code harder to read for
+       little wall-clock gain.
+
+Related: #9 (experiment runner — needed to gather timing samples),
+         #12 (scalability eval — wins land here visibly),
+         #30 [WONTFIX] (the per-action conditional-effect cost is one
+              specific instance of the broader question — out of
+              scope per supervisor; revisit only if profiling shows
+              it dominates after other wins),
+         #34 (placement-view-blocks ray-AABB cost — concrete suspect),
+         FOR LATER bullets (incremental boxel recomputation, dense
+              lattice — both touch planner cost).
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -797,8 +1096,18 @@ FOR LATER
   (#9–#13) and thesis-critical fixes (#40, #47, … per ROADMAP; #21 was
   archived 2026-05-05 with a log-only band-aid, #47 is the real fix).
 
+- LW1 / TAMPURA empirical comparison.  Supervisor (sync 2026-05-06):
+  "Comparison with lw1 and tampura only after finishing the writing of the
+  thesis if I have at least a week of free time."  Conditional on:
+  (i) thesis writing done end-to-end, and (ii) ≥ 1 week of free time
+  remaining before submission.  Otherwise cite as related work without
+  empirical comparison.  Likely scope: harness LW1 / TAMPURA on the same
+  scenes used for #12 scalability, reuse #9 metric hooks, run the same
+  seeds — no domain re-encoding by us if their published encodings cover
+  the task; otherwise drop the comparison rather than shoehorn.
+
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-05)
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-06)
 ================================================================================
 
 Aligns with the ROADMAP banner above (pre-eval → eval prerequisites → eval).
@@ -808,29 +1117,42 @@ TIER 0 — BEFORE EVAL (correctness):
   #47  Re-ground view-blocker atoms after repeated still_blocked ~1–2 days
        (real fix; supersedes archive resolved #21's log-only band-aid)
 
+TIER 2 — NEW EVAL GOAL + PERF (added 2026-05-06):
+  #49  Find-hidden-then-stack-on-tray goal mode + tray entity in scene
+       (supervisor-requested new goal; ties #11 baseline and #12 scalability
+       to a concrete place-down task)
+  #50  Planner perf investigation — profile, cache static init, kill
+       redundancies (user-flagged "planner is too slow")
+
 TIER 3 — PRE-EVAL / EXTENSION:
   #41  Stack goal: base not constrained on_table    <1 day
        (minor; could ride with #40 verifier work)
-  #30  Stack-goal planner slowdown (:conditional-effects) — split-pick experiment
-       or accept ~2×; see entry
-  #36  Holding goal: optional upright / home pose after pick
+  #36  Hardcode small post-action lift in execute_place / execute_stack
+       (primary — gives the next plan_motion safe headroom over the freshly
+       placed/stacked cube); pick lift cosmetic only.  Supervisor-approved
+       workaround; replaces the dropped at_config-q_home goal-clause proposal.
   #31  Narration-style comments sweep
   #32  Comment/code drift sweep
-  #34  _compute_placement_view_blocks — optimise only if #12 shows cost
+  #34  _compute_placement_view_blocks — optimise only if #12 / #50 show cost
   #48  Pick does not clear on_relations[X] (write-side counterpart to #40)
 
 TIER 3 — EVALUATION (runner #9–#10, then #11–#13):
   #9   Experiment runner + metric hooks
-  #10  Uniform voxelization baseline
+  #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
   #11  Fixed semantic regions baseline
-  #12  Scalability matrix + plots
+  #12  Scalability matrix + plots                      (CONFIRMED 2026-05-06)
   #13  Recursive free-space discovery (implement or thesis future-work)
 
-Total open: 13 items (#9–#13, #30, #31, #32, #34, #36, #41, #47, #48).
+Total open: 14 items (#9–#13, #31, #32, #34, #36, #41, #47, #48, #49, #50).
+
+Closed since previous summary:
+  #30 [WONTFIX 2026-05-06] — split-pick mitigation scrapped per supervisor;
+       ~2× holding-goal slowdown accepted.  Awaiting archive slim.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
-                  see DEFERRED section #42 and THESIS_NOTES.md).
+                  supervisor reconfirmed 2026-05-06: "no need to track
+                  knocked-down objects").
 
 Resolved/subsumed → archive/CODEBASE_AUDIT_RESOLVED.txt:
              #1, #3, #4 (accepted shadow AABB remainder), #5, #7, #8, #15–#20,
