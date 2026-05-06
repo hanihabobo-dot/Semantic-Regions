@@ -90,6 +90,14 @@ Updated:      2026-05-06 (triage) — killed #34 [WONTFIX] per user
               real bottleneck, the fix lands in #50 with measurements
               rather than as a speculative one-off.  Open count:
               12 → 11.
+Updated:      2026-05-06 (triage) — promoted #48 from TIER 3 to
+              TIER 1 per user decision; bundled with #41 in the
+              stack-language correctness pass.  Reasoning: #49
+              (tray goal) makes pick→place(tray) plan shapes normal,
+              and any target starting on top of another cube triggers
+              the stale-(on X Y) gap.  Fix is one line; landing it
+              alongside #41's on_table clause is a single
+              symbolic-plumbing commit.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -184,7 +192,8 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 ROADMAP — PRE-EVALUATION VS. EVALUATION (updated 2026-05-06)
 ================================================================================
 Pre-evaluation (intended order before the eval sweep):
-  #31 (comment-quality sweep, absorbs #32) → #41 (on_table)
+  #31 (comment-quality sweep, absorbs #32)
+    → #41 (on_table) + #48 (clear on_relations[X])  [bundled commit]
     → #36 (hardcoded place/stack lift) → #49 (tray goal)
     → #50 (planner perf)
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
@@ -888,14 +897,21 @@ Related: archive resolved #21 (this issue's enabling pre-fix; the
 
 
 ================================================================================
-#48. PICK DOES NOT CLEAR on_relations[X] AFTER REMOVING X FROM A STACK
+#48. PICK DOES NOT CLEAR on_relations[X] AFTER REMOVING X FROM A STACK  [USER-PRIORITISED 2026-05-06; BUNDLE WITH #41]
 ================================================================================
-Priority: TIER 3 — Latent correctness gap; not triggered by current plan
-          shapes but fragile if pick→re-stack with the same cube ever appears.
+Priority: TIER 1 — User-prioritised 2026-05-06 to bundle with #41 in
+          the stack-language correctness pass.  Reasoning: #49 (tray
+          goal) makes pick→place(tray) plan shapes normal, and any
+          target that starts on top of another cube would trigger the
+          stale-(on X Y) fact this issue describes.  The fix is one
+          line; landing it now removes the risk before #49
+          implementation rather than discovering the bug mid-stream.
 Where:    test_full_pipeline.py pick handler (~line 891-946),
           on_relations dict (~line 299)
 Depends:  None.  Independent of #40 (which gates the WRITE side; this is
-          the missing CLEAR side).
+          the missing CLEAR side).  Naturally rides with #41 — both
+          tighten the (on ?o ?x) symbolic-state plumbing in one
+          commit.
 Effort:   <0.5 day
 
 What:  The PDDL pick action's conditional effect
@@ -1218,6 +1234,10 @@ TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
   #41  Stack goal: explicit (on_table ?o) clause for the base cube
        (semantic completeness of the goal language; precondition for
        a clean tray-goal extension in #49)
+  #48  Pick does not clear on_relations[X] — one-line fix in the
+       pick handler.  Bundle with #41 in the same stack-language
+       correctness commit; #49 (tray goal) makes pick→place(tray)
+       plan shapes normal so this latent gap fires.
 
 TIER 2 — NEW EVAL GOAL + PERF (added 2026-05-06):
   #49  Find-hidden-then-stack-on-tray goal mode + tray entity in scene
@@ -1231,7 +1251,6 @@ TIER 3 — PRE-EVAL / EXTENSION:
        (primary — gives the next plan_motion safe headroom over the freshly
        placed/stacked cube); pick lift cosmetic only.  Supervisor-approved
        workaround; replaces the dropped at_config-q_home goal-clause proposal.
-  #48  Pick does not clear on_relations[X] (write-side counterpart to #40)
 
 TIER 3 — EVALUATION (runner #9–#10, then #11–#13):
   #9   Experiment runner + metric hooks
