@@ -66,6 +66,14 @@ Updated:      2026-05-06 (later) — triage pass.  Marked #47 [DEFERRED
               blocked" cases as failures.  Open count: 14 → 13.
               TIER 0 is now empty.  THESIS_NOTES §18 updated to
               note the deferral.
+Updated:      2026-05-06 (triage) — promoted #41 from TIER 3 to
+              TIER 1 per user decision ("make top prio").  Reordered
+              pre-evaluation roadmap to put #41 (on_table) first.
+              Reasoning: the (on a b) chain alone admits floating-
+              tower interpretations the #40 verifier cannot rule out
+              without an on_table clause, and #49 (tray goal) reuses
+              the same predicate plumbing — fixing the goal language
+              once before either lands.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -160,7 +168,8 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 ROADMAP — PRE-EVALUATION VS. EVALUATION (updated 2026-05-06)
 ================================================================================
 Pre-evaluation (intended order before the eval sweep):
-  #36 (hardcoded place/stack lift) → #49 (tray goal) → #50 (planner perf) → #31 → #32
+  #41 (on_table) → #36 (hardcoded place/stack lift) → #49 (tray goal)
+    → #50 (planner perf) → #31 → #32
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
    — user decision; the archived #21 log-only band-aid is the
@@ -676,9 +685,16 @@ Related: #39 (root cause of this run's false-success),
 
 
 ================================================================================
-#41. STACK GOAL DOES NOT CONSTRAIN BASE TO BE ON THE TABLE
+#41. STACK GOAL DOES NOT CONSTRAIN BASE TO BE ON THE TABLE  [USER-PRIORITISED 2026-05-06]
 ================================================================================
-Priority: TIER 3 — Minor, related to #40
+Priority: TIER 1 — Semantic completeness of the goal language;
+          user-prioritised 2026-05-06 to top of the pre-evaluation
+          roadmap.  Reasoning: the (on a b) chain alone admits
+          floating-tower interpretations that the verifier (#40)
+          cannot rule out without an on_table clause; making the
+          goal explicit is the single cheapest cleanup of the goal
+          language before #49 (tray goal) builds on the same
+          predicates.
 Where:    test_full_pipeline.py (build_stack_goal ~line 111),
           pddl/domain_pddlstream.pddl (new predicate or convention)
 Depends:  None.  Could ride with #40's verifier work.
@@ -1139,6 +1155,11 @@ TIER 0 — BEFORE EVAL (correctness):
   (none — #47 deferred out of scope 2026-05-06; archive #21 log-only
   band-aid is the accepted level of correctness for the thesis)
 
+TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
+  #41  Stack goal: explicit (on_table ?o) clause for the base cube
+       (semantic completeness of the goal language; precondition for
+       a clean tray-goal extension in #49)
+
 TIER 2 — NEW EVAL GOAL + PERF (added 2026-05-06):
   #49  Find-hidden-then-stack-on-tray goal mode + tray entity in scene
        (supervisor-requested new goal; ties #11 baseline and #12 scalability
@@ -1147,8 +1168,6 @@ TIER 2 — NEW EVAL GOAL + PERF (added 2026-05-06):
        redundancies (user-flagged "planner is too slow")
 
 TIER 3 — PRE-EVAL / EXTENSION:
-  #41  Stack goal: base not constrained on_table    <1 day
-       (minor; could ride with #40 verifier work)
   #36  Hardcode small post-action lift in execute_place / execute_stack
        (primary — gives the next plan_motion safe headroom over the freshly
        placed/stacked cube); pick lift cosmetic only.  Supervisor-approved
