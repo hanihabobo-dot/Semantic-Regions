@@ -148,17 +148,65 @@ def _verify_cube_on(env, obj_name, support_name, eps_z=0.005):
     return True, ""
 
 
-def _verify_goal_physics(goal, env):
+def _verify_holding(env, target_name, grasp_constraint_id, lift_eps=0.005):
     """
-    Walk a goal AST and physics-check each ``(on a b)`` clause
-    (audit #40).
+    Physics check that ``target_name`` is currently welded to the
+    end-effector (audit S-18 — the holding-goal twin of
+    ``_verify_cube_on``).
 
-    Heads currently handled: ``and`` (recurse), ``on`` (AABB check).
-    ``holding`` is intentionally NOT checked here — that desync is
-    in scope for audit #47.  Other heads (e.g. future predicates
-    like ``on_table``/``at_config``) trigger a one-line warning so
-    coverage gaps surface in the run log instead of silently
-    passing.
+    The pre-fix holding-goal success was driven entirely by
+    ``belief.is_target_found()``, which flips on a successful
+    ``sense`` *or* a successful ``pick`` of the target name.  A
+    sense-then-failed-pick run therefore reported SUCCESS while the
+    gripper was empty (or holding the wrong body).  This helper
+    closes that gap by querying PyBullet directly:
+
+      1. There is an active grasp constraint.
+      2. The constraint's child body (``bodyB``, info index 2 — same
+         convention used in ``execute_place``) is the target body.
+      3. The target's AABB bottom sits clearly above the table
+         surface (lift_eps default 5 mm — matches audit #40's
+         on-stack tolerance).
+
+    Returns:
+        (ok, reason) — reason is "" on success, a short
+        diagnostic on failure.
+    """
+    if grasp_constraint_id is None:
+        return False, "no active grasp constraint (gripper is empty)"
+    if target_name is None or target_name not in env.objects:
+        return False, (f"target '{target_name}' not in env.objects "
+                       f"(cannot resolve PyBullet body)")
+    target_body = env.objects[target_name].object_id
+    c_info = p.getConstraintInfo(grasp_constraint_id)
+    cstr_body = c_info[2]
+    if cstr_body != target_body:
+        return False, (f"grasp constraint bodyB={cstr_body} ≠ "
+                       f"target body={target_body} ('{target_name}')")
+    a_min, _ = p.getAABB(target_body)
+    table_z = env.table_surface_height
+    if a_min[2] < table_z + lift_eps:
+        return False, (f"target bottom_z={a_min[2]:.4f} not lifted "
+                       f"above table top_z={table_z:.4f} "
+                       f"(Δ={a_min[2] - table_z:.4f} < ε={lift_eps})")
+    return True, ""
+
+
+def _verify_goal_physics(goal, env, grasp_constraint_id=None):
+    """
+    Walk a goal AST and physics-check each leaf clause
+    (audits #40 + S-18).
+
+    Heads currently handled:
+      - ``and``      — recurse into sub-clauses
+      - ``on``       — AABB stack check via ``_verify_cube_on``
+      - ``holding``  — gripper-constraint check via
+                       ``_verify_holding`` (requires
+                       ``grasp_constraint_id``)
+
+    Other heads (e.g. future predicates like ``on_table``/
+    ``at_config``) trigger a one-line warning so coverage gaps
+    surface in the run log instead of silently passing.
 
     Returns:
         list[str] — human-readable failure descriptions, empty on
@@ -178,15 +226,18 @@ def _verify_goal_physics(goal, env):
         # append) so the caller sees a single flat list, not a list
         # of lists.
         for sub in goal[1:]:
-            failures.extend(_verify_goal_physics(sub, env))
+            failures.extend(
+                _verify_goal_physics(sub, env, grasp_constraint_id))
     elif head == 'on':
         a, b = str(goal[1]), str(goal[2])
         ok, reason = _verify_cube_on(env, a, b)
         if not ok:
             failures.append(f"(on {a} {b}) — {reason}")
     elif head == 'holding':
-        # Deferred to audit #47 (atoms-vs-physics for held object).
-        pass
+        x = str(goal[1])
+        ok, reason = _verify_holding(env, x, grasp_constraint_id)
+        if not ok:
+            failures.append(f"(holding {x}) — {reason}")
     else:
         # Unknown predicate — verifier coverage gap.  Surface it in
         # the log so a new goal predicate without a verifier doesn't
@@ -1050,7 +1101,29 @@ def main(gui=True, run_logger=None, scene_config=None,
     # printing + timing_summary.json write.
     physics_failures: list = []
     if goal_kind == 'holding':
-        success = belief.is_target_found()
+        # Audit S-18: belief.is_target_found() flips on a successful
+        # sense OR a successful pick — neither implies the gripper
+        # is currently welded to the target body.  A sense-then-
+        # failed-pick run (or a slip after a successful pick) leaves
+        # the belief flag True but the gripper empty / holding the
+        # wrong body.  Gate the success on a physics check so the
+        # holding-goal path matches the stack-goal path's audit-#40
+        # rigour.
+        symbolic_ok = belief.is_target_found()
+        if symbolic_ok:
+            ok, reason = _verify_holding(env, target_name, grasp_constraint_id)
+            if not ok:
+                physics_failures.append(f"(holding {target_name}) — {reason}")
+                print(f"  PHYSICAL_FAILURE (goal): "
+                      f"(holding {target_name}) — {reason}")
+                # Reclassify the exit reason so the FAILED summary
+                # in report_run_outcome doesn't print the misleading
+                # "Replan limit reached" default — the loop exited
+                # cleanly on belief, the failure is a physics
+                # mismatch with that belief.
+                if exit_reason is None:
+                    exit_reason = "physics_mismatch"
+        success = symbolic_ok and not physics_failures
     else:
         symbolic_ok = goal_satisfied(goal, on_relations)
         if symbolic_ok:
@@ -1059,7 +1132,8 @@ def main(gui=True, run_logger=None, scene_config=None,
             # post-stack collapses that slipped past the per-action
             # gate (e.g. a tower falling later under a subsequent
             # action's vibration).
-            physics_failures = _verify_goal_physics(goal, env)
+            physics_failures = _verify_goal_physics(
+                goal, env, grasp_constraint_id=grasp_constraint_id)
             for pf in physics_failures:
                 print(f"  PHYSICAL_FAILURE (goal): {pf}")
         success = symbolic_ok and not physics_failures
