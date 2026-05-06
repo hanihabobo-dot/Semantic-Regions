@@ -245,6 +245,7 @@ def build_stack_goal(stackable_objects, stack_height, rng=None):
 def main(gui=True, run_logger=None, scene_config=None,
          draw_boxel_overlays=True, show_free=False,
          goal_kind='holding', stack_height=2,
+         unit_costs=False,
          run_config: Optional[Dict[str, Any]] = None):
     print("=" * 60)
     print("FULL PIPELINE: PDDLStream + Replanning")
@@ -690,6 +691,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                           else None),
             stackable_objects=(stack_target_objects
                                if goal_kind == 'stack' else None),
+            unit_costs=unit_costs,
         )
         plan_dt = time.perf_counter() - plan_t0
         total_plan_time += plan_dt
@@ -1140,6 +1142,7 @@ if __name__ == "__main__":
         "seed":         args.seed,
         "goal":         args.goal,
         "stack_height": args.stack_height,
+        "unit_costs":   args.unit_costs,
         "gui":          not args.no_gui,
         "boxel_viz":    not args.no_boxel_viz,
         "show_free":    args.show_free,
@@ -1158,6 +1161,7 @@ if __name__ == "__main__":
             show_free=args.show_free,
             goal_kind=args.goal,
             stack_height=args.stack_height,
+            unit_costs=args.unit_costs,
             run_config=run_config,
         )
     finally:

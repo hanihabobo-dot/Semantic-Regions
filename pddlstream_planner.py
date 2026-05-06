@@ -528,10 +528,11 @@ class PDDLStreamPlanner:
              observed_clear_regions: Optional[List[str]] = None,
              visible_target_locations: Optional[Dict[str, str]] = None,
              on_relations: Optional[Dict[str, str]] = None,
-             stackable_objects: Optional[List[str]] = None) -> Optional[List[Tuple]]:
+             stackable_objects: Optional[List[str]] = None,
+             unit_costs: bool = False) -> Optional[List[Tuple]]:
         """
         Generate a plan using PDDLStream.
-        
+
         Args:
             target_objects: Objects to reason about
             goal: Goal as a tuple, e.g. ('holding', 'blue_object')
@@ -547,6 +548,11 @@ class PDDLStreamPlanner:
             on_relations: Known stack relations (see create_problem docstring).
             stackable_objects: Stack participants (see create_problem
                 docstring).  Leave None for holding-goal runs.
+            unit_costs: If True, override the domain's numeric
+                ``(increase (total-cost) ...)`` effects and treat every
+                action as cost 1 (PDDLStream solve(unit_costs=...)
+                kwarg).  False keeps the domain costs (stack=2,
+                others=1; see THESIS_NOTES §17).
 
         Returns:
             List of action tuples, or None if planning fails
@@ -559,17 +565,19 @@ class PDDLStreamPlanner:
                                       visible_target_locations,
                                       on_relations,
                                       stackable_objects)
-        
+
         if verbose:
             print(f"\n--- PDDLStream Planning ---")
             print(f"Goal: {goal}")
             print(f"Max time: {max_time}s")
-        
+            print(f"Unit costs: {unit_costs}")
+
         # Call PDDLStream solver
         solution = solve(
             problem,
             algorithm='adaptive',  # Best for TAMP problems
             max_time=max_time,
+            unit_costs=unit_costs,
             verbose=verbose
         )
         

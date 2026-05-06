@@ -368,9 +368,20 @@ with a `(stack_allowed)` precondition that is set only when the goal
 contains an `(on ...)` literal — is recorded under FOR LATER as a
 fallback if the cost bias proves insufficient at scale.
 
+**Evaluation knob**: `test_full_pipeline.py --unit-costs` passes
+`unit_costs=True` to `pddlstream.algorithms.meta.solve()`, which
+overrides the domain's numeric `(increase (total-cost) ...)` effects
+and treats every action as cost 1.  The bias and the original
+"stack-as-rescue" failure mode both reappear under that flag, which
+makes paired runs (`--unit-costs` vs default) the natural way to
+quantify how much of the success-rate / plan-shape difference is
+attributable to the cost bias rather than to other planner state.
+Default is off (domain costs apply), so existing runs are unchanged.
+
 **References**: `pddl/domain_pddlstream.pddl` (action cost effects);
-commit `6f91d0c`; `CODEBASE_AUDIT.txt` FOR LATER (stack_allowed
-fallback).
+commit `6f91d0c`; `pddlstream_planner.py` `plan(..., unit_costs=...)`;
+`run_logger.py` `--unit-costs` argparse flag;
+`CODEBASE_AUDIT.txt` FOR LATER (stack_allowed fallback).
 
 ---
 
