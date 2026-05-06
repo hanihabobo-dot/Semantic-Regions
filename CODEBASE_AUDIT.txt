@@ -74,6 +74,13 @@ Updated:      2026-05-06 (triage) — promoted #41 from TIER 3 to
               without an on_table clause, and #49 (tray goal) reuses
               the same predicate plumbing — fixing the goal language
               once before either lands.
+Updated:      2026-05-06 (triage) — merged #32 (comment/code drift
+              sweep) into #31 per user decision; promoted the merged
+              issue to TIER 1 and put it FIRST in the pre-evaluation
+              roadmap so the comment-quality category is "knocked
+              out and not thought about" before the substantive
+              pre-eval work begins.  #32 now [MERGED INTO #31] —
+              moves to RESOLVED on next slim.  Open count: 13 → 12.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -159,7 +166,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #11–#13, #31, #32, #34, #36, #41, #48, #49, #50       #
+#  OPEN ISSUES — #9, #10, #11–#13, #31, #34, #36, #41, #48, #49, #50            #
 #                                                                              #
 ################################################################################
 
@@ -168,8 +175,9 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 ROADMAP — PRE-EVALUATION VS. EVALUATION (updated 2026-05-06)
 ================================================================================
 Pre-evaluation (intended order before the eval sweep):
-  #41 (on_table) → #36 (hardcoded place/stack lift) → #49 (tray goal)
-    → #50 (planner perf) → #31 → #32
+  #31 (comment-quality sweep, absorbs #32) → #41 (on_table)
+    → #36 (hardcoded place/stack lift) → #49 (tray goal)
+    → #50 (planner perf)
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
    — user decision; the archived #21 log-only band-aid is the
@@ -440,45 +448,84 @@ Related: #9 (evaluation needs both 'holding' and 'stack' goal kinds),
 
 
 ================================================================================
-#31. NARRATION COMMENTS — RESTATE CODE INSTEAD OF EXPLAINING INTENT
+#31. CODE-COMMENT QUALITY SWEEP — NARRATION + STALE DRIFT  [USER-PRIORITISED 2026-05-06; ABSORBS #32]
+================================================================================
+Priority: TIER 1 — User-prioritised top-of-roadmap 2026-05-06.  "Get
+          through first and not think about it" — knock out the entire
+          comment-quality category in one pass so it doesn't interleave
+          with substantive pre-eval work.
+Where:    Codebase-wide sweep (visualization.py, streams.py,
+          pddlstream_planner.py, execution.py, test_full_pipeline.py,
+          run_logger.py, boxel_env.py, free_space.py,
+          shadow_calculator.py, cell_merger.py, robot_utils.py,
+          belief.py, reboxelize.py, smart_filter.py, boxel_data.py,
+          boxel_types.py — every .py touched in the last quarter).
+Depends:  None
+Effort:   1–2 days end-to-end.  Was 1–2 days for narration alone (#31)
+          plus <1 day for drift (#32); doing them together is cheaper
+          than doing them separately because the eyes-on-every-file
+          cost is paid once.
+
+What:  Two overlapping comment-quality problems, merged 2026-05-06:
+
+  (A) NARRATION COMMENTS — restate WHAT, not WHY (was #31).
+      Examples: "# Define the 8 corners", "# Define edges",
+      "# Determine color", "# Get boxel centers for robot motion
+      targets".  AI-generated narration that adds noise and obscures
+      the genuinely useful intent-explaining comments (audit
+      references, design-decision notes, "this is here because of
+      bug X" pointers).
+
+  (B) COMMENT / CODE DRIFT — comments describe behaviour that no
+      longer matches the code (absorbed from #32, 2026-05-06).
+      Originally cited example: streams.py said "Yield one grasp per
+      Z-offset (0.05, 0.10, 0.15 m above object)" while
+      _GRASP_Z_OFFSETS list was [0.1].  That specific comment has
+      been fixed in place — streams.py line 397 now reads "Yield one
+      grasp per Z-offset (currently 0.10 m above object)" and
+      matches the single-element list at line 372.  Remaining work:
+      scan the rest of the codebase for similar mismatches (no
+      specific ones identified yet — open as a sweep).
+
+Fix:   ONE PASS over every .py file — read each function /
+       module-level docstring + every inline comment and keep,
+       rewrite, or delete:
+       - DELETE pure narration comments that restate the code.
+       - REWRITE comments that explain WHAT into comments that
+         explain WHY (the constraint, the bug, the design decision).
+       - REWRITE / DELETE comments that describe stale behaviour;
+         confirm against the surrounding code that the rewritten
+         comment matches reality.
+       - KEEP audit-reference notes ("audit #N"), TODO/FIXME with
+         specific outstanding gaps, and any block that explains a
+         non-obvious invariant (THESIS_NOTES cross-refs, etc.).
+
+       Care points:
+       - Per CODEBASE POLICY (top of this file), commented-out CODE
+         is preserved intentionally — DO NOT delete.  Move to
+         archive/ if cleanup is genuinely needed.  This sweep is
+         about explanatory comments only.
+       - Do not rephrase comments just to "improve style" — only
+         touch comments that are actively wrong (drift) or actively
+         noisy (pure narration).
+       - Land as ONE commit per major file (or one per module group)
+         so review diff stays readable.
+
+Subsumes: #32 (comment/code drift sweep) — merged into this issue
+          2026-05-06 per user decision; #32 will move to
+          archive/CODEBASE_AUDIT_RESOLVED.txt on next slim.
+
+
+================================================================================
+#32. COMMENT/CODE DRIFT — STALE COMMENTS DESCRIBING OLD BEHAVIOR  [MERGED INTO #31 2026-05-06]
 ================================================================================
 Priority: TIER 3 — Code quality
-Where:    Throughout codebase (visualization.py, streams.py, etc.)
-Depends:  None
-Effort:   1-2 days (sweep)
-
-What:  Many comments restate what the code does rather than why.
-       Examples: "# Define the 8 corners", "# Define edges",
-       "# Determine color", "# Get boxel centers for robot motion
-       targets".  These are AI-generated narration comments that add
-       noise and obscure the genuinely useful intent-explaining
-       comments (audit references, design decision notes).
-
-Fix:   Sweep codebase: remove narration comments, keep intent
-       comments.  Comments should explain WHY, not WHAT.
-
-
-================================================================================
-#32. COMMENT/CODE DRIFT — STALE COMMENTS DESCRIBING OLD BEHAVIOR
-================================================================================
-Priority: TIER 3 — Code quality
-Where:    streams.py and possibly others (codebase-wide sweep)
-Depends:  None
-Effort:   <1 day
-
-What:  Originally cited example: streams.py said "Yield one grasp per
-       Z-offset (0.05, 0.10, 0.15 m above object)" while the actual
-       _GRASP_Z_OFFSETS list was [0.1].  That specific comment has been
-       fixed in place — streams.py line 397 now reads "Yield one grasp
-       per Z-offset (currently 0.10 m above object)" and matches the
-       single-element list at line 372.
-
-       Remaining work: scan the rest of the codebase for other
-       instances of comments that no longer match the code they
-       describe (no specific ones identified yet — open as a sweep).
-
-Fix:   Codebase-wide sweep for comment/code drift.  Cited streams.py
-       case is already resolved.
+Status:   [MERGED INTO #31 2026-05-06]  User decision: fold the
+          drift sweep into the broader narration sweep (#31) so the
+          "eyes on every .py file" cost is paid once.  See #31
+          (CODE-COMMENT QUALITY SWEEP — NARRATION + STALE DRIFT)
+          for the consolidated scope, fix, and care points.  Will
+          move to archive/CODEBASE_AUDIT_RESOLVED.txt on next slim.
 
 
 ================================================================================
@@ -1156,6 +1203,10 @@ TIER 0 — BEFORE EVAL (correctness):
   band-aid is the accepted level of correctness for the thesis)
 
 TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
+  #31  Code-comment quality sweep (narration + stale drift; absorbs #32)
+       — "knock it out first and not think about it" pass over every
+       .py file; removes pure-narration comments and rewrites stale
+       drift in one go.  1–2 days end-to-end.
   #41  Stack goal: explicit (on_table ?o) clause for the base cube
        (semantic completeness of the goal language; precondition for
        a clean tray-goal extension in #49)
@@ -1172,8 +1223,6 @@ TIER 3 — PRE-EVAL / EXTENSION:
        (primary — gives the next plan_motion safe headroom over the freshly
        placed/stacked cube); pick lift cosmetic only.  Supervisor-approved
        workaround; replaces the dropped at_config-q_home goal-clause proposal.
-  #31  Narration-style comments sweep
-  #32  Comment/code drift sweep
   #34  _compute_placement_view_blocks — optimise only if #12 / #50 show cost
   #48  Pick does not clear on_relations[X] (write-side counterpart to #40)
 
@@ -1184,7 +1233,7 @@ TIER 3 — EVALUATION (runner #9–#10, then #11–#13):
   #12  Scalability matrix + plots                      (CONFIRMED 2026-05-06)
   #13  Recursive free-space discovery (implement or thesis future-work)
 
-Total open: 13 items (#9–#13, #31, #32, #34, #36, #41, #48, #49, #50).
+Total open: 12 items (#9–#13, #31, #34, #36, #41, #48, #49, #50).
 
 Closed since previous summary:
   #30 [WONTFIX 2026-05-06] — split-pick mitigation scrapped per supervisor;
@@ -1192,6 +1241,9 @@ Closed since previous summary:
   #47 [DEFERRED OUT OF SCOPE 2026-05-06] — user decision; archive #21
        log-only band-aid is the accepted level of correctness for the
        thesis.  Awaiting archive slim → CODEBASE_AUDIT_DEFERRED.txt.
+  #32 [MERGED INTO #31 2026-05-06] — comment/code drift sweep absorbed
+       into the broader code-comment quality sweep (#31).  Awaiting
+       archive slim → CODEBASE_AUDIT_RESOLVED.txt.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
