@@ -268,6 +268,15 @@ def report_run_outcome(
             print(f"FAILED: Could not release held object after retries — "
                   f"aborted to avoid double-grasp "
                   f"({len(remaining)} unsearched shadows remaining)")
+        elif exit_reason == "physics_mismatch":
+            # Audit S-18: belief says target was found, but the
+            # end-of-run physics check disagreed (gripper empty,
+            # wrong body welded, or cube not lifted off the table).
+            # Details are in physics_failures / the
+            # PHYSICAL_FAILURE (goal) line printed earlier.
+            print(f"FAILED: Belief said target was found but physics "
+                  f"check disagreed (see PHYSICAL_FAILURE above) — "
+                  f"audit S-18")
         elif goal_kind == 'stack':
             print(f"FAILED: Stack goal not reached after {plan_count} plans "
                   f"(goal {goal}, achieved {on_relations})")
