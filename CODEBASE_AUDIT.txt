@@ -112,6 +112,13 @@ Updated:      2026-05-06 (triage) — merged #12 (scalability analysis)
               n_targets matrix, scalability plots) folded into #9's
               "remaining work" so there's a single eval-implementation
               milestone instead of two.  Open count: 10 → 9.
+Updated:      2026-05-06 (triage) — killed #13 [WONTFIX] per user
+              decision: recursive free-space discovery is dead code
+              under this thesis's fixed-camera + no-concave-geometry
+              setup; would only matter for partial-coverage sensors
+              or objects hidden inside containers.  Already documented
+              as accepted simplification in THESIS_NOTES §20.  Open
+              count: 9 → 8.  Triage pass complete.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -197,7 +204,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #13, #31, #36, #41, #48, #49, #50                     #
+#  OPEN ISSUES — #9, #10, #31, #36, #41, #48, #49, #50                          #
 #                                                                              #
 ################################################################################
 
@@ -224,12 +231,16 @@ Evaluation prerequisites (runner + uniform baseline for thesis comparison):
   #10 uniform voxelization baseline  (CONFIRMED in scope 2026-05-06)
 
 Evaluation phase (Results chapter — user-scoped sweep):
-  #13 recursive free-space discovery (implement or cite explicitly as future work)
-  (#11 [WONTFIX 2026-05-06] — fixed-semantic-regions baseline killed;
-   semantic-vs-uniform comparison via #10 alone carries the thesis claim,
-   and #49's tray entity already exemplifies a fixed labelled region.
-   #12 [MERGED INTO #9 2026-05-06] — scalability matrix folded into
-   the eval runner.)
+  (no remaining items — see Closed/relocated below.)
+  #11 [WONTFIX 2026-05-06] — fixed-semantic-regions baseline killed;
+       semantic-vs-uniform comparison via #10 alone carries the thesis
+       claim, and #49's tray entity already exemplifies a fixed
+       labelled region.
+  #12 [MERGED INTO #9 2026-05-06] — scalability matrix folded into
+       the eval runner.
+  #13 [WONTFIX 2026-05-06] — recursive free-space discovery is dead
+       code under our fixed-camera + no-concave-geometry setup; cited
+       as future work in THESIS_NOTES §20.
 
 Parallel / non-blocking:
   #50  planner perf investigation — can run alongside the eval sweep; any wins
@@ -361,12 +372,25 @@ Effort:   N/A — see #9
 
 
 ================================================================================
-#13. RECURSIVE OBJECT DISCOVERY IN FREE SPACE
+#13. RECURSIVE OBJECT DISCOVERY IN FREE SPACE  [WONTFIX 2026-05-06 — FIXED-CAMERA OUT-OF-SCOPE]
 ================================================================================
 Priority: TIER 3 — Proposal alignment, nice-to-have
+Status:   [WONTFIX 2026-05-06]  User triage decision: the recursive
+          pass is dead code under this thesis's setup — fixed
+          overhead camera (boxel_env.py [0.1, -0.8, 0.7]) plus no
+          concave geometry (no containers, cupboards, drawers) means
+          every object is detected upfront by oracle_detect_objects
+          and the recursive pass is never triggered.  THESIS_NOTES
+          §20 (added 2026-05-06) already documents this as an
+          accepted simplification for the fixed-camera scenario and
+          cites recursion as future work in the perception chapter
+          rather than as a TAMP limitation.  The audit issue is now
+          redundant with the thesis note — keeping it open implies
+          "we might still implement this," which is misleading.
+          Will move to archive/CODEBASE_AUDIT_RESOLVED.txt on next
+          slim.
 Where:    free_space.py (FreeSpaceGenerator)
-Depends:  None
-Effort:   2-3 days
+Effort:   N/A — closed (cited as future work in THESIS_NOTES §20)
 
 What:  The proposal (Section 4.2) says: "If new objects are found
        within a partition, the process repeats: bound the biggest
@@ -1285,13 +1309,12 @@ TIER 3 — PRE-EVAL / EXTENSION:
        placed/stacked cube); pick lift cosmetic only.  Supervisor-approved
        workaround; replaces the dropped at_config-q_home goal-clause proposal.
 
-TIER 3 — EVALUATION (runner #9, then #10, then #13):
+TIER 3 — EVALUATION (runner #9, then baseline #10):
   #9   Experiment runner + metric hooks + scalability matrix + plots
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
-  #13  Recursive free-space discovery (implement or thesis future-work)
 
-Total open: 9 items (#9, #10, #13, #31, #36, #41, #48, #49, #50).
+Total open: 8 items (#9, #10, #31, #36, #41, #48, #49, #50).
 
 Closed since previous summary:
   #30 [WONTFIX 2026-05-06] — split-pick mitigation scrapped per supervisor;
@@ -1312,6 +1335,10 @@ Closed since previous summary:
   #12 [MERGED INTO #9 2026-05-06] — scalability matrix folded into
        the eval runner; matrix is one configuration of the runner,
        not a separate issue.  Awaiting archive slim →
+       CODEBASE_AUDIT_RESOLVED.txt.
+  #13 [WONTFIX 2026-05-06] — recursive free-space discovery is dead
+       code under our fixed-camera + no-concave-geometry setup; cited
+       as future work in THESIS_NOTES §20.  Awaiting archive slim →
        CODEBASE_AUDIT_RESOLVED.txt.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
