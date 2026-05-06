@@ -98,6 +98,15 @@ Updated:      2026-05-06 (triage) — promoted #48 from TIER 3 to
               the stale-(on X Y) gap.  Fix is one line; landing it
               alongside #41's on_table clause is a single
               symbolic-plumbing commit.
+Updated:      2026-05-06 (triage) — killed #11 [WONTFIX] per user
+              decision: the semantic-vs-uniform comparison via #10
+              alone carries the thesis claim that semantic boxels do
+              real work.  A third "semantic-but-static" baseline
+              would add 3–5 days for marginal narrative gain.  The
+              tray entity in #49 already exemplifies a fixed
+              labelled region, so extending to a 4×4 fixed-regions
+              sweep can be cited as straightforward future work
+              without running it.  Open count: 11 → 10.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -183,7 +192,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #11–#13, #31, #36, #41, #48, #49, #50                 #
+#  OPEN ISSUES — #9, #10, #12, #13, #31, #36, #41, #48, #49, #50                #
 #                                                                              #
 ################################################################################
 
@@ -208,9 +217,11 @@ Evaluation prerequisites (runner + uniform baseline for thesis comparison):
   #10 uniform voxelization baseline  (CONFIRMED in scope 2026-05-06)
 
 Evaluation phase (Results chapter — user-scoped sweep):
-  #11 fixed semantic regions baseline
   #12 scalability matrix, metrics, plots  (CONFIRMED in scope 2026-05-06)
   #13 recursive free-space discovery (implement or cite explicitly as future work)
+  (#11 [WONTFIX 2026-05-06] — fixed-semantic-regions baseline killed;
+   semantic-vs-uniform comparison via #10 alone carries the thesis claim,
+   and #49's tray entity already exemplifies a fixed labelled region.)
 
 Parallel / non-blocking:
   #50  planner perf investigation — can run alongside the eval sweep; any wins
@@ -285,23 +296,23 @@ Fix:   ONE COMMIT — implement uniform voxelization baseline:
 
 
 ================================================================================
-#11. EVALUATION BASELINE — FIXED SEMANTIC REGIONS
+#11. EVALUATION BASELINE — FIXED SEMANTIC REGIONS  [WONTFIX 2026-05-06]
 ================================================================================
 Priority: TIER 3 — Thesis baseline
+Status:   [WONTFIX 2026-05-06]  User triage decision: kill in place.
+          Two-baseline comparison (semantic vs. uniform, #10) already
+          carries the thesis claim that semantic boxels do real work.
+          A third "semantic-but-static" baseline would add 3–5 days
+          for marginal narrative gain.  Fixed labelled regions are
+          present in the codebase via #49's tray entity (a tray IS
+          the simplest possible fixed semantic region), so the
+          extension to a 4×4 fixed-regions sweep can be cited as
+          straightforward future work without running it.  Supervisor
+          2026-05-06 sync only reconfirmed #10 (univox) and #12
+          (scalability), not #11.  Will move to
+          archive/CODEBASE_AUDIT_RESOLVED.txt on next slim.
 Where:    New module or configuration; integrates with eval_runner
-Depends:  #9 (experiment runner)
-Effort:   3-5 days
-
-What:  The proposal defines "fixed semantic regions" as a baseline:
-       pre-defined spatial regions (e.g., table quadrants or fixed
-       grid sectors) with manually assigned semantic labels.  No
-       dynamic shadow computation or adaptive boxelization.
-
-Fix:   ONE COMMIT — implement fixed regions baseline:
-       (a) Define a set of fixed rectangular regions covering the
-           workspace (e.g., 4x4 grid with manual labels).
-       (b) Wire into experiment runner as --baseline fixed-regions.
-       (c) Compare against semantic boxels on same scenes.
+Effort:   N/A — closed
 
 
 ================================================================================
@@ -1252,14 +1263,13 @@ TIER 3 — PRE-EVAL / EXTENSION:
        placed/stacked cube); pick lift cosmetic only.  Supervisor-approved
        workaround; replaces the dropped at_config-q_home goal-clause proposal.
 
-TIER 3 — EVALUATION (runner #9–#10, then #11–#13):
+TIER 3 — EVALUATION (runner #9–#10, then #12–#13):
   #9   Experiment runner + metric hooks
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
-  #11  Fixed semantic regions baseline
   #12  Scalability matrix + plots                      (CONFIRMED 2026-05-06)
   #13  Recursive free-space discovery (implement or thesis future-work)
 
-Total open: 11 items (#9–#13, #31, #36, #41, #48, #49, #50).
+Total open: 10 items (#9, #10, #12, #13, #31, #36, #41, #48, #49, #50).
 
 Closed since previous summary:
   #30 [WONTFIX 2026-05-06] — split-pick mitigation scrapped per supervisor;
@@ -1273,6 +1283,10 @@ Closed since previous summary:
   #34 [WONTFIX 2026-05-06] — placement-view-blocks scalability folded
        into #50 (profile-driven redundancy hunt).  Awaiting archive
        slim → CODEBASE_AUDIT_RESOLVED.txt.
+  #11 [WONTFIX 2026-05-06] — fixed-semantic-regions baseline killed;
+       semantic-vs-uniform (#10) carries the thesis claim, and #49's
+       tray entity already exemplifies a fixed labelled region.
+       Awaiting archive slim → CODEBASE_AUDIT_RESOLVED.txt.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
