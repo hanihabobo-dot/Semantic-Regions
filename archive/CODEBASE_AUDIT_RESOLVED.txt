@@ -27,6 +27,19 @@ Archived: 2026-05-05 (moved from CODEBASE_AUDIT.txt: #21 — log-only band-aid
          observed-empty shadows from blocked-unresolved ones.  Real fix —
          re-grounding planner blocker atoms after repeated still_blocked —
          tracked as new audit #47 on the open list.)
+Archived: 2026-05-06 (moved from CODEBASE_AUDIT.txt: #11, #12, #13, #30, #32,
+         #34, #40 — triage-pass slim closing the 2026-05-06 audit
+         re-evaluation.  #40 [DONE 2026-05-05] (physics verifier for stack
+         goals).  #11 [WONTFIX] fixed-semantic-regions baseline killed —
+         semantic-vs-uniform via #10 alone carries the thesis claim.
+         #12 [MERGED INTO #9] scalability matrix folded into the eval runner.
+         #13 [WONTFIX] recursive free-space discovery dead code under fixed-
+         camera setup; cited as future work in THESIS_NOTES §20.
+         #30 [WONTFIX] split-pick mitigation scrapped per supervisor; ~2×
+         holding-goal slowdown accepted.  #32 [MERGED INTO #31] comment/code
+         drift sweep absorbed into the broader narration sweep.  #34
+         [WONTFIX] _compute_placement_view_blocks scalability folded into #50
+         redundancy hunt.  Open count after slim: 8.)
 
 These issues have been fixed, reclassified as not-an-issue, or corrected.
 The active audit with remaining open issues is in CODEBASE_AUDIT.txt.
@@ -3103,6 +3116,262 @@ Fix:   ONE COMMIT — design decision needed:
 
 Related: #5 (placement re-blocks cleared corridor),
          archive resolved #78(c) (3-strike give-up behavior),
-         open #47 (real fix — re-ground blocker atoms after repeated
-                   still_blocked).
+         #47 [DEFERRED OUT OF SCOPE 2026-05-06]
+                   (real fix abandoned — see archive/CODEBASE_AUDIT_DEFERRED.txt).
+--------------------------------------------------------------------------------
+
+
+================================================================================
+2026-05-06 SLIM ADDITIONS
+================================================================================
+The following entries were moved from CODEBASE_AUDIT.txt during the
+2026-05-06 triage pass.  Status notes copied verbatim from the open audit
+at the time of the move; bodies preserved for historical reference.
+
+
+================================================================================
+#40. FALSE-SUCCESS IN STACK GOALS — SYMBOLIC STATE ACCEPTED OVER PHYSICS  [DONE 2026-05-05]
+================================================================================
+Priority: TIER 0 — Correctness bug (reports SUCCESS on physically failed runs)
+Status:   [DONE 2026-05-05]  test_full_pipeline.py now runs
+          _verify_cube_on() per stack action (gates the on_relations
+          write; failure → log PHYSICAL_FAILURE, append to
+          physical_failures, break to replan) AND walks the goal AST
+          via _verify_goal_physics() at end-of-run.  Both layers feed
+          timing_summary.json (physical_failures_per_action,
+          physical_failures_at_goal).  Holding-goal verification
+          intentionally deferred to #47 [DEFERRED OUT OF SCOPE
+          2026-05-06].  Safe-inset XY refinement tracked in FOR LATER.
+          Pick-clears-on_relations gap tracked as #48 (open).
+Where:    test_full_pipeline.py (post-execution goal check, ~line 1009+;
+          on_relations tracking in the stack dispatch handler)
+Depends:  None.  Independent of #39 — even if pick is fixed, a cube can
+          slip off during subsequent physics settling and produce the
+          same desync.
+
+What:  After plan execution terminates, the pipeline compared an
+       on_relations dict (built by the executor from what each stack
+       action SAID happened) to the goal conjunction.  The dict was
+       never reconciled with physics.  Any PDDL-level symbolic
+       success was printed as SUCCESS regardless of physical state.
+
+Fix landed (commit b088673, 2026-05-05):
+       (a) After symbolic success, walk the goal AST.  For each
+           clause:
+             (on A B): query p.getAABB for both A and B; require
+               A's bottom_z ≈ B's top_z (ε ~5 mm) AND A's (x,y)
+               centre within B's (x,y) AABB.
+             (holding X): check the grasp constraint still exists
+               and targets X (body id match).
+             (at_config q): check current joints ≈ q (RRT
+               tolerance).
+       (b) On mismatch, print "PHYSICAL_FAILURE: <clause> —
+           symbolic true but physics disagrees (<details>)" and
+           set the run exit status to failure.
+       (c) Per-action stack verifier landed in the same commit:
+           _verify_cube_on gates the on_relations write; mismatch
+           → PHYSICAL_FAILURE log + break to replan.
+
+Related: #39 (root cause class for stack false-success — DONE),
+         #9  (evaluation metrics depend on truthful success flags),
+         archive resolved #21 (reactive policy after unexpected
+              state — log-only band-aid landed 2026-05-05),
+         #47 [DEFERRED OUT OF SCOPE 2026-05-06] (re-ground blocker
+              atoms — same atoms-vs-physics theme),
+         #41 (on_table clause in goal — verifier extension; OPEN).
+--------------------------------------------------------------------------------
+
+
+================================================================================
+#11. EVALUATION BASELINE — FIXED SEMANTIC REGIONS  [WONTFIX 2026-05-06]
+================================================================================
+Priority: TIER 3 — Thesis baseline
+Status:   [WONTFIX 2026-05-06]  User triage decision: kill in place.
+          Two-baseline comparison (semantic vs. uniform, #10) already
+          carries the thesis claim that semantic boxels do real work.
+          A third "semantic-but-static" baseline would add 3–5 days
+          for marginal narrative gain.  Fixed labelled regions are
+          present in the codebase via #49's tray entity (a tray IS
+          the simplest possible fixed semantic region), so the
+          extension to a 4×4 fixed-regions sweep can be cited as
+          straightforward future work without running it.  Supervisor
+          2026-05-06 sync only reconfirmed #10 (univox) and #12
+          (scalability), not #11.
+
+Original scope (proposal Section 5):
+       Pre-defined spatial regions (e.g., table quadrants or fixed
+       grid sectors) with manually assigned semantic labels.  No
+       dynamic shadow computation or adaptive boxelization.  Wired
+       as --baseline fixed-regions in the experiment runner.
+--------------------------------------------------------------------------------
+
+
+================================================================================
+#12. EVALUATION — SCALABILITY ANALYSIS  [MERGED INTO #9 2026-05-06]
+================================================================================
+Priority: TIER 3 — Thesis evaluation
+Status:   [MERGED INTO #9 2026-05-06]  User decision: the scalability
+          matrix is one configuration of the eval runner, not a
+          separate issue.  Scope (n_occluders 1–6 × n_targets 1–3
+          × 5–10 seeds, scalability plots) folded into #9 directly
+          so there's a single eval-implementation milestone.
+
+Original scope (preserved in #9):
+       Vary number of occluders / targets to measure how planning
+       time, success rate, and plan quality scale with scene
+       complexity.  scalability_scene() preset (old #55) wires it
+       in.  Plots: planning time vs scene size; success rate vs
+       scene size.
+--------------------------------------------------------------------------------
+
+
+================================================================================
+#13. RECURSIVE OBJECT DISCOVERY IN FREE SPACE  [WONTFIX 2026-05-06 — FIXED-CAMERA OUT-OF-SCOPE]
+================================================================================
+Priority: TIER 3 — Proposal alignment, nice-to-have
+Status:   [WONTFIX 2026-05-06]  User triage decision: the recursive
+          pass is dead code under this thesis's setup — fixed
+          overhead camera (boxel_env.py [0.1, -0.8, 0.7]) plus no
+          concave geometry (no containers, cupboards, drawers) means
+          every object is detected upfront by oracle_detect_objects
+          and the recursive pass is never triggered.  THESIS_NOTES
+          §20 (added 2026-05-06) documents this as an accepted
+          simplification for the fixed-camera scenario and cites
+          recursion as future work in the perception chapter rather
+          than as a TAMP limitation.
+Where:    free_space.py (FreeSpaceGenerator)
+
+Original scope (proposal Section 4.2):
+       "If new objects are found within a partition, the process
+       repeats: bound the biggest object and define its occluded
+       space."  The actual FreeSpaceGenerator does a single-pass
+       octree that marks cells as FREE or OCCUPIED.  It never
+       detects new objects inside partitions — all objects are
+       detected upfront by oracle_detect_objects.  Would matter
+       only for partial-coverage sensors or objects hidden inside
+       containers.
+
+Related: archived #4 (re-boxelization — recursive pass optional if
+         partial-coverage perception is added).
+--------------------------------------------------------------------------------
+
+
+================================================================================
+#30. STACK GOAL PERF REGRESSION — KEEP/KILL OPEN  [WONTFIX 2026-05-06]
+================================================================================
+Priority: TIER 3 — Evaluation infrastructure / extensibility
+Status:   [WONTFIX 2026-05-06]  Supervisor (sync 2026-05-06) decided
+          to scrap the proposed split-pick mitigation: "stripping of
+          the stack action doesn't say much about anything and is
+          not interesting or relevant for the thesis."  The ~2× per-
+          call holding-goal slowdown is accepted as the cost of the
+          stack feature.  Planner perf approached from the generic-
+          redundancy angle in audit #50 (open).
+Where:    pddl/domain_pddlstream.pddl (pick conditional effect,
+          :conditional-effects requirement)
+
+Stack-goal implementation (--goal {holding,stack}, --stack-height,
+--n-objects, domain/stream/execution wiring, scene clamping to the
+Panda reach disk) was DONE 2026-04-24 (commit 0d5def7).
+
+OPEN PROBLEM (now ACCEPTED): the stack feature DOUBLES holding-goal
+per-call planning time on the same scene/seed, even though init
+facts are gated.
+
+  Smoke tests:
+    --goal stack --stack-height 2 --no-gui --seed 0  → 1 plan,
+      1.37 s, plan = move/pick/move/stack ✓
+    --goal stack --stack-height 3 --no-gui --seed 0  → 1 plan,
+      1.58 s, plan = move/pick/move/stack/move/pick/move/stack ✓
+
+  Baseline (pre-stack, commit fed063a), default scene, no-GUI:
+    seeds 0-3 aggregate (15 calls): 4.63 s/call.
+  After stack (commit 0d5def7), default scene, holding goal:
+    no-GUI seed 0 → 10.61 s/plan  (+153%)
+    GUI    seed 0 →  7.88 s/plan  (+88%)
+    GUI    seed 0 →  8.36 s/plan  (+99%)
+    Three independent seed-0 runs: 7.9–10.6 s/call vs 4.2 s/call.
+    Consistent ~2× per-call slowdown.  Run timings live in
+    logs/run_<timestamp>/timing_summary.json (commit fed063a).
+
+LIKELY ROOT CAUSE:
+  The conditional pick effect
+
+    (forall (?x)
+      (when (on ?o ?x)
+        (and (not (on ?o ?x)) (clear ?x))))
+
+  grounds against every (Obj ?x) per pick instantiation, and the
+  :conditional-effects requirement switches FastDownward to a
+  slower translator path.  Init-side gating does not help — cost
+  is in the domain grounder.
+
+PROPOSED MITIGATION (SCRAPPED 2026-05-06 per supervisor):
+  Split pick into pick + unstack — remove the forall from pick;
+  drop :conditional-effects; add (:action unstack) with
+  precondition (on ?o ?support) emitting (clear ?support).  Both
+  map to the same execute_pick routine.  Holding-goal runs would
+  then never see (on ?o ?x); the grounder would discard unstack
+  early.  Supervisor framing: "stripping of the stack action
+  doesn't say much about anything and is not interesting or
+  relevant for the thesis."
+
+Related: #9 (evaluation runner — both 'holding' and 'stack' goals),
+         #36 (post-action lift — orthogonal),
+         #39 [DONE 2026-04-26, archive] (pick precondition (clear ?o)
+              would have been forward-compatible),
+         #50 (planner perf hunt — broader redundancy investigation
+              that subsumes per-action perf questions like this).
+--------------------------------------------------------------------------------
+
+
+================================================================================
+#32. COMMENT/CODE DRIFT — STALE COMMENTS DESCRIBING OLD BEHAVIOR  [MERGED INTO #31 2026-05-06]
+================================================================================
+Priority: TIER 3 — Code quality
+Status:   [MERGED INTO #31 2026-05-06]  User decision: fold the
+          drift sweep into the broader narration sweep (#31) so the
+          "eyes on every .py file" cost is paid once.  See #31
+          (CODE-COMMENT QUALITY SWEEP — NARRATION + STALE DRIFT)
+          on the open list for the consolidated scope, fix, and
+          care points.
+
+Original scope (preserved in #31):
+       Sweep the codebase for comments that no longer match the
+       code they describe.  Originally cited example: streams.py
+       said "Yield one grasp per Z-offset (0.05, 0.10, 0.15 m
+       above object)" while _GRASP_Z_OFFSETS list was [0.1].  That
+       specific case has been fixed in place (streams.py:397 now
+       reads "Yield one grasp per Z-offset (currently 0.10 m above
+       object)").  Remaining work is the codebase-wide sweep,
+       absorbed into #31.
+--------------------------------------------------------------------------------
+
+
+================================================================================
+#34. _COMPUTE_PLACEMENT_VIEW_BLOCKS SCALABILITY  [WONTFIX 2026-05-06 — REDUNDANT WITH #50]
+================================================================================
+Priority: TIER 3 — Scalability concern
+Status:   [WONTFIX 2026-05-06]  User triage decision: kill in place
+          as redundant with #50 (planner perf investigation —
+          profile-driven redundancy hunt).  #34's own fix
+          instructions already conditioned on "if #12 reveals this
+          as a bottleneck" — the new #50 issue covers exactly that
+          profile-then-fix flow for every planner hotspot, including
+          this one.  Keeping #34 separate created two hunting
+          permits for one suspect.  If profiling under #50 shows
+          _compute_placement_view_blocks as a real bottleneck, the
+          fix lands there with measurements rather than as a
+          speculative one-off.
+Where:    pddlstream_planner.py (~lines 287-323)
+
+Original scope:
+       Runs per-replan inside _build_init().  For S shadows × 25
+       rays × F free boxels: pure-Python ray-AABB intersection
+       tests.  At current scale (3 shadows, 15 free = 1,125 tests)
+       fast.  At evaluation scale (6 shadows, 50 free = 7,500 tests)
+       still under 50 ms.  At 10+ shadows with many free boxels
+       would need spatial indexing (AABB tree).  Suggested fix
+       (deferred to #50): AABB tree or vectorized numpy ray-box
+       test.
 --------------------------------------------------------------------------------

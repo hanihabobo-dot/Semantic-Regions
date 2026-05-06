@@ -36,6 +36,12 @@ Contents of this file:
   - ACCEPTED runtime policy (#42, 2026-05-03): logged PyBullet collisions during
     execute_* / move do NOT trigger break-to-replan.  See section "#42" below
     and THESIS_NOTES.md.
+  - DEFERRED OUT OF SCOPE (#47, 2026-05-06): re-grounding planner view-blocker
+    atoms after repeated still_blocked.  User decision: the archive #21
+    log-only band-aid is the accepted level of correctness for the thesis;
+    eval tooling (#9) filters gave-up cases as failures.  Principled
+    "belief reflects observation" correctness story forfeit; empirical
+    results unaffected.  See section "#47" below and THESIS_NOTES.md §18.
 
 ================================================================================
 56. DEAD COMPUTATION — POINT CLOUD AND NEIGHBORS NEVER USED  [PARTIALLY DONE, DEFERRED]
@@ -804,4 +810,92 @@ collision_count from execute_* and break-to-replan above a CLI threshold.
 
 Related: #40 (symbolic-vs-physics success), open #21 (belief / replan policy),
          THESIS_NOTES.md (accepted execution policy).
+
+
+================================================================================
+#47. RE-GROUND VIEW-BLOCKER ATOMS AFTER REPEATED STILL-BLOCKED  [DEFERRED OUT OF SCOPE 2026-05-06]
+================================================================================
+Source: CODEBASE_AUDIT.txt (formerly TIER 0 open; deferred 2026-05-06).
+
+Priority: TIER 0 — Correctness; currently masked by archive resolved
+          #21's 3-strike give-up + lying belief (log-only band-aid landed
+          2026-05-05; behavior unchanged).
+Status:   [DEFERRED OUT OF SCOPE 2026-05-06]  User decision: this fix
+          is out of scope for the thesis.  The archived #21 log-only
+          band-aid is sufficient — the run report distinguishes
+          observed-empty from gave-up-blocked, and eval tooling
+          (#9) can filter the gave-up cases as failures.  The
+          principled "belief reflects observation" correctness story
+          is forfeit, but empirical results are not affected.
+Where:    test_full_pipeline.py (sense handler still_blocked branch),
+          pddlstream_planner.py (init-fact emission for blocks_view_at,
+          _compute_placement_view_blocks),
+          execution.py (sense_shadow_raycasting,
+          compute_shadow_blockers).
+Effort:   1-2 days (if ever revisited).
+
+What:  When sense_shadow_raycasting returns still_blocked, the planner
+       has no automatic way to learn WHICH object is currently in the
+       camera→shadow corridor.  Today's blocks_view_at facts are
+       emitted once per replan from compute_shadow_blockers, which
+       uses a coarse 5x5 single-z-slice ray grid against current
+       physics — sense uses 3 z-levels x 7x7 = 147 rays.  Mismatch
+       cases (planner thinks view_clear, sense disagrees) loop the
+       same (move, sense, pick) skeleton until the archive #21
+       3-strike give-up lies the shadow into not_here.
+
+       Original framing: a shadow can still be blocked by a NEW
+       object that drifted or was placed into the corridor on the
+       previous step, but the planner reasons against the blocker
+       map computed before the still_blocked event.  Re-grounding
+       the atoms from current physics after N failures — including
+       matching sense's ray density — would let the planner see the
+       actual obstruction and plan around it, rather than re-issuing
+       the same skeleton.
+
+Original proposed fix (NOT IMPLEMENTED — abandoned 2026-05-06):
+       (a) Modify sense_shadow_raycasting to return the set of body
+           IDs that contributed to still_blocked.
+       (b) On still_blocked in the dispatcher, before increment-and-
+           break:
+             - Resolve blocker body IDs to OBJECT boxel IDs via
+               body_id_to_name + registry.
+             - Re-run compute_shadow_blockers (or a denser variant
+               matching sense's 147-ray density) with the updated
+               registry.
+             - Push the refreshed map to planner.shadow_occluder_map.
+             - Optionally extend the planner with an
+               observed_placement_blocks set: tuples
+               (occluder_id, dest_boxel_id, shadow_id) for placements
+               that empirically did not clear the corridor.
+               _build_init emits one extra
+               (blocks_view_at occluder dest shadow) per entry so
+               view_clear(shadow) becomes false on the next plan and
+               the planner is forced to relocate the occluder.
+       (c) Once (a) and (b) work, remove the 3-strike give-up and the
+           blocked_giveup_shadows tracking added by archive #21's
+           log-only fix.  Replace with an honest
+           exit_reason="blocked_unresolved" when the augmented init
+           facts make the goal unreachable.
+
+       Care points (would still apply if revisited):
+       - The 5x5 grid in _compute_placement_view_blocks should ALSO
+         be raised to the 147-ray density (or AABB-dilated by ~2 cm)
+         so the planner does not repeatedly nominate the same
+         corridor-grazing placement.
+       - Persistence of observed_placement_blocks across replans:
+         keep indefinitely (geometric truth).  Cleanup hook only
+         when the shadow itself is removed from the registry.
+       - Robot self-blocks (R1 in archive #21's analysis) NOT
+         addressed here — they need the home_retract uncomment at
+         test_full_pipeline.py (audit #79).
+
+Related: archive resolved #21 (this issue's enabling pre-fix; the
+              log-only band-aid for the false 'all_searched' message),
+         #40 [DONE / archived 2026-05-06] (shared "PDDL atoms vs.
+              physics desync" theme — false-success in stack goals;
+              physics verifier landed),
+         #79 (home-retract before sense, also commented out),
+         archive resolved #78(c) (3-strike give-up historical context),
+         THESIS_NOTES.md §18 (accepted simplification framing).
 
