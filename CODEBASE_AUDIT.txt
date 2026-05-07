@@ -312,6 +312,14 @@ Slimmed:      2026-05-07 (later) — moved #31, #36, #41, #48, #49
               Open audit shrunk from ~395 lines of issue bodies to
               the four still-active items (#9, #10, #50, #52).
               No code changes.
+Added:        2026-05-07 (later) — #53 (TIER 0 diagnostic — trim
+              --goal find-and-tray-stack to 1 target temporarily so
+              we can tell whether the planner failure is goal-AST
+              length, size-compat, or something else.  Gates #52:
+              if the 1-cube run succeeds, #52 is "nicer demo" not
+              "only path to passing"; if it also fails, the size-
+              compat FOR LATER bullet promotes to fix-this status).
+              Open count: 4 -> 5.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -397,7 +405,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #50, #52                                              #
+#  OPEN ISSUES — #9, #10, #50, #52, #53                                         #
 #                                                                              #
 ################################################################################
 
@@ -410,6 +418,7 @@ Pre-evaluation (intended order before the eval sweep):
     → #41 [DONE 2026-05-07] (on_table) + #48 [DONE 2026-05-07] (clear on_relations[X])
     → #36 [DONE 2026-05-07] (hardcoded place/stack lift)
     → #49 [DONE 2026-05-07] (tray goal)
+    → #53 (TIER 0 diagnostic triage — 1-cube tray-stack)
     → #52 (TIER 0 demo goal — find-and-stack-on-base) → #50 (planner perf)
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
@@ -727,6 +736,75 @@ Related: #49 [DONE] — find-and-tray-stack; this issue is the user-
 
 
 ================================================================================
+#53. DIAGNOSTIC — TRIM --goal find-and-tray-stack TO 1 TARGET FOR TRIAGE
+================================================================================
+Priority: TIER 0 — User-prioritised 2026-05-07 (post-#52).  Cheap triage
+          step to disambiguate the failure mode of #49 before committing
+          to #52's full redesign.
+Where:    test_full_pipeline.py main() — find-and-tray-stack branch
+          (post-#49 hotfix), narrow stack_target_objects to a single
+          target rather than every all_targets entry.
+Depends:  None.  Should land BEFORE #52 — its result decides whether #52
+          is strictly necessary or just the nicer-shaped thesis demo.
+Effort:   <0.5 day (one-line slice + WSL run + result observation).
+
+What:  After --goal find-and-tray-stack commit 4/4 (8221602) + tray-
+       filter hotfix (62d435b), the planner still returns no plan on
+       default_scene in WSL.  Two competing hypotheses live in #52's
+       root-cause analysis:
+         (a) Goal-AST length scales with --n-targets — a 4-cube
+             tower-on-tray plus sense actions explodes the search
+             space.
+         (b) The size-compat gap (#52(a)) — planner picks an
+             infeasible big-on-small pose somewhere along the chain
+             and the skeleton never grounds.
+
+       Both fixes are non-trivial.  Cheaper to settle which one is the
+       actual blocker first by running the goal in its smallest
+       possible form: pick one target, stack only that cube on the
+       tray, ignore the rest.  Goal AST collapses to
+       ('and', ('on', t_1, 'tray')).
+
+       Outcomes inform the next steps:
+         - If 1-cube tray-stack succeeds: confirms (a).  The fix is
+           to cap chain length in build_tray_stack_goal (or accept
+           the simpler shape as the default for find-and-tray-stack
+           going forward).  #52 still relevant as the cleaner thesis
+           demo, but #49 is salvageable for the multi-cube case via
+           cap-N.
+         - If 1-cube also fails: confirms (b) (or another deeper
+           issue).  #52 with its big-base-small-target setup is the
+           right way out; the size-compat FOR LATER bullet promotes
+           to "fix this" status.
+
+Fix:   ONE COMMIT — minimal-touch slice in the find-and-tray-stack
+       branch in main():
+       (a) After computing stack_target_objects = list(all_targets),
+           narrow to a single target.  Prefer a hidden target if
+           target_to_shadow is non-empty (exercises the sense → pick
+           → stack chain); fall back to a visible target otherwise.
+       (b) Pass the 1-element list to build_tray_stack_goal — the
+           existing 1-target collapse handles it
+           (('and', ('on', t_1, 'tray'))).
+       (c) Print "[#53 triage] limiting tray-stack to single target:
+           <name>" so the diagnostic intent is obvious in the log.
+
+       INTENTIONALLY TEMPORARY.  When the triage signal is in, the
+       slice either:
+         - reverts (next step is #52),
+         - turns into a permanent --tray-stack-cap N flag (if (a)
+           and we want to keep #49 functional), or
+         - moves to audit history as a settled diagnostic.
+
+Related: #49 [DONE 2026-05-07; archived] — the goal mode being
+              triaged.
+         #52 — TIER 0 simplified replacement; this issue gates
+              whether #52 is strictly necessary or just nicer.
+         FOR LATER (size-compat) — promoted to "fix this" status if
+              the 1-cube run still fails.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -799,6 +877,10 @@ follow the tier / roadmap ordering, not the lowest open number.
 Each issue is ideally one commit; parallelise where dependencies allow.
 
 TIER 0 — TOP PRIORITY (user-prioritised 2026-05-07):
+  #53  diagnostic triage — cap find-and-tray-stack at 1 target;
+       gates #52 (if 1-cube run also fails, size-compat gap is
+       confirmed and #52 is the right path; if it succeeds, #49
+       is salvageable via cap-N and #52 is "nicer" not "necessary")
   #52  find-and-stack-on-base demo goal (simplified replacement for
        --goal find-and-tray-stack as the default thesis demo;
        sidesteps size-compat gap by setup convention)
@@ -816,7 +898,7 @@ TIER 3 — EVALUATION (runner #9, then baseline #10):
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
 
-Total open: 4 items (#9, #10, #50, #52).
+Total open: 5 items (#9, #10, #50, #52, #53).
 
 Closed since previous summary:
   (none — #31 / #36 / #41 / #48 / #49 archived in 2026-05-07 slim;
