@@ -164,6 +164,15 @@ Slimmed:      2026-05-07 (same day) — moved #51 (DEFERRED 2026-05-07)
               archive convention.  Fix attempt remains reachable via
               branch audit-51-shadow-blocker-fix on both github and
               origin.
+Updated:      2026-05-07 (later) — #41 marked [DONE 2026-05-07].
+              Added (on_table ?o) predicate to the domain (pick removes,
+              place emits; stack untouched — held cube was already off-
+              table); _build_init emits (on_table X) for every cube not
+              stacked; build_stack_goal appends (on_table base) so the
+              tower base is grounded in the goal AST; goal_satisfied
+              and the #40 physics verifier (_verify_on_table) handle
+              the new head.  py_compile clean across the three modules.
+              Open count: 7 -> 6.  TIER 1 reduces to #48 alone.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -249,7 +258,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #36, #41, #48, #49, #50                               #
+#  OPEN ISSUES — #9, #10, #36, #48, #49, #50                                    #
 #                                                                              #
 ################################################################################
 
@@ -259,7 +268,8 @@ ROADMAP — PRE-EVALUATION VS. EVALUATION (updated 2026-05-06)
 ================================================================================
 Pre-evaluation (intended order before the eval sweep):
   #31 [DONE 2026-05-07] (comment-quality sweep, absorbs #32)
-    → #41 (on_table) + #48 (clear on_relations[X])  [bundled commit]
+    → #41 [DONE 2026-05-07] (on_table) + #48 (clear on_relations[X])
+       [originally bundled; #41 landed alone, #48 still open]
     → #36 (hardcoded place/stack lift) → #49 (tray goal)
     → #50 (planner perf)
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
@@ -553,7 +563,7 @@ Related: execution.py refactor 2026-04-22 (originally REMOVED the lift —
 
 
 ================================================================================
-#41. STACK GOAL DOES NOT CONSTRAIN BASE TO BE ON THE TABLE  [USER-PRIORITISED 2026-05-06]
+#41. STACK GOAL DOES NOT CONSTRAIN BASE TO BE ON THE TABLE  [DONE 2026-05-07]
 ================================================================================
 Priority: TIER 1 — Semantic completeness of the goal language;
           user-prioritised 2026-05-06 to top of the pre-evaluation
@@ -937,13 +947,12 @@ TIER 0 — BEFORE EVAL (correctness):
   (empty — #51 [DEFERRED 2026-05-07]; awaiting archive slim)
 
 TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
-  #41  Stack goal: explicit (on_table ?o) clause for the base cube
-       (semantic completeness of the goal language; precondition for
-       a clean tray-goal extension in #49)
   #48  Pick does not clear on_relations[X] — one-line fix in the
-       pick handler.  Bundle with #41 in the same stack-language
-       correctness commit; #49 (tray goal) makes pick→place(tray)
-       plan shapes normal so this latent gap fires.
+       pick handler.  Was originally bundled with #41 (on_table)
+       in the same stack-language correctness commit; #41 landed
+       alone 2026-05-07, #48 still pending.  #49 (tray goal) makes
+       pick→place(tray) plan shapes normal so this latent gap fires.
+       (#41 [DONE 2026-05-07] — on_table predicate plumbed.)
 
 TIER 2 — NEW EVAL GOAL + PERF (added 2026-05-06):
   #49  Find-hidden-then-stack-on-tray goal mode + tray entity in scene
@@ -963,12 +972,11 @@ TIER 3 — EVALUATION (runner #9, then baseline #10):
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
 
-Total open: 7 items (#9, #10, #36, #41, #48, #49, #50).
+Total open: 6 items (#9, #10, #36, #48, #49, #50).
 
 Closed since previous summary:
-  (none — 2026-05-07 slim moved #51 to
-  archive/CODEBASE_AUDIT_DEFERRED.txt; see "Slimmed: 2026-05-07" line
-  in the changelog header.)
+  #41 [DONE 2026-05-07] — explicit (on_table ?o) predicate plumbed
+       through domain / init / goal / verifier; awaits archive slim.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
