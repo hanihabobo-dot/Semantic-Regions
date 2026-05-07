@@ -628,36 +628,16 @@ def main(gui=True, run_logger=None, scene_config=None,
                 "--goal find-and-tray-stack needs at least 1 target cube; "
                 "the scene spawned none."
             )
-        # audit #54 — TIER 0 follow-up diagnostic.  #53 narrowed
-        # tray-stack to 1 target and confirmed the run still fails when
-        # the cube is HIDDEN (sense → pick → stack chain).  Drop the
-        # sense step entirely by forcing a VISIBLE target — its
-        # obj_at_boxel fact lets the planner go straight from pick to
-        # stack with no sense action in the AST.
-        # Outcomes:
-        #   - Visible-only succeeds: the failure lives in sense
-        #     (stale view_blocked atoms, blocker re-grounding, etc).
-        #   - Visible-only also fails: pick / stack-on-tray / streams,
-        #     or the single (Boxel tray) sample, is the bottleneck.
-        # INTENTIONALLY TEMPORARY — supersedes the #53 slice.
-        visible_targets = [t for t in stack_target_objects
-                           if t not in target_to_shadow]
-        if not visible_targets:
-            env.close()
-            raise RuntimeError(
-                "[#54 triage] no visible targets — every spawned cube "
-                "was hidden.  Pick a different --seed or lower "
-                "--n-hidden so the visible-only triage can run."
-            )
-        chosen_target = random.choice(visible_targets)
-        print(f"[#54 triage] limiting tray-stack to single visible "
-              f"target (no sense): {chosen_target}")
-        stack_target_objects = [chosen_target]
-        # Visible target → record its boxel for obj_at_boxel emission.
-        for boxel in registry.boxels.values():
-            if boxel.object_name == chosen_target:
-                visible_target_locations[chosen_target] = boxel.id
-                break
+        # Visible targets get an obj_at_boxel fact so the planner can pick
+        # them directly; hidden ones stay unknown until a sense action
+        # uncovers them.
+        for tname in stack_target_objects:
+            if tname in target_to_shadow:
+                continue
+            for boxel in registry.boxels.values():
+                if boxel.object_name == tname:
+                    visible_target_locations[tname] = boxel.id
+                    break
         goal = build_tray_stack_goal(stack_target_objects, tray_obj)
         # target_name is consumed by belief / sense / pick logging.  Use
         # the cube anchored on the tray (goal[1] is the (on c_0 tray)
@@ -927,7 +907,11 @@ def main(gui=True, run_logger=None, scene_config=None,
             current_config=current_config,
             known_empty_shadows=known_empty,
             moved_occluders=dict(belief.occluders_moved),
-            max_time=120.0,
+            max_time=1800.0,  # audit #54 follow-up — bumped from 120 s; the
+                              # find-and-tray-stack 1-cube hidden run gave up at
+                              # 45 s on adaptive-search exhaustion under the
+                              # 120 s cap, so more rope lets the sampler retry
+                              # more skeletons / stream samples.
             verbose=False,
             visible_target_locations=visible_target_locations,
             # on/clear facts only emitted into init when stackable
