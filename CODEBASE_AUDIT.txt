@@ -320,6 +320,44 @@ Added:        2026-05-07 (later) — #53 (TIER 0 diagnostic — trim
               "only path to passing"; if it also fails, the size-
               compat FOR LATER bullet promotes to fix-this status).
               Open count: 4 -> 5.
+Updated:      2026-05-07 (later) — #53 marked [DONE 2026-05-07].
+              Diagnostic slice landed in test_full_pipeline.py
+              find-and-tray-stack branch (commit 4d7fa37); WSL run
+              logs/run_2026-05-07_21-26-18 read off the triage
+              signal: 1-CUBE TRAY-STACK ALSO FAILS.  Slice fired
+              correctly — chose hidden target cyan_object, goal AST
+              collapsed to ('and', ('on', 'cyan_object', 'tray'))
+              (the smallest possible shape).  Planner returned NO
+              PLAN after a single 45.87 s attempt; exit_reason
+              "planner_failed", plan_count 1.  Implications for the
+              gate logic in #53's "Outcomes inform the next steps"
+              block:
+                - Hypothesis (a) goal-AST length: REJECTED.  The
+                  1-clause goal is the floor; cap-N on
+                  build_tray_stack_goal is NOT the fix.
+                - Hypothesis (b) size-compat: NOT the diagnosis
+                  either, at least not on its own — the 1-cube tray
+                  goal never invokes cube-on-cube stacking (the cube
+                  drops into the tray cavity per
+                  compute_stack_kin_solution + #49 commit 3/4), so
+                  the big-on-small footprint check would fire on
+                  zero stacking operations.  The size-compat FOR
+                  LATER bullet does NOT auto-promote.
+                - The "or another deeper issue" branch is the live
+                  one.  #52's full big-base/small-target redesign
+                  proceeds as the recommended path; understanding
+                  WHY the 1-cube tray goal failed (sense
+                  precondition?  stack-into-cavity stream sampling?
+                  single (Boxel tray) pose vs. the move action?)
+                  is a separate sub-investigation that can fold
+                  into #50 (planner perf / hotspot hunt) or stay
+                  out of scope if #52 succeeds without it.
+              No domain / verifier changes from the slice itself.
+              Slice itself is "intentionally temporary" per the
+              issue body — left in place pending #52 lands and the
+              tray goal's role is settled (revert, --tray-stack-cap
+              N flag, or audit-history note).  py_compile clean.
+              Open count: 5 -> 4.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -405,7 +443,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #50, #52, #53                                         #
+#  OPEN ISSUES — #9, #10, #50, #52                                              #
 #                                                                              #
 ################################################################################
 
@@ -418,7 +456,7 @@ Pre-evaluation (intended order before the eval sweep):
     → #41 [DONE 2026-05-07] (on_table) + #48 [DONE 2026-05-07] (clear on_relations[X])
     → #36 [DONE 2026-05-07] (hardcoded place/stack lift)
     → #49 [DONE 2026-05-07] (tray goal)
-    → #53 (TIER 0 diagnostic triage — 1-cube tray-stack)
+    → #53 [DONE 2026-05-07] (TIER 0 diagnostic triage — 1-cube tray-stack)
     → #52 (TIER 0 demo goal — find-and-stack-on-base) → #50 (planner perf)
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
@@ -736,7 +774,7 @@ Related: #49 [DONE] — find-and-tray-stack; this issue is the user-
 
 
 ================================================================================
-#53. DIAGNOSTIC — TRIM --goal find-and-tray-stack TO 1 TARGET FOR TRIAGE
+#53. DIAGNOSTIC — TRIM --goal find-and-tray-stack TO 1 TARGET FOR TRIAGE [DONE 2026-05-07]
 ================================================================================
 Priority: TIER 0 — User-prioritised 2026-05-07 (post-#52).  Cheap triage
           step to disambiguate the failure mode of #49 before committing
@@ -877,13 +915,15 @@ follow the tier / roadmap ordering, not the lowest open number.
 Each issue is ideally one commit; parallelise where dependencies allow.
 
 TIER 0 — TOP PRIORITY (user-prioritised 2026-05-07):
-  #53  diagnostic triage — cap find-and-tray-stack at 1 target;
-       gates #52 (if 1-cube run also fails, size-compat gap is
-       confirmed and #52 is the right path; if it succeeds, #49
-       is salvageable via cap-N and #52 is "nicer" not "necessary")
+  (#53 [DONE 2026-05-07] — diagnostic slice landed; WSL run
+   logs/run_2026-05-07_21-26-18 confirms 1-cube tray-stack ALSO
+   fails (planner_failed, 45.87 s, single attempt).  Triage rules
+   out goal-AST length AND size-compat; "deeper issue" branch is
+   live.  Awaiting archive slim.)
   #52  find-and-stack-on-base demo goal (simplified replacement for
        --goal find-and-tray-stack as the default thesis demo;
-       sidesteps size-compat gap by setup convention)
+       proceeds as the recommended path independently of the deeper
+       tray-goal issue surfaced by #53)
 
 TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
   (empty — #41 [DONE 2026-05-07], #48 [DONE 2026-05-07]; stack-
@@ -898,11 +938,14 @@ TIER 3 — EVALUATION (runner #9, then baseline #10):
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
 
-Total open: 5 items (#9, #10, #50, #52, #53).
+Total open: 4 items (#9, #10, #50, #52).
 
 Closed since previous summary:
-  (none — #31 / #36 / #41 / #48 / #49 archived in 2026-05-07 slim;
-   see archive/CODEBASE_AUDIT_RESOLVED.txt "2026-05-07 SLIM ADDITIONS".)
+  #53 [DONE 2026-05-07] — TIER 0 diagnostic slice landed; WSL run
+       2026-05-07 21:26 confirms 1-cube tray-stack also fails
+       (45.87 s, no plan).  Rules out goal-AST length AND size-
+       compat; #52 proceeds as the recommended path.  Awaiting
+       archive slim.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
