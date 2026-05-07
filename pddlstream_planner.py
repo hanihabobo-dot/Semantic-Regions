@@ -466,9 +466,13 @@ class PDDLStreamPlanner:
         # emitted, so pick's (obj_at_boxel ?o ?b) precondition is
         # unsatisfiable for the tray => implicitly unpickable.
         # (clear tray) and (on_table tray) emerge from the all_obj_ids
-        # loop further down.
+        # loop further down.  (Boxel tray) is required so the move
+        # action's (Boxel ?b) precondition is satisfied when the
+        # destination is the tray (compute-stack-kin certifies
+        # (config_for_boxel ?q tray)).
         if self.tray_name is not None:
             init.append(('Obj', self.tray_name))
+            init.append(('Boxel', self.tray_name))
             init.append(('is_tray', self.tray_name))
 
         for tgt, boxel_id in visible_target_locations.items():
