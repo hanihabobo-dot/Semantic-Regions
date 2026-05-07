@@ -42,6 +42,12 @@ Contents of this file:
     eval tooling (#9) filters gave-up cases as failures.  Principled
     "belief reflects observation" correctness story forfeit; empirical
     results unaffected.  See section "#47" below and THESIS_NOTES.md §18.
+  - DEFERRED (#51, 2026-05-07): stale shadow blocker from parent-relationship
+    fallback in compute_shadow_blockers.  A fix landed on main and was reverted
+    per user decision; the reverted work (hit_pos filter + slab-method outside-
+    shadow gate, plus regression tests in tests/test_audit_51_blocker.py) is
+    preserved on branch audit-51-shadow-blocker-fix on both github and origin.
+    Re-open by cherry-picking the branch.  See section "#51" below.
 
 ================================================================================
 56. DEAD COMPUTATION — POINT CLOUD AND NEIGHBORS NEVER USED  [PARTIALLY DONE, DEFERRED]
@@ -898,4 +904,158 @@ Related: archive resolved #21 (this issue's enabling pre-fix; the
          #79 (home-retract before sense, also commented out),
          archive resolved #78(c) (3-strike give-up historical context),
          THESIS_NOTES.md §18 (accepted simplification framing).
+
+
+================================================================================
+#51. STALE SHADOW BLOCKER FROM PARENT-RELATIONSHIP FALLBACK AFTER OCCLUDER RELOCATION  [DEFERRED 2026-05-07]
+================================================================================
+Source:   CODEBASE_AUDIT.txt (formerly TIER 0 open; deferred 2026-05-07).
+Archived: 2026-05-07 — moved here in the same-day slim that landed the
+          deferral.
+
+Priority: TIER 0 (proposed) — Symbolic-state correctness.  Sense becomes
+          impossible for any shadow whose creating occluder has been
+          moved aside, even when the camera can clearly see the shadow.
+          User-discovered 2026-05-07 in GUI run.
+
+Status (2026-05-07): DEFERRED.  A fix landed on main and was reverted
+          per user decision.  The reverted work (compute_shadow_blockers
+          hit_pos filter on the primary 5x5 ray batch, plus a slab-
+          method outside-shadow gate on the parent-relationship
+          fallback, plus regression tests in
+          tests/test_audit_51_blocker.py) is preserved on branch
+          audit-51-shadow-blocker-fix on both github and origin.
+          Investigation log (logs/run_2026-05-07_09-33-49) showed the
+          actual failure mode is broader than this entry first
+          described: the user observed sense executing 3x and looping
+          on still_blocked rather than the planner refusing to emit
+          sense.  Both the primary 5x5 ray batch (when the relocated
+          body overlaps the shadow's stale AABB on its far side) AND
+          the parent-relationship fallback (when the body is past the
+          shadow entirely) can produce the bug.  Re-open if a future
+          decision wants to revisit; the branch contains the full fix
+          + tests ready to cherry-pick.
+Where:    execution.py compute_shadow_blockers (~lines 207-216, the
+          parent-relationship fallback);
+          pddlstream_planner.py _build_init (consumes the map and
+          emits blocks_view_at facts);
+          pddl/domain_pddlstream.pddl (derives blocks_view ->
+          view_blocked -> view_clear from blocks_view_at +
+          obj_at_boxel).
+Depends:  None.  Distinct from #47 (still_blocked runtime detection,
+          DEFERRED OUT OF SCOPE 2026-05-06) — that issue was about
+          the sense action's own raycast disagreeing with planner
+          symbolic state for a stationary object.  THIS issue is
+          about the planner-side symbolic state being wrong because
+          the blocker-recomputation function force-adds a stale
+          creator when the 5x5 raycast correctly returns empty.
+Effort:   <0.5 day (one-line gate inside the fallback) + 0.5 day
+          smoke testing across post-place / post-pick scenarios.
+
+What:  Observed 2026-05-07 in the GUI: orange_object had been picked
+       and placed out of the way of shadow_of_orange_object; the
+       shadow was clearly visible from the camera (no occluder
+       between them); but the planner continued to treat the shadow
+       as view_blocked and would not emit a sense action.
+
+       Root cause — execution.py compute_shadow_blockers parent-
+       relationship fallback (~lines 207-216):
+
+         # Parent-relationship fallback: if raycasting found nothing
+         # for this shadow but we know the creating occluder, add it.
+         # The creator is by construction the geometry that cast the
+         # shadow, so it remains a valid blocker until either (a) it
+         # is moved or (b) the shadow itself is removed.  We re-
+         # confirm it is still an OBJECT in the registry to avoid
+         # resurrecting stale links.
+         if not blocker_set and sb.created_by_boxel_id:
+             creator = registry.get_boxel(sb.created_by_boxel_id)
+             if creator is not None:
+                 blocker_set.add(sb.created_by_boxel_id)
+
+       The fallback was introduced for the "geometry skew" case
+       (yellow <-> shadow_of_yellow_object) where the 5x5 ray grid
+       grazes the creator's AABB along a shared face and misreports
+       view_clear.  It now fires unconditionally whenever
+       blocker_set is empty — INCLUDING the post-relocation case,
+       where the rays are CORRECTLY clear because the creator has
+       been moved out of the corridor.  The comment lists "(a) it is
+       moved" as a termination condition, but the code does not
+       actually check.
+
+       Effect on the symbolic plan:
+       (a) compute_shadow_blockers returns shadow_of_X -> [X] even
+           when X is no longer in the corridor.
+       (b) pddlstream_planner._build_init emits
+           (blocks_view_at X X shadow_of_X).
+       (c) Combined with (obj_at_boxel X X), the derived
+           (blocks_view X shadow_of_X) is true.
+       (d) (view_blocked shadow_of_X) is true; (view_clear ...) is
+           false; sense's precondition fails; planner cannot
+           progress past the visible-but-symbolically-blocked
+           shadow.
+       (e) Holding-goal / stack-goal / tray-goal runs that REQUIRE
+           sensing X to confirm presence in the cleared corridor
+           will fall back to the still_blocked path or fail.
+
+Fix:   ONE COMMIT — gate the fallback on "creator is geometrically
+       still in the corridor":
+       (a) Replace the unconditional creator-add with an explicit
+           geometric check: cast a coarse ray (or the existing
+           ray batch's hit list) against the creator's CURRENT
+           AABB; only add the creator as a blocker if at least one
+           ray now intersects it.  This restores the original
+           geometry-skew use case (creator hasn't moved, AABB still
+           adjacent to the shadow face -> ray AABB-intersection
+           still positive) without resurrecting moved creators.
+       (b) Or: drop the fallback entirely and increase primary ray
+           density (e.g. 7x7 + corner rays) so the geometry-skew
+           case is caught by the primary check.  Pro: single code
+           path.  Con: ~2x rays per shadow per refresh.
+       (c) Or: keep the fallback but limit it to "creator has not
+           moved since shadow was cast" — track a creator-pose
+           snapshot at shadow creation and only fire when the pose
+           is unchanged within epsilon.  Pro: zero geometry rework.
+           Con: extra bookkeeping in BoxelRegistry.
+
+       Recommended: (a).  Smallest diff, addresses the observed bug
+       directly, no new state.  The shared-face skew case is by
+       definition a creator that has NOT moved — its AABB is still
+       adjacent to the shadow — so the AABB-intersection retest
+       still flags it as a blocker.
+
+       Smoke test plan:
+       - Default scene, --goal holding red_object: sense red after
+         a pick of green_object that clears the corridor.  Pre-fix:
+         shadow stays "blocked" by green's stale entry.  Post-fix:
+         shadow goes view_clear; sense fires.
+       - The yellow <-> shadow_of_yellow_object case from the
+         original fallback motivation: confirm yellow is still
+         listed as a blocker when it has not moved (regression
+         guard for the fallback's original use case).
+
+Related: #4  [archive RESOLVED] — accepted stale shadow AABBs after
+              occluder relocation.  #51 is the symbolic-state twin:
+              shadow geometry is stale (#4 accepted), AND the
+              blocker map is stale (#51 — fixable).  #4 is about
+              the shadow boxel itself; #51 is about which objects
+              are reported as blocking it.
+         #21 [archive RESOLVED] — log-only band-aid distinguishing
+              "observed-empty" from "blocked-unresolved" sense
+              outcomes.  #51 reduces how often #21's give-up path
+              is hit because sense will succeed in cases that are
+              currently mislabelled as blocked.
+         #47 [archive DEFERRED OUT OF SCOPE] — runtime sense-side
+              still_blocked correctness.  Different bug; #51 is
+              planner-side symbolic state, #47 was sense-action
+              runtime detection.  #51 fix does not depend on #47
+              and does not revive its scope.
+         #73 [archive RESOLVED] — original blocks_view_at staleness
+              fix; rebuilt the map after every place.  #51 is a
+              residual bug in the rebuild logic itself.
+         #78 [archive] — many-blockers refactor that introduced
+              compute_shadow_blockers and the 5x5 ray grid; the
+              parent-relationship fallback was added in the same
+              change for the geometry-skew case.
+
 
