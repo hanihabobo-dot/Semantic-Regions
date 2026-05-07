@@ -270,6 +270,9 @@ def is_path_collision_free(robot_id: int, q_start, q_end,
         q_end:           End joint positions (array-like, length 7).
         physics_client:  PyBullet physics client ID.
         n_checks:        Number of intermediate configurations to test.
+                         Default 8 matches BoxelStreams.RRT_EDGE_CHECKS —
+                         see the RRT-Connect parameter block in streams.py
+                         for the empirical-tuning rationale.
         ignored_bodies:  Optional set/frozenset of body IDs to skip.
         allow_gripper_collisions: If True, exempt gripper/wrist links
             from environment collision reporting (same as in

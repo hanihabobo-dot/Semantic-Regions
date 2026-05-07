@@ -190,6 +190,10 @@ class BoxelRegistry:
         if obj_boxel is not None:
             obj_boxel.min_corner = np.asarray(placed_min, dtype=float)
             obj_boxel.max_corner = np.asarray(placed_max, dtype=float)
+            # 0.01 m (1 cm) tolerance accommodates PyBullet contact
+            # margin + AABB rounding — same convention used in
+            # execution.release_held_object_in_place and
+            # boxel_env.annotate_free_space_surface.
             obj_boxel.on_surface = (
                 "table" if placed_min[2] <= table_surface_height + 0.01 else None
             )

@@ -46,6 +46,11 @@ def reboxelize_free_space(registry: BoxelRegistry, env, boxel_centers: dict,
     fresh_cells = env.generate_free_space(known_obstacles, visualize=False)
     merged = merge_free_space_cells(fresh_cells)
 
+    # 1e-4 m (0.1 mm) AABB-equality tolerance — same FP-noise budget as
+    # CellMerger.tolerance.  Anything tighter would falsely classify
+    # numerically-equivalent boxels as new (forcing pointless removal +
+    # re-add cycles); anything looser risks merging boxels that should
+    # actually be split.
     _tol = 1e-4
     old_matched: Set[str] = set()
     new_unmatched: List[BoxelData] = []
