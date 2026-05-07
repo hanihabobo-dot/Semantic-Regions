@@ -148,7 +148,7 @@ def _verify_cube_on(env, obj_name, support_name, eps_z=0.005):
     return True, ""
 
 
-def _verify_holding(env, target_name, grasp_constraint_id, lift_eps=0.005):
+def _verify_holding(env, target_name, grasp_constraint_id):
     """
     Physics check that ``target_name`` is currently welded to the
     end-effector (audit S-18 — the holding-goal twin of
@@ -164,9 +164,27 @@ def _verify_holding(env, target_name, grasp_constraint_id, lift_eps=0.005):
       1. There is an active grasp constraint.
       2. The constraint's child body (``bodyB``, info index 2 — same
          convention used in ``execute_place``) is the target body.
-      3. The target's AABB bottom sits clearly above the table
-         surface (lift_eps default 5 mm — matches audit #40's
-         on-stack tolerance).
+
+    Both checks together are a hard physics guarantee: a
+    ``JOINT_FIXED`` constraint linking the EE link to the target
+    body welds them rigidly until ``removeConstraint`` is called,
+    so any active constraint with ``bodyB == target_body`` means
+    the gripper is genuinely holding the target.
+
+    NOTE on the dropped lift-above-table check (audit #36): an
+    earlier revision also required ``target.AABB_min.z > table_z +
+    5 mm``.  That contradicts the post-2026-04-22 execute_pick
+    refactor, which intentionally terminates at the contact pose
+    with the cube hovering at table height — the lift is supposed
+    to come from the next planned ``move`` action's plan_motion.
+    When ``pick`` is the LAST action of the plan (the typical
+    terminal ``(holding ?o)`` goal) there is no follow-on move, so
+    the cube legitimately sits at ``table_z`` and the old check
+    false-failed every terminal-pick run.  See
+    ``CODEBASE_AUDIT.txt#36`` for the design rationale; the
+    optional cosmetic post-pick lift listed there (#36(d)) would
+    paper over the visual weirdness but is not required for
+    correctness.
 
     Returns:
         (ok, reason) — reason is "" on success, a short
@@ -183,12 +201,6 @@ def _verify_holding(env, target_name, grasp_constraint_id, lift_eps=0.005):
     if cstr_body != target_body:
         return False, (f"grasp constraint bodyB={cstr_body} ≠ "
                        f"target body={target_body} ('{target_name}')")
-    a_min, _ = p.getAABB(target_body)
-    table_z = env.table_surface_height
-    if a_min[2] < table_z + lift_eps:
-        return False, (f"target bottom_z={a_min[2]:.4f} not lifted "
-                       f"above table top_z={table_z:.4f} "
-                       f"(Δ={a_min[2] - table_z:.4f} < ε={lift_eps})")
     return True, ""
 
 
