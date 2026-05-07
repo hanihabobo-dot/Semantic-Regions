@@ -140,6 +140,32 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
     return "clear_but_empty", 0.0, set()
 
 
+def _segment_aabb_t_enter(origin: np.ndarray, endpoint: np.ndarray,
+                           aabb_min: np.ndarray, aabb_max: np.ndarray):
+    """
+    Slab-method intersection: return t in [0, 1] of the entry point of
+    the segment origin->endpoint into the AABB, or None if the segment
+    does not intersect.  Mirrors PDDLStreamPlanner._ray_aabb_intersects
+    but returns the entry parameter so audit #51's parent-relationship
+    fallback can locate the entry point in world coordinates and check
+    whether it falls inside or outside the shadow's AABB.
+    """
+    direction = endpoint - origin
+    with np.errstate(divide='ignore', invalid='ignore'):
+        inv_dir = np.where(
+            np.abs(direction) > 1e-10,
+            1.0 / direction,
+            np.copysign(1e10, direction),
+        )
+    t1 = (aabb_min - origin) * inv_dir
+    t2 = (aabb_max - origin) * inv_dir
+    t_enter = np.max(np.minimum(t1, t2))
+    t_exit = np.min(np.maximum(t1, t2))
+    if t_enter > t_exit or t_exit <= 0.0 or t_enter >= 1.0:
+        return None
+    return float(max(0.0, t_enter))
+
+
 def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
     """
     For each shadow, find ALL object boxels that block the camera's view.
@@ -210,20 +236,52 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
                 ray_tos.append([float(xi), float(yi), float(z_mid)])
 
         results = p.rayTestBatch(ray_froms, ray_tos)
-        for hit_id, _link, _frac, _pos, _normal in results:
+        shadow_min = np.asarray(min_c, dtype=float)
+        shadow_max = np.asarray(max_c, dtype=float)
+        for hit_id, _link, _frac, hit_pos, _normal in results:
             if hit_id in pybullet_to_boxel:
-                blocker_set.add(pybullet_to_boxel[hit_id])
+                # A hit INSIDE the shadow's AABB means the body has
+                # migrated into the shadow region (e.g. orange relocated
+                # to a free boxel that overlaps shadow_of_orange's stale
+                # AABB on its far side, audit #4 + #51).  That is a
+                # contains_nontarget discovery for sense — NOT a corridor
+                # blocker.  Listing it here would put its body_id in
+                # occluder_pybullet_ids at sense time and rays that hit
+                # it inside the shadow would loop on still_blocked.
+                hp = np.asarray(hit_pos, dtype=float)
+                if not (np.all(hp >= shadow_min) and np.all(hp <= shadow_max)):
+                    blocker_set.add(pybullet_to_boxel[hit_id])
 
-        # Parent-relationship fallback: if raycasting found nothing for
-        # this shadow but we know the creating occluder, add it.  The
-        # creator is by construction the geometry that cast the shadow,
-        # so it remains a valid blocker until either (a) it is moved or
-        # (b) the shadow itself is removed.  We re-confirm it is still
-        # an OBJECT in the registry to avoid resurrecting stale links.
+        # Parent-relationship fallback: rayTestBatch can graze the
+        # creator's AABB along a shared face (yellow <-> shadow_of_
+        # yellow_object) and miss it.  Re-test the creator geometrically
+        # against its CURRENT AABB and only add it when a ray segment
+        # enters that AABB at a point OUTSIDE the shadow.  An inside-
+        # shadow entry would mean the creator has migrated into the
+        # shadow corridor — same gate as the primary loop above.
+        # Without this gate, creators that have been picked and placed
+        # elsewhere stay listed as blockers and sense loops on
+        # still_blocked (audit #51).
         if not blocker_set and sb.created_by_boxel_id:
             creator = registry.get_boxel(sb.created_by_boxel_id)
-            if creator is not None:
-                blocker_set.add(sb.created_by_boxel_id)
+            if (creator is not None
+                    and creator.object_name is not None
+                    and creator.object_name in env.objects):
+                creator_body = env.objects[creator.object_name].object_id
+                c_min, c_max = p.getAABB(creator_body)
+                c_min = np.asarray(c_min, dtype=float)
+                c_max = np.asarray(c_max, dtype=float)
+                for ro_l, rt_l in zip(ray_froms, ray_tos):
+                    ro = np.asarray(ro_l, dtype=float)
+                    rt = np.asarray(rt_l, dtype=float)
+                    t_enter = _segment_aabb_t_enter(ro, rt, c_min, c_max)
+                    if t_enter is None:
+                        continue
+                    entry = ro + t_enter * (rt - ro)
+                    if not (np.all(entry >= shadow_min)
+                            and np.all(entry <= shadow_max)):
+                        blocker_set.add(sb.created_by_boxel_id)
+                        break
 
         blockers[shadow_id] = list(blocker_set)
 
