@@ -271,6 +271,24 @@ Updated:      2026-05-07 (later) — #49 commit 4/4 landed (--goal find-
               scenes (audit step f) deferred to next WSL session.
               #49 [DONE 2026-05-07].  Open count: 4 -> 3.  TIER 2
               reduces to #50 alone.
+Updated:      2026-05-07 (later) — #49 hotfix: exclude is_tray=True
+              from all_targets in test_full_pipeline.py main().  First
+              WSL run of --goal find-and-tray-stack on default_scene
+              produced (and (on cyan tray) (on blue cyan) (on yellow
+              blue) (on tray yellow) (on purple tray)) — the (on tray
+              yellow) clause is geometric nonsense (the tray is fixed-
+              base) and the planner returned no plan after 46s.  Root
+              cause: the all_targets filter dropped is_occluder /
+              plane / table / robot but NOT is_tray, so the tray
+              leaked into stack_target_objects and the build_tray_-
+              stack_goal shuffle landed it mid-chain.  One-line fix
+              at the source ("not info.is_tray" added to the filter)
+              — no behaviour change on enable_tray=False runs (the
+              tray never spawns), and removes the same latent bug
+              from the holding / stack branches if either is run
+              with enable_tray=True manually.  py_compile clean.
+              #49 stays [DONE 2026-05-07] — hotfix is a follow-up
+              within the same audit, not a new audit item.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
