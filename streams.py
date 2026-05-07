@@ -156,7 +156,8 @@ class BoxelStreams:
     Stream call order during planning:
       1. sample_grasp(obj)          -> "how to grab this object?"
       2. compute_kin_solution(obj, boxel, grasp) -> "what joint angles reach it?"
-         (or compute_stack_kin_solution(obj, on_obj, grasp) for stack actions)
+         (or compute_stack_kin_solution(obj, on_obj, p_on, grasp) for stack —
+         pose-aware since audit #55)
       3. plan_motion(q1, q2)        -> "collision-free path between configs?"
 
     The ignored_body_ids field threads through all three: compute_kin_solution
@@ -999,32 +1000,49 @@ class BoxelStreams:
                          boxel_id, target_pos.tolist())
 
     # =========================================================================
-    # STREAM 4: Compute IK for Stack  (audit #30)
+    # STREAM 4: Compute IK for Stack  (audit #30; pose-aware refactor in #55)
     # =========================================================================
-    # Like compute_kin_solution but the EE target is derived from
-    # ?on_obj's CURRENT AABB rather than a precomputed boxel center,
-    # so a stack built across a multi-step plan keeps targeting the
-    # running stack height rather than the support's spawn pose.
+    # The EE target is derived from the SUPPORT'S SYMBOLIC POSE (?p_on)
+    # passed in as a SymbolicPose argument.  ?p_on flows from (at_pose
+    # ?on_obj ?p_on) in the planner's symbolic state, which the stack
+    # action's effect updates each time a stack lands — so stack(B, A)
+    # at the second tier of a tower correctly targets A's destination
+    # on the lower support, not A's pre-stack pose.  Replaces the old
+    # getAABB(?on_obj) read (audit #55 root cause for find-and-tray-
+    # stack failure on default scene, 2026-05-07).
     #
-    # Reuses the same IK seed loop, dedup, and ignored-body convention as
-    # compute_kin_solution; the only differences are the target-pose
-    # derivation and the config name prefix.
-    def compute_stack_kin_solution(self, obj_id: str, on_obj_id: str,
-                                   grasp: Grasp) -> Iterator[Tuple[RobotConfig]]:
+    # Reuses the same IK seed loop, dedup, and ignored-body convention
+    # as compute_kin_solution; the only differences are the target-pose
+    # derivation, the config name prefix, and an additional ?p_new
+    # output (the held cube's resulting pose) so subsequent stacks can
+    # read it through (at_pose ?o ?p_new).
+    def compute_stack_kin_solution(
+            self, obj_id: str, on_obj_id: str,
+            on_obj_pose: 'SymbolicPose',
+            grasp: Grasp
+    ) -> Iterator[Tuple['SymbolicPose', RobotConfig]]:
         """
         IK to release the held ``obj_id`` on top of ``on_obj_id``.
 
-        Pose derivation: read ``on_obj_id``'s current AABB from PyBullet
-        (falling back to its registry boxel) and compute the EE z so the
-        held object's bottom face rests on the support's top face:
+        Pose derivation: read ``on_obj_pose`` (a ``SymbolicPose`` flowing
+        from ``(at_pose ?on_obj ?p_on)``) and compute the EE z so the
+        held object's bottom face rests on the support's top face::
 
-            ee_target.xy = on_obj_top.xy + grasp.position[:2]
-            ee_target.z  = on_obj_top.z + held_half_height + grasp.position[2]
+            ee_target.xy = on_obj_pose.xy + grasp.position[:2]
+            ee_target.z  = on_obj_pose.top_z + held_half_height
+                            + grasp.position[2]
 
         ``held_half_height`` comes from the held object's registry boxel
         (compute_kin_solution sized it from the AABB at scan time).
 
-        Certifies (Config ?q), (stack_kin ?o ?on_obj ?g ?q), and
+        Mints a fresh ``SymbolicPose`` ``new_pose`` describing the held
+        cube's resulting pose AFTER stacking — top face at
+        ``on_obj_pose.top_z + held_full_height``, xy and orientation
+        inherited.  The stack action's effect adds (at_pose ?o ?p_new)
+        so subsequent stacks read this pose via (at_pose ?on_obj ?p_on).
+
+        Certifies (Pose ?p_new), (Config ?q),
+        (stack_kin ?o ?on_obj ?p_on ?p_new ?g ?q), and
         (config_for_boxel ?q ?on_obj) — the last so the preceding move
         action can deliver the arm to the support's OBJECT boxel.
         """
@@ -1033,25 +1051,8 @@ class BoxelStreams:
             return
         held_half_height = float(held_boxel.extent[2])
 
-        on_body_id = self._resolve_body_id(on_obj_id)
-        top_z: Optional[float] = None
-        if on_body_id is not None:
-            try:
-                aabb_min, aabb_max = p.getAABB(on_body_id,
-                                               physicsClientId=self.physics_client)
-                top_z = float(aabb_max[2])
-                cx = (aabb_min[0] + aabb_max[0]) / 2.0
-                cy = (aabb_min[1] + aabb_max[1]) / 2.0
-            except Exception:
-                top_z = None
-
-        if top_z is None:
-            on_boxel = self.registry.get_boxel(on_obj_id)
-            if on_boxel is None:
-                return
-            top_z = float(on_boxel.max_corner[2])
-            cx, cy, _ = on_boxel.center.tolist()
-
+        cx, cy = on_obj_pose.xy
+        top_z = float(on_obj_pose.top_z)
         target_obj_pos = np.array([cx, cy, top_z + held_half_height])
         target_pos = target_obj_pos + grasp.position
         ee_orn = grasp.orientation
@@ -1064,6 +1065,10 @@ class BoxelStreams:
             logger.warning("compute_stack_kin: no robot_id — cannot compute IK "
                            "for %s on %s", obj_id, on_obj_id)
             return
+
+        # Resulting top face of the held cube once it lands on ?on_obj —
+        # consumed by any subsequent stack onto ?o via (at_pose).
+        new_top_z = top_z + 2.0 * held_half_height
 
         seen = set()
         yielded = 0
@@ -1079,11 +1084,17 @@ class BoxelStreams:
             config.grasp_ee_offset = grasp.position
             self._config_counter += 1
             config.name = f"q_stack_{obj_id}_on_{on_obj_id}_{self._config_counter}"
+            new_pose = SymbolicPose(
+                name=f"p_stack_{obj_id}_on_{on_obj_id}_{self._config_counter}",
+                xy=on_obj_pose.xy,
+                top_z=new_top_z,
+                quat=on_obj_pose.quat,
+            )
             logger.debug("compute_stack_kin: %s on %s -> %s "
-                         "ee_target=%s seed=%d",
+                         "ee_target=%s new_top_z=%.3f seed=%d",
                          obj_id, on_obj_id, config.name,
-                         target_pos.tolist(), seed_idx)
-            yield (config,)
+                         target_pos.tolist(), new_top_z, seed_idx)
+            yield (new_pose, config)
             yielded += 1
 
         if yielded == 0:

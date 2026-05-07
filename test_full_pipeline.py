@@ -1216,7 +1216,14 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # refresh the OBJECT boxel for the stacked cube to its
                 # post-settle AABB so the next planner.plan() sees the
                 # new stack height (audit #30).
-                obj, on_obj, grasp, config = params
+                #
+                # Audit #55 (Path C): action signature gained ?p_on /
+                # ?p_new symbolic-pose params for the planner-side
+                # moved-support fix.  Execution is unchanged — execute_-
+                # stack reads on_obj's live PyBullet AABB at runtime,
+                # which by definition matches ?p_on; ?p_new is purely
+                # planner-internal, unused at execution.
+                obj, on_obj, p_on, p_new, grasp, config = params
                 obj_str = str(obj)
                 on_obj_str = str(on_obj)
                 print(f"    Stacking {obj_str} on {on_obj_str}...")
