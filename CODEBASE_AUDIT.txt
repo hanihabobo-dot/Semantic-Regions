@@ -241,6 +241,36 @@ Updated:      2026-05-07 (later) — #49 commit 3/4 landed (Boxel tray
               cube-on-cube for the rest of the tower).  py_compile
               clean.  #49 still open — commit 4 (--goal find-and-
               tray-stack + verifier extension + smoke tests) remains.
+Updated:      2026-05-07 (later) — #49 commit 4/4 landed (--goal find-
+              and-tray-stack + verifier extension).  CLI: 'find-and-
+              tray-stack' added to --goal choices in run_logger.py;
+              auto-enables the tray entity in test_full_pipeline.py
+              __main__ regardless of selected scene; --n-hidden > 0
+              now allowed with this goal (sense-side use case
+              symmetric with holding).  Goal builder:
+              build_tray_stack_goal(targets, tray_name) produces (and
+              (on c_0 tray) (on c_1 c_0) ... (on c_{H-1} c_{H-2})) —
+              base-up convention inverted from build_stack_goal
+              because the tray plays the role of the table-anchor (no
+              on_table tray clause emitted; the planner-side init fact
+              already covers it).  main() branch: discovers env tray
+              via ObjectInfo.is_tray, sets visible_target_locations
+              only for VISIBLE targets (hidden ones must be sensed),
+              generalises the 'stack'-only plumbing
+              (planner_target_objects, on_relations /
+              stackable_objects into planner.plan(), per-iteration
+              banner) to include find-and-tray-stack; max_replans =
+              4*shadows + 2*targets + 3.  Verifier: _verify_cube_on
+              now branches on support_info.is_tray — cube settles
+              INSIDE the cavity (not on the wall-top), so bottom-z
+              match becomes a z-range check; XY centre check
+              unchanged; cube-on-cube path bit-identical to pre-#49.
+              py_compile clean; build_tray_stack_goal smoke-tested
+              standalone (1/2/3-target shapes + empty-list ValueError).
+              Manual end-to-end smoke tests on default and scalability
+              scenes (audit step f) deferred to next WSL session.
+              #49 [DONE 2026-05-07].  Open count: 4 -> 3.  TIER 2
+              reduces to #50 alone.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -326,7 +356,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #49, #50                                              #
+#  OPEN ISSUES — #9, #10, #50                                                   #
 #                                                                              #
 ################################################################################
 
@@ -338,7 +368,7 @@ Pre-evaluation (intended order before the eval sweep):
   #31 [DONE 2026-05-07] (comment-quality sweep, absorbs #32)
     → #41 [DONE 2026-05-07] (on_table) + #48 [DONE 2026-05-07] (clear on_relations[X])
     → #36 [DONE 2026-05-07] (hardcoded place/stack lift)
-    → #49 (tray goal) → #50 (planner perf)
+    → #49 [DONE 2026-05-07] (tray goal) → #50 (planner perf)
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
    — user decision; the archived #21 log-only band-aid is the
@@ -739,7 +769,7 @@ Related: #40 (write-side gate; this is the clear-side counterpart),
 
 
 ================================================================================
-#49. NEW GOAL — FIND HIDDEN OBJECTS, THEN STACK ON A TRAY
+#49. NEW GOAL — FIND HIDDEN OBJECTS, THEN STACK ON A TRAY  [DONE 2026-05-07]
 ================================================================================
 Priority: TIER 2 — New evaluation goal mode (user + supervisor 2026-05-06)
 Where:    boxel_env.py (scene construction — add tray entity);
@@ -1020,9 +1050,6 @@ TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
    language correctness pass complete.)
 
 TIER 2 — NEW EVAL GOAL + PERF (added 2026-05-06):
-  #49  Find-hidden-then-stack-on-tray goal mode + tray entity in scene
-       (supervisor-requested new goal; ties #11 baseline and #12 scalability
-       to a concrete place-down task)
   #50  Planner perf investigation — profile, cache static init, kill
        redundancies (user-flagged "planner is too slow")
 
@@ -1031,7 +1058,7 @@ TIER 3 — EVALUATION (runner #9, then baseline #10):
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
 
-Total open: 4 items (#9, #10, #49, #50).
+Total open: 3 items (#9, #10, #50).
 
 Closed since previous summary:
   #36 [DONE 2026-05-07] — _apply_post_action_lift helper in
@@ -1041,6 +1068,11 @@ Closed since previous summary:
        through domain / init / goal / verifier; awaits archive slim.
   #48 [DONE 2026-05-07] — on_relations.pop(obj_str, None) in pick
        handler; mirrors PDDL pick conditional effect.
+  #49 [DONE 2026-05-07] — find-hidden-then-stack-on-tray goal landed
+       across 4 commits (tray entity in scene; PDDL is_tray gate;
+       (Boxel tray) init fact; --goal find-and-tray-stack +
+       build_tray_stack_goal + main() branch + tray-aware
+       _verify_cube_on); awaits archive slim.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
