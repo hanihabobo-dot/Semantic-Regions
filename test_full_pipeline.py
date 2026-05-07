@@ -303,8 +303,8 @@ def main(gui=True, run_logger=None, scene_config=None,
     print("=" * 60)
 
     # Echo the run configuration so saved logs are self-documenting:
-    # later baseline-vs-feature comparisons (audit #30 keep/kill) need
-    # to know which flags produced these timings.
+    # later baseline-vs-feature comparisons (e.g. eval runner audit #9)
+    # need to know which flags produced these timings.
     if run_config:
         print("\n--- Run configuration ---")
         for k, v in run_config.items():
@@ -597,8 +597,9 @@ def main(gui=True, run_logger=None, scene_config=None,
     boxel_centers = {b.id: b.center for b in registry.boxels.values()}
 
     plan_count = 0
-    # Per-call planner.plan() durations (audit #30 baseline timing).
-    # The cumulative total is what matters for keep/kill on stack-goal.
+    # Per-call planner.plan() durations.  Captured originally for
+    # audit #30 baseline timing; now consumed by the eval runner
+    # (audit #9) for scalability plots.
     total_plan_time = 0.0
     plan_times = []
     # --- Reactive replanning loop ---
@@ -630,7 +631,8 @@ def main(gui=True, run_logger=None, scene_config=None,
     # not_here so the planner stops re-attempting them.  Track the IDs
     # so the run report can distinguish observed-empty shadows from
     # blocked-unresolved ones (no false "Searched all" claim).  The
-    # real fix is tracked as audit #47 (re-ground blocker atoms).
+    # real fix (re-ground blocker atoms) is audit #47, deferred out of
+    # scope 2026-05-06.
     blocked_giveup_shadows: set = set()
 
     def _loop_done() -> bool:
@@ -1205,8 +1207,8 @@ if __name__ == "__main__":
 
     # Snapshot of effective CLI flags echoed into the per-run log and the
     # JSON timing summary so cross-run comparisons can group by config
-    # (audit #30 keep/kill).  Booleans match the kwargs we hand to main()
-    # rather than the inverted no_* arg names for readability.
+    # (consumed by eval runner audit #9).  Booleans match the kwargs we
+    # hand to main() rather than the inverted no_* arg names for readability.
     run_config = {
         "scene":        args.scene,
         "n_occluders":  args.n_occluders,

@@ -157,9 +157,9 @@ def default_scene() -> SceneConfig:
     Original hardcoded scene (3 occluders, 4 targets, all cubes).
 
     Preserved for backward compatibility and regression testing.
-    Occluder cubes are 0.075 m half-extent (7.5 cm) — graspable by
-    the Panda gripper.  All positions within 0.65 m of robot base
-    (fix #17: shifted -0.4 m in X, sizes halved from original).
+    Occluder cubes are 0.075 m on a side (0.0375 m half-extent) —
+    graspable by the Panda gripper.  All positions within 0.65 m of
+    robot base (fix #17: shifted -0.4 m in X, sizes halved from original).
     """
     return SceneConfig(
         occluders=[
