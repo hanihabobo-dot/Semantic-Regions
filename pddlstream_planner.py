@@ -506,9 +506,15 @@ class PDDLStreamPlanner:
         # destructuring.
         all_obj_ids = {fact[1] for fact in init
                        if len(fact) == 2 and fact[0] == 'Obj'}
+        stacked_objs = set(on_relations.keys())
         for obj_id in all_obj_ids:
             if obj_id not in supports_with_obj_on_top:
                 init.append(('clear', obj_id))
+            # audit #41: a cube not stacked on another cube is
+            # table-resting at planning time.  At a replan boundary
+            # (handempty) is true, so no held cube exists here.
+            if obj_id not in stacked_objs:
+                init.append(('on_table', obj_id))
 
         if stackable_objects is not None:
             for stacked, support in on_relations.items():

@@ -84,14 +84,18 @@ def goal_satisfied(goal, on_relations=None, target_found=False) -> bool:
     Generic goal-predicate evaluator for the orchestration loop (audit #30).
 
     Decoupled from BeliefState because stack goals don't need a belief
-    state at all — there are no shadows.  The two flavours we support:
+    state at all — there are no shadows.  Heads we support:
 
-      ('holding', obj)   — delegates to ``target_found`` (set by the
-                           pick handler / sense outcome).
-      ('on', a, b)       — checked against ``on_relations``, the
-                           planner-side picture of the live stack
-                           maintained by the stack action handler.
-      ('and', g1, g2,..) — conjunction; recurses.
+      ('holding', obj)    — delegates to ``target_found`` (set by the
+                            pick handler / sense outcome).
+      ('on', a, b)        — checked against ``on_relations``, the
+                            planner-side picture of the live stack
+                            maintained by the stack action handler.
+      ('on_table', obj)   — true iff ``obj`` is not a key in
+                            ``on_relations`` (audit #41).  Consulted
+                            only at replan boundaries where (handempty)
+                            holds, so held cubes never confound this.
+      ('and', g1, g2,..)  — conjunction; recurses.
 
     Reading from ``on_relations`` rather than re-deriving from PyBullet
     AABBs each tick avoids races with in-flight settling — by the time
@@ -110,6 +114,12 @@ def goal_satisfied(goal, on_relations=None, target_found=False) -> bool:
     if head == 'on':
         a, b = str(goal[1]), str(goal[2])
         return on_relations.get(a) == b
+    if head == 'on_table':
+        # audit #41 — symbolic mirror.  An object is "on the table" iff
+        # it is not stacked on another cube.  Held objects are absent
+        # from on_relations as keys but goal_satisfied is only consulted
+        # at replan boundaries (handempty), so this is sound.
+        return str(goal[1]) not in on_relations
     return False
 
 
@@ -145,6 +155,27 @@ def _verify_cube_on(env, obj_name, support_name, eps_z=0.005):
                        f"support XY AABB "
                        f"({s_min[0]:.3f}..{s_max[0]:.3f}, "
                        f"{s_min[1]:.3f}..{s_max[1]:.3f})")
+    return True, ""
+
+
+def _verify_on_table(env, obj_name, eps_z=0.005):
+    """
+    Physics check that ``obj_name`` rests on the table top
+    (audit #41).  Counterpart to ``_verify_cube_on``: the cube's
+    bottom z must match ``env.table_surface_height`` within ε.
+
+    Returns:
+        (ok, reason) — reason is "" on success, a short
+        diagnostic on failure.
+    """
+    if obj_name not in env.objects:
+        return False, f"missing body ('{obj_name}' not in env.objects)"
+    o_min, _ = p.getAABB(env.objects[obj_name].object_id)
+    table_z = env.table_surface_height
+    dz = abs(o_min[2] - table_z)
+    if dz > eps_z:
+        return False, (f"bottom_z={o_min[2]:.4f} not ≈ table top_z="
+                       f"{table_z:.4f} (Δ={dz:.4f} > ε={eps_z})")
     return True, ""
 
 
@@ -210,15 +241,17 @@ def _verify_goal_physics(goal, env, grasp_constraint_id=None):
     (audits #40 + S-18).
 
     Heads currently handled:
-      - ``and``      — recurse into sub-clauses
-      - ``on``       — AABB stack check via ``_verify_cube_on``
-      - ``holding``  — gripper-constraint check via
-                       ``_verify_holding`` (requires
-                       ``grasp_constraint_id``)
+      - ``and``       — recurse into sub-clauses
+      - ``on``        — AABB stack check via ``_verify_cube_on``
+      - ``on_table``  — AABB table-rest check via ``_verify_on_table``
+                        (audit #41)
+      - ``holding``   — gripper-constraint check via
+                        ``_verify_holding`` (requires
+                        ``grasp_constraint_id``)
 
-    Other heads (e.g. future predicates like ``on_table``/
-    ``at_config``) trigger a one-line warning so coverage gaps
-    surface in the run log instead of silently passing.
+    Other heads (e.g. future predicates like ``at_config``)
+    trigger a one-line warning so coverage gaps surface in the run
+    log instead of silently passing.
 
     Returns:
         list[str] — human-readable failure descriptions, empty on
@@ -245,6 +278,11 @@ def _verify_goal_physics(goal, env, grasp_constraint_id=None):
         ok, reason = _verify_cube_on(env, a, b)
         if not ok:
             failures.append(f"(on {a} {b}) — {reason}")
+    elif head == 'on_table':
+        x = str(goal[1])
+        ok, reason = _verify_on_table(env, x)
+        if not ok:
+            failures.append(f"(on_table {x}) — {reason}")
     elif head == 'holding':
         x = str(goal[1])
         ok, reason = _verify_holding(env, x, grasp_constraint_id)
@@ -266,11 +304,13 @@ def build_stack_goal(stackable_objects, stack_height, rng=None):
 
     For height H the goal is::
 
-        ('and', ('on', t_1, t_2), ..., ('on', t_{H-1}, t_H))
+        ('and', ('on', t_1, t_2), ..., ('on', t_{H-1}, t_H),
+                ('on_table', t_H))
 
-    where ``t_1`` is the top and ``t_H`` is the base resting on the
-    table.  The base is implicitly table-resting — the domain doesn't
-    represent the table as an object.
+    where ``t_1`` is the top and ``t_H`` is the base.  The
+    ``on_table`` clause (audit #41) makes the table-resting base
+    explicit so the verifier can rule out floating-tower
+    interpretations.
 
     Args:
         stackable_objects: Object IDs the planner may use as cubes.
@@ -300,9 +340,9 @@ def build_stack_goal(stackable_objects, stack_height, rng=None):
 
     pairs = [('on', chosen[i], chosen[i + 1])
              for i in range(stack_height - 1)]
-    if len(pairs) == 1:
-        return pairs[0]
-    return ('and',) + tuple(pairs)
+    base = chosen[-1]                        # t_H — the cube at the bottom
+    clauses = pairs + [('on_table', base)]   # audit #41 — ground the tower
+    return ('and',) + tuple(clauses)
 
 
 def main(gui=True, run_logger=None, scene_config=None,
