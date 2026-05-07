@@ -129,6 +129,13 @@ Slimmed:      2026-05-06 — moved 7 entries to archives:
               Body of each closed issue preserved verbatim under a
               "2026-05-06 SLIM ADDITIONS" section in the archive.
               Open audit shrunk to 8 active items.
+Added:        2026-05-07 — #51 (stale shadow blocker fallback after
+              occluder relocation; user-discovered runtime bug —
+              compute_shadow_blockers parent-relationship fallback
+              wrongly force-adds creator after creator has moved
+              out of corridor; visible shadows symbolically reported
+              as view_blocked; sense action precondition fails).
+              Open count: 8 -> 9.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -214,7 +221,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #31, #36, #41, #48, #49, #50                          #
+#  OPEN ISSUES — #9, #10, #31, #36, #41, #48, #49, #50, #51                     #
 #                                                                              #
 ################################################################################
 
@@ -840,6 +847,137 @@ Related: #9 (experiment runner — needed to gather timing samples),
 
 
 ================================================================================
+#51. STALE SHADOW BLOCKER FROM PARENT-RELATIONSHIP FALLBACK AFTER OCCLUDER RELOCATION
+================================================================================
+Priority: TIER 0 (proposed) — Symbolic-state correctness.  Sense becomes
+          impossible for any shadow whose creating occluder has been
+          moved aside, even when the camera can clearly see the shadow.
+          User-discovered 2026-05-07 in GUI run.
+Where:    execution.py compute_shadow_blockers (~lines 207-216, the
+          parent-relationship fallback);
+          pddlstream_planner.py _build_init (consumes the map and
+          emits blocks_view_at facts);
+          pddl/domain_pddlstream.pddl (derives blocks_view ->
+          view_blocked -> view_clear from blocks_view_at +
+          obj_at_boxel).
+Depends:  None.  Distinct from #47 (still_blocked runtime detection,
+          DEFERRED OUT OF SCOPE 2026-05-06) — that issue was about
+          the sense action's own raycast disagreeing with planner
+          symbolic state for a stationary object.  THIS issue is
+          about the planner-side symbolic state being wrong because
+          the blocker-recomputation function force-adds a stale
+          creator when the 5x5 raycast correctly returns empty.
+Effort:   <0.5 day (one-line gate inside the fallback) + 0.5 day
+          smoke testing across post-place / post-pick scenarios.
+
+What:  Observed 2026-05-07 in the GUI: orange_object had been picked
+       and placed out of the way of shadow_of_orange_object; the
+       shadow was clearly visible from the camera (no occluder
+       between them); but the planner continued to treat the shadow
+       as view_blocked and would not emit a sense action.
+
+       Root cause — execution.py compute_shadow_blockers parent-
+       relationship fallback (~lines 207-216):
+
+         # Parent-relationship fallback: if raycasting found nothing
+         # for this shadow but we know the creating occluder, add it.
+         # The creator is by construction the geometry that cast the
+         # shadow, so it remains a valid blocker until either (a) it
+         # is moved or (b) the shadow itself is removed.  We re-
+         # confirm it is still an OBJECT in the registry to avoid
+         # resurrecting stale links.
+         if not blocker_set and sb.created_by_boxel_id:
+             creator = registry.get_boxel(sb.created_by_boxel_id)
+             if creator is not None:
+                 blocker_set.add(sb.created_by_boxel_id)
+
+       The fallback was introduced for the "geometry skew" case
+       (yellow <-> shadow_of_yellow_object) where the 5x5 ray grid
+       grazes the creator's AABB along a shared face and misreports
+       view_clear.  It now fires unconditionally whenever
+       blocker_set is empty — INCLUDING the post-relocation case,
+       where the rays are CORRECTLY clear because the creator has
+       been moved out of the corridor.  The comment lists "(a) it is
+       moved" as a termination condition, but the code does not
+       actually check.
+
+       Effect on the symbolic plan:
+       (a) compute_shadow_blockers returns shadow_of_X -> [X] even
+           when X is no longer in the corridor.
+       (b) pddlstream_planner._build_init emits
+           (blocks_view_at X X shadow_of_X).
+       (c) Combined with (obj_at_boxel X X), the derived
+           (blocks_view X shadow_of_X) is true.
+       (d) (view_blocked shadow_of_X) is true; (view_clear ...) is
+           false; sense's precondition fails; planner cannot
+           progress past the visible-but-symbolically-blocked
+           shadow.
+       (e) Holding-goal / stack-goal / tray-goal runs that REQUIRE
+           sensing X to confirm presence in the cleared corridor
+           will fall back to the still_blocked path or fail.
+
+Fix:   ONE COMMIT — gate the fallback on "creator is geometrically
+       still in the corridor":
+       (a) Replace the unconditional creator-add with an explicit
+           geometric check: cast a coarse ray (or the existing
+           ray batch's hit list) against the creator's CURRENT
+           AABB; only add the creator as a blocker if at least one
+           ray now intersects it.  This restores the original
+           geometry-skew use case (creator hasn't moved, AABB still
+           adjacent to the shadow face -> ray AABB-intersection
+           still positive) without resurrecting moved creators.
+       (b) Or: drop the fallback entirely and increase primary ray
+           density (e.g. 7x7 + corner rays) so the geometry-skew
+           case is caught by the primary check.  Pro: single code
+           path.  Con: ~2x rays per shadow per refresh.
+       (c) Or: keep the fallback but limit it to "creator has not
+           moved since shadow was cast" — track a creator-pose
+           snapshot at shadow creation and only fire when the pose
+           is unchanged within epsilon.  Pro: zero geometry rework.
+           Con: extra bookkeeping in BoxelRegistry.
+
+       Recommended: (a).  Smallest diff, addresses the observed bug
+       directly, no new state.  The shared-face skew case is by
+       definition a creator that has NOT moved — its AABB is still
+       adjacent to the shadow — so the AABB-intersection retest
+       still flags it as a blocker.
+
+       Smoke test plan:
+       - Default scene, --goal holding red_object: sense red after
+         a pick of green_object that clears the corridor.  Pre-fix:
+         shadow stays "blocked" by green's stale entry.  Post-fix:
+         shadow goes view_clear; sense fires.
+       - The yellow <-> shadow_of_yellow_object case from the
+         original fallback motivation: confirm yellow is still
+         listed as a blocker when it has not moved (regression
+         guard for the fallback's original use case).
+
+Related: #4  [archive RESOLVED] — accepted stale shadow AABBs after
+              occluder relocation.  #51 is the symbolic-state twin:
+              shadow geometry is stale (#4 accepted), AND the
+              blocker map is stale (#51 — fixable).  #4 is about
+              the shadow boxel itself; #51 is about which objects
+              are reported as blocking it.
+         #21 [archive RESOLVED] — log-only band-aid distinguishing
+              "observed-empty" from "blocked-unresolved" sense
+              outcomes.  #51 reduces how often #21's give-up path
+              is hit because sense will succeed in cases that are
+              currently mislabelled as blocked.
+         #47 [archive DEFERRED OUT OF SCOPE] — runtime sense-side
+              still_blocked correctness.  Different bug; #51 is
+              planner-side symbolic state, #47 was sense-action
+              runtime detection.  #51 fix does not depend on #47
+              and does not revive its scope.
+         #73 [archive RESOLVED] — original blocks_view_at staleness
+              fix; rebuilt the map after every place.  #51 is a
+              residual bug in the rebuild logic itself.
+         #78 [archive] — many-blockers refactor that introduced
+              compute_shadow_blockers and the 5x5 ray grid; the
+              parent-relationship fallback was added in the same
+              change for the geometry-skew case.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -899,8 +1037,10 @@ Aligns with the ROADMAP banner above (pre-eval → eval prerequisites → eval).
 Each issue is ideally one commit; parallelise where dependencies allow.
 
 TIER 0 — BEFORE EVAL (correctness):
-  (none — #47 deferred out of scope 2026-05-06; archive #21 log-only
-  band-aid is the accepted level of correctness for the thesis)
+  #51  Stale shadow blocker from parent-relationship fallback
+       (compute_shadow_blockers force-adds creator after relocation;
+       visible shadows symbolically blocked; sense impossible).
+       User-discovered 2026-05-07 in GUI.  <0.5 day fix.
 
 TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
   #31  Code-comment quality sweep (narration + stale drift; absorbs #32)
@@ -933,7 +1073,7 @@ TIER 3 — EVALUATION (runner #9, then baseline #10):
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
 
-Total open: 8 items (#9, #10, #31, #36, #41, #48, #49, #50).
+Total open: 9 items (#9, #10, #31, #36, #41, #48, #49, #50, #51).
 
 Closed since previous summary:
   (none — 2026-05-06 slim moved all freshly-closed entries to the
