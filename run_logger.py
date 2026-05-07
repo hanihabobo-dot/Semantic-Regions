@@ -383,10 +383,13 @@ def parse_pipeline_args(argv=None):
                              'is logged in run_config.')
     parser.add_argument(
         '--goal',
-        choices=['holding', 'stack'],
+        choices=['holding', 'stack', 'find-and-tray-stack'],
         default='holding',
         help="Goal kind. 'holding' picks the (hidden or visible) target; "
-             "'stack' builds a randomised tower of cubes (audit #30).",
+             "'stack' builds a randomised tower of cubes (audit #30); "
+             "'find-and-tray-stack' senses every target then stacks them "
+             "on a tray (audit #49 — auto-enables the tray entity; "
+             "--stack-height ignored, every spawned target is included).",
     )
     parser.add_argument(
         '--stack-height',
@@ -430,11 +433,11 @@ def parse_pipeline_args(argv=None):
                 f"(got --scene {args.scene}). Hidden-target guarantee "
                 f"only applies to the scalability scene."
             )
-        if args.goal != 'holding':
+        if args.goal not in ('holding', 'find-and-tray-stack'):
             parser.error(
                 f"--n-hidden > 0 is only meaningful with --goal holding "
-                f"(got --goal {args.goal}). Stack scenes have no "
-                f"occluders."
+                f"or --goal find-and-tray-stack (got --goal {args.goal}). "
+                f"--goal stack uses an occluder-free scene by default."
             )
         if args.n_occluders < 1:
             parser.error(
