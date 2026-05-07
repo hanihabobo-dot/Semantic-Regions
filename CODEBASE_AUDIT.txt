@@ -148,6 +148,16 @@ Updated:      2026-05-07 (later) — #31 marked [DONE 2026-05-07].
               keep/kill" parentheticals (decided WONTFIX 2026-05-06);
               missing newer streams in module/class docstrings.
               Open count: 9 -> 8.
+Updated:      2026-05-07 (later) — Marked #51 [DEFERRED 2026-05-07]
+              per user decision.  A fix attempt was committed to main
+              (compute_shadow_blockers hit_pos filter on the primary
+              5x5 ray batch + slab-method outside-shadow gate on the
+              parent-relationship fallback, regression tests in
+              tests/test_audit_51_blocker.py covering both bug paths
+              and the geometry-skew regression) and then reverted.
+              Work preserved on branch audit-51-shadow-blocker-fix
+              (pushed to both github and origin) for later revisit.
+              Open count: 8 -> 7.  TIER 0 again empty.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -233,7 +243,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #36, #41, #48, #49, #50, #51                          #
+#  OPEN ISSUES — #9, #10, #36, #41, #48, #49, #50                               #
 #                                                                              #
 ################################################################################
 
@@ -859,12 +869,30 @@ Related: #9 (experiment runner — needed to gather timing samples),
 
 
 ================================================================================
-#51. STALE SHADOW BLOCKER FROM PARENT-RELATIONSHIP FALLBACK AFTER OCCLUDER RELOCATION
+#51. STALE SHADOW BLOCKER FROM PARENT-RELATIONSHIP FALLBACK AFTER OCCLUDER RELOCATION  [DEFERRED 2026-05-07]
 ================================================================================
 Priority: TIER 0 (proposed) — Symbolic-state correctness.  Sense becomes
           impossible for any shadow whose creating occluder has been
           moved aside, even when the camera can clearly see the shadow.
           User-discovered 2026-05-07 in GUI run.
+
+Status (2026-05-07): DEFERRED.  A fix landed on main and was reverted
+          per user decision.  The reverted work (compute_shadow_blockers
+          hit_pos filter on the primary 5x5 ray batch, plus a slab-
+          method outside-shadow gate on the parent-relationship
+          fallback, plus regression tests in
+          tests/test_audit_51_blocker.py) is preserved on branch
+          audit-51-shadow-blocker-fix on both github and origin.
+          Investigation log (logs/run_2026-05-07_09-33-49) showed the
+          actual failure mode is broader than this entry first
+          described: the user observed sense executing 3x and looping
+          on still_blocked rather than the planner refusing to emit
+          sense.  Both the primary 5x5 ray batch (when the relocated
+          body overlaps the shadow's stale AABB on its far side) AND
+          the parent-relationship fallback (when the body is past the
+          shadow entirely) can produce the bug.  Re-open if a future
+          decision wants to revisit; the branch contains the full fix
+          + tests ready to cherry-pick.
 Where:    execution.py compute_shadow_blockers (~lines 207-216, the
           parent-relationship fallback);
           pddlstream_planner.py _build_init (consumes the map and
@@ -1049,10 +1077,7 @@ Aligns with the ROADMAP banner above (pre-eval → eval prerequisites → eval).
 Each issue is ideally one commit; parallelise where dependencies allow.
 
 TIER 0 — BEFORE EVAL (correctness):
-  #51  Stale shadow blocker from parent-relationship fallback
-       (compute_shadow_blockers force-adds creator after relocation;
-       visible shadows symbolically blocked; sense impossible).
-       User-discovered 2026-05-07 in GUI.  <0.5 day fix.
+  (empty — #51 [DEFERRED 2026-05-07]; awaiting archive slim)
 
 TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
   #41  Stack goal: explicit (on_table ?o) clause for the base cube
@@ -1081,12 +1106,13 @@ TIER 3 — EVALUATION (runner #9, then baseline #10):
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
 
-Total open: 8 items (#9, #10, #36, #41, #48, #49, #50, #51).
+Total open: 7 items (#9, #10, #36, #41, #48, #49, #50).
 
 Closed since previous summary:
-  (none — 2026-05-06 slim moved all freshly-closed entries to the
-  archives; see "Slimmed: 2026-05-06" line in the changelog header
-  for the full list.)
+  #51  [DEFERRED 2026-05-07] — fix attempted on main and reverted
+       per user decision; work preserved on branch
+       audit-51-shadow-blocker-fix (both remotes) for later revisit.
+       Awaiting archive slim into archive/CODEBASE_AUDIT_DEFERRED.txt.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
