@@ -289,6 +289,21 @@ Updated:      2026-05-07 (later) — #49 hotfix: exclude is_tray=True
               with enable_tray=True manually.  py_compile clean.
               #49 stays [DONE 2026-05-07] — hotfix is a follow-up
               within the same audit, not a new audit item.
+Added:        2026-05-07 (later) — #52 (find-one-hidden-target-stack-
+              on-big-visible-base — new TIER 0 demo goal mode
+              requested by user post-#49 hotfix).  Last WSL run of
+              --goal find-and-tray-stack still failed after commit
+              62d435b; root-cause analysis flagged size-compat gap
+              (no big-on-small check anywhere — confirmed by
+              inspection of domain_pddlstream.pddl :action stack
+              and streams.compute_stack_kin_solution) and goal-AST
+              length scaling with --n-targets.  User proposal:
+              simplest possible end-to-end goal = one big visible
+              base + one small hidden target stacked on top.
+              Replaces find-and-tray-stack as the demo default;
+              tray goal stays available.  New FOR LATER bullet
+              records the size-compat gap as a parallel concern.
+              Open count: 3 -> 4.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -374,19 +389,20 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #50                                                   #
+#  OPEN ISSUES — #9, #10, #50, #52                                              #
 #                                                                              #
 ################################################################################
 
 
 ================================================================================
-ROADMAP — PRE-EVALUATION VS. EVALUATION (updated 2026-05-06)
+ROADMAP — PRE-EVALUATION VS. EVALUATION (updated 2026-05-07)
 ================================================================================
 Pre-evaluation (intended order before the eval sweep):
   #31 [DONE 2026-05-07] (comment-quality sweep, absorbs #32)
     → #41 [DONE 2026-05-07] (on_table) + #48 [DONE 2026-05-07] (clear on_relations[X])
     → #36 [DONE 2026-05-07] (hardcoded place/stack lift)
-    → #49 [DONE 2026-05-07] (tray goal) → #50 (planner perf)
+    → #49 [DONE 2026-05-07] (tray goal)
+    → #52 (TIER 0 demo goal — find-and-stack-on-base) → #50 (planner perf)
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
    — user decision; the archived #21 log-only band-aid is the
@@ -1000,6 +1016,114 @@ Related: #9 (experiment runner — needed to gather timing samples),
 
 
 ================================================================================
+#52. NEW GOAL — FIND ONE HIDDEN TARGET, STACK ON A BIG VISIBLE BASE
+================================================================================
+Priority: TIER 0 — User-prioritised demo goal (sync 2026-05-07 post-#49).
+          Top of the pre-evaluation roadmap: the simplest end-to-end goal
+          that still exercises sense → pick → stack.  Drop-in default
+          replacement for "stack on tray" in the default scene; tray goal
+          (#49) stays available but moves to a richer scenario preset.
+Where:    boxel_env.py    — scene knob for a designated big-base cube
+                            (size, position, visibility guarantee);
+                            ObjectInfo.is_base flag analogous to is_tray.
+          test_full_pipeline.py
+                          — new --goal find-and-stack-on-base; goal builder;
+                            main() branch; auto-enable the base entity in
+                            __main__ similar to find-and-tray-stack.
+          run_logger.py   — add the choice; --n-hidden interaction.
+          (Domain unchanged.  No new (compat_stack ?o ?on_obj) predicate
+           — the simplified setup makes the constraint a setup convention,
+           not a planner concern.  Geometric size-check is the parallel
+           deferred concern in FOR LATER.)
+Depends:  - #49 [DONE] — tray plumbing demonstrates the is_X-flag pattern
+                          we reuse for is_base.
+          - sense / pick / stack pipeline already in place.
+Effort:   1-2 days (scene + flag + goal builder + main branch + smoke test).
+
+What:  Discovered 2026-05-07 while testing --goal find-and-tray-stack
+       (audit #49).  Even after the tray-filter hotfix (commit 62d435b)
+       the planner fails on the default scene: the goal AST chains every
+       target onto the tray and the planner cannot find a satisfying
+       sequence.  Suspected contributors:
+         (a) No symbolic / geometric check that a held cube fits on top
+             of its support — the planner happily plans "big-on-small"
+             stacks that the executor's physics step then fails to
+             stabilise.  Confirmed by inspection: domain stack action
+             has no compat predicate; compute_stack_kin_solution does
+             pure top-of-AABB IK with no footprint check.
+         (b) The goal AST length scales with --n-targets; a 4-cube
+             tower-on-tray plus the sense actions explodes the search
+             space relative to a single sense → pick → stack chain.
+
+       The user proposal sidesteps both:
+         "Make the goal easy as default — stack two objects only.  One
+          big visible cube is the base (no sensing).  One small target
+          is hidden and must be sensed.  Goal: small target on top of
+          the big base."
+
+       Why this is the right "TIER 0":
+         - Cleanest demo of the thesis claim: shadows reveal the
+           hidden target, planner picks it, stacks it on a labelled
+           known location.  One sentence in Results.
+         - 2-cube stack physics is the cube-on-cube case the existing
+           verifier (#40) handles correctly with no tray quirks.
+         - Big-on-small is structurally impossible by the setup, so
+           the size-compat gap (a) is mooted for the demo run.
+         - Replanner has at most one sense iteration to do (one hidden
+           target), so #21-style still_blocked give-ups are unlikely
+           in well-formed scenes.
+
+Fix:   PROPOSED INCREMENTS — one commit each:
+       (a) Scene: extend ObjectSpec / ObjectInfo with an is_base flag
+           and a "base_cube" entry in default_scene at e.g. 60-mm
+           edge (vs. 40-mm targets) at a fixed visible pose well
+           within the Panda reach disk.  _create_targets reserves
+           the base footprint analogous to the tray.
+       (b) PDDL init: emit (Obj base) + (Boxel base) + (clear base)
+           + (on_table base) the same way commit 3/4 of #49 did for
+           the tray.  No is_base predicate in the domain — the
+           planner treats it as a generic Obj.
+       (c) Goal: --goal find-and-stack-on-base in run_logger.py;
+           goal AST = ('and', ('on', target, base), ('on_table', base))
+           where target is the chosen hidden target.  --n-hidden >= 1
+           required; --stack-height ignored.
+       (d) main() branch: locate base via ObjectInfo.is_base; pick a
+           hidden target from target_to_shadow (must be non-empty);
+           visible_target_locations[base] = base_boxel_id so the
+           planner can reach the base for the stack action.
+       (e) Smoke tests: --no-gui --goal find-and-stack-on-base on
+           default_scene with one hidden target; expect plan length
+           ~5 (move → sense → move → pick → stack).
+
+       Open design questions to settle in the planning turn:
+         - Should the base be 60×60×60 mm or wider (e.g. 80×40×40 mm
+           "platform")?  Wider base = larger XY landing window for
+           the stack-kin sampler.
+         - CLI default: keep --goal holding as default, or promote
+           --goal find-and-stack-on-base?  Argues for promoting since
+           it is the one-line thesis demo; argues for keeping holding
+           since holding is the simpler baseline used in
+           THESIS_NOTES eval scripting.
+         - Should --goal find-and-tray-stack stay available or move
+           to a deferred bucket?  User decision — recommend keep
+           available for #11 fixed-region narrative continuity.
+
+Related: #49 [DONE] — find-and-tray-stack; this issue is the user-
+              chosen simplification.  Tray plumbing (is_tray flag,
+              auto-enable, planner init) is the pattern to reuse.
+         #40 [DONE] — physics verifier; cube-on-cube path bit-
+              identical to existing usage, no extension needed.
+         #41 [DONE] — (on_table) predicate; goal includes
+              (on_table base) for symmetric verifier coverage.
+         FOR LATER (new bullet) — geometric / symbolic size-compat
+              check for stack action.  Streams currently let any
+              cube stack on any other; physics tipping is unhandled.
+              Out of scope for #52 (the simplified setup avoids it),
+              but documented there so it surfaces if a richer goal
+              brings the gap back into reach.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -1035,6 +1159,17 @@ FOR LATER
   center-within-AABB.  Audit #40 introduced the loose check; refinement
   only matters if eval (#12) shows edge-perching false-positives.
 
+- Stack size-compatibility check (raised 2026-05-07 in #52 root-cause
+  analysis).  Domain :action stack and streams.compute_stack_kin_solution
+  currently let any cube stack on any other — the planner happily plans
+  big-on-small towers that physics fails to stabilise.  Two possible
+  fixes: (i) symbolic (compat_stack ?o ?on_obj) static predicate
+  precomputed in _build_init from boxel half-extents; (ii) geometric
+  filter inside the placement / stack-kin sampler (skip seeds where
+  held footprint exceeds support footprint by more than X%).  Out of
+  scope for #52 (which sidesteps the gap by setup), but in scope when
+  any goal mode allows size-mixed stacking again.
+
 - POMDP / contingent baseline: large effort; only if time after eval sweep
   (#9–#13).  Thesis-critical fixes are now bounded to #40 [DONE] +
   #36 [DONE] + #49 per ROADMAP; #21 / #47 (still_blocked correctness) are
@@ -1060,8 +1195,10 @@ Issue numbers are chronological (audit discovery order), NOT priority order —
 follow the tier / roadmap ordering, not the lowest open number.
 Each issue is ideally one commit; parallelise where dependencies allow.
 
-TIER 0 — BEFORE EVAL (correctness):
-  (empty — #51 [DEFERRED 2026-05-07]; awaiting archive slim)
+TIER 0 — TOP PRIORITY (user-prioritised 2026-05-07):
+  #52  find-and-stack-on-base demo goal (simplified replacement for
+       --goal find-and-tray-stack as the default thesis demo;
+       sidesteps size-compat gap by setup convention)
 
 TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
   (empty — #41 [DONE 2026-05-07], #48 [DONE 2026-05-07]; stack-
@@ -1076,7 +1213,7 @@ TIER 3 — EVALUATION (runner #9, then baseline #10):
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
 
-Total open: 3 items (#9, #10, #50).
+Total open: 4 items (#9, #10, #50, #52).
 
 Closed since previous summary:
   #36 [DONE 2026-05-07] — _apply_post_action_lift helper in
