@@ -146,6 +146,11 @@ class SceneConfig:
     seed: Optional[int] = None
     constrain_to_reach: bool = False
     n_hidden_targets: int = 0
+    # audit #49 — when True, spawn a fixed-base tray as a non-pickable
+    # support surface (see BoxelTestEnv._create_tray).  Default off so
+    # existing scenes/runs are unaffected.  The tray-stack goal mode
+    # (audit #49 commit 3) auto-enables it.
+    enable_tray: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -668,6 +673,13 @@ class BoxelTestEnv:
             size=np.array([0.5, 0.5, 0.8]), is_visible=True, is_occluder=False
         )
 
+        # Tray (audit #49) — fixed-base support surface, only spawned when
+        # the scene_config opts in.  Created BEFORE occluders/targets so its
+        # XY can be reserved against random-placement collisions.
+        self._tray_xy: Optional[List[float]] = None
+        if self.scene_config.enable_tray:
+            self._create_tray()
+
         # Create occluders
         self._create_occluders()
 
@@ -811,6 +823,57 @@ class BoxelTestEnv:
             )
         return positions
 
+    # audit #49 — tray (fixed-base support surface, default-off).
+    # Uses the built-in pybullet_data tray/traybox.urdf (textured mesh
+    # visual, box-primitive collision, mass=0).  At globalScaling=0.4
+    # the footprint is ~0.24 x 0.24 m with angled walls ~0.03 m high.
+    # Position (0.10, 0.40) sits in the back-left corner of the table,
+    # closest to the Panda base; for default_scene the (0.10, 0.40)
+    # yellow target slot conflicts with this and needs to be moved when
+    # enable_tray is opted in (random-placement scenes auto-reserve
+    # via _create_targets).
+    _TRAY_XY = (-0.130, 0.380)
+    _TRAY_SCALE = 0.4
+    _TRAY_NAME = "tray"
+
+    def _create_tray(self):
+        """Spawn the built-in traybox URDF as a non-pickable support (audit #49).
+
+        Loaded via ``_mirror_load_urdf`` so both GUI and plan clients see
+        it.  Registered in ``self.objects`` with ``is_tray=True`` so
+        downstream filters (oracle_detect_objects, shadow loop, planner
+        init) can recognise it.  ``self._tray_xy`` is exposed so random-
+        placement helpers can reserve the footprint.
+        """
+        cx, cy = self._TRAY_XY
+        cz = self.table_surface_height
+
+        body_id = self._mirror_load_urdf(
+            "tray/traybox.urdf",
+            [cx, cy, cz],
+            [0, 0, 0, 1],
+            useFixedBase=True,
+            globalScaling=self._TRAY_SCALE,
+        )
+
+        aabb_min, aabb_max = p.getAABB(body_id,
+                                        physicsClientId=self.client_id)
+        size = np.array([aabb_max[0] - aabb_min[0],
+                         aabb_max[1] - aabb_min[1],
+                         aabb_max[2] - aabb_min[2]])
+
+        self.objects[self._TRAY_NAME] = ObjectInfo(
+            object_id=body_id,
+            name=self._TRAY_NAME,
+            position=np.array([cx, cy, cz]),
+            orientation=np.array([0, 0, 0, 1]),
+            size=size,
+            is_visible=True,
+            is_occluder=False,
+            is_tray=True,
+        )
+        self._tray_xy = [float(cx), float(cy)]
+
     def _create_occluders(self):
         """Create occluder objects on the table from scene_config."""
         cfg = self.scene_config
@@ -819,9 +882,12 @@ class BoxelTestEnv:
         if cfg.occluder_positions is not None:
             xys = cfg.occluder_positions
         else:
+            reserved = ([list(self._tray_xy)]
+                        if self._tray_xy is not None else None)
             xys = self._random_xy_positions(
                 len(cfg.occluders), rng,
                 constrain_to_reach=cfg.constrain_to_reach,
+                reserved_xys=reserved,
             )
 
         for i, (spec, xy) in enumerate(zip(cfg.occluders, xys)):
@@ -1031,6 +1097,10 @@ class BoxelTestEnv:
             reserved_xys: List[List[float]] = [
                 list(xy) for xy, _ in occluder_info
             ]
+            # audit #49 — also reserve the tray footprint when present so
+            # random target placement does not spawn cubes inside the tray.
+            if self._tray_xy is not None:
+                reserved_xys.append(list(self._tray_xy))
 
             hidden_xys: List[List[float]] = []
             if n_hidden > 0 and occluder_info:
@@ -1124,8 +1194,16 @@ class BoxelTestEnv:
             ))
 
         # Compute shadows; mark casters as occluders.
+        # audit #49 — tray (is_tray=True) is a support surface, not an
+        # occluder.  Skip it as a shadow CASTER so no shadow_of_tray
+        # boxel is generated and no blocks_view_at facts emit for it.
+        # The tray remains in obstacles for OTHER objects' shadow rays
+        # (its 3 cm walls barely obstruct anything anyway).
         shadow_boxels: List[BoxelData] = []
         for obj_boxel in object_boxels:
+            obj_info = self.objects.get(obj_boxel.id)
+            if obj_info is not None and obj_info.is_tray:
+                continue
             obstacles = [b for b in object_boxels if b.id != obj_boxel.id]
             shadow_parts = self.shadow_calculator.calculate_shadow_boxel(
                 obj_boxel, obstacles)
