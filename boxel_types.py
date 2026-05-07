@@ -30,6 +30,7 @@ class ObjectInfo:
     size: np.ndarray  # [width, height, depth] dimensions
     is_visible: bool  # Whether object is currently visible from camera
     is_occluder: bool  # Whether this object is an occluder (larger cube)
+    is_tray: bool = False  # audit #49 — fixed-base support surface (not pickable)
 
 
 class OctreeNode:
