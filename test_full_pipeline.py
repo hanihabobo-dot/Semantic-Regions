@@ -951,6 +951,12 @@ def main(gui=True, run_logger=None, scene_config=None,
                     label=f"after pick {pick_obj_name}",
                     body_names=body_id_to_name)
                 print(f"    *** {pick_obj_name} PICKED UP! ***")
+                # Audit #48: clear the symbolic stack relation so the next
+                # _build_init does not re-emit a stale (on obj_str ?x) fact
+                # while also asserting (holding obj_str).  Mirrors the PDDL
+                # pick conditional effect (forall ?x: when (on ?o ?x) then
+                # not (on ?o ?x)).  No-op when obj_str was on the table.
+                on_relations.pop(obj_str, None)
                 if pick_obj_name == target_name:
                     belief.target_found_in = visible_target_locations.get(
                         target_name, "picked")
