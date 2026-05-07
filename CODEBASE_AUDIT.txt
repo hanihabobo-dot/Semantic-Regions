@@ -371,6 +371,25 @@ Added:        2026-05-07 (later) — #54 (TIER 0 follow-up triage —
               (test_full_pipeline.py find-and-tray-stack branch);
               supersedes #53's hidden-preferred slice.  py_compile
               clean.  Open count: 4 -> 5.
+Updated:      2026-05-07 (later) — #54 marked [DONE 2026-05-07].
+              Visible-only triage run (logs/run_2026-05-07_21-48-02)
+              succeeded in 5.19 s (1 plan, success: true, 0 physical
+              failures, full pipeline ran end-to-end).  Diagnosis:
+              sense is NOT broken, but it is the dominant search-cost
+              driver for this goal — the prior 1-cube hidden run
+              (#53, logs/run_2026-05-07_21-26-18) gave up at 45.87 s
+              on adaptive-search exhaustion UNDER the 120 s max_time
+              cap, meaning the planner ran out of skeletons / stream
+              samples before time expired.  Slice reverted to the
+              original #49 multi-cube behaviour (commit b287450); the
+              planner.plan() max_time cap bumped 120 -> 1800 s in
+              the same commit so the adaptive sampler has more rope
+              for the multi-cube hidden+visible mix.  py_compile
+              clean.  Next: WSL run on default scene with the
+              reverted goal + uncapped time to confirm whether
+              sense-heavy multi-cube tray-stack converges with more
+              budget or fails on a deeper bottleneck.  Open count:
+              5 -> 4.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -456,7 +475,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #50, #52, #54                                         #
+#  OPEN ISSUES — #9, #10, #50, #52                                              #
 #                                                                              #
 ################################################################################
 
@@ -470,7 +489,7 @@ Pre-evaluation (intended order before the eval sweep):
     → #36 [DONE 2026-05-07] (hardcoded place/stack lift)
     → #49 [DONE 2026-05-07] (tray goal)
     → #53 [DONE 2026-05-07] (TIER 0 diagnostic triage — 1-cube tray-stack)
-    → #54 (TIER 0 follow-up triage — visible-only tray-stack)
+    → #54 [DONE 2026-05-07] (TIER 0 follow-up triage — visible-only tray-stack)
     → #52 (TIER 0 demo goal — find-and-stack-on-base) → #50 (planner perf)
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
@@ -857,7 +876,7 @@ Related: #49 [DONE 2026-05-07; archived] — the goal mode being
 
 
 ================================================================================
-#54. DIAGNOSTIC — FORCE VISIBLE TARGET ON --goal find-and-tray-stack
+#54. DIAGNOSTIC — FORCE VISIBLE TARGET ON --goal find-and-tray-stack [DONE 2026-05-07]
 ================================================================================
 Priority: TIER 0 — User-prioritised 2026-05-07 (post-#53).  Cheap follow-up
           triage that drops the sense action from the goal AST entirely so
@@ -1010,10 +1029,12 @@ TIER 0 — TOP PRIORITY (user-prioritised 2026-05-07):
    fails (planner_failed, 45.87 s, single attempt).  Triage rules
    out goal-AST length AND size-compat; "deeper issue" branch is
    live.  Awaiting archive slim.)
-  #54  Follow-up triage — force VISIBLE target on --goal find-and-
-       tray-stack (drops sense action from goal AST, isolates
-       sense-side failure modes from pick/stack/streams).  Slice
-       landed in commit 826bb21; awaiting WSL run for triage signal.
+  (#54 [DONE 2026-05-07] — visible-only triage run
+   logs/run_2026-05-07_21-48-02 succeeded in 5.19 s; sense is the
+   dominant search-cost driver, not a correctness bug.  Slice
+   reverted (commit b287450); planner.plan() max_time bumped
+   120 -> 1800 s for the next multi-cube experiment.  Awaiting
+   archive slim.)
   #52  find-and-stack-on-base demo goal (simplified replacement for
        --goal find-and-tray-stack as the default thesis demo;
        proceeds as the recommended path independently of the deeper
@@ -1032,13 +1053,19 @@ TIER 3 — EVALUATION (runner #9, then baseline #10):
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
 
-Total open: 5 items (#9, #10, #50, #52, #54).
+Total open: 4 items (#9, #10, #50, #52).
 
 Closed since previous summary:
   #53 [DONE 2026-05-07] — TIER 0 diagnostic slice landed; WSL run
        2026-05-07 21:26 confirms 1-cube tray-stack also fails
        (45.87 s, no plan).  Rules out goal-AST length AND size-
        compat; #52 proceeds as the recommended path.  Awaiting
+       archive slim.
+  #54 [DONE 2026-05-07] — TIER 0 follow-up triage; visible-only WSL
+       run 2026-05-07 21:48 succeeded in 5.19 s.  Sense is the
+       dominant search-cost driver, not a correctness bug.  Slice
+       reverted (commit b287450); planner.plan() max_time bumped
+       120 -> 1800 s for the next multi-cube experiment.  Awaiting
        archive slim.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
