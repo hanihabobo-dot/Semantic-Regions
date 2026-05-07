@@ -406,6 +406,40 @@ Added:        2026-05-07 (later) — #55 (TIER 0 — find-and-tray-stack
               max_planner_time) still on defaults — next lever if
               2-cube also fails.  py_compile clean.  Open count:
               4 -> 5.
+Updated:      2026-05-07 (later) — #55 Path C commit 1/2 landed on
+              branch audit-55-pose-aware-stack (9eca2a1).  Diagnosis
+              from logs/run_2026-05-07_22-07-31 (planner_failed at
+              20.6 s, plan_count=1, search exhausted not timed): the
+              9-action skeleton was found at iteration 4 but stream
+              sampling could not ground stack(blue, yellow on tray)
+              because compute_stack_kin_solution at streams.py:943
+              read p.getAABB(yellow_body) — yellow's INITIAL pose,
+              not its destination on the tray.  compute_kin_solution
+              (streams.py:832 picks) sidesteps this via lazy
+              collision-check + ignored_body_ids; the equivalent
+              affordance for stack was missing.  User chose Path C —
+              thread the support's symbolic destination pose through
+              compute-stack-kin.  Commit 1/2 (no-op groundwork):
+              SymbolicPose dataclass added to streams.py near
+              RobotConfig (frozen, name-hashable, fields:
+              name/xy/top_z/quat); BoxelStreams.initial_pose() helper
+              reads plan-side getAABB (synced via env.sync_to_plan_-
+              client at the start of each replan), falls back to
+              registry.get_boxel max_corner; (Pose ?p) and (at_pose
+              ?o ?p) predicate declarations added to
+              domain_pddlstream.pddl with comment-block pointing at
+              audit #55 commit 2/2; _build_init emits ('Pose', pose)
+              + ('at_pose', obj_id, pose) for every Obj in
+              all_obj_ids (skip-silent on initial_pose=None).
+              Behaviour: ZERO change — no action / stream consumes
+              (Pose) or (at_pose) yet; ~2N inert facts added to
+              init.  py_compile clean across the three files.
+              Branch convention shift: multi-commit refactors now
+              land on audit-N-* branches off main rather than main
+              directly (#55 is the first to follow this).  #55 still
+              open — commit 2/2 (real fix: compute-stack-kin
+              signature change + stack action update + WSL run on
+              find-and-tray-stack default scene) remains.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
