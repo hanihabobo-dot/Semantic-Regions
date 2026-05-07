@@ -391,6 +391,25 @@ def release_held_object_in_place(
     return True, state_updates
 
 
+def _apply_post_action_lift(robot_id, contact_ee, orientation, contact_joints,
+                             pc, gui, lift_height: float = 0.10):
+    """Lift the EE straight up by ``lift_height`` after a contact pose.
+
+    Hardcoded post-action workaround for motion-planning fragility — see
+    audit #36 / THESIS_NOTES.md §19.  The lift is invisible to the planner;
+    ``final_config`` (read by the caller after this returns) carries the
+    lifted pose forward as the next ``move`` action's plan_motion seed.
+    Falls through silently to the contact configuration if the lift IK
+    cannot be solved — never aborts the surrounding pick / place / stack.
+    """
+    lift_ee = contact_ee + np.array([0.0, 0.0, lift_height])
+    lift_joints = solve_ik(robot_id, lift_ee, orientation, pc,
+                           seed=contact_joints)
+    if lift_joints is None:
+        return
+    move_robot_smooth(robot_id, lift_joints, gui)
+
+
 def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
                  ) -> Tuple[Optional[int], Optional[RobotConfig]]:
     """
@@ -411,12 +430,12 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     The constraint-based attachment (p.createConstraint) is an accepted
     simulation simplification — see audit #7 part B.
 
-    Lifting after the grasp is intentionally NOT done here (refactor
-    step 1).  The pick ends at the contact configuration with the
-    object welded to the EE; any subsequent `move` action's plan-motion
-    trajectory will lift the arm naturally through free space.  This
-    keeps execution one-to-one with PDDL actions — no hidden arm
-    motion that the planner does not see.
+    A small (~5 cm) hardcoded post-pick lift runs after the grasp
+    constraint is created — cosmetic only.  See audit #36 /
+    THESIS_NOTES.md §19 for the rationale (motion-planning fragility
+    workaround); the lift is invisible to the planner because
+    ``final_config`` (read after the lift) carries the lifted pose
+    forward as the next ``move`` action's plan_motion seed.
 
     Args:
         robot_id: PyBullet body ID of the robot
@@ -506,12 +525,17 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
         parentFrameOrientation=list(parent_frame_orn)
     )
 
-    # No lift here (refactor step 1).  The arm stays at the contact
-    # config holding the object; the next planned `move` action will
-    # lift via plan_motion's collision-free trajectory.  Read the actual
-    # joint state — position control may not reach the exact IK target.
-    # Tracking the true state prevents PDDL state drift from compounding
-    # across chained actions within a plan (audit #86).
+    # Hardcoded post-pick lift (audit #36, THESIS_NOTES §19): smaller
+    # than place/stack (~5 cm) — cosmetic only for the holding-goal
+    # terminate-at-contact view; the next plan_motion already runs in
+    # free space because the cube is now attached to the EE.
+    _apply_post_action_lift(robot_id, contact_ee, grasp.orientation,
+                            contact_joints, pc, gui, lift_height=0.05)
+
+    # Read the actual joint state — position control may not reach the
+    # exact IK target.  Tracking the true state prevents PDDL state
+    # drift from compounding across chained actions within a plan
+    # (audit #86).
     actual_joints = np.array(
         [p.getJointState(robot_id, i)[0] for i in range(7)]
     )
@@ -537,9 +561,11 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     the table surface, using the live EE-to-object offset from the
     constraint (established at pick time).
 
-    Retreating after the release is intentionally NOT done here
-    (refactor step 1, mirror of execute_pick): the next planned `move`
-    action lifts via plan-motion's collision-free trajectory.
+    A small (~10 cm) hardcoded post-place lift runs after the settle
+    so the next ``move`` action's plan_motion has safe headroom over
+    the just-placed cube.  See audit #36 / THESIS_NOTES.md §19; the
+    lift is invisible to the planner — ``final_config`` carries the
+    lifted pose forward.
 
     Args:
         robot_id: PyBullet body ID of the robot
@@ -613,6 +639,11 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     for _ in range(30):
         p.stepSimulation()
 
+    # Hardcoded post-place lift (audit #36, THESIS_NOTES §19): give the
+    # next plan_motion ~10 cm of safe headroom over the just-placed cube.
+    _apply_post_action_lift(robot_id, contact_ee, grasp.orientation,
+                            contact_joints, pc, gui)
+
     # Read actual joint state to prevent drift accumulation (audit #86).
     actual_joints = np.array(
         [p.getJointState(robot_id, i)[0] for i in range(7)]
@@ -641,6 +672,12 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     first two cubes have physically settled and may differ slightly from
     the planner's nominal pose.  Reading the support's actual top each
     time keeps the placement geometrically grounded.
+
+    A small (~10 cm) hardcoded post-stack lift runs after the settle so
+    the next ``move`` action's plan_motion has safe headroom over the
+    freshly stacked column.  See audit #36 / THESIS_NOTES.md §19; the
+    lift is invisible to the planner — ``final_config`` carries the
+    lifted pose forward.
 
     The contact-pose IK is seeded with the planner's ``config`` (audit
     #37/#38) so the solver stays in the same IK branch the planner
@@ -717,6 +754,12 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     # damp visible micro-bouncing, short enough to keep the run snappy.
     for _ in range(60):
         p.stepSimulation()
+
+    # Hardcoded post-stack lift (audit #36, THESIS_NOTES §19): the EE
+    # currently sits on top of the freshly stacked column; lift ~10 cm
+    # so the next plan_motion has safe headroom over the column.
+    _apply_post_action_lift(robot_id, contact_ee, grasp.orientation,
+                            contact_joints, pc, gui)
 
     actual_joints = np.array(
         [p.getJointState(robot_id, i)[0] for i in range(7)]
