@@ -221,6 +221,26 @@ Updated:      2026-05-07 (later) — #49 commit 2/4 landed (PDDL is_tray
               test_full_pipeline.py.  #49 still open — commits 3-4
               (streams placement on tray top + stack_kin for tray;
               --goal find-and-tray-stack + verifier extension) remain.
+Updated:      2026-05-07 (later) — #49 commit 3/4 landed (Boxel tray
+              init fact for move-to-tray plannability).  Triage of the
+              existing pipeline showed that compute_stack_kin_solution
+              already handles the tray as a generic Obj (resolves the
+              tray body via object_body_ids, reads its AABB, drops the
+              held cube at tray_center_xy + wall_top + cube_half_height;
+              physics settles the cube into the tray cavity).  The real
+              gap was symbolic: commit 2/4 emitted (Obj tray) +
+              (is_tray tray) but NOT (Boxel tray); since
+              compute-stack-kin certifies (config_for_boxel ?q tray),
+              the move action's (Boxel ?b) precondition would have
+              failed when delivering the arm to the stack-on-tray pose.
+              One-line fix in pddlstream_planner._build_init: when
+              tray_name is set, also append ('Boxel', tray_name).
+              Multi-xy sampling within the tray footprint deferred —
+              not required for the goal AST (on t_1 tray) (on t_2 t_1)
+              ... which always uses centered placement on tray (and
+              cube-on-cube for the rest of the tower).  py_compile
+              clean.  #49 still open — commit 4 (--goal find-and-
+              tray-stack + verifier extension + smoke tests) remains.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
