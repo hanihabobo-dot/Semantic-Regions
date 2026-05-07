@@ -611,7 +611,12 @@ def main(gui=True, run_logger=None, scene_config=None,
         print(f"  Stack goal: {goal}")
         print(f"  Stackable cubes: {stack_target_objects}")
     elif goal_kind == 'find-and-tray-stack':
-        # audit #49 — discover every target via sense + tray-stack them.
+        # audit #55 — 2-cube tower on tray (smallest goal that exercises
+        # sense → pick → stack end-to-end).  One VISIBLE cube placed on
+        # the tray, then one HIDDEN cube sensed and stacked on top of
+        # the visible one.  Both cubes drawn from all_targets — same
+        # physical size; visible/hidden is the only role distinction.
+        # Replaces #49's multi-cube goal.
         tray_obj = next((name for name, info in env.objects.items()
                          if info.is_tray), None)
         if tray_obj is None:
@@ -621,30 +626,33 @@ def main(gui=True, run_logger=None, scene_config=None,
                 "The CLI auto-enables it; if you constructed the SceneConfig "
                 "manually, set enable_tray=True."
             )
-        stack_target_objects = list(all_targets)
-        if not stack_target_objects:
+        visible_targets = [t for t in all_targets
+                           if t not in target_to_shadow]
+        hidden_targets = [t for t in all_targets
+                          if t in target_to_shadow]
+        if not visible_targets or not hidden_targets:
             env.close()
             raise RuntimeError(
-                "--goal find-and-tray-stack needs at least 1 target cube; "
-                "the scene spawned none."
+                f"find-and-tray-stack needs at least 1 visible AND 1 "
+                f"hidden target.  Got {len(visible_targets)} visible / "
+                f"{len(hidden_targets)} hidden.  Adjust --seed or "
+                f"--n-hidden so both roles are populated."
             )
-        # Visible targets get an obj_at_boxel fact so the planner can pick
-        # them directly; hidden ones stay unknown until a sense action
-        # uncovers them.
-        for tname in stack_target_objects:
-            if tname in target_to_shadow:
-                continue
-            for boxel in registry.boxels.values():
-                if boxel.object_name == tname:
-                    visible_target_locations[tname] = boxel.id
-                    break
-        goal = build_tray_stack_goal(stack_target_objects, tray_obj)
-        # target_name is consumed by belief / sense / pick logging.  Use
-        # the cube anchored on the tray (goal[1] is the (on c_0 tray)
-        # clause — same role on_table-base plays in build_stack_goal).
-        target_name = str(goal[1][1])
+        chosen_visible = random.choice(visible_targets)
+        chosen_hidden = random.choice(hidden_targets)
+        stack_target_objects = [chosen_visible, chosen_hidden]
+        print(f"  2-cube tray tower: {chosen_visible} (on tray) + "
+              f"{chosen_hidden} (on {chosen_visible})")
+        # Visible cube → emit obj_at_boxel; hidden cube stays unknown
+        # until the sense action uncovers it.
+        for boxel in registry.boxels.values():
+            if boxel.object_name == chosen_visible:
+                visible_target_locations[chosen_visible] = boxel.id
+                break
+        goal = ('and', ('on', chosen_visible, tray_obj),
+                       ('on', chosen_hidden, chosen_visible))
+        target_name = chosen_hidden  # belief / sense logging
         print(f"  Find-and-tray-stack goal: {goal}")
-        print(f"  Targets: {stack_target_objects}")
         print(f"  Tray: {tray_obj}")
     else:
         raise ValueError(f"Unsupported --goal '{goal_kind}'. "
