@@ -59,7 +59,8 @@ class PDDLStreamPlanner:
                  physics_client: int = None,
                  object_body_ids: Dict[str, int] = None,
                  support_body_ids: frozenset = None,
-                 camera_pos: 'np.ndarray' = None):
+                 camera_pos: 'np.ndarray' = None,
+                 tray_name: Optional[str] = None):
         """
         Initialize the planner.
 
@@ -78,11 +79,16 @@ class PDDLStreamPlanner:
                 plane) ignored during pick/place endpoint checks.
             camera_pos: Fixed camera position [x, y, z].  Used to compute
                 blocks_view_at facts for placement positions (audit #5).
+            tray_name: Fixed-base tray support name (audit #49), or None.
+                When set, _build_init emits (Obj <tray>) + (is_tray
+                <tray>); (clear <tray>) and (on_table <tray>) fall out
+                of the existing clear / on_table loop.
         """
         self.registry = registry
         self.robot_id = robot_id
         self.shadow_occluder_map = shadow_occluder_map or {}
         self.camera_pos = camera_pos
+        self.tray_name = tray_name
 
         self.streams = BoxelStreams(
             registry, robot_id=robot_id, physics_client=physics_client,
@@ -455,6 +461,15 @@ class PDDLStreamPlanner:
 
         for obj in target_objects:
             init.append(('Obj', obj))
+
+        # audit #49 — tray as a stackable support.  No obj_at_boxel
+        # emitted, so pick's (obj_at_boxel ?o ?b) precondition is
+        # unsatisfiable for the tray => implicitly unpickable.
+        # (clear tray) and (on_table tray) emerge from the all_obj_ids
+        # loop further down.
+        if self.tray_name is not None:
+            init.append(('Obj', self.tray_name))
+            init.append(('is_tray', self.tray_name))
 
         for tgt, boxel_id in visible_target_locations.items():
             init.append(('obj_at_boxel', tgt, boxel_id))
