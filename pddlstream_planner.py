@@ -190,7 +190,7 @@ class PDDLStreamPlanner:
         planner receives, without running PDDLStream. The output file matches
         domain_pddlstream.pddl's untyped format.
 
-        Note: stream-certified predicates (push_solution, kin_solution, etc.)
+        Note: stream-certified predicates (kin_solution, motion, valid_grasp, etc.)
         are populated at runtime by PDDLStream streams and will NOT appear in
         this file. The problem is therefore not solvable by a plain PDDL
         planner — it's a snapshot of the static init state for inspection.
@@ -292,7 +292,7 @@ class PDDLStreamPlanner:
         lies in the camera→shadow line of sight.
 
         Casts a 5x5 ray grid from the camera through each shadow volume
-        (same density as compute_shadow_blockers in test_full_pipeline.py)
+        (same density as compute_shadow_blockers in execution.py)
         and tests each ray against every free boxel's AABB.
 
         Returns:
@@ -344,7 +344,7 @@ class PDDLStreamPlanner:
             current_config: Current robot config (RobotConfig or string)
             known_empty_shadows: Shadows already checked (empty)
             moved_occluders: Dict mapping occluder_id -> destination_boxel_id
-                for occluders that have been pushed aside
+                for occluders that have been moved aside
             observed_clear_regions: Boxel IDs that the robot has directly
                 observed to NOT contain the target.  If ``None`` (default),
                 ALL object and free-space boxels are treated as observed-clear

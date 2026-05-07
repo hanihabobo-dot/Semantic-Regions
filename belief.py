@@ -44,12 +44,12 @@ class BeliefState:
 
     def mark_occluder_moved(self, occluder_id: str, destination: str) -> None:
         """
-        Mark that an occluder has been pushed to a new location.
+        Mark that an occluder has been moved to a new location.
 
         Args:
-            occluder_id: Boxel ID of the occluder that was pushed.
-            destination: Symbolic boxel ID for the push destination (used
-                by the planner to emit obj_at_boxel for the new location).
+            occluder_id: Boxel ID of the occluder that was moved.
+            destination: Symbolic boxel ID for the destination (used by
+                the planner to emit obj_at_boxel for the new location).
         """
         self.occluders_moved[occluder_id] = destination
 

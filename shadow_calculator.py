@@ -44,8 +44,9 @@ class ShadowCalculator:
         Calculate the Shadow Boxel(s) cast by an object, accounting for ray casting and obstacles.
 
         1. Ray Casting: Uses PyBullet rayTestBatch to find shadow extent against table/world.
-        2. Splitting: Breaks shadow boxels if they intersect with other objects.
-        3. Height Constraint: Shadow height is an overestimate (at least as tall as object).
+        2. AABB Construction: Builds initial shadow volume from hit points; height is
+           an overestimate (at least as tall as object).
+        3. Splitting: Breaks shadow boxels if they intersect with other obstacles.
 
         Args:
             obj_boxel: BoxelData of the visible object casting the shadow.
