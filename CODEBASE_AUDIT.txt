@@ -178,6 +178,16 @@ Updated:      2026-05-07 (later) — #48 marked [DONE 2026-05-07].
               the PICKED UP log line; mirrors the PDDL pick conditional
               effect that clears (on ?o ?x).  py_compile clean.
               Open count: 6 -> 5.  TIER 1 now empty.
+Updated:      2026-05-07 (later) — #36 marked [DONE 2026-05-07].
+              New _apply_post_action_lift helper in execution.py:
+              Cartesian +Z lift seeded from the contact joints, fail-safe
+              fall-through on IK failure.  10 cm in execute_place and
+              execute_stack (gives the next plan_motion safe headroom
+              over the freshly placed/stacked cube), 5 cm cosmetic in
+              execute_pick.  actual_joints read AFTER the lift so
+              final_config carries the lifted pose forward as the next
+              move's plan_motion seed.  Docstrings updated to point at
+              THESIS_NOTES §19.  py_compile clean.  Open count: 5 -> 4.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -263,7 +273,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #36, #49, #50                                         #
+#  OPEN ISSUES — #9, #10, #49, #50                                              #
 #                                                                              #
 ################################################################################
 
@@ -274,8 +284,8 @@ ROADMAP — PRE-EVALUATION VS. EVALUATION (updated 2026-05-06)
 Pre-evaluation (intended order before the eval sweep):
   #31 [DONE 2026-05-07] (comment-quality sweep, absorbs #32)
     → #41 [DONE 2026-05-07] (on_table) + #48 [DONE 2026-05-07] (clear on_relations[X])
-    → #36 (hardcoded place/stack lift) → #49 (tray goal)
-    → #50 (planner perf)
+    → #36 [DONE 2026-05-07] (hardcoded place/stack lift)
+    → #49 (tray goal) → #50 (planner perf)
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
    — user decision; the archived #21 log-only band-aid is the
@@ -466,7 +476,7 @@ Subsumes: #32 (comment/code drift sweep) — merged into this issue
 
 
 ================================================================================
-#36. HARDCODE SMALL POST-RELEASE / POST-GRASP LIFT (PLACE & STACK PRIMARILY, PICK COSMETIC)
+#36. HARDCODE SMALL POST-RELEASE / POST-GRASP LIFT (PLACE & STACK PRIMARILY, PICK COSMETIC)  [DONE 2026-05-07]
 ================================================================================
 Priority: TIER 3 — Robustness workaround for motion-planning fragility
 Where:    execution.py execute_place (~line 605, just before reading
@@ -926,7 +936,7 @@ FOR LATER
 
 - POMDP / contingent baseline: large effort; only if time after eval sweep
   (#9–#13).  Thesis-critical fixes are now bounded to #40 [DONE] +
-  #36 + #49 per ROADMAP; #21 / #47 (still_blocked correctness) are
+  #36 [DONE] + #49 per ROADMAP; #21 / #47 (still_blocked correctness) are
   closed at the log-only-band-aid level (#47 deferred out of scope
   2026-05-06).
 
@@ -961,20 +971,17 @@ TIER 2 — NEW EVAL GOAL + PERF (added 2026-05-06):
   #50  Planner perf investigation — profile, cache static init, kill
        redundancies (user-flagged "planner is too slow")
 
-TIER 3 — PRE-EVAL / EXTENSION:
-  #36  Hardcode small post-action lift in execute_place / execute_stack
-       (primary — gives the next plan_motion safe headroom over the freshly
-       placed/stacked cube); pick lift cosmetic only.  Supervisor-approved
-       workaround; replaces the dropped at_config-q_home goal-clause proposal.
-
 TIER 3 — EVALUATION (runner #9, then baseline #10):
   #9   Experiment runner + metric hooks + scalability matrix + plots
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
 
-Total open: 5 items (#9, #10, #36, #49, #50).
+Total open: 4 items (#9, #10, #49, #50).
 
 Closed since previous summary:
+  #36 [DONE 2026-05-07] — _apply_post_action_lift helper in
+       execution.py; 10 cm post-place / post-stack lift, 5 cm cosmetic
+       post-pick; awaits archive slim.
   #41 [DONE 2026-05-07] — explicit (on_table ?o) predicate plumbed
        through domain / init / goal / verifier; awaits archive slim.
   #48 [DONE 2026-05-07] — on_relations.pop(obj_str, None) in pick
