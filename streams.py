@@ -6,12 +6,13 @@ continuous parameters for the symbolic planner. Streams interface with PyBullet
 for inverse kinematics and motion planning.
 
 Sensing uses the fixed scene camera (not the robot's end-effector), so there
-is no sensing_config stream. See issue #36 in CODEBASE_AUDIT.txt.
+is no sensing_config stream.
 
 Streams:
     - sample_grasp: Generate grasp poses for an object
     - plan_motion: Plan collision-free trajectory between configs
     - compute_kin_solution: Compute IK for pick/place
+    - compute_stack_kin_solution: Compute IK for stacking on a support (audit #30)
 """
 
 import logging
@@ -128,6 +129,7 @@ class BoxelStreams:
     Stream call order during planning:
       1. sample_grasp(obj)          -> "how to grab this object?"
       2. compute_kin_solution(obj, boxel, grasp) -> "what joint angles reach it?"
+         (or compute_stack_kin_solution(obj, on_obj, grasp) for stack actions)
       3. plan_motion(q1, q2)        -> "collision-free path between configs?"
 
     The ignored_body_ids field threads through all three: compute_kin_solution

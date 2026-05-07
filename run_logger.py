@@ -257,8 +257,8 @@ def report_run_outcome(
                 print(f"FAILED: {observed_empty} shadow(s) observed "
                       f"empty, {len(blocked_giveup_shadows)} "
                       f"blocked-unresolved (target may still be there): "
-                      f"{sorted(blocked_giveup_shadows)} — see audit #21, "
-                      f"real fix tracked as #47")
+                      f"{sorted(blocked_giveup_shadows)} — see audit #21 "
+                      f"(real fix #47 deferred 2026-05-06)")
             else:
                 print(f"FAILED: All {len(shadows)} shadows searched — target not found")
         elif exit_reason == "planner_failed":

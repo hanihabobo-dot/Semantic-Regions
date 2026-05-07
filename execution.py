@@ -786,10 +786,13 @@ def handle_sense_action(
     """
     # SENSE: cast rays from the fixed camera through the
     # shadow volume to determine what's inside.
-    # Three possible outcomes drive the control flow:
-    #   found_target  → belief updated, plan continues to pick
-    #   clear_but_empty → shadow eliminated, break to replan
-    #   still_blocked → occluder not fully cleared, break to replan
+    # Four sense outcomes are folded into three control-flow branches:
+    #   found_target            → belief updated, plan continues to pick
+    #   clear_but_empty
+    #     / contains_nontarget  → shadow eliminated, break to replan
+    #                              (contains_nontarget also registers the
+    #                               discovered objects + their new shadows)
+    #   still_blocked           → occluder not fully cleared, break to replan
     obj, shadow_id = action_params
     print(f"    Sensing {shadow_id} (fixed camera)...")
 
@@ -990,7 +993,8 @@ def handle_sense_action(
               f"empty; marking not_here so the planner "
               f"stops re-attempting it.  Real remedy: "
               f"re-ground blocker atoms after repeated "
-              f"failure — tracked as audit #47.")
+              f"failure — audit #47 (deferred out of scope "
+              f"2026-05-06).")
         blocked_giveup_shadows.add(sid_str)
         belief.mark_sensed(sid_str, found=False)
     else:

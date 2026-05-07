@@ -5,7 +5,7 @@ This module provides:
 - BoxelData: Rich data structure for semantic boxels
 - BoxelRegistry: Container for all boxels with relationship tracking
 - Serialization to JSON for persistence
-- PDDL fact generation for PDDLStream integration
+- Type tags consumed by pddlstream_planner for PDDL fact emission
 """
 
 import json
