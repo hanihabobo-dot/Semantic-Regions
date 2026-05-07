@@ -202,6 +202,25 @@ Updated:      2026-05-07 (later) — #49 commit 1/4 landed (tray entity
               toggle (reverted before commit).  py_compile clean.
               #49 still open — commits 2-4 (PDDL is_tray gate, --goal
               find-and-tray-stack, polish/scalability sweep) remain.
+Updated:      2026-05-07 (later) — #49 commit 2/4 landed (PDDL is_tray
+              gate).  Added (is_tray ?o) predicate to
+              pddl/domain_pddlstream.pddl alongside the existing stacking
+              predicates; no action body changes.  PDDLStreamPlanner
+              constructor takes a new tray_name kwarg (default None);
+              _build_init emits (Obj tray) + (is_tray tray) when set,
+              and the existing all_obj_ids loop emits (clear tray) +
+              (on_table tray) automatically.  test_full_pipeline.py
+              detects the tray by scanning env.objects for
+              ObjectInfo.is_tray and passes tray_name=... to the
+              planner; backward compatible (tray_name=None when
+              enable_tray=False default).  pick is implicitly unpickable
+              on tray since no (obj_at_boxel tray ?b) is emitted; place
+              targets free-space boxels (tray has none); stack accepts
+              tray as ?on_obj once (Obj tray) + (clear tray) are in
+              init.  py_compile clean across pddlstream_planner.py and
+              test_full_pipeline.py.  #49 still open — commits 3-4
+              (streams placement on tray top + stack_kin for tray;
+              --goal find-and-tray-stack + verifier extension) remain.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
