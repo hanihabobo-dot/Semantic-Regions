@@ -623,12 +623,15 @@ def main(gui=True, run_logger=None, scene_config=None,
     # in each plan() call so replanning always starts from scratch with
     # the latest world state.
     belief = BeliefState(shadows, target_name)
+    tray_name = next((name for name, info in env.objects.items()
+                      if info.is_tray), None)
     planner = PDDLStreamPlanner(registry, robot_id=env.plan_robot_id,
                                 shadow_occluder_map=shadow_occluder_map,
                                 physics_client=env.plan_client_id,
                                 object_body_ids=object_body_ids,
                                 support_body_ids=planner_support_body_ids,
-                                camera_pos=env.camera_position)
+                                camera_pos=env.camera_position,
+                                tray_name=tray_name)
 
     # The planner needs to reason about every object that may participate
     # in the goal.  For 'holding' that's just the chosen target; for

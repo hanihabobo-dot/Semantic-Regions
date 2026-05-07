@@ -73,6 +73,7 @@
     (on ?o1 ?o2)
     (on_table ?o)                 ; ?o sits directly on the table  (audit #41)
     (clear ?o)
+    (is_tray ?o)                  ; ?o is the fixed-base tray support  (audit #49)
     (stack_kin ?o ?on_obj ?g ?q)  ; IK config ?q to place ?o on top of ?on_obj
   )
 
