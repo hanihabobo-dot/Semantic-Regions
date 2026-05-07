@@ -358,6 +358,19 @@ Updated:      2026-05-07 (later) — #53 marked [DONE 2026-05-07].
               tray goal's role is settled (revert, --tray-stack-cap
               N flag, or audit-history note).  py_compile clean.
               Open count: 5 -> 4.
+Added:        2026-05-07 (later) — #54 (TIER 0 follow-up triage —
+              force VISIBLE target on --goal find-and-tray-stack to
+              isolate sense from pick/stack/streams.  #53 ruled out
+              goal-AST length and size-compat as causes; the "deeper
+              issue" branch has three live candidates — sense-side
+              (stale view_blocked / blocker re-grounding), pick/
+              stack-into-cavity sampling, and single (Boxel tray)
+              move plannability.  Visible-only run drops sense from
+              the AST, separating sense-side from {pick, stack,
+              streams}).  Slice landed in commit 826bb21
+              (test_full_pipeline.py find-and-tray-stack branch);
+              supersedes #53's hidden-preferred slice.  py_compile
+              clean.  Open count: 4 -> 5.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -443,7 +456,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #50, #52                                              #
+#  OPEN ISSUES — #9, #10, #50, #52, #54                                         #
 #                                                                              #
 ################################################################################
 
@@ -457,6 +470,7 @@ Pre-evaluation (intended order before the eval sweep):
     → #36 [DONE 2026-05-07] (hardcoded place/stack lift)
     → #49 [DONE 2026-05-07] (tray goal)
     → #53 [DONE 2026-05-07] (TIER 0 diagnostic triage — 1-cube tray-stack)
+    → #54 (TIER 0 follow-up triage — visible-only tray-stack)
     → #52 (TIER 0 demo goal — find-and-stack-on-base) → #50 (planner perf)
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
@@ -843,6 +857,82 @@ Related: #49 [DONE 2026-05-07; archived] — the goal mode being
 
 
 ================================================================================
+#54. DIAGNOSTIC — FORCE VISIBLE TARGET ON --goal find-and-tray-stack
+================================================================================
+Priority: TIER 0 — User-prioritised 2026-05-07 (post-#53).  Cheap follow-up
+          triage that drops the sense action from the goal AST entirely so
+          we can tell whether the planner failure lives in sense or in
+          pick/stack/streams.  Supersedes #53's hidden-preferred slice.
+Where:    test_full_pipeline.py main() — find-and-tray-stack branch (was
+          #53's slice; commit 826bb21 swaps the preference from hidden to
+          visible).
+Depends:  #53 [DONE] — established the 1-cube floor and ruled out
+          goal-AST length AND size-compat as causes.
+Effort:   <0.5 day (slice already in place; one WSL run + result read-off).
+
+What:  #53 narrowed --goal find-and-tray-stack to a single hidden cube
+       and confirmed the planner still fails (logs/run_2026-05-07_21-26-18,
+       45.87 s, no plan).  That rules out goal-AST length and size-compat
+       (the 1-cube tray drop never invokes cube-on-cube stacking).
+
+       The "deeper issue" branch from #53 has at least three live
+       candidates:
+         (a) sense-side: stale view_blocked atoms / blocker re-grounding
+             gaps (cf. archived #21 / deferred #47).
+         (b) pick-or-stack-side: stack-into-cavity stream sampling, or
+             execute_pick / execute_stack interaction with the tray
+             support.
+         (c) move-to-tray plannability: a single (Boxel tray) sample is
+             insufficient for the move action's
+             (config_for_boxel ?q tray) chain.
+
+       #54 isolates (a) from {(b), (c)} by forcing a VISIBLE cube.  The
+       visible cube's obj_at_boxel fact lets the planner go straight from
+       pick to stack with no sense action in the AST — if the planner
+       still fails, sense is exonerated and we narrow to {(b), (c)}.
+
+       Outcomes inform the next step:
+         - Visible-only succeeds: the failure is sense-side.  Open a
+           follow-up audit issue scoped to the failing sense
+           preconditions; #52 still proceeds because find-and-stack-on-
+           base also runs sense in its plan AST.
+         - Visible-only also fails: pick / stack / streams or single
+           (Boxel tray) sample is the bottleneck.  Investigation folds
+           into #50 (planner perf) or a new audit item; #52's cube-on-
+           cube path is independent of tray-cavity sampling so #52
+           still proceeds.
+
+Fix:   ONE COMMIT (already landed — 826bb21):
+       (a) In the find-and-tray-stack branch of main(), filter
+           stack_target_objects down to the targets NOT in
+           target_to_shadow (visible only).
+       (b) Raise an actionable error when no visible target exists
+           rather than silently falling back to a hidden one (defeats
+           the diagnostic).
+       (c) Pick one with random.choice; record its boxel id in
+           visible_target_locations so the planner emits obj_at_boxel.
+       (d) Print "[#54 triage] limiting tray-stack to single visible
+           target (no sense): <name>" so the diagnostic intent is
+           obvious in the log.
+
+       INTENTIONALLY TEMPORARY (supersedes #53's slice).  Once the
+       triage signal is in, the slice either reverts (next step is
+       #52), turns into a permanent --tray-stack-cap-N flag, or moves
+       to audit history.
+
+Related: #49 [DONE 2026-05-07; archived] — the goal mode being
+              triaged.
+         #53 [DONE 2026-05-07] — sibling triage; #54 supersedes its
+              code slice.  #53's findings (rules out goal-AST length
+              AND size-compat) remain valid context.
+         #52 — TIER 0 simplified replacement; #54's outcome
+              clarifies what #52 inherits from --goal find-and-tray-
+              stack's failure modes.
+         #50 — planner perf; visible-only failure would funnel into
+              its profiling sweep.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -920,10 +1010,14 @@ TIER 0 — TOP PRIORITY (user-prioritised 2026-05-07):
    fails (planner_failed, 45.87 s, single attempt).  Triage rules
    out goal-AST length AND size-compat; "deeper issue" branch is
    live.  Awaiting archive slim.)
+  #54  Follow-up triage — force VISIBLE target on --goal find-and-
+       tray-stack (drops sense action from goal AST, isolates
+       sense-side failure modes from pick/stack/streams).  Slice
+       landed in commit 826bb21; awaiting WSL run for triage signal.
   #52  find-and-stack-on-base demo goal (simplified replacement for
        --goal find-and-tray-stack as the default thesis demo;
        proceeds as the recommended path independently of the deeper
-       tray-goal issue surfaced by #53)
+       tray-goal issue surfaced by #53/#54)
 
 TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
   (empty — #41 [DONE 2026-05-07], #48 [DONE 2026-05-07]; stack-
@@ -938,7 +1032,7 @@ TIER 3 — EVALUATION (runner #9, then baseline #10):
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
 
-Total open: 4 items (#9, #10, #50, #52).
+Total open: 5 items (#9, #10, #50, #52, #54).
 
 Closed since previous summary:
   #53 [DONE 2026-05-07] — TIER 0 diagnostic slice landed; WSL run
