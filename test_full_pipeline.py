@@ -628,34 +628,36 @@ def main(gui=True, run_logger=None, scene_config=None,
                 "--goal find-and-tray-stack needs at least 1 target cube; "
                 "the scene spawned none."
             )
-        # audit #53 — TIER 0 diagnostic.  Narrow tray-stack to a single
-        # target to disambiguate goal-AST length from size-compat as the
-        # cause of #49 planner failures on default_scene.  Prefer a
-        # hidden target so the sense → pick → stack chain stays
-        # exercised; fall back to a visible target otherwise.
-        # INTENTIONALLY TEMPORARY — revert (or convert to a
-        # --tray-stack-cap N flag) once the triage signal is in.
-        hidden_targets = [t for t in stack_target_objects
-                          if t in target_to_shadow]
-        if hidden_targets:
-            chosen_target = random.choice(hidden_targets)
-            chosen_kind = 'hidden'
-        else:
-            chosen_target = random.choice(stack_target_objects)
-            chosen_kind = 'visible'
-        print(f"[#53 triage] limiting tray-stack to single target: "
-              f"{chosen_target} ({chosen_kind})")
+        # audit #54 — TIER 0 follow-up diagnostic.  #53 narrowed
+        # tray-stack to 1 target and confirmed the run still fails when
+        # the cube is HIDDEN (sense → pick → stack chain).  Drop the
+        # sense step entirely by forcing a VISIBLE target — its
+        # obj_at_boxel fact lets the planner go straight from pick to
+        # stack with no sense action in the AST.
+        # Outcomes:
+        #   - Visible-only succeeds: the failure lives in sense
+        #     (stale view_blocked atoms, blocker re-grounding, etc).
+        #   - Visible-only also fails: pick / stack-on-tray / streams,
+        #     or the single (Boxel tray) sample, is the bottleneck.
+        # INTENTIONALLY TEMPORARY — supersedes the #53 slice.
+        visible_targets = [t for t in stack_target_objects
+                           if t not in target_to_shadow]
+        if not visible_targets:
+            env.close()
+            raise RuntimeError(
+                "[#54 triage] no visible targets — every spawned cube "
+                "was hidden.  Pick a different --seed or lower "
+                "--n-hidden so the visible-only triage can run."
+            )
+        chosen_target = random.choice(visible_targets)
+        print(f"[#54 triage] limiting tray-stack to single visible "
+              f"target (no sense): {chosen_target}")
         stack_target_objects = [chosen_target]
-        # Visible targets get an obj_at_boxel fact so the planner can pick
-        # them directly; hidden ones stay unknown until a sense action
-        # uncovers them.
-        for tname in stack_target_objects:
-            if tname in target_to_shadow:
-                continue
-            for boxel in registry.boxels.values():
-                if boxel.object_name == tname:
-                    visible_target_locations[tname] = boxel.id
-                    break
+        # Visible target → record its boxel for obj_at_boxel emission.
+        for boxel in registry.boxels.values():
+            if boxel.object_name == chosen_target:
+                visible_target_locations[chosen_target] = boxel.id
+                break
         goal = build_tray_stack_goal(stack_target_objects, tray_obj)
         # target_name is consumed by belief / sense / pick logging.  Use
         # the cube anchored on the tray (goal[1] is the (on c_0 tray)
