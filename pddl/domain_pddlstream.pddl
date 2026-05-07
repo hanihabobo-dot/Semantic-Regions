@@ -58,17 +58,20 @@
     (boxel_fits ?o ?b)            ; Free boxel ?b is large enough to contain ?o
     (on_surface ?b)               ; Boxel ?b rests on a support surface (table)
     
-    ;; --- Stacking (audit #30, --goal stack) ---
+    ;; --- Stacking (audit #30, #41, --goal stack) ---
     ;; (on ?o ?support) means ?o sits directly on top of ?support.
-    ;; "On the table" is implicit — an object that appears in no
-    ;; (on ?o ?x) fact is treated as table-resting.  This keeps the
-    ;; predicate space minimal while still expressing stack goals.
+    ;; (on_table ?o) is the explicit "?o rests on the table"
+    ;; counterpart (audit #41) — emitted in init for every cube not
+    ;; stacked, removed by pick, re-emitted by place.  build_stack_goal
+    ;; appends (on_table base) to the conjunction so the tower base
+    ;; is grounded.
     ;;
     ;; (clear ?o) means nothing is stacked on ?o.  Only emitted into
     ;; init when stackable_objects is supplied (i.e. the run is using
     ;; --goal stack); holding-goal runs never see these facts and pay
     ;; no grounding cost (audit #30 implementation note).
     (on ?o1 ?o2)
+    (on_table ?o)                 ; ?o sits directly on the table  (audit #41)
     (clear ?o)
     (stack_kin ?o ?on_obj ?g ?q)  ; IK config ?q to place ?o on top of ?on_obj
   )
@@ -215,6 +218,8 @@
       (holding ?o)
       (not (handempty))
       (not (obj_at_boxel ?o ?b))
+      (not (on_table ?o))         ; audit #41 — picking lifts ?o off the table
+                                  ; (idempotent if ?o was on a stack instead)
       ;; Stacking bookkeeping (audit #30): if ?o was sitting on some
       ;; ?x, picking it off makes ?x clear again.  The forall ranges
       ;; over (Obj ?x) but only fires when the (on ?o ?x) fluent is
@@ -226,7 +231,7 @@
       (increase (total-cost) 1)
     )
   )
-  
+
   ;; =========================================================================
   ;; PLACE: Place an object in a boxel
   ;; =========================================================================
@@ -254,6 +259,7 @@
       (handempty)
       (obj_at_boxel ?o ?b)
       (obj_at_boxel_KIF ?o ?b)
+      (on_table ?o)               ; audit #41 — place lands ?o on the table
       (not (holding ?o))
       (not (is_free_space ?b))
       (increase (total-cost) 1)
