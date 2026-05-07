@@ -12,7 +12,8 @@ Streams:
     - sample_grasp: Generate grasp poses for an object
     - plan_motion: Plan collision-free trajectory between configs
     - compute_kin_solution: Compute IK for pick/place
-    - compute_stack_kin_solution: Compute IK for stacking on a support (audit #30)
+    - compute_stack_kin_solution: Compute IK for stacking on a support
+      (audit #30; pose-aware refactor in audit #55)
 """
 
 import logging
@@ -117,6 +118,32 @@ class Grasp:
     
     def __repr__(self):
         return self.name if self.name else f"Grasp({self.position})"
+
+
+@dataclass(frozen=True)
+class SymbolicPose:
+    """
+    Symbolic pose of an object support — used by compute_stack_kin_solution
+    to derive the EE target for stacking on top of ``?on_obj``  (audit #55).
+
+    ``top_z`` is the support's top-face world-z: where the next cube's
+    bottom rests (= aabb_max[2] for cubes; = wall-top for the tray).
+    ``xy`` is the support's center xy.  ``quat`` carries the support's
+    orientation; cubes inherit it when stacked (planner-time geometry only).
+
+    Frozen + name-hashable so PDDLStream can use it as an opaque object
+    identity (mirrors ``RobotConfig`` / ``Trajectory`` / ``Grasp``).
+    """
+    name: str
+    xy: Tuple[float, float]
+    top_z: float
+    quat: Tuple[float, float, float, float]
+
+    def __repr__(self):
+        if self.name:
+            return self.name
+        return (f"SymbolicPose(xy=({self.xy[0]:.3f},{self.xy[1]:.3f}), "
+                f"top_z={self.top_z:.3f})")
 
 
 class BoxelStreams:
@@ -333,6 +360,48 @@ class BoxelStreams:
         if boxel and boxel.object_name and boxel.object_name in self.object_body_ids:
             return self.object_body_ids[boxel.object_name]
         return None
+
+    def initial_pose(self, obj_id: str) -> Optional['SymbolicPose']:
+        """
+        Mint an initial ``SymbolicPose`` for ``obj_id`` from the plan-side
+        PyBullet world (audit #55 commit 1/2).
+
+        ``self.physics_client`` is synced from the GUI client at the start
+        of each replan via ``env.sync_to_plan_client()``, so the AABB read
+        here reflects the object's CURRENT physical pose — including
+        positions resulting from prior executed actions.
+
+        Falls back to the registry boxel (axis-aligned, pose at scan time)
+        if the body cannot be resolved.  Returns None when neither source
+        is available, in which case _build_init silently skips the
+        (at_pose) emission for this object.
+        """
+        body_id = self._resolve_body_id(obj_id)
+        if body_id is not None:
+            try:
+                aabb_min, aabb_max = p.getAABB(
+                    body_id, physicsClientId=self.physics_client)
+                _, orn = p.getBasePositionAndOrientation(
+                    body_id, physicsClientId=self.physics_client)
+                return SymbolicPose(
+                    name=f"p_init_{obj_id}",
+                    xy=((aabb_min[0] + aabb_max[0]) / 2.0,
+                        (aabb_min[1] + aabb_max[1]) / 2.0),
+                    top_z=float(aabb_max[2]),
+                    quat=(float(orn[0]), float(orn[1]),
+                          float(orn[2]), float(orn[3])),
+                )
+            except Exception:
+                pass
+        boxel = self.registry.get_boxel(obj_id)
+        if boxel is None:
+            return None
+        return SymbolicPose(
+            name=f"p_init_{obj_id}",
+            xy=(float(boxel.center[0]), float(boxel.center[1])),
+            top_z=float(boxel.max_corner[2]),
+            quat=(0.0, 0.0, 0.0, 1.0),
+        )
 
     # =========================================================================
     # Boxel fitness (place precondition) — used from pddlstream_planner init

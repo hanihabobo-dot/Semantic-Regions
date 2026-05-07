@@ -535,6 +535,21 @@ class PDDLStreamPlanner:
             if obj_id not in stacked_objs:
                 init.append(('on_table', obj_id))
 
+        # audit #55 commit 1/2 — initial-pose facts for every Obj.
+        # BoxelStreams.initial_pose() reads the plan-side PyBullet world
+        # (synced from GUI at the start of each replan), so at_pose
+        # reflects each object's CURRENT physical position.  Inert at this
+        # commit — no action consumes (Pose ?p) or (at_pose ?o ?p) yet;
+        # commit 2/2 (Path C) rewires :action stack and compute-stack-kin
+        # to read ?p_on and mint ?p_new.  Skip silently when initial_pose
+        # cannot resolve a body (no body_id, no registry boxel).
+        for obj_id in all_obj_ids:
+            pose = self.streams.initial_pose(obj_id)
+            if pose is None:
+                continue
+            init.append(('Pose', pose))
+            init.append(('at_pose', obj_id, pose))
+
         if stackable_objects is not None:
             for stacked, support in on_relations.items():
                 init.append(('on', stacked, support))

@@ -75,6 +75,20 @@
     (clear ?o)
     (is_tray ?o)                  ; ?o is the fixed-base tray support  (audit #49)
     (stack_kin ?o ?on_obj ?g ?q)  ; IK config ?q to place ?o on top of ?on_obj
+
+    ;; --- Pose plumbing (audit #55) ---
+    ;; (Pose ?p) is a stream-typed certified predicate (mirrors Config /
+    ;; Grasp / Trajectory).  (at_pose ?o ?p) tracks where ?o currently
+    ;; sits, derived from PyBullet at planning-time via
+    ;; BoxelStreams.initial_pose() and updated by the stack action's
+    ;; effect once compute-stack-kin lands a new pose for the stacked
+    ;; cube (audit #55 commit 2/2).  Pick / place do NOT update at_pose
+    ;; — the stale value is harmless because no stream consumes ?o's
+    ;; at_pose while ?o is held, and no current goal stacks onto a
+    ;; placed cube (FOR LATER).  Inert until commit 2/2 wires the
+    ;; stack action to consume them.
+    (Pose ?p)
+    (at_pose ?o ?p)
   )
 
   ;; =========================================================================
