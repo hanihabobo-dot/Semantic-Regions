@@ -780,6 +780,11 @@ class BoxelTestEnv:
                  else self._PANDA_REACH_RADIUS)
         reserved = list(reserved_xys) if reserved_xys else []
         positions = []
+        # 400 rejection-sampling attempts per object — empirical budget
+        # that succeeds for typical 2-8 object scenes within the safe
+        # placement window.  Exhaustion is hard-raised below (no silent
+        # fallback) so over-constrained configurations surface as
+        # actionable errors.
         for _ in range(n * 400):
             if len(positions) >= n:
                 break
@@ -928,6 +933,10 @@ class BoxelTestEnv:
             target_half = max(hx, hy)
             cz = self.table_surface_height + hz
             placed = False
+            # 400 candidate attempts per hidden target — same empirical
+            # budget as _random_xy_positions; exhaustion returns None
+            # so _create_targets raises an actionable error rather than
+            # silently fall back to unconstrained placement.
             for _ in range(400):
                 idx = int(rng.randint(len(occluder_info)))
                 (ox, oy), occ_half = occluder_info[idx]

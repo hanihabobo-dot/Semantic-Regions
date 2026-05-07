@@ -85,12 +85,22 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
     min_c = shadow_boxel.min_corner
     max_c = shadow_boxel.max_corner
 
+    # Three z-slices through the shadow volume so a target at any height
+    # has a chance of being hit.  +0.04 m on the lowest slice keeps it
+    # clear of the shadow base (which sits at the table surface — rays
+    # exactly at table_z would terminate on the table before reaching
+    # anything inside the shadow); 1/3 and 2/3 fractions space the
+    # upper two slices through the remaining volume.
     z_levels = [
         min_c[2] + 0.04,
         min_c[2] + (max_c[2] - min_c[2]) * 0.33,
         min_c[2] + (max_c[2] - min_c[2]) * 0.67,
     ]
 
+    # 7x7 grid per z-slice — finer than compute_shadow_blockers' 5x5
+    # because here we need to detect whether the TARGET is visible
+    # (precision matters), not just identify which objects block the
+    # corridor.
     n = 7
     ray_froms = []
     ray_tos = []
