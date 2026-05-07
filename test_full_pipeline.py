@@ -125,9 +125,20 @@ def goal_satisfied(goal, on_relations=None, target_found=False) -> bool:
 
 def _verify_cube_on(env, obj_name, support_name, eps_z=0.005):
     """
-    Physics check that ``obj_name`` rests on top of ``support_name``
-    (audit #40).  Used both per-action (gate the on_relations write
-    after execute_stack) and at end-of-run (walk the goal AST).
+    Physics check that ``obj_name`` rests on ``support_name``
+    (audit #40; tray-aware extension audit #49).  Used both
+    per-action (gate the on_relations write after execute_stack) and
+    at end-of-run (walk the goal AST).
+
+    Two support shapes:
+      - cube-on-cube: the cube's bottom face must match the support's
+        top face within ε; XY centre inside the support's AABB.
+      - cube-on-tray (``support_info.is_tray``): the cube settles
+        INSIDE the tray cavity instead of touching the wall-top, so
+        the bottom-z match is replaced by a z-range check (cube's
+        bottom anywhere within the tray's full z extent ± ε).  The
+        XY centre check is unchanged — the cube must still land
+        within the tray's footprint.
 
     Tolerance ε = 5 mm is the audit's chosen default for 40-mm cubes.
     XY-centre check uses the support's plain AABB; tightening to a
@@ -143,10 +154,20 @@ def _verify_cube_on(env, obj_name, support_name, eps_z=0.005):
                        f"'{support_name}' not in env.objects)")
     o_min, o_max = p.getAABB(env.objects[obj_name].object_id)
     s_min, s_max = p.getAABB(env.objects[support_name].object_id)
-    dz = abs(o_min[2] - s_max[2])
-    if dz > eps_z:
-        return False, (f"bottom_z={o_min[2]:.4f} not ≈ top_z="
-                       f"{s_max[2]:.4f} (Δ={dz:.4f} > ε={eps_z})")
+
+    support_info = env.objects.get(support_name)
+    is_tray_support = bool(getattr(support_info, 'is_tray', False))
+    if is_tray_support:
+        if not (s_min[2] - eps_z <= o_min[2] <= s_max[2] + eps_z):
+            return False, (f"bottom_z={o_min[2]:.4f} not within tray z "
+                           f"range [{s_min[2]:.4f}, {s_max[2]:.4f}] "
+                           f"(ε={eps_z})")
+    else:
+        dz = abs(o_min[2] - s_max[2])
+        if dz > eps_z:
+            return False, (f"bottom_z={o_min[2]:.4f} not ≈ top_z="
+                           f"{s_max[2]:.4f} (Δ={dz:.4f} > ε={eps_z})")
+
     o_cx = (o_min[0] + o_max[0]) / 2.0
     o_cy = (o_min[1] + o_max[1]) / 2.0
     if not (s_min[0] <= o_cx <= s_max[0]
@@ -345,6 +366,52 @@ def build_stack_goal(stackable_objects, stack_height, rng=None):
     return ('and',) + tuple(clauses)
 
 
+def build_tray_stack_goal(targets, tray_name, rng=None):
+    """
+    Goal builder for --goal find-and-tray-stack (audit #49).
+
+    For ``targets = [c_0, ..., c_{H-1}]`` (after a shuffle) and tray
+    ``T`` the goal is::
+
+        ('and', ('on', c_0, T),
+                ('on', c_1, c_0),
+                ('on', c_2, c_1),
+                ...
+                ('on', c_{H-1}, c_{H-2}))
+
+    ``c_0`` is the BASE that anchors the tower onto the tray.  This
+    inverts ``build_stack_goal``'s top-down convention because the tray
+    plays the role of the table-anchor that ``(on_table base)`` plays
+    for cube-stack goals.  No ``(on_table tray)`` clause is emitted —
+    the tray is fixed-base and not picked, so the planner-side init
+    fact is sufficient and the verifier need not check it.
+
+    A 1-target call collapses to ``('and', ('on', c_0, T))`` — a
+    single-clause conjunction that ``_verify_goal_physics`` and
+    ``goal_satisfied`` already handle.
+
+    Args:
+        targets: discovered/visible cube names to include in the
+            tower.  All of them end up on the tray; ``--stack-height``
+            is not consulted for this goal.
+        tray_name: ObjectInfo name of the tray (commonly "tray").
+        rng: ``random.Random`` for reproducible shuffling; defaults to
+            the module ``random``.
+    """
+    if not targets:
+        raise ValueError(
+            "--goal find-and-tray-stack needs at least 1 target. "
+            "Increase --n-targets or pick a scene that spawns cubes."
+        )
+    rng = rng or random
+    chosen = list(targets)
+    rng.shuffle(chosen)
+    base_clause = ('on', chosen[0], tray_name)
+    pairs = [('on', chosen[i + 1], chosen[i])
+             for i in range(len(chosen) - 1)]
+    return ('and',) + tuple([base_clause] + pairs)
+
+
 def main(gui=True, run_logger=None, scene_config=None,
          draw_boxel_overlays=True, show_free=False,
          goal_kind='holding', stack_height=2,
@@ -538,6 +605,42 @@ def main(gui=True, run_logger=None, scene_config=None,
             target_name = str(goal[1])
         print(f"  Stack goal: {goal}")
         print(f"  Stackable cubes: {stack_target_objects}")
+    elif goal_kind == 'find-and-tray-stack':
+        # audit #49 — discover every target via sense + tray-stack them.
+        tray_obj = next((name for name, info in env.objects.items()
+                         if info.is_tray), None)
+        if tray_obj is None:
+            env.close()
+            raise RuntimeError(
+                "--goal find-and-tray-stack requires a tray in the scene. "
+                "The CLI auto-enables it; if you constructed the SceneConfig "
+                "manually, set enable_tray=True."
+            )
+        stack_target_objects = list(all_targets)
+        if not stack_target_objects:
+            env.close()
+            raise RuntimeError(
+                "--goal find-and-tray-stack needs at least 1 target cube; "
+                "the scene spawned none."
+            )
+        # Visible targets get an obj_at_boxel fact so the planner can pick
+        # them directly; hidden ones stay unknown until a sense action
+        # uncovers them.
+        for tname in stack_target_objects:
+            if tname in target_to_shadow:
+                continue
+            for boxel in registry.boxels.values():
+                if boxel.object_name == tname:
+                    visible_target_locations[tname] = boxel.id
+                    break
+        goal = build_tray_stack_goal(stack_target_objects, tray_obj)
+        # target_name is consumed by belief / sense / pick logging.  Use
+        # the cube anchored on the tray (goal[1] is the (on c_0 tray)
+        # clause — same role on_table-base plays in build_stack_goal).
+        target_name = str(goal[1][1])
+        print(f"  Find-and-tray-stack goal: {goal}")
+        print(f"  Targets: {stack_target_objects}")
+        print(f"  Tray: {tray_obj}")
     else:
         raise ValueError(f"Unsupported --goal '{goal_kind}'. "
                          "Add a builder before passing it through.")
@@ -637,7 +740,9 @@ def main(gui=True, run_logger=None, scene_config=None,
     # in the goal.  For 'holding' that's just the chosen target; for
     # 'stack' it's every cube in the requested tower.
     planner_target_objects = (
-        stack_target_objects if goal_kind == 'stack' else [target_name]
+        stack_target_objects
+        if goal_kind in ('stack', 'find-and-tray-stack')
+        else [target_name]
     )
 
     problem_path = planner.export_problem_pddl(
@@ -671,6 +776,10 @@ def main(gui=True, run_logger=None, scene_config=None,
     # (pick + stack) plus a small slack for retries (audit #30).
     if goal_kind == 'stack':
         max_replans = 2 * stack_height + 3
+    elif goal_kind == 'find-and-tray-stack':
+        # audit #49 — sense (up to 4 attempts/shadow) + pick+stack
+        # (2 actions/cube) + slack.
+        max_replans = 4 * len(shadows) + 2 * len(stack_target_objects) + 3
     else:
         max_replans = 4 * len(shadows) + 1
     grasp_constraint_id = None       # set during pick, cleared after place
@@ -703,7 +812,10 @@ def main(gui=True, run_logger=None, scene_config=None,
         known_empty = belief.get_known_empty_shadows()
 
         print(f"\n=== PLAN #{plan_count} ===")
-        if goal_kind == 'holding':
+        if goal_kind == 'find-and-tray-stack':
+            print(f"Tray-stack progress: {on_relations} "
+                  f"(unknown shadows: {len(unknown_shadows)})")
+        elif goal_kind == 'holding':
             print(f"Unknown shadows remaining: {len(unknown_shadows)}")
             if not unknown_shadows:
                 # Audit #21: 'all_searched' is the loop-termination tag,
@@ -795,10 +907,15 @@ def main(gui=True, run_logger=None, scene_config=None,
             visible_target_locations=visible_target_locations,
             # on/clear facts only emitted into init when stackable
             # objects is supplied — holding-goal runs pay nothing.
-            on_relations=(on_relations if goal_kind == 'stack'
+            # find-and-tray-stack (audit #49) reuses the same plumbing
+            # because its goal AST is built from (on ?o ?x) clauses.
+            on_relations=(on_relations
+                          if goal_kind in ('stack', 'find-and-tray-stack')
                           else None),
             stackable_objects=(stack_target_objects
-                               if goal_kind == 'stack' else None),
+                               if goal_kind in ('stack',
+                                                'find-and-tray-stack')
+                               else None),
             unit_costs=unit_costs,
         )
         plan_dt = time.perf_counter() - plan_t0
@@ -1265,6 +1382,13 @@ if __name__ == "__main__":
         ),
     }
     scene_cfg = scene_builders[args.scene]()
+
+    # audit #49 — find-and-tray-stack is the only goal that needs the
+    # tray entity; enable it on whatever scene was selected (default,
+    # scalability, etc.) so the user does not have to construct a custom
+    # SceneConfig just to opt the tray in.
+    if args.goal == 'find-and-tray-stack':
+        scene_cfg.enable_tray = True
 
     # Snapshot of effective CLI flags echoed into the per-run log and the
     # JSON timing summary so cross-run comparisons can group by config
