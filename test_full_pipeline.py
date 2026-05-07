@@ -628,6 +628,24 @@ def main(gui=True, run_logger=None, scene_config=None,
                 "--goal find-and-tray-stack needs at least 1 target cube; "
                 "the scene spawned none."
             )
+        # audit #53 — TIER 0 diagnostic.  Narrow tray-stack to a single
+        # target to disambiguate goal-AST length from size-compat as the
+        # cause of #49 planner failures on default_scene.  Prefer a
+        # hidden target so the sense → pick → stack chain stays
+        # exercised; fall back to a visible target otherwise.
+        # INTENTIONALLY TEMPORARY — revert (or convert to a
+        # --tray-stack-cap N flag) once the triage signal is in.
+        hidden_targets = [t for t in stack_target_objects
+                          if t in target_to_shadow]
+        if hidden_targets:
+            chosen_target = random.choice(hidden_targets)
+            chosen_kind = 'hidden'
+        else:
+            chosen_target = random.choice(stack_target_objects)
+            chosen_kind = 'visible'
+        print(f"[#53 triage] limiting tray-stack to single target: "
+              f"{chosen_target} ({chosen_kind})")
+        stack_target_objects = [chosen_target]
         # Visible targets get an obj_at_boxel fact so the planner can pick
         # them directly; hidden ones stay unknown until a sense action
         # uncovers them.
