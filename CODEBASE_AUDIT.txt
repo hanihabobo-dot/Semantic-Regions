@@ -148,6 +148,21 @@ Updated:      2026-05-07 (later) — #31 marked [DONE 2026-05-07].
               keep/kill" parentheticals (decided WONTFIX 2026-05-06);
               missing newer streams in module/class docstrings.
               Open count: 9 -> 8.
+Updated:      2026-05-07 (later) — #51 marked [DONE 2026-05-07].
+              Fix landed in execution.py compute_shadow_blockers; tests
+              in tests/test_audit_51_blocker.py (3 cases, all passing).
+              Real failure mode broader than the audit text said: the
+              user observed sense executing 3x and looping on
+              still_blocked rather than the planner refusing to emit
+              sense.  Both the primary 5x5 ray batch (when the relocated
+              body overlaps the shadow's stale AABB on its far side) AND
+              the parent-relationship fallback (when the body is past
+              the shadow entirely) could produce the bug.  Fix gates
+              both via hit_pos / segment-entry-point against the shadow
+              AABB.  Original geometry-skew use case (yellow shared-
+              face) preserved by the fallback's slab test +
+              outside-shadow gate.  Open count: 8 -> 7.  TIER 0 again
+              empty.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -233,7 +248,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #36, #41, #48, #49, #50, #51                          #
+#  OPEN ISSUES — #9, #10, #36, #41, #48, #49, #50                               #
 #                                                                              #
 ################################################################################
 
@@ -859,12 +874,42 @@ Related: #9 (experiment runner — needed to gather timing samples),
 
 
 ================================================================================
-#51. STALE SHADOW BLOCKER FROM PARENT-RELATIONSHIP FALLBACK AFTER OCCLUDER RELOCATION
+#51. STALE SHADOW BLOCKER FROM PARENT-RELATIONSHIP FALLBACK AFTER OCCLUDER RELOCATION  [DONE 2026-05-07]
 ================================================================================
 Priority: TIER 0 (proposed) — Symbolic-state correctness.  Sense becomes
           impossible for any shadow whose creating occluder has been
           moved aside, even when the camera can clearly see the shadow.
           User-discovered 2026-05-07 in GUI run.
+
+Resolution (2026-05-07): the actual failure mode in the GUI run was
+          BROADER than this entry first described.  The user observed
+          sense executing 3x and looping on still_blocked (logs/run_
+          2026-05-07_09-33-49: "View to shadow_of_orange_object still
+          blocked (8% rays hit occluder). [attempt 1..3]"), not the
+          planner refusing to emit sense at all.  The 8% of rays were
+          hitting orange's NEW body, which had been placed at
+          free_076 (~y=0.05) — overlapping shadow_of_orange's stale
+          AABB on its far side.  Two paths produce the bug: (a) the
+          primary 5x5 ray batch hits the relocated body inside the
+          shadow's AABB and lists it as a blocker; (b) when the body
+          is moved past the shadow entirely, the unconditional
+          parent-relationship fallback adds it.  The fix gates both
+          paths against the shadow's AABB:
+            - Primary loop: skip a hit when hit_pos lies INSIDE the
+              shadow's AABB (the body has migrated into the shadow
+              region — sense should treat it as contains_nontarget,
+              not as a corridor obstruction).
+            - Fallback: replace the unconditional add with a slab-
+              method ray-AABB test (new helper _segment_aabb_t_enter
+              mirroring PDDLStreamPlanner._ray_aabb_intersects); only
+              add the creator when the segment enters its CURRENT
+              AABB at a point OUTSIDE the shadow.  Original geometry-
+              skew use case (yellow <-> shadow_of_yellow_object,
+              shared face) preserved — yellow's near face is outside
+              the shadow's AABB so the gate accepts it.
+          Tests: tests/test_audit_51_blocker.py covers both bug paths
+          (cases A and B) and the geometry-skew regression (case C).
+          Pre-fix: 2 failed, 1 passed.  Post-fix: all 3 pass.
 Where:    execution.py compute_shadow_blockers (~lines 207-216, the
           parent-relationship fallback);
           pddlstream_planner.py _build_init (consumes the map and
@@ -1049,10 +1094,7 @@ Aligns with the ROADMAP banner above (pre-eval → eval prerequisites → eval).
 Each issue is ideally one commit; parallelise where dependencies allow.
 
 TIER 0 — BEFORE EVAL (correctness):
-  #51  Stale shadow blocker from parent-relationship fallback
-       (compute_shadow_blockers force-adds creator after relocation;
-       visible shadows symbolically blocked; sense impossible).
-       User-discovered 2026-05-07 in GUI.  <0.5 day fix.
+  (empty — #51 [DONE 2026-05-07]; awaiting archive slim)
 
 TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
   #41  Stack goal: explicit (on_table ?o) clause for the base cube
@@ -1081,12 +1123,14 @@ TIER 3 — EVALUATION (runner #9, then baseline #10):
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
 
-Total open: 8 items (#9, #10, #36, #41, #48, #49, #50, #51).
+Total open: 7 items (#9, #10, #36, #41, #48, #49, #50).
 
 Closed since previous summary:
-  (none — 2026-05-06 slim moved all freshly-closed entries to the
-  archives; see "Slimmed: 2026-05-06" line in the changelog header
-  for the full list.)
+  #51  [DONE 2026-05-07] — stale shadow blocker fix landed in
+       compute_shadow_blockers (hit_pos filter on the primary 5x5
+       ray batch + slab-method outside-shadow gate on the parent-
+       relationship fallback); regression tests in
+       tests/test_audit_51_blocker.py.  Awaiting archive slim.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
