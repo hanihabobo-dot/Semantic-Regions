@@ -282,27 +282,35 @@
   )
 
   ;; =========================================================================
-  ;; STACK: Place the held object on top of another object  (audit #30)
+  ;; STACK: Place the held object on top of another object  (audit #30;
+  ;;        pose-aware refactor in audit #55)
   ;; =========================================================================
   ;; Mirrors place but the destination is an OBJECT boxel rather than a
   ;; FREE_SPACE boxel.  ``stack_kin`` is certified by compute-stack-kin,
-  ;; which derives the EE target from ?on_obj's CURRENT top z + the held
-  ;; object's half-height; this is computed each time the planner is
-  ;; invoked so multi-step stacks tolerate per-step settling.
+  ;; which derives the EE target from the support's SYMBOLIC pose ?p_on
+  ;; (flowing from (at_pose ?on_obj ?p_on)) plus the held object's
+  ;; half-height, and mints ?p_new for the held cube's resulting pose.
+  ;; Stack effect updates at_pose for ?o so a subsequent stack onto ?o
+  ;; sees its CURRENT pose, not its pre-pick pose — fixes the moved-
+  ;; support gap that broke find-and-tray-stack on the default scene
+  ;; (logs/run_2026-05-07_22-07-31).
   ;;
   ;; (clear ?o) becomes true on the newly-stacked object so it is itself
   ;; available as a support for a subsequent stack action.
   (:action stack
-    :parameters (?o ?on_obj ?g ?q)
+    :parameters (?o ?on_obj ?p_on ?p_new ?g ?q)
     :precondition (and
       (Obj ?o)
       (Obj ?on_obj)
+      (Pose ?p_on)
+      (Pose ?p_new)
       (Grasp ?g)
       (Config ?q)
       (holding ?o)
       (at_config ?q)
       (clear ?on_obj)
-      (stack_kin ?o ?on_obj ?g ?q)
+      (at_pose ?on_obj ?p_on)
+      (stack_kin ?o ?on_obj ?p_on ?p_new ?g ?q)
     )
     :effect (and
       (handempty)
@@ -312,6 +320,15 @@
       (obj_at_boxel_KIF ?o ?o)
       (not (holding ?o))
       (not (clear ?on_obj))
+      ;; audit #55 — keep at_pose single-valued for ?o.  PDDL effects
+      ;; evaluate against the pre-state, so the forall deletes any
+      ;; stale (at_pose ?o ?p_old) carried over from before pick /
+      ;; the previous stack, while the simultaneous (at_pose ?o
+      ;; ?p_new) addition lands the new pose.
+      (at_pose ?o ?p_new)
+      (forall (?p_old)
+        (when (at_pose ?o ?p_old)
+          (not (at_pose ?o ?p_old))))
       (increase (total-cost) 2)
     )
   )
