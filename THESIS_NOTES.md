@@ -313,20 +313,28 @@ audit #9 (experiment runner), audit #10/#11 (baselines), audit #30
 
 ---
 
-## 15. Stack support chain — implicit base today, explicit `on_table` open (#41)
+## 15. Stack support chain — explicit `on_table` predicate (#41 [DONE 2026-05-07])
 
-Stack goals are expressed with `(on ?object ?support)` only; the base
-cube is **not** named as resting on the table in the goal tuple today
-(`build_stack_goal` documents implicit table support).  The domain
-comments describe the same convention: objects absent from any `(on ?o ?x)`
-fact are treated as table-resting.
+Stack goals were originally expressed with `(on ?object ?support)`
+only; the base cube was **not** named as resting on the table in the
+goal tuple, and the domain treated cubes absent from any `(on ?o ?x)`
+fact as implicitly table-resting.  That convention admitted floating-
+tower interpretations the physics verifier (#40) could not refute.
 
-Making that constraint **explicit** in the PDDL goal (e.g. `(on_table ?o)`
-or a table object) is tracked as **open** `CODEBASE_AUDIT.txt` **#41**
-and pairs with the physics verifier in **#40**.
+`(on_table ?o)` is now an explicit domain predicate (pick removes,
+place emits; stack untouched — the held cube was already off-table
+from the prior pick).  `_build_init` emits `(on_table X)` for every
+non-stacked cube, `build_stack_goal` appends `(on_table base)` to
+the goal AST, and `_verify_on_table` extends the #40 physics
+verifier to the clause.
 
-**References**: `CODEBASE_AUDIT.txt` #41, #40; `pddl/domain_pddlstream.pddl`
-(~lines 61–65); `test_full_pipeline.py` `build_stack_goal`.
+No longer an accepted simplification — kept here for cross-reference
+stability (later sections reference §15+).
+
+**References**: `CODEBASE_AUDIT.txt` #41 [DONE 2026-05-07], #40;
+`pddl/domain_pddlstream.pddl` (`on_table` predicate, pick/place
+effects); `pddlstream_planner.py` `_build_init`;
+`test_full_pipeline.py` `build_stack_goal` / `_verify_on_table`.
 
 ---
 
