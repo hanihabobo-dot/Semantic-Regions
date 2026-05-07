@@ -270,10 +270,14 @@ def report_run_outcome(
                   f"({len(remaining)} unsearched shadows remaining)")
         elif exit_reason == "physics_mismatch":
             # Audit S-18: belief says target was found, but the
-            # end-of-run physics check disagreed (gripper empty,
-            # wrong body welded, or cube not lifted off the table).
-            # Details are in physics_failures / the
-            # PHYSICAL_FAILURE (goal) line printed earlier.
+            # end-of-run physics check disagreed (gripper empty
+            # or wrong body welded — the lift-above-table sub-
+            # check was dropped after it false-failed terminal-
+            # pick runs against the post-2026-04-22 no-lift-on-
+            # pick design; see _verify_holding docstring and
+            # CODEBASE_AUDIT.txt#36).  Details are in
+            # physics_failures / the PHYSICAL_FAILURE (goal)
+            # line printed earlier.
             print(f"FAILED: Belief said target was found but physics "
                   f"check disagreed (see PHYSICAL_FAILURE above) — "
                   f"audit S-18")
