@@ -536,9 +536,14 @@ def main(gui=True, run_logger=None, scene_config=None,
     # genuinely occluded.  The robot only discovers this through sensing.
     print("\n--- Phase 4: Hidden Object Scenario ---")
 
+    # audit #49 — also exclude is_tray=True (the fixed-base tray is a
+    # support surface, never a pickable target; it would otherwise leak
+    # into stack_target_objects under --goal find-and-tray-stack and
+    # produce nonsense (on tray <cube>) clauses in the goal AST).
     all_targets = [
         name for name, info in env.objects.items()
-        if not info.is_occluder and name not in ("plane", "table", "robot")
+        if not info.is_occluder and not info.is_tray
+        and name not in ("plane", "table", "robot")
     ]
 
     # AABB containment test: a target is "in" a shadow if its position
