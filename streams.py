@@ -930,16 +930,32 @@ class BoxelStreams:
                          boxel_id, target_pos.tolist())
 
     # =========================================================================
-    # STREAM 4: Compute IK for Stack  (audit #30)
+    # STREAM 4: Compute IK for Stack  (audit #30; lazy-collision fix in #55)
     # =========================================================================
     # Like compute_kin_solution but the EE target is derived from
     # ?on_obj's CURRENT AABB rather than a precomputed boxel center,
     # so a stack built across a multi-step plan keeps targeting the
     # running stack height rather than the support's spawn pose.
     #
-    # Reuses the same IK seed loop, dedup, and ignored-body convention as
-    # compute_kin_solution; the only differences are the target-pose
-    # derivation and the config name prefix.
+    # ignored_body_ids includes BOTH the held cube AND the support cube
+    # (audit #55).  Mirrors compute_kin_solution's lazy-collision pattern
+    # (see L843-851) and extends it to the support: an earlier action
+    # may have relocated ?on_obj (picked + stacked elsewhere), but at
+    # planning time the plan-client world still shows ?on_obj at its
+    # initial pose.  Without ignoring ?on_obj, plan_motion would reject
+    # trajectories that pass through where ?on_obj statically sits.
+    # execute_stack reads ?on_obj's LIVE AABB at runtime and re-solves
+    # IK seeded with the planner's config, so the IK target being
+    # "above initial pose" at planning time is recovered to "above
+    # current pose" at execution.  Full symbolic pose-threading
+    # (Path C) was prototyped on branch audit-55-pose-aware-stack —
+    # functionally correct but slow under PDDLStream's exogenous-
+    # axiom compilation; revisit if a future goal mode needs precise
+    # pre-execution arm-routing.
+    #
+    # Compared to the pre-#55 implementation, the only diff is this
+    # ignored-set extension; IK seed loop, dedup, target-pose
+    # derivation are unchanged.
     def compute_stack_kin_solution(self, obj_id: str, on_obj_id: str,
                                    grasp: Grasp) -> Iterator[Tuple[RobotConfig]]:
         """
@@ -954,6 +970,14 @@ class BoxelStreams:
 
         ``held_half_height`` comes from the held object's registry boxel
         (compute_kin_solution sized it from the AABB at scan time).
+
+        ``ignored_body_ids`` on the yielded config includes BOTH the held
+        cube AND the support cube (audit #55).  See the section comment
+        above for the lazy-collision rationale: at planning time the
+        support may symbolically be elsewhere (e.g. on the tray after a
+        prior stack action) while the plan-client world still places it
+        at its initial pose.  execute_stack salvages this at runtime via
+        a fresh IK against the support's live AABB.
 
         Certifies (Config ?q), (stack_kin ?o ?on_obj ?g ?q), and
         (config_for_boxel ?q ?on_obj) — the last so the preceding move
@@ -987,9 +1011,13 @@ class BoxelStreams:
         target_pos = target_obj_pos + grasp.position
         ee_orn = grasp.orientation
 
+        # audit #55 — ignore BOTH held cube AND support cube; see section
+        # comment above for the lazy-collision rationale.
         held_body_id = self._resolve_body_id(obj_id)
-        ignored = (frozenset({held_body_id})
-                   if held_body_id is not None else frozenset())
+        support_body_id = self._resolve_body_id(on_obj_id)
+        ignored = frozenset(
+            bid for bid in (held_body_id, support_body_id) if bid is not None
+        )
 
         if self.robot_id is None:
             logger.warning("compute_stack_kin: no robot_id — cannot compute IK "
