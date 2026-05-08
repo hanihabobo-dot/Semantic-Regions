@@ -1451,6 +1451,18 @@ if __name__ == "__main__":
     # Argparse + post-parse validation lives in run_logger.py.
     args = parse_pipeline_args()
 
+    # Audit #9: seed every process-global RNG from --seed so two runs
+    # with the same seed are bit-identical end-to-end (target choice,
+    # PDDL init shuffle, IK joint sampling, RRT goal bias, path-smoothing
+    # pivots, placement-offset shuffle).  Scene placement uses local
+    # np.random.RandomState(seed) and is unaffected; this hook only
+    # tames the *global* random / np.random calls.  FastDownward's
+    # internal tie-breaking RNG (random_seed=-1 in the vendored
+    # PDDLStream) is NOT overridden — same noise affects every approach
+    # at the same seed, so approach-vs-baseline averaging stays valid.
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+
     # Lazy scene construction — each builder captures CLI args and
     # returns a SceneConfig when called, so only the selected scene
     # pays the cost of object placement computation.
