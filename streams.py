@@ -953,9 +953,11 @@ class BoxelStreams:
     # axiom compilation; revisit if a future goal mode needs precise
     # pre-execution arm-routing.
     #
-    # Compared to the pre-#55 implementation, the only diff is this
-    # ignored-set extension; IK seed loop, dedup, target-pose
-    # derivation are unchanged.
+    # Compared to the pre-#55 implementation, the diffs are: (1) the
+    # ignored-set extension to include the support cube body, and
+    # (2) a PyBullet-AABB fallback for held cube half-height when no
+    # registry boxel exists (hidden targets pre-sense).  IK seed loop,
+    # dedup, and target-pose derivation are unchanged.
     def compute_stack_kin_solution(self, obj_id: str, on_obj_id: str,
                                    grasp: Grasp) -> Iterator[Tuple[RobotConfig]]:
         """
@@ -968,8 +970,10 @@ class BoxelStreams:
             ee_target.xy = on_obj_top.xy + grasp.position[:2]
             ee_target.z  = on_obj_top.z + held_half_height + grasp.position[2]
 
-        ``held_half_height`` comes from the held object's registry boxel
-        (compute_kin_solution sized it from the AABB at scan time).
+        ``held_half_height`` prefers the held object's registry boxel
+        (compute_kin_solution sized it from the AABB at scan time);
+        falls back to the live PyBullet AABB when no registry boxel
+        exists, e.g. for hidden targets pre-sense (audit #55).
 
         ``ignored_body_ids`` on the yielded config includes BOTH the held
         cube AND the support cube (audit #55).  See the section comment
@@ -983,6 +987,13 @@ class BoxelStreams:
         (config_for_boxel ?q ?on_obj) — the last so the preceding move
         action can deliver the arm to the support's OBJECT boxel.
         """
+        # Body-id lookups hoisted (audit #55): held_body_id is reused by
+        # the AABB-fallback branch below AND the ignored-set construction;
+        # support_body_id is reused by the on_obj AABB read AND the
+        # ignored-set construction.
+        held_body_id = self._resolve_body_id(obj_id)
+        support_body_id = self._resolve_body_id(on_obj_id)
+
         # Held cube half-height: prefer registry boxel; fall back to live
         # AABB for hidden targets that don't have OBJECT-type registry
         # boxels (audit #55).  Their bodies ARE mirrored in plan_client
@@ -991,22 +1002,20 @@ class BoxelStreams:
         held_boxel = self.registry.get_boxel(obj_id)
         if held_boxel is not None:
             held_half_height = float(held_boxel.extent[2])
-        else:
-            body_id = self._resolve_body_id(obj_id)
-            if body_id is None:
-                return
+        elif held_body_id is not None:
             try:
                 h_min, h_max = p.getAABB(
-                    body_id, physicsClientId=self.physics_client)
+                    held_body_id, physicsClientId=self.physics_client)
             except Exception:
                 return
             held_half_height = float(h_max[2] - h_min[2]) / 2.0
+        else:
+            return
 
-        on_body_id = self._resolve_body_id(on_obj_id)
         top_z: Optional[float] = None
-        if on_body_id is not None:
+        if support_body_id is not None:
             try:
-                aabb_min, aabb_max = p.getAABB(on_body_id,
+                aabb_min, aabb_max = p.getAABB(support_body_id,
                                                physicsClientId=self.physics_client)
                 top_z = float(aabb_max[2])
                 cx = (aabb_min[0] + aabb_max[0]) / 2.0
@@ -1027,8 +1036,6 @@ class BoxelStreams:
 
         # audit #55 — ignore BOTH held cube AND support cube; see section
         # comment above for the lazy-collision rationale.
-        held_body_id = self._resolve_body_id(obj_id)
-        support_body_id = self._resolve_body_id(on_obj_id)
         ignored = frozenset(
             bid for bid in (held_body_id, support_body_id) if bid is not None
         )
