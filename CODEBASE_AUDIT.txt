@@ -969,6 +969,20 @@ Added:        2026-05-08 (later) — #64 (uniform GUI visual-framing
               IDs because our domain is boxel-indexed).  No PDDL,
               streams, or planner-grounding changes.  TIER 3 — visual-
               narrative polish.  Open count: 6 -> 7.
+Updated:      2026-05-08 (later) — #64 [DONE 2026-05-08 (later)].
+              BoxelVisualizer.uniform_mode flag landed in commit
+              e078252; visualization.py / test_full_pipeline.py /
+              README.md.  _should_draw filter applies to draw_boxels
+              and draw_boxel_data so both the Phase 4 initial overlay
+              and the incremental discovery / reboxelize re-draws
+              honour the filter.  test_full_pipeline forces
+              show_free=True under baseline=='uniform' so the lattice
+              actually renders.  README gains a "Baselines"
+              subsection citing Curtis et al. 2024, plus the missing
+              --baseline / --uniform-cell-size rows in the flags
+              table.  py_compile clean on both modified Python files;
+              semantic mode unchanged (uniform_mode=False default).
+              Open count: 7 -> 6.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -1054,7 +1068,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #50, #57, #59, #61, #62, #63, #64                              #
+#  OPEN ISSUES — #50, #57, #59, #61, #62, #63                                   #
 #                                                                              #
 ################################################################################
 
@@ -1152,11 +1166,6 @@ Parallel / non-blocking:
        2026-05-08 immediately after #58 landed: "its faster but
        still slow."  Profile first; close as MERGED INTO #50 if the
        dominant cost turns out to be branch-agnostic.
-  #64  uniform GUI visual-framing follow-up to #10 (Option D, TAMPURA-
-       faithful).  BoxelVisualizer.uniform_mode flag suppresses
-       OBJECT/SHADOW wireframes under --baseline uniform so only the
-       FREE lattice renders.  Cited as Curtis et al. 2024 baseline.
-       Visual-only; no planner / streams / domain changes.
 
 Closed / relocated since last summary:
   #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
@@ -1174,6 +1183,9 @@ Closed / relocated since last summary:
        threaded through planner.plan().  Archived 2026-05-08 (later) slim.
   #60 [DONE 2026-05-08] — post-action lift now reaches plan_motion (Option
        B: sync + replan).  Archived 2026-05-08 (later) slim.
+  #64 [DONE 2026-05-08 (later)] — TAMPURA-faithful uniform-baseline GUI
+       framing landed in e078252.  BoxelVisualizer.uniform_mode
+       suppresses OBJECT/SHADOW overlay under --baseline uniform.
 
 ================================================================================
 #9. [DONE 2026-05-08 (later)] EVALUATION — METRIC COLLECTION, EXPERIMENT RUNNER + SCALABILITY MATRIX (absorbs #12)
@@ -1972,7 +1984,7 @@ Related: All other open issues at landing time — this is the
 
 
 ================================================================================
-#64. UNIFORM BASELINE — TAMPURA-FAITHFUL VISUAL FRAMING (audit #10 follow-up)
+#64. [DONE 2026-05-08 (later)] UNIFORM BASELINE — TAMPURA-FAITHFUL VISUAL FRAMING (audit #10 follow-up)
 ================================================================================
 Priority: TIER 3 — Visual-narrative consistency.  Without it, the
           --baseline uniform GUI shows uniform 5cm cubes for FREE
@@ -2197,12 +2209,8 @@ TIER 3 — CODE QUALITY / LOW-PRIO:
        any other open issue that lands between now and submission.
        Explicitly the last commit before thesis submission per user
        2026-05-08.
-  #64  Uniform GUI visual-framing follow-up to #10 (Option D, TAMPURA-
-       faithful per Curtis et al. 2024).  BoxelVisualizer.uniform_mode
-       suppresses OBJECT/SHADOW wireframes under --baseline uniform.
-       Visual-only; no planner / streams / domain changes.
 
-Total open: 7 items (#50, #57, #59, #61, #62, #63, #64).
+Total open: 6 items (#50, #57, #59, #61, #62, #63).
 
 Closed since previous summary:
   #10  [DONE 2026-05-08 (later)] — uniform voxelization baseline
@@ -2214,6 +2222,13 @@ Closed since previous summary:
        gains the baseline axis (90 -> 180 cells, semantic + uniform).
        eval_plotter.py --baseline-csv hook already consumes the
        comparison input.
+  #64  [DONE 2026-05-08 (later)] — TAMPURA-faithful uniform-baseline
+       GUI framing (commit e078252).  BoxelVisualizer.uniform_mode
+       suppresses OBJECT/SHADOW wireframes under --baseline uniform
+       so only the FREE lattice renders; PyBullet's own object
+       rendering shows the physical scene.  README "Baselines"
+       subsection cites Curtis et al. 2024.  No PDDL / streams /
+       planner-grounding changes.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
