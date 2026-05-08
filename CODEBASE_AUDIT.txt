@@ -786,6 +786,52 @@ Restructured: 2026-05-08 (later) — pre-evaluation correctness chain
               as-is; the TIER move is a SUMMARY-only shift that
               reflects reality without rewriting the roadmap
               narrative.  No code changes.
+Added:        2026-05-08 (later) — #63 (TIER 3 — README + wiki
+              final doc sweep, gated on eval.  User-flagged
+              2026-05-08: "we need to update the read me and
+              wiki.  this is should be done post eval.  most
+              likly the last thing we change.").  Doc-state
+              catch-up at thesis-submission time: walk audit
+              changelog since the last full wiki pass, page-by-
+              page diff against current code (PDDL_Domain_-
+              Reference, Execution_Pipeline, Planning_System,
+              Architecture_Overview, Known_Issues_and_Roadmap,
+              Design_Decisions per the obvious drift hotspots
+              from the 2026-05-07/08 audit chain), refresh
+              README flags table (missing --goal, --n-hidden,
+              --n-occluders, --seed today).  Per CODEBASE POLICY
+              L823-828 the wiki is updated after every behaviour
+              change anyway — this issue is the safety-net
+              final pass, not the primary update mechanism.
+              Gate: do NOT start before #9 / #10 land; eval
+              results drive the Known_Issues_and_Roadmap +
+              Design_Decisions narrative.  New "Post-evaluation
+              (final doc sweep)" section added to the ROADMAP
+              between "Evaluation phase" and "Parallel".  Open
+              count: 7 -> 8.
+
+Updated:      2026-05-08 (later) — #9 [DONE].  eval_runner.py +
+              eval_plotter.py landed.  Subprocess-per-cell driver;
+              built-in "scalability" preset (n_occluders 1..6 ×
+              n_targets 1..3 × 5 seeds × goal=holding, n_hidden =
+              min(n_targets, n_occluders) for deepest search) and
+              "smoke" preset (1 cell).  Aggregator collates
+              cells/*/timing_summary.json into aggregated.csv +
+              aggregated.jsonl.  Plotter consumes aggregated.csv,
+              produces planning_time / success_rate / plan_count
+              vs n_occluders PNGs (matplotlib) or text tables
+              (fallback); --baseline-csv hook stubbed for #10
+              uniform-vox overlay.  Master --seed plumbing in
+              test_full_pipeline.py __main__: random.seed() +
+              np.random.seed() right after parse_pipeline_args() so
+              the 8 process-global RNG call sites (target choice,
+              PDDL init shuffle, IK joint sampling, RRT goal bias,
+              placement offsets, path-smoothing pivots) become
+              deterministic.  FD's internal random_seed=-1 left
+              alone — same noise hits every approach at the same
+              seed, mean comparison still valid.  Open count: 8 -> 7
+              (#10, #50, #57, #59, #61, #62, #63).  TIER 1 narrows
+              to #10 alone.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -871,7 +917,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #50, #57, #59, #61, #62                               #
+#  OPEN ISSUES — #10, #50, #57, #59, #61, #62, #63                              #
 #                                                                              #
 ################################################################################
 
@@ -905,9 +951,19 @@ Pre-evaluation (intended order before the eval sweep):
    supervisor; ~2× holding-goal slowdown accepted.)
 
 Evaluation prerequisites (runner + uniform baseline for thesis comparison):
-  #9  metric hooks + batch experiment runner + scalability matrix + plots
-      (absorbs #12; matrix is one configuration of the runner, not a
-      separate issue)
+  #9  [DONE 2026-05-08 (later)] metric hooks + batch experiment runner +
+      scalability matrix + plots (absorbs #12).  eval_runner.py +
+      eval_plotter.py landed; subprocess-per-cell, scalability preset
+      (n_occluders 1..6 × n_targets 1..3 × 5 seeds = 90 cells),
+      aggregated.csv + jsonl, matplotlib-with-text-fallback plotter.
+      Master --seed now plumbs through random.seed() + np.random.seed()
+      at process start so two runs at the same seed are bit-identical
+      end-to-end (target choice, PDDL init shuffle, IK joint sampling,
+      RRT goal bias, placement-offset shuffle, path-smoothing pivots).
+      FastDownward's internal tie-breaking RNG (random_seed=-1 in
+      vendored PDDLStream) is NOT overridden — same noise hits every
+      approach at the same seed, so approach-vs-baseline averaging
+      remains valid.
   #10 uniform voxelization baseline  (CONFIRMED in scope 2026-05-06)
 
 Evaluation phase (Results chapter — user-scoped sweep):
@@ -921,6 +977,13 @@ Evaluation phase (Results chapter — user-scoped sweep):
   #13 [WONTFIX 2026-05-06] — recursive free-space discovery is dead
        code under our fixed-camera + no-concave-geometry setup; cited
        as future work in THESIS_NOTES §20.
+
+Post-evaluation (final doc sweep — last commit before submission):
+  #63  README + wiki final doc sweep — gated on #9 / #10 plus any
+       other open issue that lands between now and submission.
+       Doc-state catch-up; per CODEBASE POLICY L823-828 the wiki
+       is updated continuously, this is the safety-net pass.
+       Explicitly the last thing we change per user 2026-05-08.
 
 Parallel / non-blocking:
   #50  planner perf investigation — can run alongside the eval sweep; any wins
@@ -960,9 +1023,9 @@ Closed / relocated since last summary:
        B: sync + replan).  Archived 2026-05-08 (later) slim.
 
 ================================================================================
-#9. EVALUATION — METRIC COLLECTION, EXPERIMENT RUNNER + SCALABILITY MATRIX (absorbs #12)
+#9. [DONE 2026-05-08 (later)] EVALUATION — METRIC COLLECTION, EXPERIMENT RUNNER + SCALABILITY MATRIX (absorbs #12)
 ================================================================================
-Priority: TIER 3 — Thesis-critical, independent of code fixes
+Priority: TIER 1 — Thesis-critical, independent of code fixes
 Where:    New module(s); integrates with test_full_pipeline.py
 Depends:  None (can be built on current pipeline)
 Effort:   3-5 days (was 3-5 + 2-3 when split; doing the matrix in
@@ -1013,6 +1076,50 @@ Subsumes: #12 (scalability analysis) — merged 2026-05-06 per user
 
 Related: #10 (uniform-vox baseline; consumes the same runner).
          #50 (planner perf hunt; uses the same per-call timing).
+
+Outcome [DONE 2026-05-08 (later)]:
+  Two new files, no edits to existing pipeline modules beyond a
+  3-line --seed hook:
+  - eval_runner.py — subprocess-per-cell driver.  Walks a matrix dict,
+    launches `python test_full_pipeline.py --no-gui ...` per cell,
+    locates the freshly-written logs/run_<ts>/timing_summary.json by
+    mtime, copies it into eval_results/sweep_<ts>/cells/<tag>/, and
+    aggregates into aggregated.csv + aggregated.jsonl.  Stub rows
+    written for timeout / crash / no_summary so the aggregator never
+    skips a cell.  Built-in presets: "scalability" (90 cells:
+    n_occluders 1..6 × n_targets 1..3 × 5 seeds × goal=holding,
+    n_hidden = min(n_targets, n_occluders) for deepest-search
+    benchmark) and "smoke" (1 cell).  Flags: --skip-existing
+    (resume), --timeout (default 300s), --max-failures, --dry-run,
+    --extra-arg (pass-through).  Stdlib only — no matplotlib /
+    pandas dependency.
+  - eval_plotter.py — Results-chapter figures from aggregated.csv:
+    planning_time_vs_n_occluders.png, success_rate_vs_n_occluders.png,
+    plan_count_vs_n_occluders.png.  matplotlib if available; falls
+    back to printed text tables if not.  --baseline-csv hook stubbed
+    for #10 (uniform-vox) overlay; line styles distinguish primary
+    vs baseline series.
+  - test_full_pipeline.py __main__ — `random.seed(args.seed)` +
+    `np.random.seed(args.seed)` immediately after parse_pipeline_args()
+    so the 8 unseeded random / np.random call sites become deterministic
+    given a single --seed:
+      * test_full_pipeline.py:569,579,641,642 — random.choice for
+        target / tray-stack participant selection
+      * pddlstream_planner.py:553 — random.shuffle of PDDL init facts
+      * streams.py:425 — random.shuffle of placement offsets
+      * streams.py:657 — np.random.uniform for IK joint sampling
+      * streams.py:761 — random.random for RRT goal bias
+      * streams.py:835-836 — random.randint for path-smoothing pivots
+    Local np.random.RandomState(seed) instances in scalability_scene
+    et al. were already deterministic and are unaffected.  FD's
+    internal random_seed=-1 (hardcoded inside vendored PDDLStream)
+    is NOT overridden — adding equal noise to every approach at the
+    same seed, so the approach-vs-baseline mean comparison remains
+    statistically valid.
+  Validation: ast.parse passes on all three files; --dry-run on both
+  matrix presets produces the expected cell counts (smoke=1,
+  scalability=90).  Real-cell smoke run + first scalability sweep
+  to be run by user on WSL (planner needs pddlstream_lib).
 
 
 ================================================================================
@@ -1549,6 +1656,104 @@ Related: #50  — broader planner perf investigation; shares the
 
 
 ================================================================================
+#63. README + WIKI FINAL DOC SWEEP — POST-EVAL FREEZE-AND-WRITE
+================================================================================
+Priority: TIER 3 — Documentation; gated on all code work being done.
+          User-flagged 2026-05-08: "we need to update the read me and
+          wiki.  this is should be done post eval.  most likly the
+          last thing we change."  Doc state should not chase a moving
+          target — land this AFTER #9 / #10 (eval) and any other open
+          issue that alters behaviour, predicates, streams, or
+          pipeline shape.
+Where:    README.md (project root, currently 29 lines — quick-start
+          + flags table + wiki link + license).
+          ../pybullet.wiki/ — local clone of the GitHub wiki repo
+          per CODEBASE POLICY L823-828.  11 pages: Architecture_-
+          Overview, Core_Data_Structures, Design_Decisions,
+          Execution_Pipeline, Home, Known_Issues_and_Roadmap,
+          PDDL_Domain_Reference, Planning_System, Robot_Control_-
+          and_Streams, Scene_Environment, Spatial_Reasoning.
+Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
+          results drive Known_Issues_and_Roadmap + Design_Decisions
+          + the README story.  Any other open issue (#50, #57, #59,
+          #61, #62) that lands between now and submission extends
+          the diff this sweep has to absorb.
+Effort:   1-2 days (one focused pass per page).
+
+What:  CODEBASE POLICY (L823-828) already requires per-change wiki
+       updates, so the wiki is never far out of date.  But by
+       thesis-submission time several pages will have accumulated
+       drift from the 2026-05-07/08 audit chain (#41 on_table, #49
+       tray, #55 lazy-collision, #58 held_obj, #60 lift sync) plus
+       whatever lands during eval.  This issue is the final once-
+       over: walk the audit changelog since the last full sweep,
+       diff each wiki page against current code, push the result.
+
+       Likely drift hotspots at landing time:
+       - PDDL_Domain_Reference.md — predicates / action signatures
+         vs. pddl/domain_pddlstream.pddl + pddl/stream.pddl
+         (on_table, is_tray, any size-compat predicate from #59).
+       - Execution_Pipeline.md — post-action lift (#36) +
+         runtime-pose sync (#60) integrated into the dispatch loop
+         description.
+       - Planning_System.md — held_obj plumbing (#58) +
+         (holding ?o) init-fact path; replan walkthrough.
+       - Architecture_Overview.md / Core_Data_Structures.md —
+         registry ownership story if #57 lands (geometry source).
+       - Known_Issues_and_Roadmap.md — rewrite to match final
+         open / resolved / deferred split; cross-link to thesis
+         Results chapter.
+       - Design_Decisions.md — sync with THESIS_NOTES.md (the
+         canonical source); any gaps accepted during eval land
+         here.
+       - README.md — flags table missing --goal, --n-hidden,
+         --n-occluders, --seed; quick-start may benefit from an
+         eval-runner pointer once #9 lands.
+       - Cross-page link health — internal wiki anchors and
+         README -> wiki links.
+
+What's already done (don't redo):
+       - Wiki scaffolding + 11 pages exist and are touched per
+         feature commit (CODEBASE POLICY L823-828).
+       - THESIS_NOTES.md is canonical for accepted simplifications;
+         this issue propagates THESIS_NOTES decisions into the
+         public-facing wiki, it does NOT relitigate them.
+       - README structure (quick-start, flags table, wiki link)
+         is correct — only contents drift.
+
+Fix:   ONE PASS, RUN LAST.
+
+       (a) Walk audit changelog (this file + archive/RESOLVED) for
+           every Updated / Added / Slimmed / Restructured entry
+           since the last full wiki sweep; bullet which wiki page
+           each lands in.
+       (b) Page-by-page diff against current code: regenerate code
+           blocks from actual files, predicate / action / stream
+           tables from pddl/, sequence ordering against execute_-
+           pick / place / stack + dispatch loop, link health.
+       (c) Refresh README — add missing flags (--goal, --n-hidden,
+           --n-occluders, --seed), update quick-start if #9 lands
+           a recommended eval invocation, verify wiki link target.
+       (d) Push wiki to both remotes if mirrored (CODEBASE POLICY
+           L802-810; verify whether pybullet.wiki has a github +
+           origin counterpart).
+       (e) Audit entry at landing: "WIKI / README final sweep —
+           frozen at <commit>."  No further edits unless filed
+           as a downstream issue.
+
+Care: Do NOT start before #9 / #10 land — starting earlier means
+       redoing the same pages when eval reveals something needing
+       a doc note.  Per-commit wiki touch-ups by other open issues
+       remain the primary update mechanism; this final sweep is
+       the safety net.
+
+Related: All other open issues at landing time — this is the
+              catch-all final pass.  Sister to THESIS_NOTES.md
+              hygiene (THESIS_NOTES is internal; README/wiki is
+              public — kept separate by audience).
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -1651,9 +1856,11 @@ TIER 0 — TOP PRIORITY:
   (empty — no open correctness blockers.)
 
 TIER 1 — ACTIVE EVAL (promoted 2026-05-08; thesis-critical path):
-  #9   Experiment runner + metric hooks + scalability matrix + plots
-       (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
+       (#9 [DONE 2026-05-08 (later)] — eval_runner.py + eval_plotter.py
+        + master --seed plumbing landed; aggregated.csv consumes the
+        existing per-run timing_summary.json so #10 just needs to
+        register itself as a second --baseline series.)
 
 TIER 2 — PERF (planner wall-clock):
   #50  Planner perf investigation — profile, cache static init, kill
@@ -1671,12 +1878,19 @@ TIER 3 — CODE QUALITY / LOW-PRIO:
        and add Claude-Code-style thinking-animation affordance during
        long planner.plan() / RRT / stream-sample calls
        (UX polish; user-flagged 2026-05-08)
+  #63  README + wiki final doc sweep — gated on #9 / #10 (eval) plus
+       any other open issue that lands between now and submission.
+       Explicitly the last commit before thesis submission per user
+       2026-05-08.
 
-Total open: 7 items (#9, #10, #50, #57, #59, #61, #62).
+Total open: 7 items (#10, #50, #57, #59, #61, #62, #63).
 
 Closed since previous summary:
-  (none — all 2026-05-08 closures (#55, #56, #58, #60) archived in the
-   2026-05-08 (later) slim.)
+  #9   [DONE 2026-05-08 (later)] — eval_runner.py + eval_plotter.py +
+       3-line master --seed plumbing in test_full_pipeline.py __main__.
+       90-cell scalability preset wired up; subprocess-per-cell;
+       aggregated.csv + jsonl; matplotlib-with-text-fallback plotter;
+       --baseline-csv stub left for #10 overlay.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
