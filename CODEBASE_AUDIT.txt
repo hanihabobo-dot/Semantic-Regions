@@ -734,6 +734,58 @@ Updated:      2026-05-08 (later) — #60 marked [DONE 2026-05-08].
               py_compile clean across execution.py and
               test_full_pipeline.py.  TIER 0 again empty.  Open
               count: 7 -> 6.
+Added:        2026-05-08 (later) — #62 (TIER 2 — replan-while-holding
+              still slow after #58.  User-flagged 2026-05-08: "the
+              planner still takes too much time to replan while
+              holding object.  its faster but still slow.").  Sub-
+              hotspot of #50 (planner perf investigation) localised
+              to the held-cube replan path.  After #58 commit
+              690f86d eliminated the ~4-action re-grasp cycle by
+              emitting ('holding', ?o) instead of dropping the cube,
+              the user observes a measurable improvement but
+              residual slowness on the same path.  Profile-first
+              suspects: (a) sample-grasp re-firing every replan to
+              certify a fresh (Grasp ?g) + (valid_grasp ?o ?g) on
+              the same held cube — grasp atom could be threaded
+              through planner.plan() the same way held_obj is;
+              (b) compute-stack-kin / compute-kin re-running IK
+              against the unchanged held-cube transform on every
+              candidate skeleton; (c) full _build_init rebuild on
+              every replan (broader #50 concern but felt sharply on
+              the held branch — (holding ?o) grounds more per-
+              skeleton state than (handempty)).  Open count: 6 -> 7.
+Slimmed:      2026-05-08 (later) — moved #56 (DONE then REVERTED
+              2026-05-08), #58 (DONE 2026-05-08), and #60 (DONE
+              2026-05-08) to archive/CODEBASE_AUDIT_RESOLVED.txt
+              under a new "2026-05-08 SLIM ADDITIONS" section.
+              Bodies preserved verbatim with Outcome paragraphs
+              recapping the actual landings (commits bf0800c +
+              ac47aa6 for #56; commit 690f86d + companion b248c76
+              for #58; commits 23687af + c08dc65 for #60).  Open
+              audit shrunk by ~270 lines of issue bodies; still-
+              active items: #9, #10, #50, #57, #59, #61, #62.
+              No code changes.
+Restructured: 2026-05-08 (later) — pre-evaluation correctness chain
+              complete (#31, #36, #41, #48, #49, #53, #54, #55, #58,
+              #60 all DONE).  Eval (#9, #10) is now the user's
+              critical path to the thesis Results chapter; promoted
+              from TIER 3 to TIER 1.  Re-tiered SUMMARY block:
+                TIER 0 — empty (no open correctness blockers).
+                TIER 1 — ACTIVE EVAL: #9 (eval runner + scalability
+                         matrix), #10 (uniform-vox baseline).
+                TIER 2 — PERF: #50 (planner perf investigation),
+                         #62 (replan-while-holding sub-hotspot).
+                TIER 3 — CODE QUALITY / LOW-PRIO: #57 (registry
+                         geometry), #59 (scaled find-and-stack —
+                         very low prio per user), #61 (smart console
+                         filter UX polish).
+              SUMMARY total-count line corrected from "6 items" to
+              "7 items" (#62 was added 2026-05-08 but the count was
+              never refreshed).  Roadmap "Pre-evaluation" /
+              "Evaluation prerequisites" / "Parallel" sections kept
+              as-is; the TIER move is a SUMMARY-only shift that
+              reflects reality without rewriting the roadmap
+              narrative.  No code changes.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -819,13 +871,13 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #50, #57, #59, #61                                    #
+#  OPEN ISSUES — #9, #10, #50, #57, #59, #61, #62                               #
 #                                                                              #
 ################################################################################
 
 
 ================================================================================
-ROADMAP — PRE-EVALUATION VS. EVALUATION (updated 2026-05-07)
+ROADMAP — PRE-EVALUATION VS. EVALUATION (updated 2026-05-08)
 ================================================================================
 Pre-evaluation (intended order before the eval sweep):
   #31 [DONE 2026-05-07] (comment-quality sweep, absorbs #32)
@@ -875,16 +927,6 @@ Parallel / non-blocking:
        feed back into #9's scalability plots.  Subsumes the per-hotspot
        questions formerly tracked as #34 (ray×free-boxel precompute) — those
        land here as profiler hits, not as separate audit items.
-  #56  [DONE then REVERTED 2026-05-08] — CLI flag for post-action safe-
-       distance lift (audit #36 follow-up).  Plumbing landed in commit
-       bf0800c then reverted in commit ac47aa6 — flag had no observable
-       effect at any value.  Underlying mechanism is broken; tracked as
-       #60.  Awaiting archive slim.
-  #60  Post-action lift fails to prevent collisions during the next move
-       action.  TIER 0 correctness bug, blocks find-and-place / find-
-       and-tray-stack.  User-flagged 2026-05-08 — root cause behind
-       #56's revert.  Pre-eval-blocking; should land before any further
-       eval sweep.
   #57  registry should own cube geometry (audit #55 follow-up; replace the
        PyBullet AABB fallback in compute_stack_kin_solution).
   #59  scaled-up find-and-stack — N hidden targets stacked physically-
@@ -894,6 +936,11 @@ Parallel / non-blocking:
        and add Claude-Code-style thinking-animation affordance during
        long planner.plan() / RRT / stream-sample calls.  UX polish on
        the existing smart_filter pipeline; no correctness impact.
+  #62  replan-while-holding still slow after #58 — sub-hotspot of #50
+       localised to the held-cube replan path.  User-flagged
+       2026-05-08 immediately after #58 landed: "its faster but
+       still slow."  Profile first; close as MERGED INTO #50 if the
+       dominant cost turns out to be branch-agnostic.
 
 Closed / relocated since last summary:
   #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
@@ -901,9 +948,16 @@ Closed / relocated since last summary:
   #42 archive/CODEBASE_AUDIT_DEFERRED.txt (collisions logged, no replan;
        supervisor reconfirmed 2026-05-06 — "no need to track knocked-down
        objects")
-  #40 [DONE 2026-05-05] — physics verifier landed; awaiting archive slim
-  #30 [WONTFIX 2026-05-06] — split-pick scrapped per supervisor; awaiting
-       archive slim
+  #40 [DONE 2026-05-05] — physics verifier landed; archived 2026-05-06 slim
+  #30 [WONTFIX 2026-05-06] — split-pick scrapped per supervisor; archived
+       2026-05-06 slim
+  #56 [DONE then REVERTED 2026-05-08] — CLI flag for post-action lift;
+       plumbing reverted because mechanism was broken (now closed via
+       #60).  Archived 2026-05-08 (later) slim.
+  #58 [DONE 2026-05-08] — preserve grasp across replans; held_obj kwarg
+       threaded through planner.plan().  Archived 2026-05-08 (later) slim.
+  #60 [DONE 2026-05-08] — post-action lift now reaches plan_motion (Option
+       B: sync + replan).  Archived 2026-05-08 (later) slim.
 
 ================================================================================
 #9. EVALUATION — METRIC COLLECTION, EXPERIMENT RUNNER + SCALABILITY MATRIX (absorbs #12)
@@ -1072,57 +1126,6 @@ Related: #9 (experiment runner — needed to gather timing samples),
 
 
 ================================================================================
-#56. CLI FLAG — POST-ACTION SAFE-DISTANCE LIFT (CURRENTLY HARDCODED ~10 cm)
-     [DONE 2026-05-08]
-================================================================================
-Priority: TIER 3 — Code-quality / eval-knob.  Affects no current
-          functionality; enables sensitivity analysis and eval-sweep
-          parameterisation (#9).
-Where:    execution.py — execute_pick (~5 cm cosmetic),
-          execute_place (~10 cm), execute_stack (~10 cm) all call
-          _apply_post_action_lift with hardcoded literals (audit #36
-          introduced this).
-          run_logger.py — add CLI arg --post-action-lift (or split:
-          --place-lift / --stack-lift / --pick-lift).
-          test_full_pipeline.py — thread the parsed value through
-          main() into the execute_* calls.
-Depends:  None.
-Effort:   <0.5 day (CLI plumbing + signature thread; no behavioural
-          change at default value).
-
-What:  Audit #36 [DONE 2026-05-07; archived] introduced a hardcoded
-       ~10 cm post-action Cartesian +Z lift in execute_place and
-       execute_stack (5 cm cosmetic in execute_pick) so the next
-       plan_motion has safe headroom over the freshly placed/stacked
-       cube.  The value is a magic number in three places — fine for
-       the demo, brittle for the eval sweep.
-
-       Exposing as a CLI knob lets us:
-       - Sensitivity-test the value without code edits (does 5 cm
-         break anything?  does 15 cm help with deeper towers?).
-       - Vary the lift across the eval sweep (#9) — shorter lifts
-         could speed up execution at the cost of plan_motion failures.
-       - Document the value as a knob rather than a hidden constant.
-
-Fix:   ONE COMMIT — CLI plumbing + signature thread:
-       (a) run_logger.py — add `--post-action-lift FLOAT` (default
-           0.10), validate range (e.g. 0.0–0.30 m).  Single value
-           covers place + stack; pick stays cosmetic at 5 cm unless
-           the user wants three separate flags.
-       (b) test_full_pipeline.py main() — thread into execute_pick /
-           execute_place / execute_stack calls, plus run_config dict
-           for timing_summary.json.
-       (c) execution.py — replace the hardcoded literals with the
-           parameter; defaults preserve current behaviour exactly.
-
-Related: #36 [DONE 2026-05-07; archived] — introduced the hardcoded
-              lift.  This issue is the "expose as a knob" follow-up
-              #36 explicitly deferred.
-         #9 — eval runner; consumes this knob if exposed before the
-              eval sweep lands.
-
-
-================================================================================
 #57. REGISTRY SHOULD OWN CUBE GEOMETRY (REPLACE PyBullet AABB FALLBACK)
 ================================================================================
 Priority: TIER 3 — Code quality.  No correctness bug — current behaviour
@@ -1173,84 +1176,6 @@ Related: #55 [DONE 2026-05-08; archived] — introduced the AABB
               fallback this issue replaces.
          #9 — eval runner; benefits from registry as the single
               metadata source.
-
-
-================================================================================
-#58. PRESERVE GRASP ACROSS REPLANS (CURRENTLY DROPS HELD OBJECT)
-     [DONE 2026-05-08]
-================================================================================
-Priority: TIER 2 — Affects every replan that fires while the gripper
-          holds an object.  User-flagged 2026-05-08 after observing
-          yellow_object dropped mid-air at the PLAN #1 -> PLAN #2
-          transition in logs/run_2026-05-08_10-49-01.
-Where:    test_full_pipeline.py main() — release_held_object_in_place
-          loop at the top of each replan iteration (line ~860; runs
-          before planner.plan() to drop the held object).
-          pddlstream_planner.py _build_init — currently emits
-          ('handempty',) unconditionally (line ~504).
-Depends:  None.  Conceptually independent of #50 / #57.
-Effort:   <1 day.
-
-What:  When the inner action loop breaks mid-plan (sense returned
-       empty, IK failed, missing shadow, etc.) while the gripper is
-       still holding an object, the current code RELEASES the object
-       in place before the next planner.plan() call.  The release is
-       there to keep symbolic state consistent — _build_init
-       unconditionally emits ('handempty',), so a plan that started
-       with (holding ?o) would let the planner schedule another pick
-       and end up with two objects dangling from the EE.  The
-       release-then-replan pattern avoids that, but it's wasteful:
-
-       - Loses progress: the next plan must re-pick the dropped
-         object before doing anything productive.
-       - Drops at uncontrolled poses: the EE position when the loop
-         broke (e.g. above the tray after move-to-tray, when sense
-         then returns empty), which physics may bounce off the table.
-       - Adds ~4 actions per re-grasp cycle (move + pick + move +
-         place / stack) to the next plan.
-       - Pollutes the registry: the dropped object's new pose may
-         intersect free-space boxels, triggering reboxelization
-         churn that would otherwise not be needed.
-
-       Concrete example from logs/run_2026-05-08_10-49-01:
-         PLAN #1 picked yellow_object then sensed shadow_of_yellow_-
-         object empty.  Loop breaks → release_held_object_in_place
-         drops yellow at EE pose (-0.181, 0.436, 0.351).  PLAN #2
-         then plans pick(red) → place(red, free_005) → re-pick(yellow)
-         → ... 13 actions total for what would have been ~9 if yellow
-         had stayed in the gripper.
-
-Fix:   ONE COMMIT — propagate (holding ?o) into the next plan's init:
-       (a) test_full_pipeline.py main(): instead of releasing on
-           replan, capture (held_object_name, grasp) and pass into
-           the next planner.plan() call as a new kwarg, e.g.
-           held_obj=("yellow_object", grasp_yellow_object_1).
-       (b) pddlstream_planner._build_init: when held_obj is set,
-           emit ('holding', held_obj_name) and SKIP the
-           ('handempty',) emission.  Reuse the existing grasp atom
-           if it's already certified, otherwise re-certify via
-           sample-grasp + cached output.
-       (c) Streams: ensure plan_motion correctly carries the held
-           body's ignored_body_ids across the replan boundary
-           (already handled via RobotConfig.ignored_body_ids on
-           current_config — verify only).
-       (d) Keep release_held_object_in_place as a SAFETY NET for
-           cases where the held object is in a bad pose for
-           continuation (e.g. plan_motion rejected every config
-           because the held cube collides with everything).
-           Trigger condition: planner returns no plan with held_obj
-           set; fall back to release-and-replan.
-
-       Smoke test: re-run --goal find-and-tray-stack on default
-       scene with the same seed.  Expect plan_count to drop (PLAN
-       #2 becomes a continuation rather than a re-grasp cycle).
-
-Related: #21 [DONE 2026-05-05; archived] — still_blocked log-only
-              band-aid; different replan trigger but same "lost
-              progress" smell.
-         #1 [RESOLVED] — robot config drift across actions; the
-              equivalent fix for arm joint state.  This issue is the
-              gripper-state analog.
 
 
 ================================================================================
@@ -1341,161 +1266,6 @@ Related: #55 [DONE 2026-05-08; archived] — find-and-tray-stack base
          FOR LATER size-compat bullet — this issue claims option (i)
               (symbolic predicate); option (ii) (geometric sampler
               filter) remains a parallel future option.
-
-
-================================================================================
-#60. POST-ACTION LIFT FAILS TO PREVENT COLLISIONS DURING NEXT MOVE ACTION
-     [DONE 2026-05-08]
-================================================================================
-Priority: TIER 0 — Correctness.  Runtime collisions during find-and-
-          place and find-and-tray-stack despite a successful
-          planner.plan() return; the symbolic layer reports a
-          collision-free trajectory that is not collision-free at
-          execution.  User-flagged 2026-05-08.
-Where:    execution.py:_apply_post_action_lift (~L394-410) and the
-          surrounding execute_place / execute_stack final_config
-          returns (~L644-651, ~L761-768).
-          Whatever module owns plan_motion's start-config seeding for
-          the next move action — likely streams.py compute_motion (or
-          plan_motion stream) and the orchestrator wiring in
-          test_full_pipeline.py main() that threads the previous
-          execute_*'s returned RobotConfig into the next planner
-          call.
-          Plan-client vs GUI-client cube state sync at the
-          place/stack boundary — boxel_env.py _mirror_load_urdf and
-          any post-place pose update path (env.plan_client_id).
-Depends:  #56 [DONE then REVERTED 2026-05-08] — the CLI flag (commit
-          bf0800c, reverted in commit ac47aa6) showed the symptom in
-          isolation: the knob plumbing landed correctly but the
-          ostensibly-tunable lift had no observable effect on robot
-          behaviour at any value tested.  This issue is the root-cause
-          hunt that #56 made visible.
-Effort:   2-3 hours investigation; fix scope depends on which
-          candidate cause dominates.
-
-What:  After running find-and-place / find-and-tray-stack with manual
-       lift_height up to 0.30 m (the upper bound of the validated
-       --post-action-lift range from #56), the next move action still
-       lowers the arm and routes through the just-placed cube,
-       producing a runtime collision.
-
-       Per #36 / #56 the post-action lift was meant to give the next
-       plan_motion safe headroom over the freshly placed/stacked cube.
-       _apply_post_action_lift's docstring (execution.py:394-404)
-       claims the final_config returned to the caller carries the
-       lifted pose forward as the next move's plan_motion seed.  The
-       user's observation contradicts that: the arm visibly DROPS
-       back toward contact height at the start of the next move,
-       which means either (i) the lifted pose is not being used as
-       the next plan_motion's start, or (ii) plan_motion's
-       collision check is certifying through-the-cube paths despite
-       a lifted start.
-
-       The reason commit ac47aa6 reverted #56 is exactly this gap —
-       the CLI knob's value reached _apply_post_action_lift, the IK
-       solve and physical lift ran, but the downstream plan_motion
-       did not respect either the lifted start config or the
-       freshly-placed cube's pose.  A configurable knob over a
-       broken mechanism is dead weight.
-
-       Three candidate causes, ranked by fit to the user's report:
-
-       (i)  plan_motion's start config not seeded from final_config.
-            If the next move's plan_motion is seeded with the
-            planner's compute_kin_solution config (contact pose,
-            10 cm above target) instead of the runtime final_config
-            from execute_place / execute_stack, the resulting
-            trajectory legitimately starts at contact height; the
-            runtime arm at lift height jumps to that start before
-            traversing.  STRONGEST FIT to user's "lowers the arm
-            again" observation.  Test: log the (q_from, q_to)
-            passed to plan_motion at each move action and compare
-            q_from to the prior execute_*'s returned
-            final_config.joint_positions.
-
-       (ii) Plan-client cube-pose desync.  plan_motion runs against
-            env.plan_client_id (separate DIRECT PyBullet client per
-            CODEBASE POLICY).  If the freshly placed cube's pose
-            isn't mirrored to plan_client between
-            execute_place/stack and the next plan_motion call, the
-            collision checker sees the cube at its initial pose
-            (or not at all) and certifies through-the-current-pose
-            paths as clean.  Compounds (i): even with a lifted
-            start, the trajectory has no reason to maintain
-            altitude over a cube the planner cannot see.  Test:
-            query p.getBasePositionAndOrientation on the placed
-            cube's body in BOTH clients before the next
-            plan_motion; if they diverge, this contributes.
-
-       (iii) Silent IK fall-through in _apply_post_action_lift.
-             execution.py:408-409 returns silently when solve_ik
-             fails for the lifted EE pose; actual_joints is then
-             read AFTER the no-op return and final_config is the
-             contact pose.  Less likely to match the user's
-             symptom (the arm "lowers" at next-move start implies
-             it WAS lifted), but worth ruling out by adding a
-             print on the IK-failure branch.
-
-       The fact that lift_height was demonstrably ineffective at
-       any value in [0.0, 0.30] (#56 revert) is the strongest
-       single signal that the lifted pose isn't actually used
-       downstream — i.e. (i) and/or (ii) dominate.
-
-Fix:   INVESTIGATION → FIX (do not pre-commit to one approach):
-       (a) Reproduce on default scene, default seed, --goal
-           find-and-tray-stack with extra debug logging in
-           _apply_post_action_lift (IK result, joint state pre-
-           and post-lift) and at the next-move plan_motion call
-           site (q_from, q_to, the body IDs and poses the
-           collision check sees).  Confirm which of (i) / (ii) /
-           (iii) matches the symptom.
-       (b) For (i): thread final_config from execute_*'s return
-           into the orchestrator's current_config so the next
-           plan_motion gets the lifted seed.  Verify plan_motion
-           treats the seed as a hard start, not a hint.
-       (c) For (ii): mirror the placed/stacked cube's live pose to
-           plan_client after the settle steps in execute_place /
-           execute_stack, before returning final_config.  Reuse
-           _mirror_load_urdf's update path or add a lightweight
-           setBasePositionAndOrientation hook against
-           env.plan_client_id.
-       (d) For (iii): replace the silent fall-through with a hard
-           error (or a replan trigger) on lift IK failure so the
-           bug becomes visible instead of accumulating as drift.
-           The "fail-safely fall through" stance pre-dates the
-           user report and is now demonstrably hiding correctness
-           gaps.
-
-       Smoke test: re-run --goal find-and-tray-stack on default
-       scene with the same seed.  Expect the next-move trajectory
-       to leave the lifted pose without lowering, and to route
-       around the placed cube.  Expect a re-attempt of #56's CLI
-       knob to produce observable behaviour at last (lower lift
-       values should now break the run; higher values should give
-       more clearance) — that's the regression test that #60
-       actually fixed the underlying mechanism.
-
-Related: #36 [DONE 2026-05-07; archived] — introduced the hardcoded
-              post-action lift this issue documents as broken.
-         #56 [DONE then REVERTED 2026-05-08] — CLI flag for the lift
-              (commit bf0800c, reverted in ac47aa6).  The revert
-              note ("no observable effect on robot behaviour at any
-              value tested") is exactly the symptom #60 tracks.
-              Re-attempt #56 only after #60 lands.
-         #1 [RESOLVED] — robot config drift across actions; this
-              issue is a sibling on the place/stack side
-              (post-action arm pose vs. planner expectation).
-         FOR LATER "Trajectory-clipping edge case for stack actions"
-              (audit #55 lazy-collision residual) — covers the dual
-              gap: support body's destination vs. its planning-time
-              pose.  #60 covers the held-arm pose; that bullet
-              covers the support body pose.  Different mechanisms,
-              partially overlapping symptoms; cross-link if a single
-              fix accidentally handles both.
-         #58 (open) — preserve grasp across replans.  If #60 also
-              causes replans on collision-detected runs (rather than
-              outright physics breakage), #58's grasp-preservation
-              would compound the wins.
 
 
 ================================================================================
@@ -1652,6 +1422,133 @@ Related: #9   — eval runner; runs in batch (likely --log-level
 
 
 ================================================================================
+#62. REPLAN-WHILE-HOLDING STILL SLOW AFTER #58 — HELD-CUBE REPLAN HOTSPOT
+================================================================================
+Priority: TIER 2 — Per-replan wall-clock cost on the held branch;
+          user-flagged 2026-05-08 immediately after #58 landed.  Sub-
+          hotspot of #50 (planner perf investigation) localised to the
+          held-cube replan path.  Quote: "the planner still takes too
+          much time to replan while holding object.  its faster but
+          still slow."
+Where:    pddlstream_planner.py — _build_init L505-515 (the
+          (holding ?o) init-fact path added by #58 commit 690f86d),
+          plan() L569+ (no certificate / static-fact caching across
+          replans within a run).
+          streams.py — sample_grasp generator (re-fires every replan
+          to certify a fresh (Grasp ?g) + (valid_grasp ?o ?g) on the
+          same held cube), compute_stack_kin_solution / compute_kin_-
+          solution (held-cube IK runs against the unchanged grasp
+          transform on every candidate skeleton).
+          test_full_pipeline.py — held_obj plumbing through
+          planner.plan() (audit #58, commit 690f86d) is the call
+          site this issue tracks.
+Depends:  None directly.  Pairs with #50 — share the same profiling
+          pass; this issue is the (holding ?o)-stratified view of the
+          same measurements.  If the dominant cost on the held branch
+          turns out to be branch-agnostic (e.g. boxel_fits emission),
+          close as MERGED INTO #50 rather than land duplicate fixes.
+Effort:   <1 week — profile first, fix what dominates.  One or two
+          targeted commits if hypothesis (a) or (b) below dominates;
+          longer if (c) requires a static-fact cache keyed on
+          registry-snapshot identity across replans.
+
+What:  Audit #58 [DONE 2026-05-08] preserved the grasp across replans
+       by emitting ('holding', held_obj) instead of ('handempty',)
+       when held_obj is set.  This eliminated the ~4-action re-grasp
+       cycle previously observed at the PLAN #1 -> PLAN #2 transition
+       in logs/run_2026-05-08_10-49-01.  User confirmed the speedup
+       ("its faster") and immediately flagged residual slowness on
+       the same code path ("but still slow").
+
+       Hypotheses to confirm with profiler before fixing:
+
+       (a) SAMPLE-GRASP RE-CERTIFICATION.  When _build_init emits
+           ('holding', held_obj), the certificate (Grasp ?g) +
+           (valid_grasp ?o ?g) does NOT carry over from the prior
+           plan — it must be re-grounded from streams.sample_grasp
+           every replan.  But the held cube hasn't moved between the
+           prior place/stack failure and the current replan; the
+           same grasp pose that worked at execution time should
+           still be valid.  Fix candidate: thread the prior plan's
+           grasp atom through planner.plan() the same way held_obj
+           is, and emit (Grasp <g>) + (valid_grasp <o> <g>) directly
+           in _build_init when given.  Saves one stream call (and
+           any IK validation it triggers) per replan.
+
+       (b) COMPUTE-STACK-KIN / COMPUTE-KIN RE-IK.  On the held
+           branch, every place/stack candidate skeleton fires the IK
+           loop against the held cube's pose-in-EE transform.  That
+           transform is fixed by the active grasp; the IK seed
+           (current_config) is the only variable across replans.
+           Profile whether IK count grows superlinearly with replan
+           index or candidate-skeleton count; if so, cache by
+           (target_boxel_id, grasp_id) hash inside
+           streams.compute_*_kin_solution.
+
+       (c) _BUILD_INIT FULL REBUILD.  Broader #50 concern — every
+           replan re-emits all static facts (boxel_fits, semantics,
+           geometry-derived predicates).  The holding branch is more
+           sensitive because (holding ?o) grounds more per-skeleton
+           state than (handempty), so the FastDownward grounder pays
+           more per replan than on holding-goal starts.  Fix
+           candidate: cache the static-fact subset keyed on
+           (registry snapshot hash, held_obj, grasp_id) and reuse
+           across replans within a run.  This overlaps with #50 (a)
+           — land it there if profiling confirms it dominates, and
+           merge this issue.
+
+What's already done (don't redo):
+       - #58 commit 690f86d — held_obj kwarg + (holding ?o) init
+         fact path landed.
+       - #58 commit b248c76 — execute_pick post-action lift
+         equalised at 10 cm with place/stack (drops the explicit
+         5 cm override in favour of _apply_post_action_lift's
+         default).
+       - #50 broad framing remains: "find ALL the big redundancies,
+         regardless of whether they live in the grounder, the
+         streams, or the Python init-fact construction."
+
+Fix:   APPROACH (no single commit — measure first):
+
+       (1) Add a profiling slice that splits planner.plan() wall-
+           time by replan index AND by (handempty) vs (holding ?o)
+           initial state.  Reuse #50's planned cProfile pass;
+           aggregate over a fixed seed sweep on --goal find-and-
+           tray-stack (default scene; held branch fires for
+           plan #2+) and --goal holding (held branch fires only
+           after a sense break).  Output the translator-time /
+           search-time / total-time breakdown #50 already plans to
+           capture, but stratified by the (holding ?o) flag so the
+           held branch's dominant cost is visible separately.
+
+       (2) Confirm or rule out hypotheses (a) / (b) / (c) from the
+           profile.  Fix whichever dominates first; re-run the
+           profile to confirm wall-clock drop.  Do not speculatively
+           cache before measurement — premature caching may regress
+           correctness if registry or grasp state mutates between
+           replans in a way the cache key misses.
+
+       (3) Re-run the seed sweep after each fix to confirm success
+           rate is unchanged (same gate as #50).
+
+Care: This is a sub-hotspot of #50 — if the profile shows the held
+       branch's dominant cost is also the dominant cost on the
+       (handempty) branch, close this as MERGED INTO #50 rather than
+       landing duplicate fixes.  Keep #62 distinct only if a held-
+       specific cache or certificate-threading fix lands that
+       wouldn't apply on (handempty) starts.
+
+Related: #50  — broader planner perf investigation; shares the
+              profiling pass and the cache-vs-vectorise-vs-drop
+              decision tree.
+         #58  [DONE 2026-05-08] — landed the (holding ?o) init fact
+              path and held_obj plumbing this issue localises to.
+         #61  — smart console filter / spinner; reduces the
+              perceived freeze during long planner.plan() calls but
+              doesn't change wall-clock cost.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -1737,7 +1634,7 @@ FOR LATER
   the task; otherwise drop the comparison rather than shoehorn.
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-06)
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-08)
 ================================================================================
 
 Aligns with the ROADMAP banner above (pre-eval → eval prerequisites → eval).
@@ -1745,22 +1642,27 @@ Issue numbers are chronological (audit discovery order), NOT priority order —
 follow the tier / roadmap ordering, not the lowest open number.
 Each issue is ideally one commit; parallelise where dependencies allow.
 
+The pre-evaluation correctness chain ended 2026-05-08 with #60 [DONE].
+Eval (#9, #10) is now the user's critical path to the thesis Results
+chapter and was promoted from TIER 3 to TIER 1 in the 2026-05-08 (later)
+restructure.
+
 TIER 0 — TOP PRIORITY:
-  (empty — #60 [DONE 2026-05-08]; lifted pose now reaches plan_motion
-   via runtime sync into plan_client + execution-time motion replan.)
+  (empty — no open correctness blockers.)
 
-TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
-  (empty — #41 [DONE 2026-05-07], #48 [DONE 2026-05-07]; stack-
-   language correctness pass complete.)
-
-TIER 2 — NEW EVAL GOAL + PERF (added 2026-05-06):
-  #50  Planner perf investigation — profile, cache static init, kill
-       redundancies (user-flagged "planner is too slow")
-
-TIER 3 — EVALUATION (runner #9, then baseline #10) + CODE QUALITY:
+TIER 1 — ACTIVE EVAL (promoted 2026-05-08; thesis-critical path):
   #9   Experiment runner + metric hooks + scalability matrix + plots
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
+
+TIER 2 — PERF (planner wall-clock):
+  #50  Planner perf investigation — profile, cache static init, kill
+       redundancies (user-flagged "planner is too slow")
+  #62  Replan-while-holding still slow after #58 — sub-hotspot of #50
+       on the held-cube path (user-flagged 2026-05-08; profile first,
+       merge into #50 if dominant cost is branch-agnostic)
+
+TIER 3 — CODE QUALITY / LOW-PRIO:
   #57  Registry should own cube geometry (audit #55 follow-up;
        replace PyBullet AABB fallback in compute_stack_kin_solution)
   #59  Scaled-up find-and-stack — N hidden targets + size-compat
@@ -1770,41 +1672,11 @@ TIER 3 — EVALUATION (runner #9, then baseline #10) + CODE QUALITY:
        long planner.plan() / RRT / stream-sample calls
        (UX polish; user-flagged 2026-05-08)
 
-Total open: 6 items (#9, #10, #50, #57, #59, #61).
+Total open: 7 items (#9, #10, #50, #57, #59, #61, #62).
 
 Closed since previous summary:
-  #55 [DONE 2026-05-08] — find-and-tray-stack 2-cube goal.  Held-cube
-       AABB fallback (commit 8281d73) + lazy-collision hack (commit
-       9a64aa1).  WSL run logs/run_2026-05-08_10-49-01: 4 plans /
-       76.6 s / 0 physical failures.  Path C archived on branch
-       audit-55-pose-aware-stack.  Archived 2026-05-08 slim.
-  #56 [DONE then REVERTED 2026-05-08] — --post-action-lift CLI flag
-       (default 0.10 m, range [0.0, 0.30]) threaded into execute_place
-       / execute_stack; pick lift unchanged.  Landed in commit bf0800c,
-       reverted in commit ac47aa6 because the flag had no observable
-       effect on robot behaviour at any value tested.  Plumbing was
-       correct; the underlying lift mechanism is broken (now tracked
-       as #60).  Re-attempt only after #60 lands.  Awaiting archive
-       slim.
-  #58 [DONE 2026-05-08] — preserve grasp across replans.  Held-object
-       name threaded through planner.plan() as held_obj kwarg;
-       _build_init emits ('holding', held_obj) instead of ('handempty',)
-       when set, sample-grasp re-fires for fresh (Grasp ?g) +
-       (valid_grasp ?o ?g).  release_held_object_in_place stays as a
-       safety net on planner.plan() returning None with held_obj set.
-       Commit 690f86d; companion commit b248c76 raises execute_pick
-       post-action lift 5 cm -> 10 cm.  Awaiting archive slim.
-  #60 [DONE 2026-05-08] — post-action lift now reaches plan_motion.
-       Option B (sync + replan) — execute_place / execute_stack mirror
-       the placed/stacked body's runtime pose into env.plan_client_id
-       (fix ii); the move action handler builds a runtime q1 from
-       current_config (carrying the planner's q1 metadata) and
-       re-invokes planner.streams.plan_motion when |current - traj[0]|
-       > 1e-2 rad (fix i).  Diagnostic [#60-diag] prints from commit
-       23687af removed; new [#60-fix(i)] one-liner replaces them on
-       the replan path.  Mechanism behind #56's revert is closed —
-       re-attempting --post-action-lift becomes meaningful as a
-       regression test.  Commit c08dc65.  Awaiting archive slim.
+  (none — all 2026-05-08 closures (#55, #56, #58, #60) archived in the
+   2026-05-08 (later) slim.)
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
@@ -1824,5 +1696,5 @@ Resolved/subsumed → archive/CODEBASE_AUDIT_RESOLVED.txt:
              [DONE 2026-05-07], #43, #44, #45, #46, #48 [DONE 2026-05-07],
              #49 [DONE 2026-05-07], #53 [DONE 2026-05-07],
              #54 [DONE 2026-05-07], #55 [DONE 2026-05-08],
-             #56 [DONE 2026-05-08; awaiting slim], #58 [DONE 2026-05-08;
-             awaiting slim].
+             #56 [DONE 2026-05-08], #58 [DONE 2026-05-08],
+             #60 [DONE 2026-05-08].
