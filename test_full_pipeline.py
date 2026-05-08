@@ -1017,6 +1017,20 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # interpolation for visual fidelity and physics stability.
                 q1, q2, dest_boxel_id, traj = params
                 print(f"    Moving to {dest_boxel_id} ({len(traj.waypoints)} waypoints)...")
+                # audit #60 diagnostic — was the lifted pose carried into plan_motion?
+                # If current_config differs from traj.waypoints[0] (= planner's q1),
+                # the arm is starting the move ABOVE the trajectory's first waypoint
+                # and move_robot_smooth(waypoints[1]) will interpolate DOWN before
+                # traversing — candidate (i).
+                if current_config is not None and len(traj.waypoints) > 0:
+                    diff = float(np.linalg.norm(
+                        np.asarray(current_config.joint_positions)
+                        - np.asarray(traj.waypoints[0].joint_positions)))
+                    if diff > 1e-4:
+                        print(f"    [#60-diag] move starts ABOVE traj[0]: "
+                              f"|current - traj[0]|={diff:.4f} rad "
+                              f"(candidate i — plan_motion's q1 is contact pose, "
+                              f"current_config is lifted)")
 
                 for wp in traj.waypoints[1:]:
                     move_robot_smooth(robot_id, wp.joint_positions,
