@@ -948,6 +948,45 @@ Updated:      2026-05-08 (later) — #10 [DONE 2026-05-08].  Uniform-
               WSL on this machine).  Open count: 7 -> 6.  TIER 1 now
               empty (eval prerequisites complete, #9 + #10 both DONE).
 
+Updated:      2026-05-08 (later) — #10 follow-up: fc7c044 skips
+              merge_free_space_cells under env.use_uniform_grid in
+              both call sites (test_full_pipeline.py phase 2 +
+              reboxelize.py post-action re-grounding).  GUI inspection
+              of commit afdaadd showed that the UniformGridGenerator
+              correctly emitted ~1440 strict-uniform 5cm cells, but
+              CellMerger then collapsed every contiguous run of them
+              back into variable-sized rectangles (cyan wireframes
+              labeled free_001 / free_004 / ... in the screenshot
+              were merged blobs, not the intended uniform lattice).
+              Merger is meaningful for octree leaves (collapse
+              equivalent siblings) but defeats uniform mode.  Two-
+              line gate, no behaviour change under --baseline
+              semantic.  py_compile clean.
+
+Added:        2026-05-08 (later) — #64 (TIER 2 — uniform baseline
+              OBJECT + SHADOW multi-cell, audit #10 follow-up).
+              GUI inspection of fc7c044 showed two issues: (1) free
+              cells now correctly uniform (this commit fixes it),
+              (2) OBJECT/SHADOW boxels still drawn as variably-sized
+              AABB wireframes — generate_boxels() unchanged under
+              uniform mode, so the baseline only differs from
+              semantic in the FREE-space dimension.  User confirmed
+              2026-05-08 the intended baseline is full multi-cell
+              (every uniform cell carries a label in {FREE,
+              part-of-OBJECT-X, part-of-SHADOW-of-X}, lattice
+              static, only labels mutate).  Ruled out: A (current
+              free-space-only swap), B (anchor cell + masking),
+              D (TAMPURA-style observed/unobserved bitmap; drops
+              per-cell semantic labels).  Settled design points:
+              centroid-anchor cell carries (clear ?b) so pick's
+              precondition logic survives without streams changes;
+              cell size reuses --uniform-cell-size (no separate
+              OBJECT-cell-size knob); IK targets read env.objects[
+              name].position (pattern from #55 hotfix).  Tracked
+              for follow-up implementation; not blocking the
+              current eval sweep run with Option A.  Open count:
+              6 -> 7.
+
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
 
@@ -1032,7 +1071,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #50, #57, #59, #61, #62, #63                                   #
+#  OPEN ISSUES — #50, #57, #59, #61, #62, #63, #64                              #
 #                                                                              #
 ################################################################################
 
@@ -1130,6 +1169,14 @@ Parallel / non-blocking:
        2026-05-08 immediately after #58 landed: "its faster but
        still slow."  Profile first; close as MERGED INTO #50 if the
        dominant cost turns out to be branch-agnostic.
+  #64  uniform baseline OBJECT + SHADOW multi-cell (audit #10 follow-up)
+       — generate_boxels() under --baseline uniform should emit
+       per-lattice-cell OBJECT and SHADOW BoxelData (instead of one
+       AABB per object/shadow region), so every cell carries a label
+       and the lattice is fully uniform.  Settled to Option C
+       (full multi-cell, planner sees per-cell atoms; centroid-
+       anchor carries (clear ?b)).  Not blocking the current sweep
+       run (Option A is shipped); thesis-narrative improvement.
 
 Closed / relocated since last summary:
   #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
@@ -1945,6 +1992,123 @@ Related: All other open issues at landing time — this is the
 
 
 ================================================================================
+#64. UNIFORM BASELINE — OBJECT + SHADOW MULTI-CELL (audit #10 follow-up)
+================================================================================
+Priority: TIER 2 — Thesis-narrative improvement.  Without it, the
+          --baseline uniform comparison is "octree-merged FREE cells
+          vs uniform FREE cells"; OBJECT/SHADOW pipelines remain
+          semantically shaped (one AABB per object, one per shadow
+          volume) so the baseline only differs from semantic in the
+          FREE-space dimension.  Fixing this makes the comparison
+          "every cell on a strict uniform lattice with labels
+          {FREE, OBJECT-X, SHADOW-of-X}" — the literal interpretation
+          of audit #10's body wording "no shadow/object/free
+          distinction".  Not blocking the current sweep run with
+          Option A.
+Where:    boxel_env.generate_boxels() + uniform_grid.py +
+          potentially pddlstream_planner._build_init for clear-cell
+          anchor logic, streams.py for IK target consistency.
+Depends:  #10 [DONE 2026-05-08] (uniform grid generator + dispatch
+          plumbing already landed).
+Effort:   2-3 days; estimated 250-350 LOC across 2-3 files.
+
+What:  Audit #10 landed a free-space-only swap (commit afdaadd):
+       UniformGridGenerator replaces FreeSpaceGenerator under
+       --baseline uniform, but generate_boxels() still emits one
+       OBJECT BoxelData per visible object (camera AABB) and one
+       SHADOW BoxelData per shadow volume (shadow_calculator AABB).
+       Visually the GUI shows uniform 5cm cubes for FREE space
+       alongside variably-sized AABB wireframes for OBJECT/SHADOW —
+       not "every cell on the uniform grid" in any literal sense.
+
+       User confirmed 2026-05-08 the intended baseline is full
+       multi-cell: every uniform cell carries one of the labels
+       {FREE / part-of-OBJECT-X / part-of-SHADOW-of-X}, lattice
+       static across replans, only labels mutate over time.
+       Planner emits per-cell atoms (multiple cells map to one
+       object name).
+
+       Ruled out (2026-05-08 user direction):
+         (A) Free-space-only swap [current state, Option A].
+             Insufficient — visual + thesis-narrative gap as above.
+         (B) Anchor-cell + masking variant.  Less invasive than C
+             but still has dual-shape weirdness (OBJECT cells
+             differ from non-OBJECT-mask cells).
+         (D) TAMPURA-style observed/unobserved bitmap (per
+             find_dice/env.py).  Drops per-cell semantic labels
+             entirely; planner sees only per-OBJECT atoms with
+             continuous poses.  Not what user wants — labels on
+             cells is the explicit framing.
+
+Fix:   ONE COMMIT (or split into 2-3 if scope demands):
+       (a) Extend uniform_grid.py with a labelling pass over the
+           static lattice.  For each visible object, walk the
+           lattice and mark every overlapping cell as OBJECT with
+           object_name=<obj> + unique cell id (e.g.
+           red_object_cell_3).  For each shadow volume, mark
+           overlapping cells as SHADOW with created_by_object set
+           and unique id (e.g. shadow_of_red_object_cell_5).
+       (b) Modify boxel_env.generate_boxels() to dispatch under
+           use_uniform_grid=True: produce multi-cell OBJECT +
+           SHADOW per (a) instead of one boxel per region.
+           Semantic path untouched.
+       (c) Anchor-cell (clear) logic: emit (clear ?b) only on the
+           OBJECT cell whose centroid is closest to the actual
+           object centroid.  Lets pick's existing (clear ?o)
+           precondition fire without streams changes.  Alternative
+           cleaner symbolically: pddlstream_planner._build_init
+           filters per-object so clear emits exactly once per
+           object (same effect, more code).  Settled to anchor-
+           cell per user 2026-05-08.
+       (d) IK-target consistency: compute_kin_solution and other
+           streams currently read the OBJECT boxel's AABB for IK
+           target.  Under multi-cell, replace with
+           env.objects[name].position (actual physical pose).
+           Pattern already exists from audit #55 hotfix (held-cube
+           AABB fallback in commit 8281d73).
+       (e) Sense reveals: under multi-cell, sense(<shadow_cell>)
+           reveals only objects whose actual pose lies in that
+           cell.  Decision (deferred to implementation):
+           (i) require multiple senses per occluder (fully
+               uniform — more replans, closer to "uniform is
+               slow" thesis story), OR
+           (ii) sense any cell of a shadow-of-X reveals X
+                if X is hidden inside that shadow's union (cheap
+                shortcut, preserves current single-sense reveal
+                pattern).
+       (f) Visualizer: BoxelVisualizer.draw_registry already
+           iterates every boxel, so multi-cell OBJECT/SHADOW
+           draws naturally.  Expect 1500+ wireframes under uniform
+           vs ~30 under semantic; --show-free renders both.
+
+Settled design points (2026-05-08):
+  - Cell size reuses --uniform-cell-size (default 0.05); no
+    separate OBJECT-cell-size knob.
+  - clear emitted only on the anchor cell (centroid-closest)
+    per (c) above.
+  - C confirmed as target option (not A, B, or D).
+
+Care: This is the MAIN consequence of choosing C over A: the
+       planner grounding cost increases roughly Nx (N = avg cells
+       per object) because every per-cell atom multiplies.  The
+       eval matrix's --timeout 300 s default may bite the upper-
+       right of the n_occluders × n_targets sweep under uniform.
+       This is *the thesis story* (uniform is supposed to be
+       slower) but practical mitigation: bump --timeout to 600 s
+       or coarsen --uniform-cell-size to 0.08 m (cuts cells per
+       axis ~40%).  Profile uniform's _build_init under #50 once
+       both #10 follow-up and #50 are open in parallel.
+
+Related: #10 [DONE 2026-05-08] — uniform free-space swap landed
+              (commits afdaadd + fc7c044).
+         #50 — planner perf investigation; uniform mode produces
+              large grounded states, profile may show new hotspots.
+         #57 — registry-owned cube geometry (uniform OBJECT cells
+              would need lattice-aligned per-cell geometry; both
+              issues touch the same boundary).
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -2053,12 +2217,17 @@ TIER 1 — ACTIVE EVAL (eval prerequisites complete):
   to populate eval_results/sweep_<ts>_scalability with both baselines'
   aggregated.csv rows.)
 
-TIER 2 — PERF (planner wall-clock):
+TIER 2 — PERF (planner wall-clock) + thesis-narrative:
   #50  Planner perf investigation — profile, cache static init, kill
        redundancies (user-flagged "planner is too slow")
   #62  Replan-while-holding still slow after #58 — sub-hotspot of #50
        on the held-cube path (user-flagged 2026-05-08; profile first,
        merge into #50 if dominant cost is branch-agnostic)
+  #64  Uniform baseline OBJECT + SHADOW multi-cell (audit #10
+       follow-up).  Settled to Option C (per-cell labels, planner
+       sees per-cell atoms, anchor cell carries (clear ?b)); user
+       direction 2026-05-08.  Not blocking the current Option-A
+       sweep run.
 
 TIER 3 — CODE QUALITY / LOW-PRIO:
   #57  Registry should own cube geometry (audit #55 follow-up;
@@ -2074,18 +2243,31 @@ TIER 3 — CODE QUALITY / LOW-PRIO:
        Explicitly the last commit before thesis submission per user
        2026-05-08.
 
-Total open: 6 items (#50, #57, #59, #61, #62, #63).
+Total open: 7 items (#50, #57, #59, #61, #62, #63, #64).
 
 Closed since previous summary:
   #10  [DONE 2026-05-08 (later)] — uniform voxelization baseline
-       (commit afdaadd).  Free-space-only swap: UniformGridGenerator
-       (uniform_grid.py) replaces FreeSpaceGenerator under
-       --baseline uniform; OBJECT + SHADOW boxels untouched; PDDL
-       domain unchanged (TAMPURA-style Python-side label maintenance
-       via the existing _build_init re-emit).  SCALABILITY_MATRIX
-       gains the baseline axis (90 -> 180 cells, semantic + uniform).
-       eval_plotter.py --baseline-csv hook already consumes the
-       comparison input.
+       (commit afdaadd + fc7c044 follow-up).  Free-space-only swap:
+       UniformGridGenerator (uniform_grid.py) replaces
+       FreeSpaceGenerator under --baseline uniform; OBJECT + SHADOW
+       boxels untouched (per Option A; full multi-cell deferred to
+       #64); PDDL domain unchanged (TAMPURA-style Python-side label
+       maintenance via the existing _build_init re-emit).
+       SCALABILITY_MATRIX gains the baseline axis (90 -> 180 cells,
+       semantic + uniform).  eval_plotter.py --baseline-csv hook
+       already consumes the comparison input.  Follow-up commit
+       fc7c044 skips merge_free_space_cells under env.use_uniform_-
+       grid in both call sites (test_full_pipeline.py phase 2 +
+       reboxelize.py post-action re-grounding) — without it the
+       merger collapsed adjacent uniform cubes back into variable-
+       sized rectangles, defeating the uniform property.
+
+Added since previous summary:
+  #64  Uniform baseline OBJECT + SHADOW multi-cell (audit #10
+       follow-up).  Visual + thesis-narrative gap from Option A:
+       OBJECT/SHADOW remain semantically shaped under --baseline
+       uniform.  Settled to Option C (full multi-cell, per-cell
+       atoms, centroid-anchor for (clear ?b)).  TIER 2.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
