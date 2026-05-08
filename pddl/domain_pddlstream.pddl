@@ -74,7 +74,7 @@
     (on_table ?o)                 ; ?o sits directly on the table  (audit #41)
     (clear ?o)
     (is_tray ?o)                  ; ?o is the fixed-base tray support  (audit #49)
-    (stack_kin ?o ?on_obj ?g ?q)  ; IK config ?q to place ?o on top of ?on_obj
+    (stack_kin ?o ?on_obj ?p_on ?p_new ?g ?q)  ; IK config ?q to land ?o on ?on_obj at ?p_on, resulting cube pose ?p_new  (audit #55)
 
     ;; --- Pose plumbing (audit #55) ---
     ;; (Pose ?p) is a stream-typed certified predicate (mirrors Config /
