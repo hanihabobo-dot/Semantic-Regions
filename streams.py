@@ -983,10 +983,24 @@ class BoxelStreams:
         (config_for_boxel ?q ?on_obj) — the last so the preceding move
         action can deliver the arm to the support's OBJECT boxel.
         """
+        # Held cube half-height: prefer registry boxel; fall back to live
+        # AABB for hidden targets that don't have OBJECT-type registry
+        # boxels (audit #55).  Their bodies ARE mirrored in plan_client
+        # via _mirror_load_urdf even before sense reveals their pose,
+        # and the cube's z-extent doesn't depend on knowing where it is.
         held_boxel = self.registry.get_boxel(obj_id)
-        if held_boxel is None:
-            return
-        held_half_height = float(held_boxel.extent[2])
+        if held_boxel is not None:
+            held_half_height = float(held_boxel.extent[2])
+        else:
+            body_id = self._resolve_body_id(obj_id)
+            if body_id is None:
+                return
+            try:
+                h_min, h_max = p.getAABB(
+                    body_id, physicsClientId=self.physics_client)
+            except Exception:
+                return
+            held_half_height = float(h_max[2] - h_min[2]) / 2.0
 
         on_body_id = self._resolve_body_id(on_obj_id)
         top_z: Optional[float] = None
