@@ -612,6 +612,53 @@ Updated:      2026-05-08 (later) — #56 marked [DONE 2026-05-08].
               py_compile clean across run_logger.py /
               test_full_pipeline.py / execution.py.  Open count:
               7 -> 6.  TIER 3 reduces to #9, #10, #57.
+Reverted:     2026-05-08 (later) — #56 rolled back on main (commit
+              ac47aa6 reverts bf0800c) because --post-action-lift had
+              no observable effect on robot behaviour at any value
+              tested in the validated [0.0, 0.30] range.  Hardcoded
+              10 cm restored via _apply_post_action_lift's default
+              lift_height kwarg (execution.py:395); 5 cm cosmetic
+              pick lift unchanged.  Manual override now requires
+              editing the kwarg default or passing an explicit
+              lift_height at execution.py:644 / 761.  #56 stays
+              [DONE then REVERTED 2026-05-08] in the closed list —
+              the plumbing landed correctly, but the underlying lift
+              mechanism is broken (see #60).  Re-attempt #56 only
+              after #60 lands.
+Added:        2026-05-08 (later) — #60 (TIER 0 — post-action lift
+              fails to prevent collisions during the next move
+              action; root cause behind #56's ineffectiveness).
+              User-flagged 2026-05-08 after find-and-place /
+              find-and-tray-stack runs collided despite manual lift
+              values up to 30 cm.  Symptom: the arm visibly drops
+              back toward contact height before the next move's
+              traversal phase, then routes through the
+              just-placed cube.  Open count: 6 -> 7.  TIER 0
+              repopulated (was empty since #52's removal 2026-05-08).
+Updated:      2026-05-08 (later) — #58 marked [DONE 2026-05-08].
+              Held-object name now threaded through planner.plan() as
+              held_obj kwarg (commit 690f86d); _build_init emits
+              ('holding', held_obj) instead of ('handempty',) when
+              set, sample-grasp re-fires on (Obj ?o) for a fresh
+              (Grasp ?g) + (valid_grasp ?o ?g).  Mid-plan-break
+              replans now continue from (holding ?o) instead of
+              dropping the cube, eliminating the ~4-action re-grasp
+              cycle observed in logs/run_2026-05-08_10-49-01 at the
+              PLAN #1 -> PLAN #2 transition.  release_held_object_-
+              in_place stays as a SAFETY NET: triggered only when
+              planner.plan() returns None with held_obj set, falls
+              back to release-and-replan from (handempty).
+              py_compile clean across pddlstream_planner.py /
+              test_full_pipeline.py.  Other init facts
+              (obj_at_boxel ?o, on_table ?o) intentionally left
+              emitting for held cubes — pick's (handempty)
+              precondition blocks any misuse, and the audit's spec
+              was minimal-swap.  Companion commit b248c76 raises
+              execute_pick post-action lift from 5 cm to 10 cm
+              (drops explicit lift_height=0.05 override, uses
+              _apply_post_action_lift default) — equalises per-
+              action lift while #60 investigation is open.  Open
+              count: 7 -> 6.  TIER 2 reduces to #50 alone.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -697,7 +744,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #50, #57, #58, #59                                    #
+#  OPEN ISSUES — #9, #10, #50, #57, #59, #60                                    #
 #                                                                              #
 ################################################################################
 
@@ -715,8 +762,15 @@ Pre-evaluation (intended order before the eval sweep):
     → #55 [DONE 2026-05-08] (find-and-tray-stack 2-cube goal — lazy-
         collision hack + held-cube AABB fallback; Path C archived on
         branch audit-55-pose-aware-stack)
-    → pre-evaluation chain complete; #50 (planner perf) is the only
-      pre-eval-adjacent open item, parallelised with the eval sweep.
+    → #60 (TIER 0, OPEN 2026-05-08) — post-action lift fails to prevent
+        collisions during the next move action.  Re-opens the
+        pre-evaluation chain: #55's tray-stack pipeline lands clean
+        runs in nominal seeds, but find-and-place / find-and-tray-
+        stack collide reproducibly when the lift mechanism is
+        exercised end-to-end (root cause behind #56's revert).
+    → after #60: pre-evaluation chain complete; #50 (planner perf) is
+      the only pre-eval-adjacent open item, parallelised with the
+      eval sweep.
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
    — user decision; the archived #21 log-only band-aid is the
@@ -747,15 +801,18 @@ Parallel / non-blocking:
        feed back into #9's scalability plots.  Subsumes the per-hotspot
        questions formerly tracked as #34 (ray×free-boxel precompute) — those
        land here as profiler hits, not as separate audit items.
-  #56  [DONE 2026-05-08] — CLI flag for post-action safe-distance lift
-       (audit #36 follow-up).  --post-action-lift FLOAT default 0.10 m,
-       range [0.0, 0.30]; threaded through main() into execute_place /
-       execute_stack.  Pick lift unchanged at 0.05 m cosmetic.  Commit
-       bf0800c; awaiting archive slim.
+  #56  [DONE then REVERTED 2026-05-08] — CLI flag for post-action safe-
+       distance lift (audit #36 follow-up).  Plumbing landed in commit
+       bf0800c then reverted in commit ac47aa6 — flag had no observable
+       effect at any value.  Underlying mechanism is broken; tracked as
+       #60.  Awaiting archive slim.
+  #60  Post-action lift fails to prevent collisions during the next move
+       action.  TIER 0 correctness bug, blocks find-and-place / find-
+       and-tray-stack.  User-flagged 2026-05-08 — root cause behind
+       #56's revert.  Pre-eval-blocking; should land before any further
+       eval sweep.
   #57  registry should own cube geometry (audit #55 follow-up; replace the
        PyBullet AABB fallback in compute_stack_kin_solution).
-  #58  preserve grasp across replans (audit #55 follow-up; observed in
-       logs/run_2026-05-08_10-49-01).
   #59  scaled-up find-and-stack — N hidden targets stacked physically-
        sensibly via (compat_stack ?o ?on_obj) PDDL predicate (very low
        priority per user direction 2026-05-08).
@@ -1042,6 +1099,7 @@ Related: #55 [DONE 2026-05-08; archived] — introduced the AABB
 
 ================================================================================
 #58. PRESERVE GRASP ACROSS REPLANS (CURRENTLY DROPS HELD OBJECT)
+     [DONE 2026-05-08]
 ================================================================================
 Priority: TIER 2 — Affects every replan that fires while the gripper
           holds an object.  User-flagged 2026-05-08 after observing
@@ -1208,6 +1266,160 @@ Related: #55 [DONE 2026-05-08; archived] — find-and-tray-stack base
 
 
 ================================================================================
+#60. POST-ACTION LIFT FAILS TO PREVENT COLLISIONS DURING NEXT MOVE ACTION
+================================================================================
+Priority: TIER 0 — Correctness.  Runtime collisions during find-and-
+          place and find-and-tray-stack despite a successful
+          planner.plan() return; the symbolic layer reports a
+          collision-free trajectory that is not collision-free at
+          execution.  User-flagged 2026-05-08.
+Where:    execution.py:_apply_post_action_lift (~L394-410) and the
+          surrounding execute_place / execute_stack final_config
+          returns (~L644-651, ~L761-768).
+          Whatever module owns plan_motion's start-config seeding for
+          the next move action — likely streams.py compute_motion (or
+          plan_motion stream) and the orchestrator wiring in
+          test_full_pipeline.py main() that threads the previous
+          execute_*'s returned RobotConfig into the next planner
+          call.
+          Plan-client vs GUI-client cube state sync at the
+          place/stack boundary — boxel_env.py _mirror_load_urdf and
+          any post-place pose update path (env.plan_client_id).
+Depends:  #56 [DONE then REVERTED 2026-05-08] — the CLI flag (commit
+          bf0800c, reverted in commit ac47aa6) showed the symptom in
+          isolation: the knob plumbing landed correctly but the
+          ostensibly-tunable lift had no observable effect on robot
+          behaviour at any value tested.  This issue is the root-cause
+          hunt that #56 made visible.
+Effort:   2-3 hours investigation; fix scope depends on which
+          candidate cause dominates.
+
+What:  After running find-and-place / find-and-tray-stack with manual
+       lift_height up to 0.30 m (the upper bound of the validated
+       --post-action-lift range from #56), the next move action still
+       lowers the arm and routes through the just-placed cube,
+       producing a runtime collision.
+
+       Per #36 / #56 the post-action lift was meant to give the next
+       plan_motion safe headroom over the freshly placed/stacked cube.
+       _apply_post_action_lift's docstring (execution.py:394-404)
+       claims the final_config returned to the caller carries the
+       lifted pose forward as the next move's plan_motion seed.  The
+       user's observation contradicts that: the arm visibly DROPS
+       back toward contact height at the start of the next move,
+       which means either (i) the lifted pose is not being used as
+       the next plan_motion's start, or (ii) plan_motion's
+       collision check is certifying through-the-cube paths despite
+       a lifted start.
+
+       The reason commit ac47aa6 reverted #56 is exactly this gap —
+       the CLI knob's value reached _apply_post_action_lift, the IK
+       solve and physical lift ran, but the downstream plan_motion
+       did not respect either the lifted start config or the
+       freshly-placed cube's pose.  A configurable knob over a
+       broken mechanism is dead weight.
+
+       Three candidate causes, ranked by fit to the user's report:
+
+       (i)  plan_motion's start config not seeded from final_config.
+            If the next move's plan_motion is seeded with the
+            planner's compute_kin_solution config (contact pose,
+            10 cm above target) instead of the runtime final_config
+            from execute_place / execute_stack, the resulting
+            trajectory legitimately starts at contact height; the
+            runtime arm at lift height jumps to that start before
+            traversing.  STRONGEST FIT to user's "lowers the arm
+            again" observation.  Test: log the (q_from, q_to)
+            passed to plan_motion at each move action and compare
+            q_from to the prior execute_*'s returned
+            final_config.joint_positions.
+
+       (ii) Plan-client cube-pose desync.  plan_motion runs against
+            env.plan_client_id (separate DIRECT PyBullet client per
+            CODEBASE POLICY).  If the freshly placed cube's pose
+            isn't mirrored to plan_client between
+            execute_place/stack and the next plan_motion call, the
+            collision checker sees the cube at its initial pose
+            (or not at all) and certifies through-the-current-pose
+            paths as clean.  Compounds (i): even with a lifted
+            start, the trajectory has no reason to maintain
+            altitude over a cube the planner cannot see.  Test:
+            query p.getBasePositionAndOrientation on the placed
+            cube's body in BOTH clients before the next
+            plan_motion; if they diverge, this contributes.
+
+       (iii) Silent IK fall-through in _apply_post_action_lift.
+             execution.py:408-409 returns silently when solve_ik
+             fails for the lifted EE pose; actual_joints is then
+             read AFTER the no-op return and final_config is the
+             contact pose.  Less likely to match the user's
+             symptom (the arm "lowers" at next-move start implies
+             it WAS lifted), but worth ruling out by adding a
+             print on the IK-failure branch.
+
+       The fact that lift_height was demonstrably ineffective at
+       any value in [0.0, 0.30] (#56 revert) is the strongest
+       single signal that the lifted pose isn't actually used
+       downstream — i.e. (i) and/or (ii) dominate.
+
+Fix:   INVESTIGATION → FIX (do not pre-commit to one approach):
+       (a) Reproduce on default scene, default seed, --goal
+           find-and-tray-stack with extra debug logging in
+           _apply_post_action_lift (IK result, joint state pre-
+           and post-lift) and at the next-move plan_motion call
+           site (q_from, q_to, the body IDs and poses the
+           collision check sees).  Confirm which of (i) / (ii) /
+           (iii) matches the symptom.
+       (b) For (i): thread final_config from execute_*'s return
+           into the orchestrator's current_config so the next
+           plan_motion gets the lifted seed.  Verify plan_motion
+           treats the seed as a hard start, not a hint.
+       (c) For (ii): mirror the placed/stacked cube's live pose to
+           plan_client after the settle steps in execute_place /
+           execute_stack, before returning final_config.  Reuse
+           _mirror_load_urdf's update path or add a lightweight
+           setBasePositionAndOrientation hook against
+           env.plan_client_id.
+       (d) For (iii): replace the silent fall-through with a hard
+           error (or a replan trigger) on lift IK failure so the
+           bug becomes visible instead of accumulating as drift.
+           The "fail-safely fall through" stance pre-dates the
+           user report and is now demonstrably hiding correctness
+           gaps.
+
+       Smoke test: re-run --goal find-and-tray-stack on default
+       scene with the same seed.  Expect the next-move trajectory
+       to leave the lifted pose without lowering, and to route
+       around the placed cube.  Expect a re-attempt of #56's CLI
+       knob to produce observable behaviour at last (lower lift
+       values should now break the run; higher values should give
+       more clearance) — that's the regression test that #60
+       actually fixed the underlying mechanism.
+
+Related: #36 [DONE 2026-05-07; archived] — introduced the hardcoded
+              post-action lift this issue documents as broken.
+         #56 [DONE then REVERTED 2026-05-08] — CLI flag for the lift
+              (commit bf0800c, reverted in ac47aa6).  The revert
+              note ("no observable effect on robot behaviour at any
+              value tested") is exactly the symptom #60 tracks.
+              Re-attempt #56 only after #60 lands.
+         #1 [RESOLVED] — robot config drift across actions; this
+              issue is a sibling on the place/stack side
+              (post-action arm pose vs. planner expectation).
+         FOR LATER "Trajectory-clipping edge case for stack actions"
+              (audit #55 lazy-collision residual) — covers the dual
+              gap: support body's destination vs. its planning-time
+              pose.  #60 covers the held-arm pose; that bullet
+              covers the support body pose.  Different mechanisms,
+              partially overlapping symptoms; cross-link if a single
+              fix accidentally handles both.
+         #58 (open) — preserve grasp across replans.  If #60 also
+              causes replans on collision-detected runs (rather than
+              outright physics breakage), #58's grasp-preservation
+              would compound the wins.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -1302,9 +1514,10 @@ follow the tier / roadmap ordering, not the lowest open number.
 Each issue is ideally one commit; parallelise where dependencies allow.
 
 TIER 0 — TOP PRIORITY:
-  (empty — #52 dropped 2026-05-08 per user direction; #55 [DONE
-   2026-05-08] already demonstrates sense → pick → stack end-to-
-   end, no need for a simpler #52-style goal.)
+  #60  Post-action lift fails to prevent collisions during the next
+       move action (root cause behind #56's revert; user-flagged
+       2026-05-08 — find-and-place / find-and-tray-stack collide
+       even at --post-action-lift 0.30 m)
 
 TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
   (empty — #41 [DONE 2026-05-07], #48 [DONE 2026-05-07]; stack-
@@ -1313,8 +1526,6 @@ TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
 TIER 2 — NEW EVAL GOAL + PERF (added 2026-05-06):
   #50  Planner perf investigation — profile, cache static init, kill
        redundancies (user-flagged "planner is too slow")
-  #58  Preserve grasp across replans (audit #55 follow-up; observed
-       in logs/run_2026-05-08_10-49-01)
 
 TIER 3 — EVALUATION (runner #9, then baseline #10) + CODE QUALITY:
   #9   Experiment runner + metric hooks + scalability matrix + plots
@@ -1325,7 +1536,7 @@ TIER 3 — EVALUATION (runner #9, then baseline #10) + CODE QUALITY:
   #59  Scaled-up find-and-stack — N hidden targets + size-compat
        PDDL predicate (very low priority per user 2026-05-08)
 
-Total open: 6 items (#9, #10, #50, #57, #58, #59).
+Total open: 6 items (#9, #10, #50, #57, #59, #60).
 
 Closed since previous summary:
   #55 [DONE 2026-05-08] — find-and-tray-stack 2-cube goal.  Held-cube
@@ -1333,9 +1544,22 @@ Closed since previous summary:
        9a64aa1).  WSL run logs/run_2026-05-08_10-49-01: 4 plans /
        76.6 s / 0 physical failures.  Path C archived on branch
        audit-55-pose-aware-stack.  Archived 2026-05-08 slim.
-  #56 [DONE 2026-05-08] — --post-action-lift CLI flag (default 0.10 m,
-       range [0.0, 0.30]) threaded into execute_place / execute_stack;
-       pick lift unchanged.  Commit bf0800c.  Awaiting archive slim.
+  #56 [DONE then REVERTED 2026-05-08] — --post-action-lift CLI flag
+       (default 0.10 m, range [0.0, 0.30]) threaded into execute_place
+       / execute_stack; pick lift unchanged.  Landed in commit bf0800c,
+       reverted in commit ac47aa6 because the flag had no observable
+       effect on robot behaviour at any value tested.  Plumbing was
+       correct; the underlying lift mechanism is broken (now tracked
+       as #60).  Re-attempt only after #60 lands.  Awaiting archive
+       slim.
+  #58 [DONE 2026-05-08] — preserve grasp across replans.  Held-object
+       name threaded through planner.plan() as held_obj kwarg;
+       _build_init emits ('holding', held_obj) instead of ('handempty',)
+       when set, sample-grasp re-fires for fresh (Grasp ?g) +
+       (valid_grasp ?o ?g).  release_held_object_in_place stays as a
+       safety net on planner.plan() returning None with held_obj set.
+       Commit 690f86d; companion commit b248c76 raises execute_pick
+       post-action lift 5 cm -> 10 cm.  Awaiting archive slim.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
@@ -1355,4 +1579,5 @@ Resolved/subsumed → archive/CODEBASE_AUDIT_RESOLVED.txt:
              [DONE 2026-05-07], #43, #44, #45, #46, #48 [DONE 2026-05-07],
              #49 [DONE 2026-05-07], #53 [DONE 2026-05-07],
              #54 [DONE 2026-05-07], #55 [DONE 2026-05-08],
-             #56 [DONE 2026-05-08; awaiting slim].
+             #56 [DONE 2026-05-08; awaiting slim], #58 [DONE 2026-05-08;
+             awaiting slim].
