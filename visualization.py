@@ -81,16 +81,46 @@ class BoxelVisualizer:
     - Blue = Visible non-occluding object
     - Gray = SHADOW
     - Cyan = FREE_SPACE (merged)
+
+    uniform_mode (audit #64 — TAMPURA-faithful, Curtis et al. 2024):
+        When True, OBJECT and SHADOW BoxelData are suppressed from
+        the overlay so only the FREE lattice renders.  Mirrors
+        TAMPURA's VoxelGrid (binary {free, occupied}; occupied is
+        implicit, never drawn).  PyBullet's own object rendering
+        provides the physical scene underneath.  OBJECT/SHADOW
+        records remain in the BoxelRegistry — they are the planner's
+        per-object handles (TAMPURA's `object_poses` equivalent),
+        only their viz is hidden.  Default False = semantic mode.
     """
 
-    def __init__(self):
-        """Initialize the visualizer."""
+    def __init__(self, *, uniform_mode: bool = False):
+        """Initialize the visualizer.
+
+        Args:
+            uniform_mode: If True, skip OBJECT and SHADOW boxels in
+                every draw call.  Set this when running under
+                ``--baseline uniform`` so the GUI matches the
+                TAMPURA-faithful framing (audit #64).
+        """
         # Sets (audit #33): remove_boxel_viz() needs O(1) membership and
         # removal because reboxelization can churn many entries per replan.
         self.debug_items: Set[int] = set()
         self.shadow_bodies: Set[int] = set()
         self._items_by_id: Dict[str, List[int]] = {}
         self._bodies_by_id: Dict[str, List[int]] = {}
+        self.uniform_mode = uniform_mode
+
+    def _should_draw(self, bd: BoxelData) -> bool:
+        """Whether ``bd`` survives the active draw filter.
+
+        Under :attr:`uniform_mode`, OBJECT and SHADOW are suppressed
+        so the GUI shows only the FREE lattice (audit #64).  All
+        other types — including FREE_SPACE — pass through.
+        """
+        if self.uniform_mode and bd.boxel_type in (
+                BoxelType.OBJECT, BoxelType.SHADOW):
+            return False
+        return True
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -191,6 +221,8 @@ class BoxelVisualizer:
             self._bodies_by_id.clear()
 
         for bd in boxels:
+            if not self._should_draw(bd):
+                continue
             item_ids, body_ids = self._draw_one_boxel(
                 bd, duration=duration, fill_opacity=fill_opacity,
                 show_labels=show_labels, label_size=label_size,
@@ -231,7 +263,14 @@ class BoxelVisualizer:
         Used by the execution loop to incrementally update the overlay
         when new objects/shadows are discovered or fragments are
         added by reboxelization (see test_full_pipeline.py).
+
+        Under :attr:`uniform_mode` (audit #64), OBJECT and SHADOW
+        BoxelData are silently dropped here too — discovery in
+        execution.py registers the BoxelData unconditionally so the
+        planner sees it; the overlay just hides it.
         """
+        if not self._should_draw(bd):
+            return
         item_ids, body_ids = self._draw_one_boxel(
             bd, duration=duration, fill_opacity=fill_opacity,
             show_labels=True, label_size=label_size,

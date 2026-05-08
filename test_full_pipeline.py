@@ -446,6 +446,13 @@ def main(gui=True, run_logger=None, scene_config=None,
         env.use_uniform_grid = True
         if uniform_cell_size != 0.05:
             env.set_uniform_cell_size(uniform_cell_size)
+        # audit #64 — TAMPURA-faithful framing (Curtis et al. 2024):
+        # under uniform the lattice IS the spatial model, so the
+        # FREE cells must render and OBJECT/SHADOW wireframes are
+        # suppressed (handled by BoxelVisualizer.uniform_mode below).
+        # Force show_free regardless of the CLI default so the
+        # overlay isn't empty.
+        show_free = True
 
     # Let settle: 50 steps at 240 Hz ≈ 0.2 s.  Enough for the loaded
     # Panda + cubes to reach static equilibrium after spawning.
@@ -541,7 +548,10 @@ def main(gui=True, run_logger=None, scene_config=None,
 
     viz = None
     if gui and draw_boxel_overlays:
-        viz = BoxelVisualizer()
+        # audit #64 — uniform_mode=True hides OBJECT/SHADOW wireframes
+        # under --baseline uniform so only the FREE lattice renders;
+        # PyBullet's own object rendering shows the physical scene.
+        viz = BoxelVisualizer(uniform_mode=(baseline == 'uniform'))
         viz.draw_registry(registry, duration=0, label_size=1.0,
                           skip_free=not show_free)
 
