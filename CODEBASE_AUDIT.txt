@@ -491,6 +491,56 @@ Updated:      2026-05-08 — #55 Path C explored on branch audit-55-pose-
               flagged for revisit if any goal mode lands the support
               somewhere a planner trajectory naturally traverses.
               #55 still open pending WSL retry on main.
+Updated:      2026-05-08 (later) — #55 marked [DONE 2026-05-08].  Real
+              root cause was DIFFERENT from the prompt's diagnosis: it
+              was the held-cube boxel guard, not the support's pose.
+              compute_stack_kin_solution at streams.py:962-965 returned
+              early when held_boxel was None, which is the case for
+              hidden targets — they have no OBJECT-type registry
+              boxel until sense reveals them.  The on_obj pose
+              "wrongness" Path C tried to fix was a downstream symptom
+              that never actually got hit because the function returned
+              at the held-boxel check first.  Confirmed via diff
+              between logs/run_2026-05-08_10-20-03 (failure with the
+              lazy-collision hack only — no compute_stack_kin debug
+              entries past sample-grasp + compute-kin, indicating early
+              return before the IK loop) and the Path C run #4
+              (logs/run_2026-05-08_09-05-23, where future-compute-
+              stack-kin placeholders masked the gap during skeleton
+              search — sample validation would have hit the same held-
+              boxel check eventually).
+
+              Fix landed on main as commit 8281d73: PyBullet AABB
+              fallback for held cube half-height when no registry
+              boxel exists.  The hidden cube's body IS mirrored in
+              plan_client via _mirror_load_urdf (independent of sense),
+              so getAABB returns its actual extent.  Half-height for
+              IK = (h_max[2] - h_min[2]) / 2.  Cube z-extent doesn't
+              depend on knowing where it is, so reading it pre-sense
+              doesn't leak position info into init facts.
+
+              WSL verification (logs/run_2026-05-08_10-49-01) on
+              default scene with --goal find-and-tray-stack:
+              success=true, plan_count=4, total_planning_time=76.593 s
+              (per-call: 9.129 / 13.528 / 27.757 / 26.180 s),
+              physical_failures_per_action=0,
+              physical_failures_at_goal=0.  Goal AST satisfied:
+              (on yellow_object tray) + (on cyan_object yellow_object).
+              No regression on --goal holding (logs/run_2026-05-08_-
+              10-46-40: success in 3 plans / 58.4 s).
+
+              #55 [DONE 2026-05-08].  Open count: 5 -> 4.  TIER 0
+              now contains only #52 (find-and-stack-on-base) which
+              stays as a backup demo; the find-and-tray-stack 2-cube
+              minimum demonstrates sense -> pick -> stack end-to-end
+              and is the cleaner thesis story.  Path C (branch
+              audit-55-pose-aware-stack) remains archived on both
+              remotes for revisit if a future goal mode requires
+              precise pre-execution arm-routing through clutter.  The
+              lazy-collision hack (commit 9a64aa1) + the held-boxel
+              fallback (commit 8281d73) together close all known #55
+              gaps; the trajectory-clipping FOR LATER bullet remains
+              as the documented residual.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
