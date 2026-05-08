@@ -16,6 +16,7 @@ from boxel_types import ObjectInfo, CameraObservation
 from boxel_data import BoxelData, BoxelType
 from shadow_calculator import ShadowCalculator
 from free_space import FreeSpaceGenerator
+from uniform_grid import UniformGridGenerator
 from visualization import BoxelVisualizer
 
 
@@ -482,6 +483,19 @@ class BoxelTestEnv:
         # occluders remain covered.
         self.free_space_generator = FreeSpaceGenerator(
             self.table_surface_height,
+            table_x_range=self._SAFE_TABLE_X_RANGE,
+            table_y_range=self._SAFE_TABLE_Y_RANGE,
+        )
+        # audit #10 — uniform-grid baseline: drop-in replacement for the
+        # octree-based FreeSpaceGenerator.  Default off (semantic);
+        # enabled by setting ``use_uniform_grid=True`` after construction
+        # (test_full_pipeline.main does this when --baseline=uniform).
+        # Cell size is reassignable via ``set_uniform_cell_size`` so the
+        # eval matrix can sweep it without recreating BoxelTestEnv.
+        self.use_uniform_grid: bool = False
+        self.uniform_grid_generator = UniformGridGenerator(
+            self.table_surface_height,
+            cell_size=0.05,
             table_x_range=self._SAFE_TABLE_X_RANGE,
             table_y_range=self._SAFE_TABLE_Y_RANGE,
         )
@@ -1244,8 +1258,31 @@ class BoxelTestEnv:
             execution layer annotates them after cell merging because
             CellMerger emits fresh BoxelData copies that would otherwise
             strip these fields.
+
+        Under the uniform-grid baseline (``use_uniform_grid=True``,
+        audit #10) the call dispatches to UniformGridGenerator instead;
+        the static lattice replaces the adaptive octree, only the labels
+        on each cell flip as objects are revealed/moved.
         """
+        if self.use_uniform_grid:
+            return self.uniform_grid_generator.generate(
+                known_boxels, visualize
+            )
         return self.free_space_generator.generate(known_boxels, visualize)
+
+    def set_uniform_cell_size(self, cell_size: float) -> None:
+        """Recreate the uniform-grid generator with a new cell size.
+
+        Used by ``test_full_pipeline`` when --uniform-cell-size is passed
+        on the CLI; cell size is hyperparameter-scope, not run-scope, so
+        rebuilding the lattice once at startup is fine.
+        """
+        self.uniform_grid_generator = UniformGridGenerator(
+            self.table_surface_height,
+            cell_size=cell_size,
+            table_x_range=self._SAFE_TABLE_X_RANGE,
+            table_y_range=self._SAFE_TABLE_Y_RANGE,
+        )
 
     def annotate_free_space_surface(self, free_boxels: List[BoxelData]) -> None:
         """
