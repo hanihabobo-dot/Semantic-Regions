@@ -947,6 +947,28 @@ Updated:      2026-05-08 (later) — #10 [DONE 2026-05-08].  Uniform-
               deferred to next session (PyBullet only spins up under
               WSL on this machine).  Open count: 7 -> 6.  TIER 1 now
               empty (eval prerequisites complete, #9 + #10 both DONE).
+Added:        2026-05-08 (later) — #64 (uniform GUI visual-framing
+              follow-up to #10, Option D — TAMPURA-faithful).  An
+              earlier Option-C audit entry (commit 73970d4 — per-cell
+              semantic labels {FREE, part-of-OBJECT-X, part-of-SHADOW-
+              of-X}) was reverted in ddea638 after consulting TAMPURA
+              — Curtis et al. 2024 (tampura_environments/find_dice/
+              env.py): TAMPURA's VoxelGrid carries binary {free,
+              occupied} labels only, no per-object cell labels;
+              shadows are implicit (cells default to "occupied" until
+              the camera proves them free); the PDDL planner sees
+              only per-object atoms (known-pose ?o, holding ?o,
+              is-target ?o), zero per-voxel predicates.  Option D
+              replicates that framing: BoxelVisualizer gains a
+              uniform_mode flag; under --baseline uniform OBJECT and
+              SHADOW wireframes are suppressed in the overlay so only
+              the FREE lattice renders, with PyBullet's own object
+              rendering visible underneath.  OBJECT/SHADOW BoxelData
+              stay in the registry as the planner's per-object handles
+              (TAMPURA's object_poses equivalent, expressed via boxel
+              IDs because our domain is boxel-indexed).  No PDDL,
+              streams, or planner-grounding changes.  TIER 3 — visual-
+              narrative polish.  Open count: 6 -> 7.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -1032,7 +1054,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #50, #57, #59, #61, #62, #63                                   #
+#  OPEN ISSUES — #50, #57, #59, #61, #62, #63, #64                              #
 #                                                                              #
 ################################################################################
 
@@ -1130,6 +1152,11 @@ Parallel / non-blocking:
        2026-05-08 immediately after #58 landed: "its faster but
        still slow."  Profile first; close as MERGED INTO #50 if the
        dominant cost turns out to be branch-agnostic.
+  #64  uniform GUI visual-framing follow-up to #10 (Option D, TAMPURA-
+       faithful).  BoxelVisualizer.uniform_mode flag suppresses
+       OBJECT/SHADOW wireframes under --baseline uniform so only the
+       FREE lattice renders.  Cited as Curtis et al. 2024 baseline.
+       Visual-only; no planner / streams / domain changes.
 
 Closed / relocated since last summary:
   #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
@@ -1945,6 +1972,103 @@ Related: All other open issues at landing time — this is the
 
 
 ================================================================================
+#64. UNIFORM BASELINE — TAMPURA-FAITHFUL VISUAL FRAMING (audit #10 follow-up)
+================================================================================
+Priority: TIER 3 — Visual-narrative consistency.  Without it, the
+          --baseline uniform GUI shows uniform 5cm cubes for FREE
+          space alongside variably-sized AABB wireframes for OBJECT
+          and SHADOW — visually contradicting the thesis baseline
+          framing of "uniform-voxelization free-space discretization."
+          Not a correctness issue: the planner contract is unchanged
+          either way; this is purely about what the GUI renders and
+          how the README/wiki describes the baseline.
+Where:    visualization.py (BoxelVisualizer) +
+          test_full_pipeline.py (BoxelVisualizer construction +
+          show_free default under --baseline uniform) +
+          README.md (one-paragraph note citing Curtis et al. 2024).
+Depends:  #10 [DONE 2026-05-08] (uniform free-space lattice).
+Effort:   ~1 day; estimated 60-100 LOC across 3 files.
+
+What:  Audit #10 landed the free-space-only swap (commit afdaadd):
+       UniformGridGenerator replaces FreeSpaceGenerator under
+       --baseline uniform.  generate_boxels() still emits one OBJECT
+       BoxelData per visible object (camera AABB) and one SHADOW
+       BoxelData per shadow volume (shadow_calculator AABB) — these
+       remain in the registry as the planner's per-object handles
+       (obj_at_boxel ?o ?b, is_shadow ?b, etc.).  Visually the GUI
+       renders these as variable-sized AABB wireframes alongside the
+       uniform 5cm FREE cubes, breaking the "every cell on the
+       uniform lattice" framing.
+
+       2026-05-08 — earlier version of this audit (commit 73970d4)
+       documented Option C (per-cell semantic labels {FREE, part-of-
+       OBJECT-X, part-of-SHADOW-of-X}) as settled.  Reverted in
+       commit ddea638 after consulting TAMPURA's actual implementation
+       (Curtis et al. 2024 — tampura_environments/find_dice/env.py):
+       TAMPURA does NOT carry per-object cell labels.  Their
+       VoxelGrid is binary {free, occupied} only; per-object state
+       lives outside the grid as continuous-pose `object_poses`.
+       Shadows / occluded regions are implicit (cells default to
+       "occupied" until the camera proves them free).  The PDDL
+       planner sees only per-object atoms (known-pose ?o, holding ?o,
+       is-target ?o) — zero per-voxel predicates reach the planner.
+
+       Option D ("TAMPURA-faithful") is therefore the more defensible
+       baseline: replicate TAMPURA's binary-visibility framing
+       faithfully, and frame the OBJECT/SHADOW BoxelData as our
+       per-object handles (TAMPURA's object_poses equivalent,
+       expressed via boxel IDs because our PDDL domain is boxel-
+       indexed rather than continuous-pose).
+
+Fix:   ONE COMMIT.
+       (a) BoxelVisualizer gains an opt-in `uniform_mode: bool`
+           constructor flag.  When True, draw_boxel_data /
+           draw_boxels / draw_registry skip OBJECT and SHADOW
+           BoxelData entirely — only the FREE lattice is drawn.
+           The PyBullet simulator's own object rendering shows the
+           physical objects underneath; SHADOW regions are implicit
+           (cells absent from the lattice = unobserved/occluded).
+       (b) test_full_pipeline.main: under baseline=='uniform',
+           construct BoxelVisualizer(uniform_mode=True) AND force
+           show_free=True at the function-arg level (the lattice
+           IS the spatial model under uniform; --show-free remains
+           opt-in under semantic).
+       (c) README.md gains one paragraph clarifying that under
+           --baseline uniform the GUI renders only the binary
+           visibility lattice, citing Curtis et al. 2024.
+
+Settled design points (2026-05-08):
+  - Option D ("TAMPURA-faithful"), not C.  Rationale per the
+    reverted-73970d4 cycle above.
+  - No PDDL domain changes.  No streams changes.  No planner-
+    grounding-cost increase (the Option-C-only worry).
+  - OBJECT/SHADOW BoxelData stay in the registry under uniform —
+    they remain the planner's per-object handles, just hidden
+    from the GUI overlay.
+  - Ruled out: A (status-quo dual-shape GUI; the visual gap that
+    motivated this issue), B (anchor-cell + masking — Option C
+    variant, same divergence from TAMPURA), C (per-cell semantic
+    labels — Option-C work originally settled 2026-05-08, reverted
+    after the TAMPURA consultation).
+
+Care: After this lands, the GUI under --baseline uniform shows the
+       FREE lattice as cyan cubes, with PyBullet's own object
+       rendering for the physical scene.  The thesis baseline
+       framing in README/wiki must point to Curtis et al. 2024 as
+       the citation for this representation.  No regression on
+       semantic mode — visual story unchanged when uniform_mode
+       is False (the default).
+
+Related: #10 [DONE 2026-05-08] — uniform free-space lattice
+              (commits afdaadd + fc7c044).  Foundation this issue
+              builds on.
+         #63 — README + wiki final doc sweep; the README paragraph
+              added here will be picked up by #63's pass.
+         #50 — planner perf investigation; uniform_mode is viz-only,
+              no planner cost change to factor in.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -2073,8 +2197,12 @@ TIER 3 — CODE QUALITY / LOW-PRIO:
        any other open issue that lands between now and submission.
        Explicitly the last commit before thesis submission per user
        2026-05-08.
+  #64  Uniform GUI visual-framing follow-up to #10 (Option D, TAMPURA-
+       faithful per Curtis et al. 2024).  BoxelVisualizer.uniform_mode
+       suppresses OBJECT/SHADOW wireframes under --baseline uniform.
+       Visual-only; no planner / streams / domain changes.
 
-Total open: 6 items (#50, #57, #59, #61, #62, #63).
+Total open: 7 items (#50, #57, #59, #61, #62, #63, #64).
 
 Closed since previous summary:
   #10  [DONE 2026-05-08 (later)] — uniform voxelization baseline
