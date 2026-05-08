@@ -412,11 +412,6 @@ def _apply_post_action_lift(robot_id, contact_ee, orientation, contact_joints,
               f"final_config will be CONTACT pose (candidate iii)")
         return
     move_robot_smooth(robot_id, lift_joints, gui)
-    actual_after = np.array([p.getJointState(robot_id, i)[0] for i in range(7)])
-    ee_after = p.getLinkState(robot_id, END_EFFECTOR_LINK)[0]
-    print(f"    [#60-diag] lift OK: target_z={lift_ee[2]:.3f}, "
-          f"actual_ee_z={ee_after[2]:.3f}, "
-          f"|joint_diff|={float(np.linalg.norm(actual_after - contact_joints)):.4f}")
 
 
 def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
@@ -653,20 +648,19 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     _apply_post_action_lift(robot_id, contact_ee, grasp.orientation,
                             contact_joints, pc, gui)
 
-    # audit #60 diagnostic — does plan_client see the placed cube's runtime pose?
+    # audit #60 fix (ii) — mirror the placed cube's runtime pose into
+    # plan_client so subsequent plan_motion calls see the correct obstacle
+    # layout.  sync_to_plan_client only fires at replan boundaries
+    # (test_full_pipeline.py:882), so without this the placed cube remains
+    # at its pre-place pose in plan_client and plan_motion certifies
+    # trajectories through where it actually sits at runtime.
     if grasp_constraint_id is not None and held_body_id in env._gui_to_plan:
         plan_body = env._gui_to_plan[held_body_id]
-        gui_pos = p.getBasePositionAndOrientation(
-            held_body_id, physicsClientId=env.client_id)[0]
-        plan_pos = p.getBasePositionAndOrientation(
-            plan_body, physicsClientId=env.plan_client_id)[0]
-        dxyz = float(np.linalg.norm(np.asarray(gui_pos) - np.asarray(plan_pos)))
-        if dxyz > 1e-3:
-            print(f"    [#60-diag] place cube pose DESYNC: "
-                  f"gui={tuple(round(v, 3) for v in gui_pos)} "
-                  f"plan={tuple(round(v, 3) for v in plan_pos)} "
-                  f"|d|={dxyz:.4f} m (candidate ii — next plan_motion will not see "
-                  f"the placed cube at its runtime pose)")
+        gui_pos, gui_orn = p.getBasePositionAndOrientation(
+            held_body_id, physicsClientId=env.client_id)
+        p.resetBasePositionAndOrientation(
+            plan_body, gui_pos, gui_orn,
+            physicsClientId=env.plan_client_id)
 
     # Read actual joint state to prevent drift accumulation (audit #86).
     actual_joints = np.array(
@@ -785,20 +779,18 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     _apply_post_action_lift(robot_id, contact_ee, grasp.orientation,
                             contact_joints, pc, gui)
 
-    # audit #60 diagnostic — does plan_client see the stacked cube's runtime pose?
+    # audit #60 fix (ii) — mirror the stacked cube's runtime pose into
+    # plan_client (mirror of execute_place's sync; see that function for
+    # rationale).  Without this, plan_motion in subsequent plan_motion
+    # calls cannot see the stacked cube at its runtime location and may
+    # certify trajectories straight through the new tower.
     if held_body_id in env._gui_to_plan:
         plan_body = env._gui_to_plan[held_body_id]
-        gui_pos = p.getBasePositionAndOrientation(
-            held_body_id, physicsClientId=env.client_id)[0]
-        plan_pos = p.getBasePositionAndOrientation(
-            plan_body, physicsClientId=env.plan_client_id)[0]
-        dxyz = float(np.linalg.norm(np.asarray(gui_pos) - np.asarray(plan_pos)))
-        if dxyz > 1e-3:
-            print(f"    [#60-diag] stack cube pose DESYNC: "
-                  f"gui={tuple(round(v, 3) for v in gui_pos)} "
-                  f"plan={tuple(round(v, 3) for v in plan_pos)} "
-                  f"|d|={dxyz:.4f} m (candidate ii — next plan_motion will not see "
-                  f"the stacked cube at its runtime pose)")
+        gui_pos, gui_orn = p.getBasePositionAndOrientation(
+            held_body_id, physicsClientId=env.client_id)
+        p.resetBasePositionAndOrientation(
+            plan_body, gui_pos, gui_orn,
+            physicsClientId=env.plan_client_id)
 
     actual_joints = np.array(
         [p.getJointState(robot_id, i)[0] for i in range(7)]
