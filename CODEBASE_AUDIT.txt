@@ -406,6 +406,91 @@ Added:        2026-05-07 (later) — #55 (TIER 0 — find-and-tray-stack
               max_planner_time) still on defaults — next lever if
               2-cube also fails.  py_compile clean.  Open count:
               4 -> 5.
+Updated:      2026-05-08 — #55 Path C explored on branch audit-55-pose-
+              aware-stack and DEFERRED in favour of a simpler lazy-
+              collision hack on main (commit 9a64aa1).  Branch
+              convention shift: this is the first multi-commit refactor
+              to follow the new "branch first" rule.  Branch pushed to
+              both github and origin for later revisit (audit-51
+              precedent).
+
+              Diagnosis from logs/run_2026-05-07_22-07-31 (commit
+              fa069bd on main): the 9-action skeleton found at iter 4
+              didn't ground because plan_motion couldn't connect from
+              above-cyan-shadow to "above yellow's initial pose" (the
+              IK target compute_stack_kin_solution derived via getAABB
+              on yellow's static planning-time body).  yellow at its
+              planning-time location blocks the RRT path; the
+              trajectory is rejected.  This is the SUPPORT analogue of
+              the moved-occluder gap that compute_kin_solution
+              sidesteps via lazy collision-check + ignored_body_ids
+              (its docstring at L843-851 explicitly calls out this
+              pattern).  The analog for stack was simply missing.
+
+              Path C exploration (6 commits on branch, in order):
+                9eca2a1 — predicates (Pose, at_pose) + SymbolicPose
+                          dataclass + initial-pose facts in
+                          _build_init.  No-op groundwork.
+                ed7ecff — audit changelog for commit 1.
+                81c0405 — pose-aware compute-stack-kin (?p_on, ?p_new
+                          inputs/outputs) + stack action signature
+                          updated; at_pose updated by stack effect via
+                          forall-when delete + add.  Real fix layer.
+                8b6b68d — stack_kin predicate declaration arity 4->6
+                          (FastDownward parser hotfix from WSL run
+                          #1).
+                5c10e36 — tighten compute-stack-kin :domain to
+                          (at_pose ?on_obj ?p_on) only (kill
+                          combinatorial blowup from WSL run #2 — 10-
+                          min hang, ~750+ IK calls per round).  Over-
+                          corrected.
+                d5c2a2d — add (Pose ?p_on) back alongside (at_pose)
+                          (fluent-stream pattern from WSL run #3
+                          KeyError on '?p_on' not covered by static
+                          :domain).
+
+              Result (logs/run_2026-05-08_09-05-23, WSL run #4):
+              skeleton found at iteration 5 / complexity 4 / attempt 2
+              in 56.6 s, with the second stack correctly chaining
+              ?p_on = ?p_new of the first stack — Path C functionally
+              correct.  Stream sample-validation phase started; user
+              killed at 10 min, ~3 min into iteration 6.  The 7x
+              skeleton-search slowdown vs baseline comes from
+              PDDLStream's exogenous-axiom compilation
+              (compile_to_exogenous_axioms in
+              pddlstream_lib/.../exogenous.py), triggered whenever a
+              stream :domain references a fluent that is also an
+              action effect.  Cost is structural — derived predicates
+              and added axioms inflate the grounded planning problem.
+              Acceptable for a one-shot demo, too slow for the eval
+              sweep (#9).
+
+              Decision: defer Path C, apply the simpler lazy-collision
+              hack on main as commit 9a64aa1 — a one-place edit in
+              streams.compute_stack_kin_solution that adds the support
+              cube's body to ignored_body_ids alongside the held cube.
+              This is the direct analog of compute_kin_solution's
+              pattern; should have been applied from the start.  IK
+              target stays "above support's planning-time pose" (the
+              pre-#55 wrong-pose behaviour); execute_stack at runtime
+              reads the support's LIVE AABB and re-solves IK seeded
+              with the planner's config, so the wrong-pose IK becomes
+              correct at execution.  plan_motion ignores the support
+              body throughout the trajectory (per
+              RobotConfig.ignored_body_ids), so RRT can route through
+              where the support statically sits — no more "trajectory
+              blocked by support's static body" rejection.
+
+              New FOR LATER bullet records the residual edge case:
+              the planned trajectory may pass through the support's
+              RUNTIME location, so the arm could collide at execution
+              if the support's destination happens to lie on the path.
+              For find-and-tray-stack on default scene the destination
+              (back-left tray corner) is unlikely to intersect a
+              typical arm route between two table-spread cubes;
+              flagged for revisit if any goal mode lands the support
+              somewhere a planner trajectory naturally traverses.
+              #55 still open pending WSL retry on main.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -1103,6 +1188,27 @@ FOR LATER
   held footprint exceeds support footprint by more than X%).  Out of
   scope for #52 (which sidesteps the gap by setup), but in scope when
   any goal mode allows size-mixed stacking again.
+
+- Trajectory-clipping edge case for stack actions (audit #55 lazy-
+  collision hack residual, raised 2026-05-08).  Commit 9a64aa1 adds
+  the support cube body to compute_stack_kin_solution's
+  ignored_body_ids so plan_motion can route through where the support
+  sits at planning time.  Side effect: the planned trajectory is
+  unaware of where the support will be at EXECUTION time (its
+  destination on the tray / a free boxel / a previously-stacked cube /
+  etc.).  If the destination lies on the planned arm route, the
+  actual arm motion could collide with the support at runtime.  Not
+  exercised by current goal modes — find-and-tray-stack lands the
+  support at the back-left tray corner well outside typical arm
+  routes between table-spread cubes; --goal stack uses initial poses
+  for all supports (destination = source so no clip risk); --goal
+  holding has no stack.  Future fix when needed: branch
+  audit-55-pose-aware-stack (Path C) threads correct destination
+  poses through compute-stack-kin and resolves this — works but
+  costs ~7x baseline planning time due to PDDLStream's exogenous-
+  axiom compilation.  Alternative: extend RobotConfig with a
+  separate endpoint-only-ignored set so plan_motion path-checks
+  honour the support body while endpoint-checks don't.
 
 - POMDP / contingent baseline: large effort; only if time after eval sweep
   (#9–#13).  Thesis-critical fixes are now bounded to #40 [DONE] +
