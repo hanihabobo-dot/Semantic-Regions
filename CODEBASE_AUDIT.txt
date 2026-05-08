@@ -659,6 +659,32 @@ Updated:      2026-05-08 (later) — #58 marked [DONE 2026-05-08].
               _apply_post_action_lift default) — equalises per-
               action lift while #60 investigation is open.  Open
               count: 7 -> 6.  TIER 2 reduces to #50 alone.
+Updated:      2026-05-08 (later) — #60 step (a) landed (commit
+              23687af): diagnostic-only logging across three sites,
+              no behaviour change.  (1) execution.py
+              _apply_post_action_lift — IK-failure branch was silent,
+              now prints "[#60-diag] lift IK FAILED..." (candidate
+              iii signal); success branch prints target vs actual EE
+              z and |joint_diff|.  (2) execution.py execute_place /
+              execute_stack (end of body, before final_config return)
+              — query the placed/stacked body's pose in BOTH
+              env.client_id and env.plan_client_id; print DESYNC
+              warning when xyz delta > 1 mm (candidate ii signal —
+              sync_to_plan_client only fires once per replan, mid-
+              plan placements do not propagate).  (3)
+              test_full_pipeline.py move handler — log
+              |current_config - traj.waypoints[0]| and warn if
+              > 1e-4 rad (candidate i signal — arm starts move
+              ABOVE the trajectory's first waypoint).  All three
+              gated on signal so clean runs (e.g. holding-only
+              goals) print nothing.  py_compile clean.  #60 stays
+              OPEN — next commit applies the targeted fix once a
+              WSL run of --goal find-and-tray-stack identifies
+              which candidate dominates.  Audit's own ranking is
+              (i) > (ii) > (iii); #56 revert ("no observable effect
+              at any value tested") corroborates that the lifted
+              pose is not reaching plan_motion regardless of
+              magnitude.  Open count unchanged at 6.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
