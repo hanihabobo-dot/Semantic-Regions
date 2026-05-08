@@ -119,7 +119,7 @@ class PDDLStreamPlanner:
             'compute-stack-kin': from_gen_fn(self.streams.compute_stack_kin_solution),
         }
     
-    def create_problem(self, 
+    def create_problem(self,
                        target_objects: List[str],
                        goal: Tuple,
                        current_config: 'Union[RobotConfig, str]' = None,
@@ -128,7 +128,8 @@ class PDDLStreamPlanner:
                        observed_clear_regions: Optional[List[str]] = None,
                        visible_target_locations: Optional[Dict[str, str]] = None,
                        on_relations: Optional[Dict[str, str]] = None,
-                       stackable_objects: Optional[List[str]] = None) -> PDDLProblem:
+                       stackable_objects: Optional[List[str]] = None,
+                       held_obj: Optional[str] = None) -> PDDLProblem:
         """
         Create a PDDLStream problem from current state.
         
@@ -167,7 +168,8 @@ class PDDLStreamPlanner:
                                 observed_clear_regions,
                                 visible_target_locations,
                                 on_relations,
-                                stackable_objects)
+                                stackable_objects,
+                                held_obj)
         
         constant_map = {}
         stream_map = self._get_stream_map()
@@ -338,7 +340,8 @@ class PDDLStreamPlanner:
                     observed_clear_regions: Optional[List[str]] = None,
                     visible_target_locations: Optional[Dict[str, str]] = None,
                     on_relations: Optional[Dict[str, str]] = None,
-                    stackable_objects: Optional[List[str]] = None) -> List[Tuple]:
+                    stackable_objects: Optional[List[str]] = None,
+                    held_obj: Optional[str] = None) -> List[Tuple]:
         """
         Build the init state as a list of fact tuples.
 
@@ -501,7 +504,15 @@ class PDDLStreamPlanner:
 
         init.append(('Config', current_config))
         init.append(('at_config', current_config))
-        init.append(('handempty',))
+        if held_obj is None:
+            init.append(('handempty',))
+        else:
+            # audit #58 — when the action loop broke mid-plan with the
+            # gripper still holding ?o, replan from (holding ?o) instead
+            # of dropping the cube.  sample-grasp re-fires on (Obj ?o)
+            # to certify a fresh (Grasp ?g) + (valid_grasp ?o ?g) for
+            # the next place/stack action.
+            init.append(('holding', held_obj))
 
         # Stacking facts (audit #30 + #39).
         #   (clear ?o)  now emitted for EVERY object unconditionally,
@@ -554,7 +565,8 @@ class PDDLStreamPlanner:
              visible_target_locations: Optional[Dict[str, str]] = None,
              on_relations: Optional[Dict[str, str]] = None,
              stackable_objects: Optional[List[str]] = None,
-             unit_costs: bool = False) -> Optional[List[Tuple]]:
+             unit_costs: bool = False,
+             held_obj: Optional[str] = None) -> Optional[List[Tuple]]:
         """
         Generate a plan using PDDLStream.
 
@@ -589,7 +601,8 @@ class PDDLStreamPlanner:
                                       observed_clear_regions,
                                       visible_target_locations,
                                       on_relations,
-                                      stackable_objects)
+                                      stackable_objects,
+                                      held_obj=held_obj)
 
         if verbose:
             print(f"\n--- PDDLStream Planning ---")

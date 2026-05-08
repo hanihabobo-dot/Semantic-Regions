@@ -849,47 +849,19 @@ def main(gui=True, run_logger=None, scene_config=None,
         else:
             print(f"Stack progress: {on_relations} (goal {goal})")
 
-        # --- Drop any object still in the gripper before replanning -------
-        # The action loop can `break` mid-plan (sense failed, IK failed,
-        # missing shadow, etc.) before reaching the planned `place`.  When
-        # that happens the constraint from the prior `pick` is still
-        # attached, but the planner's _build_init unconditionally emits
-        # ('handempty',) and will happily plan another `pick` — leading to
-        # two objects dangling from the EE.  Release the held object in
-        # place so reality matches the planner's assumption.  Retry on
-        # failure (object stuck between fingers, constraint not removed,
-        # etc.); after exhausting retries, abort the run rather than carry
-        # on with an inconsistent world state.
+        # --- Held-object handling (audit #58) -----------------------------
+        # Pre-#58: any held object was unconditionally dropped here so the
+        # planner's _build_init could rely on (handempty).  That cost ~4
+        # wasted actions per re-grasp cycle whenever the action loop broke
+        # while holding (e.g. sense returned empty after pick).
+        # Post-#58: pass held_obj=name into planner.plan() so init emits
+        # (holding ?o) and the next plan continues mid-grasp.  release_held_-
+        # object_in_place stays as a SAFETY NET for the case where the
+        # held cube blocks all plans (planner returns None below — see
+        # the safety-net branch after planner.plan).
+        held_obj_name: Optional[str] = None
         if held_body_id is not None:
-            drop_ok, drop_state = release_held_object_in_place(
-                env=env,
-                robot_id=robot_id,
-                gui=gui,
-                grasp_constraint_id=grasp_constraint_id,
-                held_body_id=held_body_id,
-                held_object_boxel_id=held_object_boxel_id,
-                registry=registry,
-                boxel_centers=boxel_centers,
-                boxel_to_pybullet=boxel_to_pybullet,
-                body_id_to_name=body_id_to_name,
-                viz=viz,
-                shadows=shadows,
-                occluders=occluders,
-                planner=planner,
-                max_attempts=3,
-            )
-            grasp_constraint_id = None
-            held_body_id = None
-            held_object_boxel_id = None
-            if drop_state.get("shadow_occluder_map") is not None:
-                shadow_occluder_map = drop_state["shadow_occluder_map"]
-            if drop_state.get("current_config") is not None:
-                current_config = drop_state["current_config"]
-            if not drop_ok:
-                exit_reason = "drop_failed"
-                print("ERROR: Could not release held object after retries — "
-                      "aborting to avoid double-grasp.")
-                break
+            held_obj_name = body_id_to_name.get(held_body_id)
 
         # Ensure the free-space partition is consistent before the planner
         # reads the registry (audit #25).  After a place action,
@@ -934,8 +906,69 @@ def main(gui=True, run_logger=None, scene_config=None,
                                                 'find-and-tray-stack')
                                else None),
             unit_costs=unit_costs,
+            held_obj=held_obj_name,  # audit #58 — preserve grasp across replans
         )
         plan_dt = time.perf_counter() - plan_t0
+
+        # audit #58 SAFETY NET — if the held cube blocked all plans (e.g.
+        # collides with everything from its current pose), drop it and
+        # try once more from (handempty).  Mirrors the pre-#58 behaviour
+        # for this single edge case.
+        if plan is None and held_obj_name is not None:
+            print(f"  audit #58: planner found no plan with {held_obj_name} "
+                  f"held — falling back to release-and-replan.")
+            drop_ok, drop_state = release_held_object_in_place(
+                env=env,
+                robot_id=robot_id,
+                gui=gui,
+                grasp_constraint_id=grasp_constraint_id,
+                held_body_id=held_body_id,
+                held_object_boxel_id=held_object_boxel_id,
+                registry=registry,
+                boxel_centers=boxel_centers,
+                boxel_to_pybullet=boxel_to_pybullet,
+                body_id_to_name=body_id_to_name,
+                viz=viz,
+                shadows=shadows,
+                occluders=occluders,
+                planner=planner,
+                max_attempts=3,
+            )
+            grasp_constraint_id = None
+            held_body_id = None
+            held_object_boxel_id = None
+            held_obj_name = None
+            if drop_state.get("shadow_occluder_map") is not None:
+                shadow_occluder_map = drop_state["shadow_occluder_map"]
+            if drop_state.get("current_config") is not None:
+                current_config = drop_state["current_config"]
+            if not drop_ok:
+                exit_reason = "drop_failed"
+                print("ERROR: Could not release held object after retries — "
+                      "aborting to avoid double-grasp.")
+                break
+            env.sync_to_plan_client(held_body_id=None)
+            plan_t1 = time.perf_counter()
+            plan = planner.plan(
+                target_objects=planner_target_objects,
+                goal=goal,
+                current_config=current_config,
+                known_empty_shadows=known_empty,
+                moved_occluders=dict(belief.occluders_moved),
+                max_time=1800.0,
+                verbose=False,
+                visible_target_locations=visible_target_locations,
+                on_relations=(on_relations
+                              if goal_kind in ('stack', 'find-and-tray-stack')
+                              else None),
+                stackable_objects=(stack_target_objects
+                                   if goal_kind in ('stack',
+                                                    'find-and-tray-stack')
+                                   else None),
+                unit_costs=unit_costs,
+                held_obj=None,
+            )
+            plan_dt += time.perf_counter() - plan_t1
         total_plan_time += plan_dt
         plan_times.append(plan_dt)
         print(f"  [timing] planner.plan() #{plan_count}: {plan_dt:.3f}s "
