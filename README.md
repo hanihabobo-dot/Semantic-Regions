@@ -16,6 +16,25 @@ python3 -u test_full_pipeline.py
 | `--scene default\|mixed\|scalability` | Scene preset |
 | `--goal holding\|stack\|find-and-tray-stack` | Goal mode |
 | `--n-occluders N` / `--n-targets N` / `--n-hidden N` / `--seed N` | Scene size + RNG |
+| `--baseline semantic\|uniform` | Free-space discretisation (default `semantic`) |
+| `--uniform-cell-size M` | Cell edge length in metres for `--baseline uniform` (default `0.05`) |
+
+### Baselines
+
+`--baseline semantic` is the project's own approach: an octree partition over
+free space, merged into variable-sized cells aligned to shadow / object AABBs.
+
+`--baseline uniform` is the comparison baseline, modelled on **TAMPURA** (Curtis
+et al. 2024 — `tampura_environments/find_dice/env.py`). The workspace is
+discretised into a strict static lattice of equal-sized cubes; each cell carries
+a binary label `{free, occupied}`, where occupied is implicit (a cell is free
+once the camera proves it empty, otherwise it is treated as occupied /
+unobserved). Per-object state lives outside the lattice as `BoxelData` records
+in the registry — the planner's per-object handles, mirroring TAMPURA's
+`object_poses` role. Under `--baseline uniform` the GUI overlay therefore
+renders only the FREE lattice (cyan cubes); OBJECT and SHADOW wireframes are
+suppressed, with PyBullet's own object meshes providing the physical scene.
+The PDDL domain is unchanged across both baselines.
 
 ## Running on this machine (WSL + PowerShell)
 
