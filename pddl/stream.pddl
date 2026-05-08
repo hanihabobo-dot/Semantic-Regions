@@ -37,7 +37,7 @@
   ;; preceding move action delivers the arm to the support's OBJECT boxel.
   (:stream compute-stack-kin
     :inputs (?o ?on_obj ?p_on ?g)
-    :domain (and (Obj ?o) (Obj ?on_obj) (Pose ?p_on) (valid_grasp ?o ?g))
+    :domain (and (Obj ?o) (Obj ?on_obj) (at_pose ?on_obj ?p_on) (valid_grasp ?o ?g))
     :outputs (?p_new ?q)
     :certified (and (Pose ?p_new) (Config ?q)
                     (stack_kin ?o ?on_obj ?p_on ?p_new ?g ?q)
