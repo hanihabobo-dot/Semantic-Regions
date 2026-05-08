@@ -4141,3 +4141,369 @@ Related: #49 [DONE; archived] — original multi-cube definition;
               through support's runtime location.  Not exercised
               by current goal modes; documented in CODEBASE_AUDIT
               FOR LATER.
+
+
+================================================================================
+2026-05-08 SLIM ADDITIONS
+================================================================================
+The following entries were moved from CODEBASE_AUDIT.txt during the
+2026-05-08 post-pre-eval-chain slim.  Status notes copied verbatim
+from the open audit at the time of the move; bodies preserved for
+historical reference.  This slim closes the post-action-lift
+correctness chain that ran 2026-05-07 → 2026-05-08: #56 (CLI flag
+for the lift — landed then reverted because the underlying mechanism
+was broken), #58 (preserve grasp across replans), #60 (the broken
+mechanism behind #56's revert — lifted pose now reaches plan_motion
+via runtime sync into plan_client + execution-time motion replan).
+
+
+================================================================================
+#56. CLI FLAG — POST-ACTION SAFE-DISTANCE LIFT (CURRENTLY HARDCODED ~10 cm)
+     [DONE 2026-05-08]
+================================================================================
+Priority: TIER 3 — Code-quality / eval-knob.  Affects no current
+          functionality; enables sensitivity analysis and eval-sweep
+          parameterisation (#9).
+Where:    execution.py — execute_pick (~5 cm cosmetic),
+          execute_place (~10 cm), execute_stack (~10 cm) all call
+          _apply_post_action_lift with hardcoded literals (audit #36
+          introduced this).
+          run_logger.py — add CLI arg --post-action-lift (or split:
+          --place-lift / --stack-lift / --pick-lift).
+          test_full_pipeline.py — thread the parsed value through
+          main() into the execute_* calls.
+Depends:  None.
+Effort:   <0.5 day (CLI plumbing + signature thread; no behavioural
+          change at default value).
+
+What:  Audit #36 [DONE 2026-05-07; archived] introduced a hardcoded
+       ~10 cm post-action Cartesian +Z lift in execute_place and
+       execute_stack (5 cm cosmetic in execute_pick) so the next
+       plan_motion has safe headroom over the freshly placed/stacked
+       cube.  The value is a magic number in three places — fine for
+       the demo, brittle for the eval sweep.
+
+       Exposing as a CLI knob lets us:
+       - Sensitivity-test the value without code edits (does 5 cm
+         break anything?  does 15 cm help with deeper towers?).
+       - Vary the lift across the eval sweep (#9) — shorter lifts
+         could speed up execution at the cost of plan_motion failures.
+       - Document the value as a knob rather than a hidden constant.
+
+Fix:   ONE COMMIT — CLI plumbing + signature thread:
+       (a) run_logger.py — add `--post-action-lift FLOAT` (default
+           0.10), validate range (e.g. 0.0–0.30 m).  Single value
+           covers place + stack; pick stays cosmetic at 5 cm unless
+           the user wants three separate flags.
+       (b) test_full_pipeline.py main() — thread into execute_pick /
+           execute_place / execute_stack calls, plus run_config dict
+           for timing_summary.json.
+       (c) execution.py — replace the hardcoded literals with the
+           parameter; defaults preserve current behaviour exactly.
+
+Outcome (2026-05-08): plumbing landed in commit bf0800c then reverted
+       in commit ac47aa6 because --post-action-lift had no observable
+       effect on robot behaviour at any value tested in the validated
+       [0.0, 0.30] range.  Hardcoded 10 cm restored via
+       _apply_post_action_lift's default lift_height kwarg
+       (execution.py:395); 5 cm cosmetic pick lift unchanged.  The
+       underlying lift mechanism was broken — tracked and fixed under
+       #60 (commit c08dc65).  Re-attempting #56 becomes a meaningful
+       regression test now that #60 has landed (lower lift values
+       should now break the run when cube top exceeds lifted altitude;
+       higher values should give more clearance).
+
+Related: #36 [DONE 2026-05-07; archived] — introduced the hardcoded
+              lift.  This issue is the "expose as a knob" follow-up
+              #36 explicitly deferred.
+         #9 — eval runner; consumes this knob if exposed before the
+              eval sweep lands.
+         #60 [DONE 2026-05-08; archived in this slim] — root cause
+              behind the revert.
+
+
+================================================================================
+#58. PRESERVE GRASP ACROSS REPLANS (CURRENTLY DROPS HELD OBJECT)
+     [DONE 2026-05-08]
+================================================================================
+Priority: TIER 2 — Affects every replan that fires while the gripper
+          holds an object.  User-flagged 2026-05-08 after observing
+          yellow_object dropped mid-air at the PLAN #1 -> PLAN #2
+          transition in logs/run_2026-05-08_10-49-01.
+Where:    test_full_pipeline.py main() — release_held_object_in_place
+          loop at the top of each replan iteration (line ~860; runs
+          before planner.plan() to drop the held object).
+          pddlstream_planner.py _build_init — currently emits
+          ('handempty',) unconditionally (line ~504).
+Depends:  None.  Conceptually independent of #50 / #57.
+Effort:   <1 day.
+
+What:  When the inner action loop breaks mid-plan (sense returned
+       empty, IK failed, missing shadow, etc.) while the gripper is
+       still holding an object, the current code RELEASES the object
+       in place before the next planner.plan() call.  The release is
+       there to keep symbolic state consistent — _build_init
+       unconditionally emits ('handempty',), so a plan that started
+       with (holding ?o) would let the planner schedule another pick
+       and end up with two objects dangling from the EE.  The
+       release-then-replan pattern avoids that, but it's wasteful:
+
+       - Loses progress: the next plan must re-pick the dropped
+         object before doing anything productive.
+       - Drops at uncontrolled poses: the EE position when the loop
+         broke (e.g. above the tray after move-to-tray, when sense
+         then returns empty), which physics may bounce off the table.
+       - Adds ~4 actions per re-grasp cycle (move + pick + move +
+         place / stack) to the next plan.
+       - Pollutes the registry: the dropped object's new pose may
+         intersect free-space boxels, triggering reboxelization
+         churn that would otherwise not be needed.
+
+       Concrete example from logs/run_2026-05-08_10-49-01:
+         PLAN #1 picked yellow_object then sensed shadow_of_yellow_-
+         object empty.  Loop breaks → release_held_object_in_place
+         drops yellow at EE pose (-0.181, 0.436, 0.351).  PLAN #2
+         then plans pick(red) → place(red, free_005) → re-pick(yellow)
+         → ... 13 actions total for what would have been ~9 if yellow
+         had stayed in the gripper.
+
+Fix:   ONE COMMIT — propagate (holding ?o) into the next plan's init:
+       (a) test_full_pipeline.py main(): instead of releasing on
+           replan, capture (held_object_name, grasp) and pass into
+           the next planner.plan() call as a new kwarg, e.g.
+           held_obj=("yellow_object", grasp_yellow_object_1).
+       (b) pddlstream_planner._build_init: when held_obj is set,
+           emit ('holding', held_obj_name) and SKIP the
+           ('handempty',) emission.  Reuse the existing grasp atom
+           if it's already certified, otherwise re-certify via
+           sample-grasp + cached output.
+       (c) Streams: ensure plan_motion correctly carries the held
+           body's ignored_body_ids across the replan boundary
+           (already handled via RobotConfig.ignored_body_ids on
+           current_config — verify only).
+       (d) Keep release_held_object_in_place as a SAFETY NET for
+           cases where the held object is in a bad pose for
+           continuation (e.g. plan_motion rejected every config
+           because the held cube collides with everything).
+           Trigger condition: planner returns no plan with held_obj
+           set; fall back to release-and-replan.
+
+       Smoke test: re-run --goal find-and-tray-stack on default
+       scene with the same seed.  Expect plan_count to drop (PLAN
+       #2 becomes a continuation rather than a re-grasp cycle).
+
+Outcome (2026-05-08): landed as commit 690f86d.  held_obj kwarg
+       threaded through planner.plan(); _build_init emits
+       ('holding', held_obj) instead of ('handempty',) when set;
+       sample-grasp re-fires on (Obj ?o) for a fresh (Grasp ?g) +
+       (valid_grasp ?o ?g).  Mid-plan-break replans now continue
+       from (holding ?o) instead of dropping the cube, eliminating
+       the ~4-action re-grasp cycle.  release_held_object_in_place
+       stays as a safety net (triggered only when planner.plan()
+       returns None with held_obj set).  Other init facts
+       (obj_at_boxel ?o, on_table ?o) intentionally left emitting
+       for held cubes — pick's (handempty) precondition blocks any
+       misuse, and the audit's spec was minimal-swap.  Companion
+       commit b248c76 raises execute_pick post-action lift from 5 cm
+       to 10 cm (drops explicit lift_height=0.05 override, uses
+       _apply_post_action_lift default) — equalises per-action lift
+       while #60 investigation was open.  py_compile clean across
+       pddlstream_planner.py / test_full_pipeline.py.  Residual
+       slowness on the held branch flagged by user immediately
+       after — tracked as #62 (TIER 2 sub-hotspot of #50).
+
+Related: #21 [DONE 2026-05-05; archived] — still_blocked log-only
+              band-aid; different replan trigger but same "lost
+              progress" smell.
+         #1 [RESOLVED] — robot config drift across actions; the
+              equivalent fix for arm joint state.  This issue is the
+              gripper-state analog.
+         #62 (open) — residual replan-while-holding slowness raised
+              by the user immediately after #58 landed; sub-hotspot
+              of #50.
+
+
+================================================================================
+#60. POST-ACTION LIFT FAILS TO PREVENT COLLISIONS DURING NEXT MOVE ACTION
+     [DONE 2026-05-08]
+================================================================================
+Priority: TIER 0 — Correctness.  Runtime collisions during find-and-
+          place and find-and-tray-stack despite a successful
+          planner.plan() return; the symbolic layer reports a
+          collision-free trajectory that is not collision-free at
+          execution.  User-flagged 2026-05-08.
+Where:    execution.py:_apply_post_action_lift (~L394-410) and the
+          surrounding execute_place / execute_stack final_config
+          returns (~L644-651, ~L761-768).
+          Whatever module owns plan_motion's start-config seeding for
+          the next move action — likely streams.py compute_motion (or
+          plan_motion stream) and the orchestrator wiring in
+          test_full_pipeline.py main() that threads the previous
+          execute_*'s returned RobotConfig into the next planner
+          call.
+          Plan-client vs GUI-client cube state sync at the
+          place/stack boundary — boxel_env.py _mirror_load_urdf and
+          any post-place pose update path (env.plan_client_id).
+Depends:  #56 [DONE then REVERTED 2026-05-08] — the CLI flag (commit
+          bf0800c, reverted in commit ac47aa6) showed the symptom in
+          isolation: the knob plumbing landed correctly but the
+          ostensibly-tunable lift had no observable effect on robot
+          behaviour at any value tested.  This issue is the root-cause
+          hunt that #56 made visible.
+Effort:   2-3 hours investigation; fix scope depends on which
+          candidate cause dominates.
+
+What:  After running find-and-place / find-and-tray-stack with manual
+       lift_height up to 0.30 m (the upper bound of the validated
+       --post-action-lift range from #56), the next move action still
+       lowers the arm and routes through the just-placed cube,
+       producing a runtime collision.
+
+       Per #36 / #56 the post-action lift was meant to give the next
+       plan_motion safe headroom over the freshly placed/stacked cube.
+       _apply_post_action_lift's docstring (execution.py:394-404)
+       claims the final_config returned to the caller carries the
+       lifted pose forward as the next move's plan_motion seed.  The
+       user's observation contradicts that: the arm visibly DROPS
+       back toward contact height at the start of the next move,
+       which means either (i) the lifted pose is not being used as
+       the next plan_motion's start, or (ii) plan_motion's
+       collision check is certifying through-the-cube paths despite
+       a lifted start.
+
+       The reason commit ac47aa6 reverted #56 is exactly this gap —
+       the CLI knob's value reached _apply_post_action_lift, the IK
+       solve and physical lift ran, but the downstream plan_motion
+       did not respect either the lifted start config or the
+       freshly-placed cube's pose.  A configurable knob over a
+       broken mechanism is dead weight.
+
+       Three candidate causes, ranked by fit to the user's report:
+
+       (i)  plan_motion's start config not seeded from final_config.
+            If the next move's plan_motion is seeded with the
+            planner's compute_kin_solution config (contact pose,
+            10 cm above target) instead of the runtime final_config
+            from execute_place / execute_stack, the resulting
+            trajectory legitimately starts at contact height; the
+            runtime arm at lift height jumps to that start before
+            traversing.  STRONGEST FIT to user's "lowers the arm
+            again" observation.  Test: log the (q_from, q_to)
+            passed to plan_motion at each move action and compare
+            q_from to the prior execute_*'s returned
+            final_config.joint_positions.
+
+       (ii) Plan-client cube-pose desync.  plan_motion runs against
+            env.plan_client_id (separate DIRECT PyBullet client per
+            CODEBASE POLICY).  If the freshly placed cube's pose
+            isn't mirrored to plan_client between
+            execute_place/stack and the next plan_motion call, the
+            collision checker sees the cube at its initial pose
+            (or not at all) and certifies through-the-current-pose
+            paths as clean.  Compounds (i): even with a lifted
+            start, the trajectory has no reason to maintain
+            altitude over a cube the planner cannot see.  Test:
+            query p.getBasePositionAndOrientation on the placed
+            cube's body in BOTH clients before the next
+            plan_motion; if they diverge, this contributes.
+
+       (iii) Silent IK fall-through in _apply_post_action_lift.
+             execution.py:408-409 returns silently when solve_ik
+             fails for the lifted EE pose; actual_joints is then
+             read AFTER the no-op return and final_config is the
+             contact pose.  Less likely to match the user's
+             symptom (the arm "lowers" at next-move start implies
+             it WAS lifted), but worth ruling out by adding a
+             print on the IK-failure branch.
+
+       The fact that lift_height was demonstrably ineffective at
+       any value in [0.0, 0.30] (#56 revert) is the strongest
+       single signal that the lifted pose isn't actually used
+       downstream — i.e. (i) and/or (ii) dominate.
+
+Fix:   INVESTIGATION → FIX (do not pre-commit to one approach):
+       (a) Reproduce on default scene, default seed, --goal
+           find-and-tray-stack with extra debug logging in
+           _apply_post_action_lift (IK result, joint state pre-
+           and post-lift) and at the next-move plan_motion call
+           site (q_from, q_to, the body IDs and poses the
+           collision check sees).  Confirm which of (i) / (ii) /
+           (iii) matches the symptom.
+       (b) For (i): thread final_config from execute_*'s return
+           into the orchestrator's current_config so the next
+           plan_motion gets the lifted seed.  Verify plan_motion
+           treats the seed as a hard start, not a hint.
+       (c) For (ii): mirror the placed/stacked cube's live pose to
+           plan_client after the settle steps in execute_place /
+           execute_stack, before returning final_config.  Reuse
+           _mirror_load_urdf's update path or add a lightweight
+           setBasePositionAndOrientation hook against
+           env.plan_client_id.
+       (d) For (iii): replace the silent fall-through with a hard
+           error (or a replan trigger) on lift IK failure so the
+           bug becomes visible instead of accumulating as drift.
+           The "fail-safely fall through" stance pre-dates the
+           user report and is now demonstrably hiding correctness
+           gaps.
+
+       Smoke test: re-run --goal find-and-tray-stack on default
+       scene with the same seed.  Expect the next-move trajectory
+       to leave the lifted pose without lowering, and to route
+       around the placed cube.  Expect a re-attempt of #56's CLI
+       knob to produce observable behaviour at last (lower lift
+       values should now break the run; higher values should give
+       more clearance) — that's the regression test that #60
+       actually fixed the underlying mechanism.
+
+Outcome (2026-05-08): two-step landing — diagnostic logging first
+       (commit 23687af, #60 step a), then targeted fix (commit
+       c08dc65, Option B: sync + replan).  Diagnostic [#60-diag]
+       prints across three sites (execution.py
+       _apply_post_action_lift candidate iii, execute_place/stack
+       end-of-body candidate ii, test_full_pipeline.py move handler
+       candidate i) confirmed candidates (i) and (ii) firing
+       universally on logs/run_2026-05-08_12-57-42: (i) fired 7/7
+       moves with |current - traj[0]| 0.064–0.498 rad, (ii) fired
+       3/3 place/stack with cube pose desync 0.124–0.686 m;
+       candidate (iii) silent IK fall-through never fired.  Fix
+       (ii): execute_place / execute_stack mirror the placed/stacked
+       body's runtime pose into env.plan_client_id via
+       p.resetBasePositionAndOrientation right after the post-action
+       lift.  Fix (i): the move action handler compares
+       current_config against the planner's q1 and if |diff| > 1e-2
+       rad, builds a runtime q1 carrying the original q1's
+       collision-check metadata (ignored_body_ids, held_body_ids,
+       grasp_ee_offset) and replans via planner.streams.plan_motion;
+       StopIteration breaks the dispatch loop to trigger an outer
+       replan from current_config (same path as IK failures).
+       Diagnostic prints from commit 23687af removed; new
+       [#60-fix(i)] one-liner only fires when a runtime replan
+       happens, and the lift IK-failure print stays as a hard-error
+       signal.  py_compile clean across execution.py and
+       test_full_pipeline.py.  Mechanism behind #56's revert is now
+       closed — re-attempting --post-action-lift becomes meaningful
+       as a regression test.
+
+Related: #36 [DONE 2026-05-07; archived] — introduced the hardcoded
+              post-action lift this issue documents as broken.
+         #56 [DONE then REVERTED 2026-05-08; archived in this slim]
+              — CLI flag for the lift (commit bf0800c, reverted in
+              ac47aa6).  The revert note ("no observable effect on
+              robot behaviour at any value tested") is exactly the
+              symptom #60 tracks.  Re-attempt #56 only after #60
+              lands.
+         #1 [RESOLVED] — robot config drift across actions; this
+              issue is a sibling on the place/stack side
+              (post-action arm pose vs. planner expectation).
+         FOR LATER "Trajectory-clipping edge case for stack actions"
+              (audit #55 lazy-collision residual) — covers the dual
+              gap: support body's destination vs. its planning-time
+              pose.  #60 covers the held-arm pose; that bullet
+              covers the support body pose.  Different mechanisms,
+              partially overlapping symptoms; cross-link if a single
+              fix accidentally handles both.
+         #58 [DONE 2026-05-08; archived in this slim] — preserve
+              grasp across replans.  If #60 also causes replans on
+              collision-detected runs (rather than outright physics
+              breakage), #58's grasp-preservation would compound the
+              wins.
