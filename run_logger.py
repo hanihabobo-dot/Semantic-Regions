@@ -408,6 +408,16 @@ def parse_pipeline_args(argv=None):
              'for evaluation sweeps that compare planner behaviour with '
              'and without the stack-cost bias.',
     )
+    parser.add_argument(
+        '--post-action-lift',
+        type=float,
+        default=0.10,
+        help='Cartesian +Z lift in metres applied after place / stack '
+             'so the next plan_motion has safe headroom over the just-'
+             'placed cube (audit #36 / #56). Default 0.10 m preserves '
+             'pre-#56 behaviour. Pick lift (cosmetic only) stays fixed '
+             'at 0.05 m. Range [0.0, 0.30] m.',
+    )
     args = parser.parse_args(argv)
 
     # Audit #29: --n-hidden only makes sense on the scalability scene
@@ -448,6 +458,14 @@ def parse_pipeline_args(argv=None):
                   f"--n-targets={args.n_targets}; capping to "
                   f"{args.n_targets}.", file=sys.stderr)
             args.n_hidden = args.n_targets
+
+    if not 0.0 <= args.post_action_lift <= 0.30:
+        parser.error(
+            f"--post-action-lift must be in [0.0, 0.30] m "
+            f"(got {args.post_action_lift}).  Larger lifts risk "
+            f"exceeding Panda reach-z; smaller is fine but a 0 m lift "
+            f"makes the post-action retreat a no-op."
+        )
 
     # When --goal stack is requested without an explicit --scene, fall
     # back to stack_scene so the spawned objects are reach-constrained

@@ -416,6 +416,7 @@ def main(gui=True, run_logger=None, scene_config=None,
          draw_boxel_overlays=True, show_free=False,
          goal_kind='holding', stack_height=2,
          unit_costs=False,
+         post_action_lift: float = 0.10,
          run_config: Optional[Dict[str, Any]] = None):
     print("=" * 60)
     print("FULL PIPELINE: PDDLStream + Replanning")
@@ -1122,7 +1123,8 @@ def main(gui=True, run_logger=None, scene_config=None,
 
                 place_result = execute_place(
                     robot_id, env, obj_str, place_pos, grasp, config,
-                    grasp_constraint_id, gui)
+                    grasp_constraint_id, gui,
+                    post_action_lift=post_action_lift)
                 if place_result is None:
                     print(f"    IK failure during place — replanning (audit #82)")
                     break
@@ -1223,7 +1225,8 @@ def main(gui=True, run_logger=None, scene_config=None,
 
                 stack_result = execute_stack(
                     robot_id, env, obj_str, on_obj_str, grasp, config,
-                    grasp_constraint_id, gui)
+                    grasp_constraint_id, gui,
+                    post_action_lift=post_action_lift)
                 if stack_result is None:
                     print(f"    IK failure during stack — replanning (audit #30)")
                     break
@@ -1412,19 +1415,20 @@ if __name__ == "__main__":
     # (consumed by eval runner audit #9).  Booleans match the kwargs we
     # hand to main() rather than the inverted no_* arg names for readability.
     run_config = {
-        "scene":        args.scene,
-        "n_occluders":  args.n_occluders,
-        "n_targets":    args.n_targets,
-        "n_hidden":     args.n_hidden,
-        "n_objects":    args.n_objects,
-        "seed":         args.seed,
-        "goal":         args.goal,
-        "stack_height": args.stack_height,
-        "unit_costs":   args.unit_costs,
-        "gui":          not args.no_gui,
-        "boxel_viz":    not args.no_boxel_viz,
-        "show_free":    args.show_free,
-        "log_level":    args.log_level,
+        "scene":            args.scene,
+        "n_occluders":      args.n_occluders,
+        "n_targets":        args.n_targets,
+        "n_hidden":         args.n_hidden,
+        "n_objects":        args.n_objects,
+        "seed":             args.seed,
+        "goal":             args.goal,
+        "stack_height":     args.stack_height,
+        "unit_costs":       args.unit_costs,
+        "post_action_lift": args.post_action_lift,
+        "gui":              not args.no_gui,
+        "boxel_viz":        not args.no_boxel_viz,
+        "show_free":        args.show_free,
+        "log_level":        args.log_level,
     }
 
     # RunLogger captures all artefacts (PDDL files, boxel data, logs)
@@ -1440,6 +1444,7 @@ if __name__ == "__main__":
             goal_kind=args.goal,
             stack_height=args.stack_height,
             unit_costs=args.unit_costs,
+            post_action_lift=args.post_action_lift,
             run_config=run_config,
         )
     finally:

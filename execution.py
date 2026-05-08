@@ -545,7 +545,9 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
 
 
 def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
-                  grasp_constraint_id, gui) -> Optional[RobotConfig]:
+                  grasp_constraint_id, gui,
+                  post_action_lift: float = 0.10
+                  ) -> Optional[RobotConfig]:
     """
     Execute place action using the plan's grasp pose.
 
@@ -639,10 +641,12 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     for _ in range(30):
         p.stepSimulation()
 
-    # Hardcoded post-place lift (audit #36, THESIS_NOTES §19): give the
-    # next plan_motion ~10 cm of safe headroom over the just-placed cube.
+    # Post-place lift (audit #36, THESIS_NOTES §19): give the next
+    # plan_motion safe headroom over the just-placed cube.  Default
+    # 0.10 m exposed via --post-action-lift CLI knob (audit #56).
     _apply_post_action_lift(robot_id, contact_ee, grasp.orientation,
-                            contact_joints, pc, gui)
+                            contact_joints, pc, gui,
+                            lift_height=post_action_lift)
 
     # Read actual joint state to prevent drift accumulation (audit #86).
     actual_joints = np.array(
@@ -653,7 +657,9 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
 
 
 def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
-                  grasp_constraint_id, gui) -> Optional[RobotConfig]:
+                  grasp_constraint_id, gui,
+                  post_action_lift: float = 0.10
+                  ) -> Optional[RobotConfig]:
     """
     Drop the held object on top of ``on_obj_name`` (audit #30, --goal stack).
 
@@ -755,11 +761,13 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     for _ in range(60):
         p.stepSimulation()
 
-    # Hardcoded post-stack lift (audit #36, THESIS_NOTES §19): the EE
-    # currently sits on top of the freshly stacked column; lift ~10 cm
-    # so the next plan_motion has safe headroom over the column.
+    # Post-stack lift (audit #36, THESIS_NOTES §19): the EE currently
+    # sits on top of the freshly stacked column; lift so the next
+    # plan_motion has safe headroom.  Default 0.10 m exposed via
+    # --post-action-lift CLI knob (audit #56).
     _apply_post_action_lift(robot_id, contact_ee, grasp.orientation,
-                            contact_joints, pc, gui)
+                            contact_joints, pc, gui,
+                            lift_height=post_action_lift)
 
     actual_joints = np.array(
         [p.getJointState(robot_id, i)[0] for i in range(7)]
