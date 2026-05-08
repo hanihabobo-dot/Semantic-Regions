@@ -833,6 +833,121 @@ Updated:      2026-05-08 (later) — #9 [DONE].  eval_runner.py +
               (#10, #50, #57, #59, #61, #62, #63).  TIER 1 narrows
               to #10 alone.
 
+Updated:      2026-05-08 (later) — README updated with a "Running on
+              this machine (WSL + PowerShell)" section enumerating the
+              three project-specific PowerShell aliases and what they
+              translate to.  Aliases (defined in
+              $PROFILE = Microsoft.PowerShell_profile.ps1):
+                run_boxels  -> wsl bash -c "cd .../Semantic_Boxels &&
+                               source wsl_env/bin/activate && DISPLAY=:0
+                               LIBGL_ALWAYS_SOFTWARE=1 PYTHONPATH=
+                               .../pddlstream_lib python3
+                               test_full_pipeline.py $args"
+                run_eval    -> wsl bash -c "cd .../Semantic_Boxels &&
+                               source wsl_env/bin/activate && PYTHONPATH=
+                               .../pddlstream_lib python3 eval_runner.py
+                               $args"
+                plot_eval   -> wsl bash -c "cd .../Semantic_Boxels &&
+                               source wsl_env/bin/activate && python3
+                               eval_plotter.py $args"
+              (cursor-agent shim also lives in $PROFILE but is editor
+              tooling, not part of the boxels pipeline — noted in the
+              README parenthetical for completeness.)
+
+              Trigger: 2026-05-08 WSL session — first eval sweep
+              (sweep_2026-05-08_14-28-22_scalability, 90 cells, 31/90
+              failures-or-timeouts) ran fine via run_eval, but
+              plot_eval produced "=== ... (matplotlib not available)
+              ==="  text tables instead of PNGs because wsl_env was
+              missing matplotlib (eval_plotter.py L26-32 try/except
+              import sets HAVE_MPL=False, _print_text_table fallback at
+              L94-104).  Diagnosis chain that the README's "Common
+              pitfalls" subsection now documents:
+                (1) Initial fix attempt targeted ~/anaconda3 — wrong
+                    Python entirely; the shims activate wsl_env, not
+                    base.
+                (2) PowerShell quoting traps surfaced too:
+                    plot_eval (Get-ChildItem ...).FullName + 'aggregated.csv'
+                    splits into two args; "$(...)\aggregated.csv"
+                    eats the FullName backslashes because PowerShell's
+                    double-quote interpolation interprets \U, \H, \g,
+                    \S as escape sequences before the string crosses
+                    into bash.  README documents the wslpath /
+                    /mnt/c/... workaround.
+                (3) Real fix: pip install matplotlib INTO wsl_env
+                    (matplotlib-3.10.9 + 8 deps).  Re-running
+                    plot_eval on the same aggregated.csv produced
+                    planning_time / success_rate / plan_count PNGs
+                    next to the CSV as designed.
+
+              README change: new section between "Quick Start" and
+              "Documentation" — alias table, one-time wsl_env
+              bootstrap line (now includes matplotlib so this won't
+              re-bite a fresh checkout), single-scene + sweep + plot
+              command examples, "Common pitfalls" subsection covering
+              the three traps above.  No code change.
+
+              Cross-ref: WSL VIRTUAL ENVIRONMENT — DO NOT DELETE
+              policy block (L888-891) updated implicitly — the README's
+              bootstrap line now includes matplotlib, which the policy
+              block's recreate command does not yet.  Defer touching
+              the policy block to the #63 final doc sweep so the
+              policy section stays a one-pass edit.
+
+Updated:      2026-05-08 (later) — #10 [DONE 2026-05-08].  Uniform-
+              voxelization baseline landed in commit afdaadd as a
+              free-space-only swap (OBJECT + SHADOW boxel pipelines
+              untouched).  Strict static uniform 3D lattice mirrors
+              FreeSpaceGenerator's signature; positions are computed
+              once at scene init and never change, only per-cell
+              labels flip as objects are revealed/moved (consulted
+              TAMPURA — Curtis et al. 2024 — find_dice/env.py: voxel
+              labels live in Python, planner sees per-OBJECT atoms;
+              same pattern as our existing _build_init re-emit).
+              Fix shape, 5 files:
+                - uniform_grid.py (NEW): UniformGridGenerator,
+                  cell_size kwarg (default 0.05 m ~ one cube footprint),
+                  workspace bounds match FreeSpaceGenerator (free_-
+                  space.py:47-48), AABB-AABB rejection identical to
+                  the octree path, FP-imprecision epsilon (1e-9) on
+                  the floor() so evenly-divisible workspaces don't
+                  silently lose a row of cells.
+                - boxel_env.py: instantiate UniformGridGenerator next
+                  to FreeSpaceGenerator; use_uniform_grid flag (default
+                  False) gates the dispatch in generate_free_space();
+                  set_uniform_cell_size() recreates the lattice for
+                  matrix sweeps.  reboxelize.py is automatically
+                  baseline-aware via the same single dispatch seam.
+                - run_logger.py: --baseline {semantic,uniform}
+                  (default semantic) + --uniform-cell-size FLOAT
+                  (default 0.05).
+                - test_full_pipeline.py: thread baseline +
+                  uniform_cell_size through run_config, main()
+                  kwargs, and the post-construction env config
+                  (env.use_uniform_grid + set_uniform_cell_size if
+                  non-default).
+                - eval_runner.py: baseline axis added to
+                  SCALABILITY_MATRIX (90 -> 180 cells, semantic +
+                  uniform), --baseline pipe-through in cell_to_argv,
+                  cell_tag suffix _semantic / _uniform, baseline +
+                  uniform_cell_size in PRIMARY_COLUMNS for stable
+                  CSV ordering.
+              eval_plotter.py needs no changes — its --baseline-csv
+              overlay hook (eval_plotter.py:157) already consumes a
+              second aggregated.csv; running the sweep + filtering
+              rows by baseline produces the comparison inputs.
+              Sanity checks: py_compile across all 5 files;
+              UniformGridGenerator on a (0.6 x 0.6 x 0.5) workspace at
+              0.05 m -> 1440 cells (12 x 12 x 10) post-FP-fix
+              (was 1210 = 11 x 11 x 10 with naive floor); obstacle
+              rejection drops 120 cells for a 0.2 m^3 obstacle; eval
+              dry-run prints 180 cells with _semantic/_uniform tags;
+              parse_pipeline_args round-trip on the new flags
+              returns the expected values.  WSL end-to-end run
+              deferred to next session (PyBullet only spins up under
+              WSL on this machine).  Open count: 7 -> 6.  TIER 1 now
+              empty (eval prerequisites complete, #9 + #10 both DONE).
+
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
 
@@ -917,7 +1032,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #10, #50, #57, #59, #61, #62, #63                              #
+#  OPEN ISSUES — #50, #57, #59, #61, #62, #63                                   #
 #                                                                              #
 ################################################################################
 
@@ -964,7 +1079,18 @@ Evaluation prerequisites (runner + uniform baseline for thesis comparison):
       vendored PDDLStream) is NOT overridden — same noise hits every
       approach at the same seed, so approach-vs-baseline averaging
       remains valid.
-  #10 uniform voxelization baseline  (CONFIRMED in scope 2026-05-06)
+  #10 [DONE 2026-05-08 (later)] uniform voxelization baseline.
+      Free-space-only swap: UniformGridGenerator (uniform_grid.py)
+      replaces FreeSpaceGenerator under --baseline uniform; OBJECT +
+      SHADOW boxels untouched, planner contract preserved.  Strict
+      static lattice — positions fixed at scene init, only per-cell
+      labels flip as objects are revealed/moved.  TAMPURA-style
+      Python-side label maintenance via the existing _build_init
+      re-emit on every planner.plan() call (no PDDL domain changes).
+      eval_runner.py SCALABILITY_MATRIX gains the baseline axis
+      (90 -> 180 cells, semantic + uniform); eval_plotter.py
+      --baseline-csv hook already consumes the comparison input.
+      Commit afdaadd; py_compile clean.
 
 Evaluation phase (Results chapter — user-scoped sweep):
   (no remaining items — see Closed/relocated below.)
@@ -1123,12 +1249,15 @@ Outcome [DONE 2026-05-08 (later)]:
 
 
 ================================================================================
-#10. EVALUATION BASELINE — UNIFORM VOXELIZATION
+#10. [DONE 2026-05-08 (later)] EVALUATION BASELINE — UNIFORM VOXELIZATION
 ================================================================================
-Priority: TIER 3 — Thesis baseline
-Where:    New module or configuration; integrates with eval_runner
-Depends:  #9 (experiment runner to collect metrics)
-Effort:   3-5 days
+Priority: TIER 1 (promoted from TIER 3 in 2026-05-08 (later) restructure once
+          the pre-eval correctness chain ended; thesis-critical path)
+Where:    New module + small wire-ins; integrates with eval_runner
+Depends:  #9 (experiment runner to collect metrics) — DONE
+Effort:   3-5 days as scoped; landed in ~1 day per the simplified
+          free-space-only swap approach (decided 2026-05-08 after
+          consulting TAMPURA's voxel-grid representation).
 
 What:  The proposal defines "uniform voxelization" as a baseline:
        the workspace is divided into equal-sized voxels with no
@@ -1143,6 +1272,68 @@ Fix:   ONE COMMIT — implement uniform voxelization baseline:
        (b) Wire into the experiment runner as --baseline uniform.
        (c) Run same scenes/seeds as the semantic boxel approach and
            compare metrics.
+
+Outcome [DONE 2026-05-08 (later)]:
+  Decision: free-space-only swap, OBJECT + SHADOW pipelines untouched.
+  Rationale (after the 2026-05-08 TAMPURA consultation): TAMPURA's
+  find_dice/env.py keeps voxel labels purely Python-side — the planner
+  only reasons over per-OBJECT atoms (`known-pose(?o)`, etc.) produced
+  by `abstract()` from the Python belief.  Our project's _build_init()
+  re-emit pattern is the same (CODEBASE POLICY L893-905), so adding
+  the uniform baseline does not require ANY PDDL domain change — only
+  the registry's free-space cells switch from octree+merge to a fixed
+  static lattice under the flag.  Keeping OBJECT + SHADOW boxels
+  semantically shaped preserves the planner contract (same predicates,
+  same ids) so the comparison isolates the discretisation strategy as
+  the single variable being measured.
+
+  Implementation (commit afdaadd, 5 files, +232 / -5):
+    - uniform_grid.py (NEW): UniformGridGenerator mirrors
+      FreeSpaceGenerator's `generate(known_boxels, visualize)` signature.
+      Default cell_size=0.05 m (~one cube footprint per cell — fine
+      enough for boxel_fits, coarse enough to keep the cell count
+      bounded).  Workspace bounds match FreeSpaceGenerator
+      (free_space.py:47-48) so the two generators cover identical
+      physical region.  AABB-AABB rejection test identical to the
+      octree path.  FP-imprecision epsilon (1e-9) on the floor()
+      so evenly-divisible workspaces don't silently drop a row of
+      cells (caught in sanity-check: 1440 vs 1210 on (0.6 x 0.6 x 0.5)
+      at 0.05 m).
+    - boxel_env.py: import + instantiate UniformGridGenerator;
+      use_uniform_grid: bool = False (default semantic).
+      generate_free_space() dispatches; set_uniform_cell_size() rebuilds
+      the lattice for cell-size sweeps.  reboxelize.py is automatically
+      baseline-aware via the same single dispatch seam (no separate
+      changes).
+    - run_logger.py: --baseline {semantic,uniform} (default semantic)
+      + --uniform-cell-size FLOAT (default 0.05).
+    - test_full_pipeline.py: thread baseline + uniform_cell_size
+      through run_config (cross-run filterable in aggregated.csv),
+      main() kwargs, and the post-construction env config.
+    - eval_runner.py: baseline axis on SCALABILITY_MATRIX
+      (90 -> 180 cells), --baseline in cell_to_argv, cell_tag
+      gains _semantic/_uniform suffix, baseline + uniform_cell_size
+      promoted into PRIMARY_COLUMNS.
+
+  eval_plotter.py needs no changes — its --baseline-csv overlay
+  hook (eval_plotter.py:157) was stubbed for exactly this purpose
+  (#9 outcome).  Run the matrix, split aggregated.csv by baseline
+  column, feed the two halves through.
+
+  Sanity checks: py_compile across all 5 files; UniformGridGenerator
+  smoke test (lattice size, obstacle rejection, return shape);
+  parse_pipeline_args round-trip on the new flags;
+  `python eval_runner.py --matrix scalability --dry-run` prints
+  180 cells with _semantic/_uniform tags as expected.  WSL end-to-end
+  run (run_eval --matrix scalability --skip-existing) deferred to next
+  WSL session — PyBullet spins up only under WSL on this machine.
+
+  Per-cell timing for the upper-right of the matrix (n_occluders=6,
+  n_targets=3) under uniform may exceed the 300 s default --timeout;
+  worth bumping to 600 s if early failures are timeout-dominated.
+  This is data, not bug — the timeout-heavy upper-right of the
+  uniform sweep is the predicted "uniform discretisation degrades
+  with scene size faster than semantic" result.
 
 
 ================================================================================
@@ -1848,19 +2039,19 @@ follow the tier / roadmap ordering, not the lowest open number.
 Each issue is ideally one commit; parallelise where dependencies allow.
 
 The pre-evaluation correctness chain ended 2026-05-08 with #60 [DONE].
-Eval (#9, #10) is now the user's critical path to the thesis Results
+Eval (#9, #10) was the user's critical path to the thesis Results
 chapter and was promoted from TIER 3 to TIER 1 in the 2026-05-08 (later)
-restructure.
+restructure; both have now landed (#9 in commit e8237b6, #10 in commit
+afdaadd) and TIER 1 is empty pending the WSL sweep run.
 
 TIER 0 — TOP PRIORITY:
   (empty — no open correctness blockers.)
 
-TIER 1 — ACTIVE EVAL (promoted 2026-05-08; thesis-critical path):
-  #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
-       (#9 [DONE 2026-05-08 (later)] — eval_runner.py + eval_plotter.py
-        + master --seed plumbing landed; aggregated.csv consumes the
-        existing per-run timing_summary.json so #10 just needs to
-        register itself as a second --baseline series.)
+TIER 1 — ACTIVE EVAL (eval prerequisites complete):
+  (empty — #9 and #10 both DONE 2026-05-08.  Next user-side step is
+  the WSL sweep run via `run_eval --matrix scalability --skip-existing`
+  to populate eval_results/sweep_<ts>_scalability with both baselines'
+  aggregated.csv rows.)
 
 TIER 2 — PERF (planner wall-clock):
   #50  Planner perf investigation — profile, cache static init, kill
@@ -1883,14 +2074,18 @@ TIER 3 — CODE QUALITY / LOW-PRIO:
        Explicitly the last commit before thesis submission per user
        2026-05-08.
 
-Total open: 7 items (#10, #50, #57, #59, #61, #62, #63).
+Total open: 6 items (#50, #57, #59, #61, #62, #63).
 
 Closed since previous summary:
-  #9   [DONE 2026-05-08 (later)] — eval_runner.py + eval_plotter.py +
-       3-line master --seed plumbing in test_full_pipeline.py __main__.
-       90-cell scalability preset wired up; subprocess-per-cell;
-       aggregated.csv + jsonl; matplotlib-with-text-fallback plotter;
-       --baseline-csv stub left for #10 overlay.
+  #10  [DONE 2026-05-08 (later)] — uniform voxelization baseline
+       (commit afdaadd).  Free-space-only swap: UniformGridGenerator
+       (uniform_grid.py) replaces FreeSpaceGenerator under
+       --baseline uniform; OBJECT + SHADOW boxels untouched; PDDL
+       domain unchanged (TAMPURA-style Python-side label maintenance
+       via the existing _build_init re-emit).  SCALABILITY_MATRIX
+       gains the baseline axis (90 -> 180 cells, semantic + uniform).
+       eval_plotter.py --baseline-csv hook already consumes the
+       comparison input.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
