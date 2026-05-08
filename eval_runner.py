@@ -42,10 +42,13 @@ from typing import Dict, Iterator, List, Optional
 # ---------------------------------------------------------------------------
 
 # Scalability evaluation matrix (audit #9, absorbing #12).
-# n_occluders ∈ 1..6 × n_targets ∈ 1..3 × 5 seeds = 90 cells.
-# --goal holding only — find-and-tray-stack adds a third data series later.
-# n_hidden = min(n_targets, n_occluders) so every cell has the deepest
-# search this scene size can support without overconstraining placement.
+# n_occluders ∈ 1..6 × n_targets ∈ 1..3 × 5 seeds × baseline {sem,uni}
+# = 180 cells.  --goal holding only — find-and-tray-stack adds a third
+# data series later.  n_hidden = min(n_targets, n_occluders) so every
+# cell has the deepest search this scene size can support without
+# overconstraining placement.  baseline axis (audit #10) drives the
+# uniform-vs-semantic free-space comparison plotted by eval_plotter via
+# the --baseline-csv overlay hook.
 SCALABILITY_MATRIX = {
     "n_occluders": [1, 2, 3, 4, 5, 6],
     "n_targets":   [1, 2, 3],
@@ -53,6 +56,7 @@ SCALABILITY_MATRIX = {
     "goal":        ["holding"],
     "unit_costs":  [False],
     "scene":       ["scalability"],
+    "baseline":    ["semantic", "uniform"],
     "_n_hidden_strategy": "all_or_max",
 }
 
@@ -64,6 +68,7 @@ SMOKE_MATRIX = {
     "goal":        ["holding"],
     "unit_costs":  [False],
     "scene":       ["scalability"],
+    "baseline":    ["semantic"],
     "_n_hidden_strategy": "all_or_max",
 }
 
@@ -101,7 +106,8 @@ def cell_tag(cell: Dict) -> str:
     """Deterministic short label used as the cell directory name."""
     return (f"occ{cell['n_occluders']}_tgt{cell['n_targets']}"
             f"_hid{cell['n_hidden']}_seed{cell['seed']}"
-            f"_{cell['goal']}_uc{int(cell['unit_costs'])}")
+            f"_{cell['goal']}_uc{int(cell['unit_costs'])}"
+            f"_{cell.get('baseline', 'semantic')}")
 
 
 def cell_to_argv(cell: Dict, extra_args: List[str]) -> List[str]:
@@ -115,6 +121,7 @@ def cell_to_argv(cell: Dict, extra_args: List[str]) -> List[str]:
         "--n-hidden", str(cell["n_hidden"]),
         "--seed", str(cell["seed"]),
         "--goal", str(cell["goal"]),
+        "--baseline", str(cell.get("baseline", "semantic")),
         "--log-level", "quiet",
     ]
     if cell["unit_costs"]:
@@ -256,6 +263,7 @@ def run_cell(
 PRIMARY_COLUMNS = [
     "scene", "n_occluders", "n_targets", "n_hidden", "seed",
     "goal", "unit_costs",
+    "baseline", "uniform_cell_size",
     "success", "exit_reason",
     "plan_count", "total_planning_time_s", "wall_clock_s",
 ]

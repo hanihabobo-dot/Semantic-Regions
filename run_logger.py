@@ -408,6 +408,27 @@ def parse_pipeline_args(argv=None):
              'for evaluation sweeps that compare planner behaviour with '
              'and without the stack-cost bias.',
     )
+    parser.add_argument(
+        '--baseline',
+        choices=['semantic', 'uniform'],
+        default='semantic',
+        help='Free-space discretization strategy (audit #10). "semantic" '
+             '(default) is the octree + cell-merger pipeline. "uniform" '
+             'replaces it with a strict static uniform 3D grid (see '
+             'uniform_grid.py); only the per-cell label mutates over '
+             'time, the lattice positions stay fixed across replans.',
+    )
+    parser.add_argument(
+        '--uniform-cell-size',
+        type=float,
+        default=0.05,
+        help='Edge length of each uniform-grid cell, in metres. Only '
+             'meaningful with --baseline uniform. Default 0.05 m (5 cm) '
+             'matches roughly one cube footprint per cell. Range '
+             '[0.02, 0.20] is sane; smaller cells inflate the cell '
+             'count quadratically, larger cells overconstrain '
+             '(boxel_fits) for cube placement.',
+    )
     args = parser.parse_args(argv)
 
     # Audit #29: --n-hidden only makes sense on the scalability scene

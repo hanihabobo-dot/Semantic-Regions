@@ -416,6 +416,8 @@ def main(gui=True, run_logger=None, scene_config=None,
          draw_boxel_overlays=True, show_free=False,
          goal_kind='holding', stack_height=2,
          unit_costs=False,
+         baseline: str = 'semantic',
+         uniform_cell_size: float = 0.05,
          run_config: Optional[Dict[str, Any]] = None):
     print("=" * 60)
     print("FULL PIPELINE: PDDLStream + Replanning")
@@ -434,6 +436,16 @@ def main(gui=True, run_logger=None, scene_config=None,
     # =========================================================
     print("\n--- Phase 1: Environment Setup ---")
     env = BoxelTestEnv(gui=gui, scene_config=scene_config)
+
+    # audit #10 — uniform-grid baseline.  Toggle BoxelTestEnv's
+    # free-space dispatch and (re)build the lattice at the requested
+    # cell size before any boxel/registry work in Phase 2.  Default
+    # path (baseline='semantic') leaves env.use_uniform_grid=False, so
+    # generate_free_space falls through to the octree pipeline as before.
+    if baseline == 'uniform':
+        env.use_uniform_grid = True
+        if uniform_cell_size != 0.05:
+            env.set_uniform_cell_size(uniform_cell_size)
 
     # Let settle: 50 steps at 240 Hz ≈ 0.2 s.  Enough for the loaded
     # Panda + cubes to reach static equilibrium after spawning.
@@ -1503,6 +1515,8 @@ if __name__ == "__main__":
         "goal":         args.goal,
         "stack_height": args.stack_height,
         "unit_costs":   args.unit_costs,
+        "baseline":     args.baseline,
+        "uniform_cell_size": args.uniform_cell_size,
         "gui":          not args.no_gui,
         "boxel_viz":    not args.no_boxel_viz,
         "show_free":    args.show_free,
@@ -1522,6 +1536,8 @@ if __name__ == "__main__":
             goal_kind=args.goal,
             stack_height=args.stack_height,
             unit_costs=args.unit_costs,
+            baseline=args.baseline,
+            uniform_cell_size=args.uniform_cell_size,
             run_config=run_config,
         )
     finally:
