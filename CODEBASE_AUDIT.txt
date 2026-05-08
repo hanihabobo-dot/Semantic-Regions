@@ -550,6 +550,34 @@ Slimmed:      2026-05-08 — moved #53 (DONE 2026-05-07), #54 (DONE
               branch (Path C exploration on audit-55-pose-aware-stack)
               recap.  Open audit shrunk to the four still-active
               items (#9, #10, #50, #52).  No code changes.
+Added:        2026-05-08 (later) — #56 (CLI flag for post-action
+              safe-distance lift; currently hardcoded ~10 cm in
+              execute_place / execute_stack and 5 cm in execute_pick
+              per audit #36).  Code-quality / eval-knob; affects no
+              current functionality but unblocks sensitivity analysis
+              and parameterisation in the eval sweep (#9).
+Added:        2026-05-08 (later) — #57 (registry should own cube
+              geometry instead of compute_stack_kin_solution reading
+              p.getAABB on the plan-client).  Architectural cleanup;
+              the AABB fallback (commit 8281d73) reads only z-extent
+              (size, not position) so it's not an oracle leak in
+              practice, but the registry is the proper "what the
+              planner knows" boundary.  Replace the PyBullet read
+              with a registry.object_geometry table populated at
+              scene init.
+Added:        2026-05-08 (later) — #58 (preserve grasp across replans;
+              currently release_held_object_in_place drops the held
+              object before each replan to keep symbolic state
+              consistent with planner._build_init's unconditional
+              ('handempty',) emission).  User-flagged 2026-05-08
+              after observing yellow_object dropped mid-air at the
+              PLAN #1 -> PLAN #2 transition in
+              logs/run_2026-05-08_10-49-01 when sense returned empty
+              post-pick.  Wasteful — the next plan re-picks the
+              dropped object, adding ~4 actions per re-grasp cycle.
+              Fix: thread held_obj + grasp into planner.plan(), have
+              _build_init emit ('holding', ?o) instead of
+              ('handempty',) when set.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -635,7 +663,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #50, #52                                              #
+#  OPEN ISSUES — #9, #10, #50, #52, #56, #57, #58                               #
 #                                                                              #
 ################################################################################
 
@@ -684,6 +712,11 @@ Parallel / non-blocking:
        feed back into #9's scalability plots.  Subsumes the per-hotspot
        questions formerly tracked as #34 (ray×free-boxel precompute) — those
        land here as profiler hits, not as separate audit items.
+  #56  CLI flag for post-action safe-distance lift (audit #36 follow-up).
+  #57  registry should own cube geometry (audit #55 follow-up; replace the
+       PyBullet AABB fallback in compute_stack_kin_solution).
+  #58  preserve grasp across replans (audit #55 follow-up; observed in
+       logs/run_2026-05-08_10-49-01).
 
 Closed / relocated since last summary:
   #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
@@ -967,6 +1000,186 @@ Related: #49 [DONE] — find-and-tray-stack; this issue is the user-
               Out of scope for #52 (the simplified setup avoids it),
               but documented there so it surfaces if a richer goal
               brings the gap back into reach.
+
+
+================================================================================
+#56. CLI FLAG — POST-ACTION SAFE-DISTANCE LIFT (CURRENTLY HARDCODED ~10 cm)
+================================================================================
+Priority: TIER 3 — Code-quality / eval-knob.  Affects no current
+          functionality; enables sensitivity analysis and eval-sweep
+          parameterisation (#9).
+Where:    execution.py — execute_pick (~5 cm cosmetic),
+          execute_place (~10 cm), execute_stack (~10 cm) all call
+          _apply_post_action_lift with hardcoded literals (audit #36
+          introduced this).
+          run_logger.py — add CLI arg --post-action-lift (or split:
+          --place-lift / --stack-lift / --pick-lift).
+          test_full_pipeline.py — thread the parsed value through
+          main() into the execute_* calls.
+Depends:  None.
+Effort:   <0.5 day (CLI plumbing + signature thread; no behavioural
+          change at default value).
+
+What:  Audit #36 [DONE 2026-05-07; archived] introduced a hardcoded
+       ~10 cm post-action Cartesian +Z lift in execute_place and
+       execute_stack (5 cm cosmetic in execute_pick) so the next
+       plan_motion has safe headroom over the freshly placed/stacked
+       cube.  The value is a magic number in three places — fine for
+       the demo, brittle for the eval sweep.
+
+       Exposing as a CLI knob lets us:
+       - Sensitivity-test the value without code edits (does 5 cm
+         break anything?  does 15 cm help with deeper towers?).
+       - Vary the lift across the eval sweep (#9) — shorter lifts
+         could speed up execution at the cost of plan_motion failures.
+       - Document the value as a knob rather than a hidden constant.
+
+Fix:   ONE COMMIT — CLI plumbing + signature thread:
+       (a) run_logger.py — add `--post-action-lift FLOAT` (default
+           0.10), validate range (e.g. 0.0–0.30 m).  Single value
+           covers place + stack; pick stays cosmetic at 5 cm unless
+           the user wants three separate flags.
+       (b) test_full_pipeline.py main() — thread into execute_pick /
+           execute_place / execute_stack calls, plus run_config dict
+           for timing_summary.json.
+       (c) execution.py — replace the hardcoded literals with the
+           parameter; defaults preserve current behaviour exactly.
+
+Related: #36 [DONE 2026-05-07; archived] — introduced the hardcoded
+              lift.  This issue is the "expose as a knob" follow-up
+              #36 explicitly deferred.
+         #9 — eval runner; consumes this knob if exposed before the
+              eval sweep lands.
+
+
+================================================================================
+#57. REGISTRY SHOULD OWN CUBE GEOMETRY (REPLACE PyBullet AABB FALLBACK)
+================================================================================
+Priority: TIER 3 — Code quality.  No correctness bug — current behaviour
+          is right; just an architectural cleanup.
+Where:    streams.py compute_stack_kin_solution — currently reads
+          p.getAABB(held_body_id) when no registry boxel exists
+          (commit 8281d73, audit #55 fix).
+          boxel_data.py BoxelRegistry — add object_geometry dict.
+          test_full_pipeline.py — populate object_geometry at scene
+          init from env.objects[name].size for every cube (visible
+          AND hidden), since cube dimensions are URDF-determined and
+          unknown-position is independent of unknown-size.
+Depends:  None.
+Effort:   <0.5 day.
+
+What:  Audit #55's held-cube AABB fallback (commit 8281d73) reads
+       p.getAABB(body_id) on the plan-client to recover a hidden
+       cube's z-extent when the cube has no OBJECT-type registry
+       boxel pre-sense.  The data taken is pure geometry (size, not
+       position), so this is NOT an oracle leak — but bypassing the
+       registry for object metadata is architecturally suboptimal:
+       the registry is supposed to be the "what the planner knows"
+       boundary, and one stream now reaches around it.
+
+       The clean fix: separate KNOWN-from-URDF metadata (size, mass,
+       grasp affordances) from OBSERVABLE-via-sense state (position).
+       Cube sizes are URDF-determined and the same regardless of
+       observability — they belong in the registry from scene init.
+
+Fix:   ONE COMMIT:
+       (a) BoxelRegistry: add object_geometry: Dict[str, np.ndarray]
+           mapping object name -> half-extents (or full extents).
+       (b) test_full_pipeline.py scene-init: populate
+           registry.object_geometry from env.objects for every cube
+           (visible + hidden + tray).
+       (c) streams.compute_stack_kin_solution: replace the
+           p.getAABB(body_id) fallback branch with a registry
+           lookup; drop the PyBullet read entirely from this stream.
+       (d) (optional) compute_kin_solution: same treatment — read
+           grasp Z height from registry.object_geometry instead of
+           hardcoding.
+
+       Behaviour-preserving.  Existing successful runs (logs/run_-
+       2026-05-08_10-49-01) should produce identical timing /
+       success metrics.
+
+Related: #55 [DONE 2026-05-08; archived] — introduced the AABB
+              fallback this issue replaces.
+         #9 — eval runner; benefits from registry as the single
+              metadata source.
+
+
+================================================================================
+#58. PRESERVE GRASP ACROSS REPLANS (CURRENTLY DROPS HELD OBJECT)
+================================================================================
+Priority: TIER 2 — Affects every replan that fires while the gripper
+          holds an object.  User-flagged 2026-05-08 after observing
+          yellow_object dropped mid-air at the PLAN #1 -> PLAN #2
+          transition in logs/run_2026-05-08_10-49-01.
+Where:    test_full_pipeline.py main() — release_held_object_in_place
+          loop at the top of each replan iteration (line ~860; runs
+          before planner.plan() to drop the held object).
+          pddlstream_planner.py _build_init — currently emits
+          ('handempty',) unconditionally (line ~504).
+Depends:  None.  Conceptually independent of #50 / #52 / #57.
+Effort:   <1 day.
+
+What:  When the inner action loop breaks mid-plan (sense returned
+       empty, IK failed, missing shadow, etc.) while the gripper is
+       still holding an object, the current code RELEASES the object
+       in place before the next planner.plan() call.  The release is
+       there to keep symbolic state consistent — _build_init
+       unconditionally emits ('handempty',), so a plan that started
+       with (holding ?o) would let the planner schedule another pick
+       and end up with two objects dangling from the EE.  The
+       release-then-replan pattern avoids that, but it's wasteful:
+
+       - Loses progress: the next plan must re-pick the dropped
+         object before doing anything productive.
+       - Drops at uncontrolled poses: the EE position when the loop
+         broke (e.g. above the tray after move-to-tray, when sense
+         then returns empty), which physics may bounce off the table.
+       - Adds ~4 actions per re-grasp cycle (move + pick + move +
+         place / stack) to the next plan.
+       - Pollutes the registry: the dropped object's new pose may
+         intersect free-space boxels, triggering reboxelization
+         churn that would otherwise not be needed.
+
+       Concrete example from logs/run_2026-05-08_10-49-01:
+         PLAN #1 picked yellow_object then sensed shadow_of_yellow_-
+         object empty.  Loop breaks → release_held_object_in_place
+         drops yellow at EE pose (-0.181, 0.436, 0.351).  PLAN #2
+         then plans pick(red) → place(red, free_005) → re-pick(yellow)
+         → ... 13 actions total for what would have been ~9 if yellow
+         had stayed in the gripper.
+
+Fix:   ONE COMMIT — propagate (holding ?o) into the next plan's init:
+       (a) test_full_pipeline.py main(): instead of releasing on
+           replan, capture (held_object_name, grasp) and pass into
+           the next planner.plan() call as a new kwarg, e.g.
+           held_obj=("yellow_object", grasp_yellow_object_1).
+       (b) pddlstream_planner._build_init: when held_obj is set,
+           emit ('holding', held_obj_name) and SKIP the
+           ('handempty',) emission.  Reuse the existing grasp atom
+           if it's already certified, otherwise re-certify via
+           sample-grasp + cached output.
+       (c) Streams: ensure plan_motion correctly carries the held
+           body's ignored_body_ids across the replan boundary
+           (already handled via RobotConfig.ignored_body_ids on
+           current_config — verify only).
+       (d) Keep release_held_object_in_place as a SAFETY NET for
+           cases where the held object is in a bad pose for
+           continuation (e.g. plan_motion rejected every config
+           because the held cube collides with everything).
+           Trigger condition: planner returns no plan with held_obj
+           set; fall back to release-and-replan.
+
+       Smoke test: re-run --goal find-and-tray-stack on default
+       scene with the same seed.  Expect plan_count to drop (PLAN
+       #2 becomes a continuation rather than a re-grasp cycle).
+
+Related: #21 [DONE 2026-05-05; archived] — still_blocked log-only
+              band-aid; different replan trigger but same "lost
+              progress" smell.
+         #1 [RESOLVED] — robot config drift across actions; the
+              equivalent fix for arm joint state.  This issue is the
+              gripper-state analog.
 
 
 ================================================================================
