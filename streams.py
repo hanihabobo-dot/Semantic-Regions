@@ -54,6 +54,13 @@ class RobotConfig:
     name: str = ""
     is_heuristic: bool = False
     ignored_body_ids: frozenset = field(default_factory=frozenset)
+    # held_body_ids is the SUBSET of ignored_body_ids that is physically
+    # attached to the EE during motion to/from this config (audit #58
+    # follow-up).  When non-empty on either endpoint, plan_motion uses
+    # the union as the held set; otherwise it falls back to the legacy
+    # intersection-on-ignored heuristic (correct for pick/place where
+    # ignored == held, broken for stack where ignored = held + support).
+    held_body_ids: frozenset = field(default_factory=frozenset)
     grasp_ee_offset: np.ndarray = None
     
     def __hash__(self):
@@ -500,10 +507,23 @@ class BoxelStreams:
         base_ignored = q1.ignored_body_ids | q2.ignored_body_ids
         is_pick_place = bool(q1.ignored_body_ids or q2.ignored_body_ids)
 
-        # Intersection: bodies ignored by BOTH endpoints are genuinely held
-        # by the gripper throughout the motion.  Bodies in only one endpoint
-        # (e.g. the pick target) are being approached, not carried.
-        held_body_ids = q1.ignored_body_ids & q2.ignored_body_ids
+        # Held-body inference (audit #58 follow-up):
+        #   • If either endpoint explicitly declares held_body_ids
+        #     (compute_stack_kin sets {held_cube} — distinct from the
+        #     {held_cube, support} set it puts in ignored_body_ids),
+        #     use the union.  This avoids misclassifying the support
+        #     cube as held when both endpoints are stack configs on
+        #     the same support — a regression that surfaced after
+        #     #58 began carrying current_config across replans.
+        #   • Otherwise fall back to the legacy intersection on
+        #     ignored_body_ids: bodies ignored by BOTH endpoints are
+        #     genuinely held throughout (correct for pick/place where
+        #     ignored == {held cube}; held cube appears at both
+        #     endpoints, pick/place targets at only one).
+        if q1.held_body_ids or q2.held_body_ids:
+            held_body_ids = q1.held_body_ids | q2.held_body_ids
+        else:
+            held_body_ids = q1.ignored_body_ids & q2.ignored_body_ids
 
         # grasp_ee_offset describes where the held body sits relative to the
         # EE (e.g. [0, 0, 0.10] = 10 cm below EE for a top-down grasp at the
@@ -1056,6 +1076,15 @@ class BoxelStreams:
                 continue
             seen.add(sig)
             config.ignored_body_ids = ignored
+            # audit #58 follow-up — explicitly declare ONLY the held cube
+            # as attached to the EE during motion.  The support cube is in
+            # ignored_body_ids (lazy-collision hack) but is NOT held; without
+            # this distinction plan_motion's intersection-on-ignored heuristic
+            # mis-attributes the support to the gripper when both endpoints
+            # are stack configs on the same support, producing spurious
+            # collision rejections and pathological replan slowness.
+            if held_body_id is not None:
+                config.held_body_ids = frozenset({held_body_id})
             config.grasp_ee_offset = grasp.position
             self._config_counter += 1
             config.name = f"q_stack_{obj_id}_on_{on_obj_id}_{self._config_counter}"
