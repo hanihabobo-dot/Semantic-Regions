@@ -530,7 +530,7 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # terminate-at-contact view; the next plan_motion already runs in
     # free space because the cube is now attached to the EE.
     _apply_post_action_lift(robot_id, contact_ee, grasp.orientation,
-                            contact_joints, pc, gui, lift_height=0.05)
+                            contact_joints, pc, gui)
 
     # Read the actual joint state — position control may not reach the
     # exact IK target.  Tracking the true state prevents PDDL state
