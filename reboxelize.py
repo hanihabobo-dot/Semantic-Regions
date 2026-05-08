@@ -44,7 +44,11 @@ def reboxelize_free_space(registry: BoxelRegistry, env, boxel_centers: dict,
     ]
 
     fresh_cells = env.generate_free_space(known_obstacles, visualize=False)
-    merged = merge_free_space_cells(fresh_cells)
+    # audit #10 — under the uniform baseline the lattice is strict and
+    # static; merging adjacent uniform cubes would defeat the property.
+    # Mirror the same gate used in test_full_pipeline.py phase 2.
+    merged = (fresh_cells if env.use_uniform_grid
+              else merge_free_space_cells(fresh_cells))
 
     # 1e-4 m (0.1 mm) AABB-equality tolerance — same FP-noise budget as
     # CellMerger.tolerance.  Anything tighter would falsely classify
