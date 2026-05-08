@@ -975,14 +975,23 @@ Updated:      2026-05-08 (later) — #64 [DONE 2026-05-08 (later)].
               README.md.  _should_draw filter applies to draw_boxels
               and draw_boxel_data so both the Phase 4 initial overlay
               and the incremental discovery / reboxelize re-draws
-              honour the filter.  test_full_pipeline forces
-              show_free=True under baseline=='uniform' so the lattice
-              actually renders.  README gains a "Baselines"
+              honour the filter.  README gains a "Baselines"
               subsection citing Curtis et al. 2024, plus the missing
               --baseline / --uniform-cell-size rows in the flags
               table.  py_compile clean on both modified Python files;
               semantic mode unchanged (uniform_mode=False default).
               Open count: 7 -> 6.
+Updated:      2026-05-08 (later) — #64 follow-up: dropped the
+              auto-force show_free=True under baseline=='uniform' per
+              user direction.  --show-free now stays an explicit user
+              toggle in BOTH baselines.  Default behaviour under
+              uniform: overlay is empty (OBJECT/SHADOW hidden by
+              uniform_mode, FREE hidden by skip_free=True default);
+              PyBullet's own object rendering carries the physical
+              scene.  Pass --show-free to reveal the lattice on top.
+              No change to the visualizer code itself — only
+              test_full_pipeline.py reverted, audit body / README
+              wording corrected.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -2041,10 +2050,12 @@ Fix:   ONE COMMIT.
            physical objects underneath; SHADOW regions are implicit
            (cells absent from the lattice = unobserved/occluded).
        (b) test_full_pipeline.main: under baseline=='uniform',
-           construct BoxelVisualizer(uniform_mode=True) AND force
-           show_free=True at the function-arg level (the lattice
-           IS the spatial model under uniform; --show-free remains
-           opt-in under semantic).
+           construct BoxelVisualizer(uniform_mode=True).
+           --show-free remains an explicit user toggle in BOTH
+           baselines (no auto-force under uniform): default
+           overlay is empty under uniform — PyBullet's own object
+           rendering carries the physical scene; passing --show-free
+           reveals the FREE lattice on top.
        (c) README.md gains one paragraph clarifying that under
            --baseline uniform the GUI renders only the binary
            visibility lattice, citing Curtis et al. 2024.
