@@ -685,6 +685,55 @@ Updated:      2026-05-08 (later) — #60 step (a) landed (commit
               at any value tested") corroborates that the lifted
               pose is not reaching plan_motion regardless of
               magnitude.  Open count unchanged at 6.
+Added:        2026-05-08 (later) — #61 (TIER 3 — smart console filter
+              still leaks startup/shutdown garbage and has no thinking-
+              animation affordance during long blocking calls).  User-
+              flagged 2026-05-08: "the terminal output is still not
+              smart enough.  in the begining and the end there still
+              garbage that no one cares about and it would be cute to
+              have thinking animations or stuff like that so that it
+              really looks like claude."  smart_filter.py already
+              implements the drop / dedupe / aggregate / transform
+              pipeline (verbosity='smart' default since #56-era log
+              hygiene work) but two gaps remain: (1) the leak set
+              outside the "Phase 1 ... -> SUCCESS / FAIL" envelope is
+              not in _DROP_PATTERNS, (2) long planner.plan() / RRT /
+              stream-sample calls show nothing on the console — looks
+              frozen.  Open count: 6 -> 7.
+Updated:      2026-05-08 (later) — #60 marked [DONE 2026-05-08].
+              Option B (sync + replan) landed in commit c08dc65 —
+              addresses the two firing causes from logs/run_-
+              2026-05-08_12-57-42 [#60-diag] data: candidate (i)
+              fired 7/7 moves with |current - traj[0]| 0.064–0.498
+              rad, candidate (ii) fired 3/3 place/stack with cube
+              pose desync 0.124–0.686 m; candidate (iii) silent IK
+              fall-through never fired.  Fix (ii): execute_place /
+              execute_stack mirror the placed/stacked body's
+              runtime pose into env.plan_client_id via
+              p.resetBasePositionAndOrientation right after the
+              post-action lift.  Fix (i): the move action handler
+              compares current_config against the planner's q1 and
+              if |diff| > 1e-2 rad, builds a runtime q1 carrying
+              the original q1's collision-check metadata
+              (ignored_body_ids, held_body_ids, grasp_ee_offset)
+              and replans via planner.streams.plan_motion;
+              StopIteration breaks the dispatch loop to trigger an
+              outer replan from current_config (same path as IK
+              failures).  Diagnostic prints from commit 23687af
+              ([#60-diag] lift OK / DESYNC / move-above-traj[0])
+              all removed; the new [#60-fix(i)] one-liner only
+              fires when a runtime replan happens, and the lift
+              IK-failure print stays as a hard-error signal.
+              Mechanism behind #56's revert ("no observable
+              effect at any value tested") is now closed: the
+              lifted pose now reaches plan_motion via the
+              execution-time replan, so re-attempting the
+              --post-action-lift CLI flag becomes meaningful as a
+              regression test (lower values should now break the
+              run when cube top exceeds lifted altitude).
+              py_compile clean across execution.py and
+              test_full_pipeline.py.  TIER 0 again empty.  Open
+              count: 7 -> 6.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -770,7 +819,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #50, #57, #59, #60                                    #
+#  OPEN ISSUES — #9, #10, #50, #57, #59, #61                                    #
 #                                                                              #
 ################################################################################
 
@@ -788,15 +837,14 @@ Pre-evaluation (intended order before the eval sweep):
     → #55 [DONE 2026-05-08] (find-and-tray-stack 2-cube goal — lazy-
         collision hack + held-cube AABB fallback; Path C archived on
         branch audit-55-pose-aware-stack)
-    → #60 (TIER 0, OPEN 2026-05-08) — post-action lift fails to prevent
-        collisions during the next move action.  Re-opens the
-        pre-evaluation chain: #55's tray-stack pipeline lands clean
-        runs in nominal seeds, but find-and-place / find-and-tray-
-        stack collide reproducibly when the lift mechanism is
-        exercised end-to-end (root cause behind #56's revert).
-    → after #60: pre-evaluation chain complete; #50 (planner perf) is
-      the only pre-eval-adjacent open item, parallelised with the
-      eval sweep.
+    → #60 [DONE 2026-05-08] — post-action lift now reaches plan_motion
+        via runtime sync into plan_client (fix ii) + execution-time
+        motion replan from the lifted pose (fix i).  Diagnostic logs
+        from commit 23687af (#60 step a) confirmed candidates (i) and
+        (ii) firing universally; targeted Option B fix landed in
+        commit c08dc65.  Pre-evaluation chain complete.
+    → after #60: #50 (planner perf) is the only pre-eval-adjacent
+      open item, parallelised with the eval sweep.
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
    — user decision; the archived #21 log-only band-aid is the
@@ -842,6 +890,10 @@ Parallel / non-blocking:
   #59  scaled-up find-and-stack — N hidden targets stacked physically-
        sensibly via (compat_stack ?o ?on_obj) PDDL predicate (very low
        priority per user direction 2026-05-08).
+  #61  smart console filter — strip residual startup/shutdown garbage
+       and add Claude-Code-style thinking-animation affordance during
+       long planner.plan() / RRT / stream-sample calls.  UX polish on
+       the existing smart_filter pipeline; no correctness impact.
 
 Closed / relocated since last summary:
   #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
@@ -1293,6 +1345,7 @@ Related: #55 [DONE 2026-05-08; archived] — find-and-tray-stack base
 
 ================================================================================
 #60. POST-ACTION LIFT FAILS TO PREVENT COLLISIONS DURING NEXT MOVE ACTION
+     [DONE 2026-05-08]
 ================================================================================
 Priority: TIER 0 — Correctness.  Runtime collisions during find-and-
           place and find-and-tray-stack despite a successful
@@ -1446,6 +1499,159 @@ Related: #36 [DONE 2026-05-07; archived] — introduced the hardcoded
 
 
 ================================================================================
+#61. SMART CONSOLE FILTER — STRIP STARTUP/SHUTDOWN GARBAGE + ADD THINKING ANIMATIONS
+================================================================================
+Priority: TIER 3 — UX / code-quality polish.  No correctness impact;
+          improves the developer-watching-a-run experience.  User-flagged
+          2026-05-08: "the terminal output is still not smart enough.
+          in the begining and the end there still garbage that no one
+          cares about and it would be cute to have thinking animations
+          or stuff like that so that it really looks like claude."
+Where:    smart_filter.py — _DROP_PATTERNS (~L88-120) covers PyBullet
+          GL/thread banner + a few PDDLStream lines, but startup and
+          shutdown garbage still leaks; SmartConsoleFilter (the line-
+          buffered drop / dedupe / aggregate / transform / pass-through
+          pipeline described in the module docstring L1-26) currently
+          has no time-based "thinking" affordance during long
+          planner.plan() / RRT / stream-sample calls.
+          run_logger.py — RunLogger wires SmartConsoleFilter onto stdout
+          when verbosity='smart' (the default; see L8-14, L44-58, the
+          _LEVEL_MAP / VALID_VERBOSITIES tuple); any spinner / animation
+          channel needs to coexist with the _TeeStream stdout->log split
+          (L63-77) so the log file stays clean and complete.
+          test_full_pipeline.py — emits the run banner / phase markers
+          / timing summaries that smart-mode reformats; surrounding
+          startup imports + atexit shutdown sequence is what currently
+          leaks at the edges of the "Phase 1 ... -> SUCCESS / FAIL"
+          envelope.
+Depends:  None.  Independent of #50 (planner perf — different concern;
+          this is presentation-layer only).  No interaction with #9
+          (eval runner; batch runs would use --log-level normal or
+          quiet anyway).
+Effort:   1-2 days.  Roughly half on extending DROP / aggregation rules
+          for the residual leak categories, half on the spinner /
+          progress affordance + ANSI cursor handling.
+
+What:  smart_filter.py already implements the Claude-Code-style filter
+       pipeline (drop / dedupe / aggregate / transform / pass-through —
+       see module docstring L1-26 and run_logger.py L8-14) and
+       run_logger.py defaults verbosity='smart'.  Two gaps remain that
+       the user flagged:
+
+       (1) STARTUP / SHUTDOWN LEAK.  _DROP_PATTERNS at smart_filter.py
+           L88-120 covers PyBullet's GL banner ("GL_VENDOR", "Direct
+           GLX", "startThreads creating", etc.) and the visible
+           thread-shutdown sequence ("stopping threads", "Thread
+           TERMINATED", "destroy ... semaphore"), but garbage still
+           appears at the run's edges.  Likely culprits not currently
+           in the drop list:
+             - Python-level import warnings (deprecation, futures, etc.)
+               that hit stderr before the pipeline banner prints.
+             - PDDLStream / FastDownward subprocess startup chatter
+               that doesn't match the existing "Iteration:" / "Attempt:"
+               aggregation rules.
+             - boxel_env / numpy / PyBullet "starting / loaded /
+               connected" status lines emitted before
+               "--- Phase 1: Environment Setup ---" prints.
+             - atexit / __del__ tear-down output (stray stderr after
+               the SUCCESS / FAIL summary, thread-join tracebacks).
+           Concrete reproduction: run --goal find-and-tray-stack
+           --log-level smart on default scene; capture the lines
+           emitted BEFORE "Phase 1: Environment Setup" and AFTER the
+           timing_summary.json line — those are the leak set.
+
+       (2) NO "THINKING" ANIMATION.  Long blocking calls (planner.plan()
+           — 9-30 s typical per replan per logs/run_2026-05-08_-
+           10-49-01; RRT inside plan_motion; stream sample loops) emit
+           nothing on the console in smart mode (the per-iteration
+           output is correctly aggregated to a single summary by
+           _ITER / _ATTEMPT / _PLAN_NONE / _NO_PLAN at L128-137).
+           From the user's seat the terminal looks frozen.  Claude
+           Code's UX trick is a compact spinner + rotating verb
+           ("Thinking…", "Planning…", "Sensing…") so the user knows
+           work is happening; smart_filter has the metadata (it sees
+           the dropped per-iteration lines internally before
+           aggregating) but doesn't render an affordance.
+
+What's already done (don't redo):
+       - Drop / dedupe / aggregate / transform / pass-through pipeline
+         with ANSI styling (smart_filter._Style L58-79).
+       - PyBullet GL/thread banner drop (_DROP_PATTERNS L88-120).
+       - Per-iteration / per-attempt PDDLStream rollup
+         (_ITER / _ATTEMPT / _PLAN_NONE / _NO_PLAN, L128-137).
+       - Action narrative reformat (_EXECUTING / _MOVING_TO /
+         _PICKING / _PLACING / _STACKING / _SENSING and matching
+         "***" success markers, L144-159).
+       - Shadow-blocker repetition collapse (_SHADOW_BLOCKERS_HDR /
+         _SHADOW_BLOCKER_ROW, L140-142).
+       - File-log tee preserves raw output for post-mortem
+         (_TeeStream in run_logger.py L63-77) — any presentation-
+         layer change here must NOT touch the log file.
+
+Fix:   ONE OR TWO COMMITS — extend the existing filter, no architectural
+       change.  Suggested split: (a) leak suppression first, (b) spinner
+       affordance second so each lands as a self-contained UX win.
+
+       (a) Leak suppression.
+           - Run --log-level smart on default + scalability scenes;
+             diff console output against the
+             "==..." banner -> "Phase 1 ..." -> "SUCCESS / FAILED"
+             envelope to enumerate the exact leak lines at both edges.
+           - Add the leak set to _DROP_PATTERNS (or a new STARTUP_DROP
+             / SHUTDOWN_DROP regex if the lines are stateful — e.g.
+             "drop everything until first --- Phase line" / "drop
+             everything after the timing_summary.json line").
+           - Suppress python import warnings reaching stderr (warnings
+             module; respect log-level so verbose mode keeps them).
+           - Add a smoke test in tests/ that spawns the pipeline and
+             asserts the first console line matches "^=+$" (banner)
+             and the last matches the SUCCESS / FAIL summary, no
+             trailing tracebacks.
+
+       (b) Thinking-animation affordance.
+           - Extend SmartConsoleFilter with a TimerSpinner that renders
+             "  ⠋ Planning… 12s" on a single line (carriage-return,
+             no newline) when no narrative output has been emitted for
+             > N seconds (default ~1 s) and a long-running phase is
+             active.  Erase + reprint on each tick (\r + ANSI clear
+             EOL); finalise to a static "  ✓ Planned in 13.2s" line on
+             phase exit.
+           - Verb selected from the active phase: "Planning" during
+             planner.plan() (already detected via _PLAN_HEADER /
+             _TIMING at L135-137), "Sensing" during sense_shadow_-
+             raycasting (_SENSING already matched), "Executing"
+             otherwise.
+           - Disable when stdout is non-TTY or NO_COLOR is set
+             (mirror _supports_color L42-55).
+           - Do NOT write spinner frames to the log file — the
+             _TeeStream split (run_logger.py L63-77) has to skip the
+             carriage-return updates; only the final static line
+             ("Planned in 13.2s") goes through to the log.
+
+       Out of scope:
+           - Changing the verbosity default away from 'smart' (it's
+             already the default, see VALID_VERBOSITIES + _LEVEL_MAP
+             at run_logger.py L46-60).
+           - Adding new presentation modes ('pretty', 'json', etc.).
+           - Reformatting timing_summary.json.
+
+Smoke test: --goal holding and --goal find-and-tray-stack on default
+       scene, --log-level smart.  Expect: (i) first console line is
+       the "==..." banner, no PyBullet/PDDLStream prelude; (ii) during
+       each planner.plan() the spinner renders + updates; (iii) last
+       console line is the SUCCESS / FAIL summary, no atexit
+       traceback/teardown noise.  Raw log file under logs/run_<ts>/
+       still contains every byte of stdout for post-mortem (verify
+       byte count against a --log-level normal run on the same seed).
+
+Related: #9   — eval runner; runs in batch (likely --log-level
+              normal or quiet); spinner only fires for interactive
+              smart mode so no impact on batch logs.
+         #50  — planner perf; reduces the time the spinner spends
+              rotating but is independent of the affordance.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -1540,10 +1746,8 @@ follow the tier / roadmap ordering, not the lowest open number.
 Each issue is ideally one commit; parallelise where dependencies allow.
 
 TIER 0 — TOP PRIORITY:
-  #60  Post-action lift fails to prevent collisions during the next
-       move action (root cause behind #56's revert; user-flagged
-       2026-05-08 — find-and-place / find-and-tray-stack collide
-       even at --post-action-lift 0.30 m)
+  (empty — #60 [DONE 2026-05-08]; lifted pose now reaches plan_motion
+   via runtime sync into plan_client + execution-time motion replan.)
 
 TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
   (empty — #41 [DONE 2026-05-07], #48 [DONE 2026-05-07]; stack-
@@ -1561,8 +1765,12 @@ TIER 3 — EVALUATION (runner #9, then baseline #10) + CODE QUALITY:
        replace PyBullet AABB fallback in compute_stack_kin_solution)
   #59  Scaled-up find-and-stack — N hidden targets + size-compat
        PDDL predicate (very low priority per user 2026-05-08)
+  #61  Smart console filter — strip residual startup/shutdown garbage
+       and add Claude-Code-style thinking-animation affordance during
+       long planner.plan() / RRT / stream-sample calls
+       (UX polish; user-flagged 2026-05-08)
 
-Total open: 6 items (#9, #10, #50, #57, #59, #60).
+Total open: 6 items (#9, #10, #50, #57, #59, #61).
 
 Closed since previous summary:
   #55 [DONE 2026-05-08] — find-and-tray-stack 2-cube goal.  Held-cube
@@ -1586,6 +1794,17 @@ Closed since previous summary:
        safety net on planner.plan() returning None with held_obj set.
        Commit 690f86d; companion commit b248c76 raises execute_pick
        post-action lift 5 cm -> 10 cm.  Awaiting archive slim.
+  #60 [DONE 2026-05-08] — post-action lift now reaches plan_motion.
+       Option B (sync + replan) — execute_place / execute_stack mirror
+       the placed/stacked body's runtime pose into env.plan_client_id
+       (fix ii); the move action handler builds a runtime q1 from
+       current_config (carrying the planner's q1 metadata) and
+       re-invokes planner.streams.plan_motion when |current - traj[0]|
+       > 1e-2 rad (fix i).  Diagnostic [#60-diag] prints from commit
+       23687af removed; new [#60-fix(i)] one-liner replaces them on
+       the replan path.  Mechanism behind #56's revert is closed —
+       re-attempting --post-action-lift becomes meaningful as a
+       regression test.  Commit c08dc65.  Awaiting archive slim.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
