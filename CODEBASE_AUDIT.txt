@@ -578,6 +578,22 @@ Added:        2026-05-08 (later) — #58 (preserve grasp across replans;
               Fix: thread held_obj + grasp into planner.plan(), have
               _build_init emit ('holding', ?o) instead of
               ('handempty',) when set.
+Updated:      2026-05-08 (later) — #56 marked [DONE 2026-05-08].
+              Single CLI flag --post-action-lift FLOAT (default 0.10
+              m, range [0.0, 0.30]) added in run_logger.py with
+              parse-time range validation; threaded through
+              test_full_pipeline.main() into execute_place /
+              execute_stack, both of which now take post_action_lift
+              kwarg defaulting to 0.10 (preserves pre-#56 behaviour
+              exactly when the flag is omitted).  execute_pick's
+              5 cm cosmetic lift unchanged per #56 spec ("pick stays
+              cosmetic at 5 cm unless the user wants three separate
+              flags").  run_config dict + timing_summary.json pick
+              up the new field automatically for cross-run
+              correlation (audit #9 dep).  Commit bf0800c.
+              py_compile clean across run_logger.py /
+              test_full_pipeline.py / execution.py.  Open count:
+              7 -> 6.  TIER 3 reduces to #9, #10, #57.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -663,7 +679,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #50, #52, #56, #57, #58                               #
+#  OPEN ISSUES — #9, #10, #50, #52, #57, #58                                    #
 #                                                                              #
 ################################################################################
 
@@ -712,7 +728,11 @@ Parallel / non-blocking:
        feed back into #9's scalability plots.  Subsumes the per-hotspot
        questions formerly tracked as #34 (ray×free-boxel precompute) — those
        land here as profiler hits, not as separate audit items.
-  #56  CLI flag for post-action safe-distance lift (audit #36 follow-up).
+  #56  [DONE 2026-05-08] — CLI flag for post-action safe-distance lift
+       (audit #36 follow-up).  --post-action-lift FLOAT default 0.10 m,
+       range [0.0, 0.30]; threaded through main() into execute_place /
+       execute_stack.  Pick lift unchanged at 0.05 m cosmetic.  Commit
+       bf0800c; awaiting archive slim.
   #57  registry should own cube geometry (audit #55 follow-up; replace the
        PyBullet AABB fallback in compute_stack_kin_solution).
   #58  preserve grasp across replans (audit #55 follow-up; observed in
@@ -1004,6 +1024,7 @@ Related: #49 [DONE] — find-and-tray-stack; this issue is the user-
 
 ================================================================================
 #56. CLI FLAG — POST-ACTION SAFE-DISTANCE LIFT (CURRENTLY HARDCODED ~10 cm)
+     [DONE 2026-05-08]
 ================================================================================
 Priority: TIER 3 — Code-quality / eval-knob.  Affects no current
           functionality; enables sensitivity analysis and eval-sweep
@@ -1276,24 +1297,10 @@ follow the tier / roadmap ordering, not the lowest open number.
 Each issue is ideally one commit; parallelise where dependencies allow.
 
 TIER 0 — TOP PRIORITY (user-prioritised 2026-05-07):
-  (#53 [DONE 2026-05-07] — diagnostic slice landed; WSL run
-   logs/run_2026-05-07_21-26-18 confirms 1-cube tray-stack ALSO
-   fails (planner_failed, 45.87 s, single attempt).  Triage rules
-   out goal-AST length AND size-compat; "deeper issue" branch is
-   live.  Awaiting archive slim.)
-  (#54 [DONE 2026-05-07] — visible-only triage run
-   logs/run_2026-05-07_21-48-02 succeeded in 5.19 s; sense is the
-   dominant search-cost driver, not a correctness bug.  Slice
-   reverted (commit b287450); planner.plan() max_time bumped
-   120 -> 1800 s for the next multi-cube experiment.  Awaiting
-   archive slim.)
-  #55  find-and-tray-stack redesigned as 2-cube goal (1 visible cube
-       on tray + 1 hidden cube on top — smallest goal that still
-       exercises sense → pick → stack end-to-end).  Commit fa069bd;
-       awaiting WSL run for the end-to-end signal.
-  #52  find-and-stack-on-base demo goal (alternative big-base setup;
-       stays open as backup if #55's 2-cube tray tower also fails or
-       if literal big-vs-small sizing is later required)
+  #52  find-and-stack-on-base demo goal (one big visible base + one
+       small hidden target stacked on top — sidesteps size-compat
+       gap by setup; cube-on-cube physics path bit-identical to #40
+       verifier coverage)
 
 TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
   (empty — #41 [DONE 2026-05-07], #48 [DONE 2026-05-07]; stack-
@@ -1302,26 +1309,27 @@ TIER 1 — TOP PRIORITY (user-prioritised 2026-05-06):
 TIER 2 — NEW EVAL GOAL + PERF (added 2026-05-06):
   #50  Planner perf investigation — profile, cache static init, kill
        redundancies (user-flagged "planner is too slow")
+  #58  Preserve grasp across replans (audit #55 follow-up; observed
+       in logs/run_2026-05-08_10-49-01)
 
-TIER 3 — EVALUATION (runner #9, then baseline #10):
+TIER 3 — EVALUATION (runner #9, then baseline #10) + CODE QUALITY:
   #9   Experiment runner + metric hooks + scalability matrix + plots
        (absorbs #12; CONFIRMED scalability scope 2026-05-06)
   #10  Uniform voxelization baseline                   (CONFIRMED 2026-05-06)
+  #57  Registry should own cube geometry (audit #55 follow-up;
+       replace PyBullet AABB fallback in compute_stack_kin_solution)
 
-Total open: 5 items (#9, #10, #50, #52, #55).
+Total open: 6 items (#9, #10, #50, #52, #57, #58).
 
 Closed since previous summary:
-  #53 [DONE 2026-05-07] — TIER 0 diagnostic slice landed; WSL run
-       2026-05-07 21:26 confirms 1-cube tray-stack also fails
-       (45.87 s, no plan).  Rules out goal-AST length AND size-
-       compat; #52 proceeds as the recommended path.  Awaiting
-       archive slim.
-  #54 [DONE 2026-05-07] — TIER 0 follow-up triage; visible-only WSL
-       run 2026-05-07 21:48 succeeded in 5.19 s.  Sense is the
-       dominant search-cost driver, not a correctness bug.  Slice
-       reverted (commit b287450); planner.plan() max_time bumped
-       120 -> 1800 s for the next multi-cube experiment.  Awaiting
-       archive slim.
+  #55 [DONE 2026-05-08] — find-and-tray-stack 2-cube goal.  Held-cube
+       AABB fallback (commit 8281d73) + lazy-collision hack (commit
+       9a64aa1).  WSL run logs/run_2026-05-08_10-49-01: 4 plans /
+       76.6 s / 0 physical failures.  Path C archived on branch
+       audit-55-pose-aware-stack.  Archived 2026-05-08 slim.
+  #56 [DONE 2026-05-08] — --post-action-lift CLI flag (default 0.10 m,
+       range [0.0, 0.30]) threaded into execute_place / execute_stack;
+       pick lift unchanged.  Commit bf0800c.  Awaiting archive slim.
 
 Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
              #2, #14, #42 (logged collisions do not trigger replan — accepted;
@@ -1339,4 +1347,6 @@ Resolved/subsumed → archive/CODEBASE_AUDIT_RESOLVED.txt:
              #32 [MERGED INTO #31], #33, #34 [WONTFIX], #35, #36 [DONE
              2026-05-07], #37, #38, #39, #40 [DONE 2026-05-05], #41
              [DONE 2026-05-07], #43, #44, #45, #46, #48 [DONE 2026-05-07],
-             #49 [DONE 2026-05-07].
+             #49 [DONE 2026-05-07], #53 [DONE 2026-05-07],
+             #54 [DONE 2026-05-07], #55 [DONE 2026-05-08],
+             #56 [DONE 2026-05-08; awaiting slim].
