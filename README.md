@@ -31,10 +31,12 @@ a binary label `{free, occupied}`, where occupied is implicit (a cell is free
 once the camera proves it empty, otherwise it is treated as occupied /
 unobserved). Per-object state lives outside the lattice as `BoxelData` records
 in the registry — the planner's per-object handles, mirroring TAMPURA's
-`object_poses` role. Under `--baseline uniform` the GUI overlay therefore
-renders only the FREE lattice (cyan cubes); OBJECT and SHADOW wireframes are
-suppressed, with PyBullet's own object meshes providing the physical scene.
-The PDDL domain is unchanged across both baselines.
+`object_poses` role. Under `--baseline uniform` the OBJECT and SHADOW overlays
+are suppressed in the GUI so the lattice is the only spatial representation
+drawn on top of the physical scene; pass `--show-free` to reveal the FREE
+lattice as cyan cubes (without it the overlay is empty under uniform and
+PyBullet's own object meshes carry the visual). The PDDL domain is unchanged
+across both baselines.
 
 ## Running on this machine (WSL + PowerShell)
 
