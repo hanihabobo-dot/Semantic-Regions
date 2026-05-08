@@ -500,7 +500,13 @@ def main(gui=True, run_logger=None, scene_config=None,
     obs = env.get_camera_observation()
     all_known = obs.boxels
     free_boxels = env.generate_free_space(all_known, visualize=False)
-    merged_free = merge_free_space_cells(free_boxels)
+    # audit #10 — uniform baseline produces a strict static lattice;
+    # CellMerger would collapse adjacent uniform cubes back into
+    # variable-sized rectangles, defeating the uniform property.  Skip
+    # merging under that mode; semantic mode keeps the merge as before
+    # (octree leaves benefit from collapse).
+    merged_free = (free_boxels if env.use_uniform_grid
+                   else merge_free_space_cells(free_boxels))
     # Free-space geometry is stateless until here; tag table-contact info
     # so the planner can emit (on_surface ?b) for place actions (audit #35).
     env.annotate_free_space_surface(merged_free)
@@ -1057,14 +1063,14 @@ def main(gui=True, run_logger=None, scene_config=None,
                         )
                         try:
                             (new_traj,) = next(planner.streams.plan_motion(q1_runtime, q2))
-                            print(f"    [#60-fix(i)] replanned motion from runtime pose "
-                                  f"(prior diff={diff:.4f} rad, "
-                                  f"{len(new_traj.waypoints)} waypoints)")
+                            # print(f"    [#60-fix(i)] replanned motion from runtime pose "
+                            #       f"(prior diff={diff:.4f} rad, "
+                            #       f"{len(new_traj.waypoints)} waypoints)")
                             traj = new_traj
                         except StopIteration:
-                            print(f"    [#60-fix(i)] plan_motion could not replan from "
-                                  f"runtime pose (diff={diff:.4f}) — breaking dispatch "
-                                  f"loop to trigger outer replan")
+                            # print(f"    [#60-fix(i)] plan_motion could not replan from "
+                            #       f"runtime pose (diff={diff:.4f}) — breaking dispatch "
+                            #       f"loop to trigger outer replan")
                             break
 
                 for wp in traj.waypoints[1:]:
