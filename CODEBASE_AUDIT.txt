@@ -541,6 +541,15 @@ Updated:      2026-05-08 (later) — #55 marked [DONE 2026-05-08].  Real
               fallback (commit 8281d73) together close all known #55
               gaps; the trajectory-clipping FOR LATER bullet remains
               as the documented residual.
+Slimmed:      2026-05-08 — moved #53 (DONE 2026-05-07), #54 (DONE
+              2026-05-07), and #55 (DONE 2026-05-08) to
+              archive/CODEBASE_AUDIT_RESOLVED.txt under a new
+              "2026-05-08 SLIM ADDITIONS" section.  #55's body
+              includes a 2-commit (lazy-collision hack +
+              held-cube AABB fallback on main) + 6-commit-archived-
+              branch (Path C exploration on audit-55-pose-aware-stack)
+              recap.  Open audit shrunk to the four still-active
+              items (#9, #10, #50, #52).  No code changes.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -626,7 +635,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #9, #10, #50, #52, #55                                         #
+#  OPEN ISSUES — #9, #10, #50, #52                                              #
 #                                                                              #
 ################################################################################
 
@@ -641,7 +650,9 @@ Pre-evaluation (intended order before the eval sweep):
     → #49 [DONE 2026-05-07] (tray goal)
     → #53 [DONE 2026-05-07] (TIER 0 diagnostic triage — 1-cube tray-stack)
     → #54 [DONE 2026-05-07] (TIER 0 follow-up triage — visible-only tray-stack)
-    → #55 (TIER 0 — find-and-tray-stack redesigned as 2-cube goal)
+    → #55 [DONE 2026-05-08] (find-and-tray-stack 2-cube goal — lazy-
+        collision hack + held-cube AABB fallback; Path C archived on
+        branch audit-55-pose-aware-stack)
     → #52 (TIER 0 demo goal — find-and-stack-on-base) → #50 (planner perf)
   (#40 landed 2026-05-05 — physics verifier for stack goals; will
    move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
@@ -956,240 +967,6 @@ Related: #49 [DONE] — find-and-tray-stack; this issue is the user-
               Out of scope for #52 (the simplified setup avoids it),
               but documented there so it surfaces if a richer goal
               brings the gap back into reach.
-
-
-================================================================================
-#53. DIAGNOSTIC — TRIM --goal find-and-tray-stack TO 1 TARGET FOR TRIAGE [DONE 2026-05-07]
-================================================================================
-Priority: TIER 0 — User-prioritised 2026-05-07 (post-#52).  Cheap triage
-          step to disambiguate the failure mode of #49 before committing
-          to #52's full redesign.
-Where:    test_full_pipeline.py main() — find-and-tray-stack branch
-          (post-#49 hotfix), narrow stack_target_objects to a single
-          target rather than every all_targets entry.
-Depends:  None.  Should land BEFORE #52 — its result decides whether #52
-          is strictly necessary or just the nicer-shaped thesis demo.
-Effort:   <0.5 day (one-line slice + WSL run + result observation).
-
-What:  After --goal find-and-tray-stack commit 4/4 (8221602) + tray-
-       filter hotfix (62d435b), the planner still returns no plan on
-       default_scene in WSL.  Two competing hypotheses live in #52's
-       root-cause analysis:
-         (a) Goal-AST length scales with --n-targets — a 4-cube
-             tower-on-tray plus sense actions explodes the search
-             space.
-         (b) The size-compat gap (#52(a)) — planner picks an
-             infeasible big-on-small pose somewhere along the chain
-             and the skeleton never grounds.
-
-       Both fixes are non-trivial.  Cheaper to settle which one is the
-       actual blocker first by running the goal in its smallest
-       possible form: pick one target, stack only that cube on the
-       tray, ignore the rest.  Goal AST collapses to
-       ('and', ('on', t_1, 'tray')).
-
-       Outcomes inform the next steps:
-         - If 1-cube tray-stack succeeds: confirms (a).  The fix is
-           to cap chain length in build_tray_stack_goal (or accept
-           the simpler shape as the default for find-and-tray-stack
-           going forward).  #52 still relevant as the cleaner thesis
-           demo, but #49 is salvageable for the multi-cube case via
-           cap-N.
-         - If 1-cube also fails: confirms (b) (or another deeper
-           issue).  #52 with its big-base-small-target setup is the
-           right way out; the size-compat FOR LATER bullet promotes
-           to "fix this" status.
-
-Fix:   ONE COMMIT — minimal-touch slice in the find-and-tray-stack
-       branch in main():
-       (a) After computing stack_target_objects = list(all_targets),
-           narrow to a single target.  Prefer a hidden target if
-           target_to_shadow is non-empty (exercises the sense → pick
-           → stack chain); fall back to a visible target otherwise.
-       (b) Pass the 1-element list to build_tray_stack_goal — the
-           existing 1-target collapse handles it
-           (('and', ('on', t_1, 'tray'))).
-       (c) Print "[#53 triage] limiting tray-stack to single target:
-           <name>" so the diagnostic intent is obvious in the log.
-
-       INTENTIONALLY TEMPORARY.  When the triage signal is in, the
-       slice either:
-         - reverts (next step is #52),
-         - turns into a permanent --tray-stack-cap N flag (if (a)
-           and we want to keep #49 functional), or
-         - moves to audit history as a settled diagnostic.
-
-Related: #49 [DONE 2026-05-07; archived] — the goal mode being
-              triaged.
-         #52 — TIER 0 simplified replacement; this issue gates
-              whether #52 is strictly necessary or just nicer.
-         FOR LATER (size-compat) — promoted to "fix this" status if
-              the 1-cube run still fails.
-
-
-================================================================================
-#54. DIAGNOSTIC — FORCE VISIBLE TARGET ON --goal find-and-tray-stack [DONE 2026-05-07]
-================================================================================
-Priority: TIER 0 — User-prioritised 2026-05-07 (post-#53).  Cheap follow-up
-          triage that drops the sense action from the goal AST entirely so
-          we can tell whether the planner failure lives in sense or in
-          pick/stack/streams.  Supersedes #53's hidden-preferred slice.
-Where:    test_full_pipeline.py main() — find-and-tray-stack branch (was
-          #53's slice; commit 826bb21 swaps the preference from hidden to
-          visible).
-Depends:  #53 [DONE] — established the 1-cube floor and ruled out
-          goal-AST length AND size-compat as causes.
-Effort:   <0.5 day (slice already in place; one WSL run + result read-off).
-
-What:  #53 narrowed --goal find-and-tray-stack to a single hidden cube
-       and confirmed the planner still fails (logs/run_2026-05-07_21-26-18,
-       45.87 s, no plan).  That rules out goal-AST length and size-compat
-       (the 1-cube tray drop never invokes cube-on-cube stacking).
-
-       The "deeper issue" branch from #53 has at least three live
-       candidates:
-         (a) sense-side: stale view_blocked atoms / blocker re-grounding
-             gaps (cf. archived #21 / deferred #47).
-         (b) pick-or-stack-side: stack-into-cavity stream sampling, or
-             execute_pick / execute_stack interaction with the tray
-             support.
-         (c) move-to-tray plannability: a single (Boxel tray) sample is
-             insufficient for the move action's
-             (config_for_boxel ?q tray) chain.
-
-       #54 isolates (a) from {(b), (c)} by forcing a VISIBLE cube.  The
-       visible cube's obj_at_boxel fact lets the planner go straight from
-       pick to stack with no sense action in the AST — if the planner
-       still fails, sense is exonerated and we narrow to {(b), (c)}.
-
-       Outcomes inform the next step:
-         - Visible-only succeeds: the failure is sense-side.  Open a
-           follow-up audit issue scoped to the failing sense
-           preconditions; #52 still proceeds because find-and-stack-on-
-           base also runs sense in its plan AST.
-         - Visible-only also fails: pick / stack / streams or single
-           (Boxel tray) sample is the bottleneck.  Investigation folds
-           into #50 (planner perf) or a new audit item; #52's cube-on-
-           cube path is independent of tray-cavity sampling so #52
-           still proceeds.
-
-Fix:   ONE COMMIT (already landed — 826bb21):
-       (a) In the find-and-tray-stack branch of main(), filter
-           stack_target_objects down to the targets NOT in
-           target_to_shadow (visible only).
-       (b) Raise an actionable error when no visible target exists
-           rather than silently falling back to a hidden one (defeats
-           the diagnostic).
-       (c) Pick one with random.choice; record its boxel id in
-           visible_target_locations so the planner emits obj_at_boxel.
-       (d) Print "[#54 triage] limiting tray-stack to single visible
-           target (no sense): <name>" so the diagnostic intent is
-           obvious in the log.
-
-       INTENTIONALLY TEMPORARY (supersedes #53's slice).  Once the
-       triage signal is in, the slice either reverts (next step is
-       #52), turns into a permanent --tray-stack-cap-N flag, or moves
-       to audit history.
-
-Related: #49 [DONE 2026-05-07; archived] — the goal mode being
-              triaged.
-         #53 [DONE 2026-05-07] — sibling triage; #54 supersedes its
-              code slice.  #53's findings (rules out goal-AST length
-              AND size-compat) remain valid context.
-         #52 — TIER 0 simplified replacement; #54's outcome
-              clarifies what #52 inherits from --goal find-and-tray-
-              stack's failure modes.
-         #50 — planner perf; visible-only failure would funnel into
-              its profiling sweep.
-
-
-================================================================================
-#55. NEW GOAL SHAPE — find-and-tray-stack AS 2-CUBE TOWER (visible+hidden)
-================================================================================
-Priority: TIER 0 — User-prioritised 2026-05-07 (post-#54).  Smallest goal
-          that still exercises sense → pick → stack end-to-end on the tray
-          entity.  Direct replacement for #49's multi-cube goal definition.
-Where:    test_full_pipeline.py main() — find-and-tray-stack branch
-          (commit fa069bd; replaces the #49 multi-cube + #53/#54 single-
-          target diagnostic variants).
-Depends:  #49 [DONE; archived] — tray entity infrastructure.
-          #54 [DONE] — sense exonerated as dominant search-cost driver,
-                       informed scoping of the 2-cube redesign.
-Effort:   <0.5 day (slice already in place; pending WSL run for the
-          end-to-end signal).
-
-What:  User direction post-#54: "place a big visible object on tray and
-       then find a small hidden object and place it on top of the object
-       on top of tray.  just that."
-
-       Goal AST:
-         ('and', ('on', visible_cube, tray),
-                 ('on', hidden_cube, visible_cube))
-
-       Plan shape (~5 actions on first replan, plus sense iterations):
-         move → pick(visible) → move → place(visible, on tray)
-                              → move → sense(hidden's shadow)
-                              → move → pick(hidden)
-                              → move → stack(hidden, on visible)
-
-       Both cubes are drawn from all_targets (40 mm same size); the
-       visible/hidden split is purely role-based.  visible_target_-
-       locations gets only the visible cube — the hidden one's
-       obj_at_boxel must be discovered by sense.
-
-       Cap inventory at landing time:
-         - max_time = 1800 s (audit #54 follow-up).
-         - max_replans = 4*shadows + 2*targets + 3 (default scene with
-           3 shadows + 2 cubes = 19 — comfortable).
-         - ik_max_iterations = 100 (per IK solve; not relevant to
-           adaptive search).
-         - PDDLStream solve internals (max_skeletons, max_planner_time,
-           effort_weight) on defaults — exposed as the next lever if
-           the 2-cube goal still fails.
-
-       Notes on the "big visible" wording:
-         The user spec uses "big" / "small" semantically — the visible
-         cube plays the tower-base role.  Default-scene targets are all
-         40 mm; literal big-vs-small would need either an occluder
-         promoted to pickable (75 mm cubes already in the scene) or
-         #52's dedicated big-base entity.  Neither was in scope for
-         the initial #55 landing.
-
-Fix:   ONE COMMIT (already landed — fa069bd):
-       (a) In the find-and-tray-stack branch of main(), filter
-           all_targets into visible_targets and hidden_targets;
-           require >= 1 of each.
-       (b) Pick one of each via random.choice; stack_target_objects
-           = [visible, hidden].
-       (c) Emit obj_at_boxel only for the visible cube.
-       (d) Construct the goal AST inline as
-           ('and', ('on', visible, tray), ('on', hidden, visible))
-           — bypasses build_tray_stack_goal so the visible cube is
-           guaranteed to be the bottom of the tower.
-       (e) target_name = chosen_hidden so belief / sense logging
-           tracks the unknown one.
-       (f) build_tray_stack_goal helper preserved unused per CODEBASE
-           POLICY (dead code preservation).
-
-       Open follow-ups (post-WSL signal):
-         - If 2-cube succeeds: #55 [DONE]; #52 (dedicated big base)
-           becomes optional alternative for literal big-vs-small;
-           multi-cube goal stays archived.
-         - If 2-cube fails: expose PDDLStream's max_skeletons /
-           effort_weight kwargs; if those don't help, escalate to
-           #52 (dedicated big base, removes one stack action from
-           the AST) or open a sense-side investigation.
-
-Related: #49 [DONE; archived] — original multi-cube definition;
-              superseded by #55 in commit fa069bd.
-         #54 [DONE 2026-05-07] — visible-only triage; established
-              that sense is search-expensive but not broken.
-         #52 — dedicated big-base entity; alternative path with one
-              fewer stack action.  Stays open as backup if #55 fails.
-         #50 — planner perf; benefits from PDDLStream internal-knob
-              exposure if that becomes the next lever for #55.
-         FOR LATER (size-compat) — irrelevant for 2 same-size cubes;
-              re-promotes only if a richer goal mode returns.
 
 
 ================================================================================
