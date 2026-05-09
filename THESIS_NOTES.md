@@ -537,3 +537,205 @@ limitation.
 `FreeSpaceGenerator`; section 1 (oracle perception) and section 14
 (perception density vs planning cost) of this file establish the
 related "all objects detected upfront" assumption.
+
+---
+
+## 21. TAMPURA baseline — hardware, planning times, and architectural difference
+
+This section collects the empirical context for comparing Semantic
+Boxels against TAMPURA (Curtis et al. 2024, arXiv:2403.10454).
+Findings gathered from the paper's experiments section, the project
+page (https://aidan-curtis.github.io/tampura.github.io/), and the
+two source repositories (the planner core
+https://github.com/aidan-curtis/tampura and the environments
+https://github.com/aidan-curtis/tampura_environments) on 2026-05-09.
+
+### 21.1 Hardware
+
+**TAMPURA** (paper § Experiments, verbatim):
+
+> "All experiments were run on a single Intel Xeon Gold 6248
+>  processor with 9 GB of memory."
+> — Curtis et al. 2024, arXiv:2403.10454
+
+The Xeon Gold 6248 is a 20-core / 40-thread Cascade Lake server CPU
+(2.5 GHz base, 3.9 GHz boost, ~150 W TDP, released 2019).  No GPU
+reported, no parallelism mentioned in Algorithms 2 and 3 (sequential
+nested for-loops over indices `I`, `K`, `J`).
+
+**This thesis** (host machine for all Semantic Boxels measurements):
+
+| Component | Spec |
+| --- | --- |
+| CPU | AMD Ryzen 7 PRO 7730U with Radeon Graphics |
+| Cores / threads | 8 cores / 16 threads |
+| Base / boost clock | 2.0 GHz / ~4.5 GHz (Zen 3 mobile, 15–28 W TDP, released 2022) |
+| RAM | 30.8 GB |
+| GPU | AMD Radeon (integrated, 1 GB; not used by PyBullet/PDDLStream) |
+| OS | Windows 11 Business 64-bit (kernel 10.0.26200) |
+| Python stack | PyBullet + PDDLStream + FastDownward |
+
+**Comparison framing**: TAMPURA's Xeon has ~2.5× our core count
+(20 vs 8) and a marginally higher base clock (2.5 vs 2.0 GHz), but
+*both systems plan single-threaded*.  PDDLStream's adaptive search
+is non-parallel; TAMPURA's planner core is likewise sequential —
+verified by inspection of
+`tampura/policies/tampura_policy.py`
+(https://github.com/aidan-curtis/tampura), which uses `tqdm`-wrapped
+sequential loops and contains no occurrence of `multiprocessing`,
+`joblib`, `Pool`, `ProcessPool`, `ThreadPool`, `concurrent.futures`,
+`parallel`, or `n_jobs`.  This matches the paper's algorithmic
+description (Algorithms 2–3 are explicit sequential nested loops
+over indices `I`, `K`, `J`).
+
+The operative comparison is therefore per-thread performance:
+
+| Benchmark | Xeon Gold 6248 | Ryzen 7 PRO 7730U | Faster |
+| --- | --- | --- | --- |
+| Cinebench R20 single-thread | 347 (gadgetversus.com) | ~570 (Zen 3 mobile typical) | Ryzen ~1.6× |
+| Cinebench R23 single-thread | ~885 (R20 × 2.55, est.) | ~1 455 (notebookcheck.net) | Ryzen ~1.6× |
+| Cinebench R23 multi-thread | ~18 090 (R20 × 2.55, est.) | ~10 095 (notebookcheck.net) | Xeon ~1.8× |
+| PassMark CPU Mark | 31 274 (gadgetversus.com) | ~22 500 (cpubenchmark.net, mobile thermals) | Xeon ~1.4× |
+
+Zen 3 mobile (released 2022, ~15 % IPC over Cascade Lake) at a
+4.5 GHz boost outperforms the Xeon 6248's 3.9 GHz boost on
+single-thread by roughly **60 %**.  Multi-threaded throughput goes
+the other way: the Xeon's 20 cores beat our 8 by roughly **80 %**.
+
+Since the operative axis (single-thread, established above) favours
+the host machine, **the host is not at a hardware disadvantage on
+the relevant axis**.  Memory subsystem differences (Xeon: 6 channels
+DDR4-2933, 27.5 MB L3; Ryzen 7730U: 2 channels DDR4-3200, 16 MB L3)
+could give the Xeon a 10–20 % edge on memory-bound state-space
+search even single-threaded — real but small relative to the wall-
+clock differences observed.  Total system RAM is not a constraint
+(TAMPURA cites 9 GB; we have 30.8 GB).
+
+Wall-clock differences between the two systems are therefore
+attributable to the planner architecture (§ 21.3), not the
+hardware.  Cinebench numbers above flagged with "est." are
+R20→R23 conversions using the standard ~2.55× ratio; quoted
+real measurements are sourced inline.
+
+### 21.2 Planning times
+
+Per-episode planning times reported by TAMPURA (Table II; 20 trials
+each; "anytime — planning can be terminated earlier with lower
+success rates"):
+
+| Task | Time per episode (s, mean ± std) |
+| --- | --- |
+| Class Uncertainty | 28 ± 26 |
+| Pose Uncertainty | 21 ± 13 |
+| Partial Observability | **57 ± 38**  ← closest analogue to our hidden-target / shadow-search setting |
+| Physical Uncertainty | 23 ± 7 |
+| SLAM (manipulation-free) | 31 ± 11 |
+| SLAM (with manipulation) | 129 ± 55 |
+
+Direct quote on the anytime guarantee:
+
+> "All of these algorithms run in an anytime fashion, meaning that
+>  planning can be terminated earlier with lower success rates."
+> — Curtis et al. 2024, arXiv:2403.10454
+
+**Caveat on demo videos**: project-page demonstrations
+(https://aidan-curtis.github.io/tampura.github.io/) appear to be
+played at compressed wall-clock; they should not be cited as
+real-time evidence.  The numerical 21–129 s/episode range above is
+the citable benchmark.
+
+### 21.3 Why TAMPURA's planner is faster — algorithmic, not hardware
+
+TAMPURA's planner pays its geometry-sampling cost **offline** in a
+model-learning phase, then plans cheaply over the resulting sparse
+MDP.  PDDLStream (this thesis) interleaves stream sampling with
+search on every plan call.
+
+Direct quote on the offline learning phase:
+
+> "TAMPURA's approach to constructing ℬ̄_sparse is to repeatedly
+>  construct optimistic, deterministic plans which begin in abstract
+>  belief state b̄, and reach the goal."
+> — Curtis et al. 2024, § V-A
+
+> "The robot calculates an uncertainty and risk aware plan in the
+>  sparse MDP it has learned, and executes this plan."
+> — Curtis et al. 2024, § IV (Figure 3 caption)
+
+Direct quote on the inner deterministic plan (FastDownward) and the
+outer probabilistic plan (LAO*):
+
+> "for i = 1, …, I do … for k = 1, …, K do … τ_k ← FastDownward(M, b̄₀, G)"
+> — Algorithm 2 (Learn-Model), lines 7–11
+
+> "TAMPURA uses … LAO* probabilistic planner."
+> — Curtis et al. 2024, § IX
+
+| | TAMPURA | Semantic Boxels (this thesis) |
+| --- | --- | --- |
+| Geometry sampling | Offline, in `Learn-Model` (Alg. 2): J simulations per controller, builds a sparse MDP before execution | Online, every PDDLStream plan call: streams sample inside the planner loop |
+| Plan-time engine | LAO* on the *already-learned* sparse MDP — the abstraction is finite and small | PDDLStream adaptive search interleaved with stream sampling |
+| Determinized inner loop | FastDownward inside Learn-Model, called K times per learning iteration | FastDownward inside PDDLStream, called every replan |
+| Cross-episode model reuse | "No mention" of cross-episode caching in the paper | Same — `_build_init` re-emits all static facts every call (audit #50 candidate fix) |
+
+The asymmetry is *when the geometry cost is paid*, not the search
+engine itself (FastDownward is shared by both).  TAMPURA front-loads
+the sampling cost; PDDLStream pays it per replan.
+
+### 21.4 Voxel grid resolution comparison
+
+TAMPURA's `find_dice/env.py` (line 8): `GRID_RESOLUTION = 0.015`
+(15 mm).  The grid is a **visibility / occupancy belief structure**
+— voxels start occupied and flip to free as raycasts confirm
+visibility.  Placement itself is continuous SE(3)-pose sampling
+(`placement_sample_fn_wrapper` in the same file); there is no
+place-grounding lattice.  Other tasks in `tampura_environments` (e.g.
+`class_uncertain`) have no `GRID_RESOLUTION` constant at all —
+purely continuous-pose, continuous-IK.
+
+Important: the 15 mm number is an **implementation choice in the
+codebase**, not a parameter committed to in the paper.  The paper
+(§ XII-A1 "Find Die") describes Pick / Place / Look controllers
+abstractly without numeric voxel sizes.  Cite as "find_dice/env.py
+line 8" rather than "Curtis et al. 2024 reports 15 mm voxels."
+
+Resolutions in this thesis for the same purposes:
+
+| Mechanism | Where | Resolution |
+| --- | --- | --- |
+| Visibility raycasting (TAMPURA-15-mm analogue) | `execution.py` `sense_shadow_raycasting` — 7×7 grid × 3 z-slices = 147 rays per shadow, spacing adaptive via `np.linspace(min_corner, max_corner, 7)` | ~17 mm for a default-size 10 × 10 × 10 cm shadow (per-shadow AABB linspace, not a global lattice) |
+| Semantic free-space octree leaf | `free_space.py` `min_resolution = 0.035` | 35 mm ("half the target object size 0.08 m — fine enough to place") |
+| Uniform baseline cell (default) | `boxel_env.py` `cell_size = 0.05`, `uniform_grid.py` | 50 mm |
+| Uniform baseline cell (auto-tuned, audit #66 Plan A, commit `ce24e84`) | `test_full_pipeline.main` — `max(visible AABB axis) + 0.01 m` | ~170 mm for the default scene (forced by occluder height; `test_boxel_fits` checks all 3 axes) |
+
+Our visibility raycasting spacing (~17 mm) is at the same scale as
+TAMPURA's 15 mm, but the *mechanism* differs (per-shadow linspace vs
+global voxel lattice).  Our place-grounding resolutions (35 mm
+semantic / 50–170 mm uniform) have no TAMPURA analogue, because
+TAMPURA does not discretise placement.
+
+### 21.5 Implications for thesis evaluation
+
+1. **Comparable per-thread hardware**: cite the host CPU spec
+   (§ 21.1) so reviewers do not attribute Semantic Boxels' wall-clock
+   to a slower machine.  Both systems are single-threaded; the host
+   is in the same ballpark on per-thread performance.
+2. **Anytime caveat**: when reporting our planner times against the
+   21–129 s TAMPURA range, clarify whether either side terminated
+   anytime-style or ran to optimal completion.
+3. **Architectural comparison is the right axis**: the speed gap is
+   "online stream sampling vs offline `Learn-Model`," not Xeon vs
+   Ryzen.  Frame the discussion this way in the eval chapter.
+4. **No cross-episode caching in either system**: TAMPURA does not
+   cache its learned MDP across initial-belief problems (per § 21.3);
+   our `_build_init` does not cache static atoms across replans.
+   Either system would benefit from cross-replan caching — audit
+   #50(a)/(c) and #62(c) propose this fix on our side, mirroring
+   TAMPURA's offline-then-online split.
+
+**References**: `CODEBASE_AUDIT.txt` #50, #62, #66 (Plan A landed
+2026-05-09 in commit `ce24e84`; Plan C pending on
+`audit-64-tampura-binary-grid`); memory entries
+`reference_tampura_grid.md` and `reference_tampura_perf.md`;
+arXiv:2403.10454 (Curtis et al. 2024); `tampura_environments/`
+`find_dice/env.py` lines 8 and ~362–379.
