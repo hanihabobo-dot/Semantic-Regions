@@ -992,6 +992,61 @@ Updated:      2026-05-08 (later) — #64 follow-up: dropped the
               No change to the visualizer code itself — only
               test_full_pipeline.py reverted, audit body / README
               wording corrected.
+Added:        2026-05-09 — #65 (rename: boxel -> hanixel terminology
+              overhaul).  User decision 2026-05-09: "boxel" retired
+              in favour of HANIXEL = HANI + XEL, where
+                HANI = Heterogeneous Axis-aligned Named Interval
+                       (each letter a literal property of the data
+                       structure: H = polymorphic semantic label
+                       OBJECT/SHADOW/FREE_SPACE; A = AABB
+                       representation in every mode; N = string
+                       `id` handle; I = 3-D interval = AABB in the
+                       formal geometry sense)
+                XEL  = inherited voxel-suffix; same construction as
+                       vo(lumetric) + (pi)xel and te(xture) + (pi)xel.
+              Mechanical rename — no correctness, performance, or
+              behavioural change.  Single dedicated branch
+              (rename-boxel-to-hanixel) off main, case-preserved
+              sed across *.py / *.pddl / forward-looking *.md, file
+              renames (boxel_*.py -> hanixel_*.py), PDDL predicates
+              (Boxel -> Hanixel; obj_at_boxel -> obj_at_hanixel;
+              boxel_fits -> hanixel_fits) mirrored in domain +
+              _build_init + goal-construction.  Changelog history
+              and archive/* keep "boxel" wording (audit trail).
+              Repo name + thesis title separate decisions.  TIER 3.
+              Open count: 6 -> 7.
+Added:        2026-05-09 (later) — #66 (uniform/tampura baselines —
+              place fails when object > cell; fix split A on main,
+              C on audit-64-tampura-binary-grid).  Diagnosed from
+              the 2026-05-09 stalled run (logs/run_2026-05-09_10-48-
+              13/): default uniform cell size 0.05 m is smaller than
+              default occluder AABB (5-7 cm wide, 12-16 cm tall),
+              so `(boxel_fits ?occluder ?cell)` is unsatisfiable on
+              every uniform cell, the PDDL place action's
+              precondition can't ground, and PDDLStream loops at
+              increasing complexity searching for a plan that
+              cannot exist.  Two-branch fix:
+                Plan A (main, free-space-only-swap baseline):
+                  auto-tune cell size to fit the largest visible
+                  AABB + 1 cm headroom.  ~30 LOC patch in
+                  test_full_pipeline.main; no domain change.
+                  Side-effect: cuts cell count ~8x, also
+                  resolves the grounding-cost half of the stall.
+                Plan C (audit-64-tampura-binary-grid, TAMPURA-
+                  faithful baseline): replace boxel-indexed place
+                  with continuous SE(3)-pose place via a new
+                  sample-place-pose stream.  Domain rewrite +
+                  streams + planner init changes; the actual
+                  TAMPURA approach (find_dice/env.py uses
+                  continuous poses).
+              Plan B (multi-cell place over a cluster of cells)
+              ruled out 2026-05-09 — neither faithful to TAMPURA
+              nor cheap.  Branch consolidation: baseline-freespace-
+              only-swap deleted (it was a stale snapshot of main);
+              main IS the free-space-only-swap baseline going
+              forward.  ONE shared #66 audit body across main and
+              audit-64 — edit on main, merge forward.  Open count:
+              7 -> 8.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -1077,7 +1132,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #50, #57, #59, #61, #62, #63                                   #
+#  OPEN ISSUES — #50, #57, #59, #61, #62, #63, #65, #66                         #
 #                                                                              #
 ################################################################################
 
@@ -1175,6 +1230,27 @@ Parallel / non-blocking:
        2026-05-08 immediately after #58 landed: "its faster but
        still slow."  Profile first; close as MERGED INTO #50 if the
        dominant cost turns out to be branch-agnostic.
+  #65  rename: boxel -> hanixel (HANI = Heterogeneous Axis-aligned
+       Named Interval; XEL = voxel-suffix).  User decision
+       2026-05-09.  Mechanical case-preserved sweep across *.py,
+       *.pddl, README, forward-looking audit body — keep changelog
+       history + archive/* as-is for the trail.  Single dedicated
+       branch `rename-boxel-to-hanixel` off main.  Land after any
+       in-flight branch (audit-64-tampura-binary-grid currently
+       open) merges or rebases, to avoid identifier-collision
+       merge noise.  TIER 3 — cosmetic only.
+  #66  uniform/tampura baselines — place fails when object > cell.
+       Default occluders (5-7 cm wide, 12-16 cm tall) don't fit
+       any uniform 5 cm cell; (boxel_fits ?occluder ?cell)
+       unsatisfiable; place can't ground; PDDLStream loops.
+       Split fix: Plan A (auto-tune cell size to largest visible
+       AABB + 1 cm) lands on `main` — ~30 LOC, no domain change,
+       also cuts grounding cost ~8x.  Plan C (continuous-pose
+       place via new sample-place-pose stream) lands on
+       `audit-64-tampura-binary-grid` — domain rewrite, the
+       actual TAMPURA approach.  Single shared audit body
+       across both branches.  TIER 1 — correctness blocker for
+       uniform.
 
 Closed / relocated since last summary:
   #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
@@ -2092,6 +2168,267 @@ Related: #10 [DONE 2026-05-08] — uniform free-space lattice
 
 
 ================================================================================
+#65. RENAME: BOXEL -> HANIXEL — TERMINOLOGY OVERHAUL (mechanical, large-diff)
+================================================================================
+Priority: TIER 3 — Code/doc cosmetic.  No correctness, performance,
+          or behavioural impact.  Sweep of one identifier; touches
+          most source files but every change is a literal word
+          substitution.
+Where:    Sweeping rename across:
+          - Source: ~150 occurrences of `boxel`/`Boxel`/`BoxelData`
+            etc. in *.py (boxel_data.py, boxel_env.py, boxel_types.py,
+            pddlstream_planner.py, streams.py, visualization.py,
+            execution.py, uniform_grid.py, reboxelize.py,
+            cell_merger.py, free_space.py, shadow_calculator.py,
+            test_full_pipeline.py, eval_runner.py, eval_plotter.py,
+            run_logger.py, plus tests/ and any utility scripts).
+          - File names: boxel_data.py -> hanixel_data.py;
+            boxel_env.py -> hanixel_env.py; boxel_types.py ->
+            hanixel_types.py.
+          - PDDL: predicate `(Boxel ?b)` -> `(Hanixel ?b)`;
+            `(obj_at_boxel ?o ?b)` -> `(obj_at_hanixel ?o ?b)`;
+            `(boxel_fits ?o ?b)` -> `(hanixel_fits ?o ?b)`.
+            Mirror in pddl/domain_pddlstream.pddl + pddl/stream.pddl
+            + pddlstream_planner._build_init() tuple emission +
+            goal-construction code in test_full_pipeline.py.
+          - Docs: README.md, the FORWARD-LOOKING / LIVE issue
+            bodies in CODEBASE_AUDIT.txt (NOT the historical
+            changelog — keep "boxel" wording there as audit trail),
+            THESIS_NOTES.md, wiki (11 pages), in-line docstrings.
+          - Data files: boxel_data.json (artefact written by
+            BoxelRegistry.save_to_json) -> hanixel_data.json;
+            search-and-replace any references in run logs / test
+            fixtures.
+          - Repo name (Semantic_Boxels) — separate decision,
+            optional, can be left as-is.
+          - Thesis title and chapter text — out of scope here;
+            handled on the writing side.
+Depends:  None — purely mechanical.  No code logic changes.
+          However: land AFTER any in-flight branch merges or
+          rebases (audit-64-tampura-binary-grid is currently
+          open) to avoid identifier-collision merge noise across
+          every renamed identifier.
+Effort:   ~1 hour mechanical pass + ~30 min smoke run.  Single-day
+          execution.
+
+What:  "Boxel" originated as a portmanteau of box + (vo)xel —
+       fine etymologically but the team has soured on the word.
+       User raised 2026-05-09 after looking at TAMPURA's voxel-grid
+       code (Curtis et al. 2024) and reflecting on the project
+       vocabulary.
+
+       Replacement chosen 2026-05-09: HANIXEL.
+       - HANI = "Heterogeneous Axis-aligned Named Interval" —
+         each letter is a literal property of the data structure:
+           H = Heterogeneous (the semantic label can be OBJECT /
+               SHADOW / FREE_SPACE — exactly the polymorphic
+               distinguishing feature of the project)
+           A = Axis-aligned (AABB representation, true in every
+               mode: semantic octree, semantic merged, uniform
+               lattice)
+           N = Named (every entry carries a string `id` — the
+               planner's handle, e.g. `red_object`,
+               `shadow_of_red_object`, `free_011`)
+           I = Interval (rigorous geometry term: a 3-D interval
+               = AABB; defines what the thing geometrically is)
+       - XEL = inherited voxel-suffix; same construction as
+         vo(lumetric) + (pi)xel and te(xture) + (pi)xel.
+
+Fix:   ONE BRANCH — `rename-boxel-to-hanixel`, off `main`.
+       (a) Mechanical case-preserved sed: boxel->hanixel,
+           Boxel->Hanixel, BOXEL->HANIXEL across *.py, *.pddl,
+           README.md, and the LIVE issue-body sections of
+           CODEBASE_AUDIT.txt — but EXCLUDING the changelog
+           history block at the top of CODEBASE_AUDIT.txt and
+           ALL of archive/CODEBASE_AUDIT_RESOLVED.txt /
+           archive/CODEBASE_AUDIT_DEFERRED.txt.  Those record
+           historical wording and stay verbatim.
+       (b) File renames: boxel_*.py -> hanixel_*.py; update
+           every import and from-import to match.
+       (c) Data-artefact rename: any place that writes or reads
+           "boxel_data.json" updates to "hanixel_data.json"
+           (run_logger.py, BoxelRegistry.save_to_json caller,
+           any test fixtures).  Old artefacts in logs/ stay
+           with their historical names.
+       (d) py_compile across all touched .py files; smoke run
+           (--scene default --baseline semantic --no-gui --seed 0)
+           to verify nothing broke.
+       (e) Two commits: one mechanical rename + one manual
+           cleanup (e.g. README "Semantic Boxels" -> "Semantic
+           Hanixels" for the public-facing prose; audit body
+           rebrand in TOC banner + SUMMARY block; visualizer
+           class-docstring polish).
+       (f) Audit DONE entry on this issue at landing.
+
+Care: Don't touch the changelog history at the top of this file —
+       every "Added:"/"Updated:"/"Slimmed:"/"Restructured:" entry
+       above mentions "boxel" because that was the term at the
+       time.  Rewriting history would lose the audit trail.  Same
+       for archive/CODEBASE_AUDIT_RESOLVED.txt and
+       archive/CODEBASE_AUDIT_DEFERRED.txt.  Only the
+       FORWARD-LOOKING / LIVE issue bodies and the SUMMARY block
+       get the rename.
+
+       Coordinate with audit-64-tampura-binary-grid: that branch
+       is currently sitting on the GUI uniform_mode flag work plus
+       its own #64 audit body.  Either merge it to main first
+       (preferred — clean main = clean rename diff) or rebase it
+       on top of #65 after #65 lands (every commit on the branch
+       gets a noisy text-rename hit).
+
+Related: #63 (README + wiki final doc sweep) — picks up the
+              hanixel terminology naturally if it lands first.
+              If #63 hasn't started yet at #65 landing time,
+              #63 inherits the rename for free.
+         #64 (open on audit-64-tampura-binary-grid) — see "Care"
+              above; merge order matters for diff cleanliness.
+         Repo name (Semantic_Boxels on disk + both remotes) —
+              separate decision, can stay as-is to avoid breaking
+              upstream URLs.
+         Thesis title ("Semantic Boxels for TAMP" -> "Semantic
+              Hanixels for TAMP") — your call on the writing side.
+
+
+================================================================================
+#66. UNIFORM/TAMPURA BASELINES — PLACE FAILS WHEN OBJECT > CELL (split fix)
+================================================================================
+Priority: TIER 1 — correctness blocker for the uniform baseline.
+          Without this, --baseline uniform with default cell size
+          0.05 m cannot ground occluder-relocation place actions
+          (default occluders are 5-7 cm wide, 12-16 cm tall; no
+          uniform cell satisfies boxel_fits).  The 2026-05-09
+          stalled run (logs/run_2026-05-09_10-48-13/) was a direct
+          consequence: PDDLStream looped at increasing complexity
+          searching for a plan that cannot exist.
+Where:    Two-branch fix.  Plan A on `main` (the free-space-only-
+          swap baseline), Plan C on `audit-64-tampura-binary-grid`
+          (the TAMPURA-faithful baseline).  ONE shared issue body
+          across both branches: edit on main, merge forward.
+          Plan A:  test_full_pipeline.main (auto-tune cell size).
+          Plan C:  pddl/domain_pddlstream.pddl + pddl/stream.pddl
+                   + streams.py (sample_place_pose) +
+                   pddlstream_planner._build_init + execution.py
+                   place handler.
+Depends:  None — independent of in-flight work.
+
+What:  Under --baseline uniform, free cells are 5 cm cubes
+       (default --uniform-cell-size 0.05).  test_boxel_fits
+       (streams.py:350-371) compares full AABB extents of the
+       OBJECT vs the candidate destination cell.  Default scene
+       occluders are 5-7 cm wide and 12-16 cm tall (boxel_env.py:
+       296-317), so for any 6-7 cm occluder the comparison
+       0.05 >= 0.07 fails on every uniform cell.  Result: zero
+       (boxel_fits occluder ?cell) atoms emit; the PDDL place
+       action's precondition is unsatisfiable; any plan that
+       requires relocating an occluder fails to ground.
+
+       Quantified from the 2026-05-09 stalled run log:
+       - 2480 cells emitted under uniform 0.05 m
+       - 2472 boxel_fits atoms (~25% of 4 visible obj × 2470
+         free cells = ~9880 candidate pairs)
+       - The passing 25% are the 4 cm targets fitting in 5 cm
+         cells; the failing 75% are 6-7 cm occluders
+       - PDDLStream stalled at iter-1 (Cost: inf, Search Time
+         0.010 s) because no skeleton can satisfy place
+
+       Three options were considered:
+         (A) Auto-tune cell size to fit the largest visible AABB
+             (+1 cm headroom for PyBullet contact margin).
+             ~30 LOC patch in test_full_pipeline.main; no domain
+             change; cuts cell count ~8x as a side-effect (also
+             fixes the grounding-cost half of the stall).  Cell
+             size becomes scene-dependent: typical default scene
+             -> ~0.10 m; smaller-target scenes -> ~0.05 m stays.
+             Lands on `main` (the free-space-only-swap baseline).
+         (B) Multi-cell place — symbolic place over a CLUSTER of
+             cells covering the object footprint.  Requires PDDL
+             action change + new "anchor cell" semantics.  RULED
+             OUT 2026-05-09: combinatorial blowup (planner picks
+             a SET of cells); not TAMPURA-faithful; not cheap.
+         (C) Continuous-pose place — replace boxel-indexed place
+             with TAMPURA-style continuous SE(3)-pose placement.
+             Stream samples (x, y, z) within the free volume,
+             returns a Pose certificate; place action takes ?p
+             (Pose) instead of ?b (Boxel).  Major domain rewrite;
+             the actual TAMPURA approach (Curtis et al. 2024 —
+             find_dice/env.py uses continuous poses).  Lands on
+             `audit-64-tampura-binary-grid`.
+
+Fix:   SPLIT ACROSS TWO BRANCHES, ONE SHARED AUDIT BODY (this entry).
+
+       On `main` (the free-space-only-swap baseline)
+       ---------------------------------------------
+       Plan A — auto-tune cell size.  Single commit:
+
+       In test_full_pipeline.main, after env.use_uniform_grid is
+       set, compute auto_cell = max(visible AABB extent across all
+       scene objects) + 0.01 m.  If auto_cell > the user-supplied
+       --uniform-cell-size, call env.set_uniform_cell_size(
+       auto_cell) and log the bump.  Preserves user override
+       (passing --uniform-cell-size 0.20 stays at 0.20 — only the
+       default 0.05 is auto-bumped).  Smoke-run the previously-
+       stuck scene (--scene default --baseline uniform --seed 0)
+       to verify it succeeds.
+
+       On `audit-64-tampura-binary-grid` (the TAMPURA-faithful baseline)
+       -----------------------------------------------------------------
+       Plan C — continuous-pose placement.  Multi-commit, in order:
+       (i)   pddl/domain_pddlstream.pddl: place action takes ?p
+             (Pose) instead of ?b (Boxel); pose-based precondition
+             stream replaces boxel_fits.
+       (ii)  pddl/stream.pddl: new sample-place-pose stream that
+             yields valid free-volume poses per object (uniform
+             rejection sample within table_x_range x table_y_range
+             x table_z, AABB-checked against current OBJECT/SHADOW
+             set).
+       (iii) streams.py: implement sample_place_pose; modify
+             compute_kin_solution to accept a Pose argument for the
+             place case (pose.position + grasp_offset = EE target).
+       (iv)  pddlstream_planner._build_init: drop boxel_fits and
+             obj_at_boxel emission for free cells under uniform
+             mode (free cells become a visualisation aid only;
+             placement is continuous).
+       (v)   execution.py place handler: read ?p (Pose) from the
+             action params instead of ?b (Boxel).
+       (vi)  Audit DONE entries for both A and C at landing.
+
+       Ordering note: A landing on main + C landing on audit-64
+       are independent; either can land first.  When audit-64
+       eventually merges back to main (post-thesis or per
+       supervisor direction), the planner has BOTH placement modes
+       — boxel-indexed for semantic baseline, pose-indexed for
+       tampura baseline.
+
+Care: The ONE-SHARED-AUDIT-BODY constraint means this issue body
+       appears IDENTICALLY on main and audit-64-tampura-binary-grid.
+       Update from main and merge forward to audit-64; avoid
+       divergent edits to the issue body.  The audit changelog at
+       the top of CODEBASE_AUDIT.txt MAY differ between branches —
+       that's history, and main/audit-64 have different DONE tracks
+       for #64 etc.
+
+       Plan A is the smaller of the two and should land first to
+       unblock --baseline uniform smoke runs and the eval matrix.
+       Plan C is the larger commit and the genuine TAMPURA-
+       faithful contribution.
+
+Related: #50 — planner perf investigation.  Plan A's cell-size
+              bump cuts grounding cost ~8x as a side effect; #50
+              loses one of its hotspots after Plan A lands.
+         #62 — replan-while-holding still slow.  Same grounding-
+              cost lineage as #50; Plan A indirectly mitigates.
+         #64 [DONE on audit-64-tampura-binary-grid] — TAMPURA-
+              faithful uniform-baseline GUI framing (visualizer
+              uniform_mode flag).  Plan C is the natural
+              continuation: visualizer change was cosmetic; this
+              is the placement-semantics change.
+         #65 — boxel -> hanixel rename.  Coordinate landing
+              order (per #65 Care): merge audit-64 back to main
+              first, OR rebase audit-64 after the rename, to
+              avoid identifier-collision merge noise.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -2194,11 +2531,13 @@ afdaadd) and TIER 1 is empty pending the WSL sweep run.
 TIER 0 — TOP PRIORITY:
   (empty — no open correctness blockers.)
 
-TIER 1 — ACTIVE EVAL (eval prerequisites complete):
-  (empty — #9 and #10 both DONE 2026-05-08.  Next user-side step is
-  the WSL sweep run via `run_eval --matrix scalability --skip-existing`
-  to populate eval_results/sweep_<ts>_scalability with both baselines'
-  aggregated.csv rows.)
+TIER 1 — UNIFORM/TAMPURA BASELINE PLACEMENT (correctness blocker):
+  #66  Place fails when object > cell.  Default uniform 5 cm
+       cells can't fit 6-7 cm occluders -> boxel_fits empty ->
+       PDDLStream stalls.  Split fix: Plan A (auto-tune cell
+       size) on main; Plan C (continuous-pose place, real
+       TAMPURA) on audit-64-tampura-binary-grid.  Single
+       shared issue body across both branches.
 
 TIER 2 — PERF (planner wall-clock):
   #50  Planner perf investigation — profile, cache static init, kill
@@ -2220,8 +2559,13 @@ TIER 3 — CODE QUALITY / LOW-PRIO:
        any other open issue that lands between now and submission.
        Explicitly the last commit before thesis submission per user
        2026-05-08.
+  #65  Rename: boxel -> hanixel.  HANI = Heterogeneous Axis-aligned
+       Named Interval; XEL inherited from voxel.  User decision
+       2026-05-09.  Mechanical case-preserved sweep on its own
+       branch (rename-boxel-to-hanixel).  Land after audit-64-
+       tampura-binary-grid merges/rebases to avoid rename noise.
 
-Total open: 6 items (#50, #57, #59, #61, #62, #63).
+Total open: 8 items (#50, #57, #59, #61, #62, #63, #65, #66).
 
 Closed since previous summary:
   #10  [DONE 2026-05-08 (later)] — uniform voxelization baseline
