@@ -947,6 +947,29 @@ Updated:      2026-05-08 (later) — #10 [DONE 2026-05-08].  Uniform-
               deferred to next session (PyBullet only spins up under
               WSL on this machine).  Open count: 7 -> 6.  TIER 1 now
               empty (eval prerequisites complete, #9 + #10 both DONE).
+Added:        2026-05-09 — #65 (rename: boxel -> hanixel terminology
+              overhaul).  User decision 2026-05-09: "boxel" retired
+              in favour of HANIXEL = HANI + XEL, where
+                HANI = Heterogeneous Axis-aligned Named Interval
+                       (each letter a literal property of the data
+                       structure: H = polymorphic semantic label
+                       OBJECT/SHADOW/FREE_SPACE; A = AABB
+                       representation in every mode; N = string
+                       `id` handle; I = 3-D interval = AABB in the
+                       formal geometry sense)
+                XEL  = inherited voxel-suffix; same construction as
+                       vo(lumetric) + (pi)xel and te(xture) + (pi)xel.
+              Mechanical rename — no correctness, performance, or
+              behavioural change.  Single dedicated branch
+              (rename-boxel-to-hanixel) off main, case-preserved
+              sed across *.py / *.pddl / forward-looking *.md, file
+              renames (boxel_*.py -> hanixel_*.py), PDDL predicates
+              (Boxel -> Hanixel; obj_at_boxel -> obj_at_hanixel;
+              boxel_fits -> hanixel_fits) mirrored in domain +
+              _build_init + goal-construction.  Changelog history
+              and archive/* keep "boxel" wording (audit trail).
+              Repo name + thesis title separate decisions.  TIER 3.
+              Open count: 6 -> 7.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -1032,7 +1055,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #50, #57, #59, #61, #62, #63                                   #
+#  OPEN ISSUES — #50, #57, #59, #61, #62, #63, #65                              #
 #                                                                              #
 ################################################################################
 
@@ -1130,6 +1153,15 @@ Parallel / non-blocking:
        2026-05-08 immediately after #58 landed: "its faster but
        still slow."  Profile first; close as MERGED INTO #50 if the
        dominant cost turns out to be branch-agnostic.
+  #65  rename: boxel -> hanixel (HANI = Heterogeneous Axis-aligned
+       Named Interval; XEL = voxel-suffix).  User decision
+       2026-05-09.  Mechanical case-preserved sweep across *.py,
+       *.pddl, README, forward-looking audit body — keep changelog
+       history + archive/* as-is for the trail.  Single dedicated
+       branch `rename-boxel-to-hanixel` off main.  Land after any
+       in-flight branch (audit-64-tampura-binary-grid currently
+       open) merges or rebases, to avoid identifier-collision
+       merge noise.  TIER 3 — cosmetic only.
 
 Closed / relocated since last summary:
   #4  archive/CODEBASE_AUDIT_RESOLVED.txt (accepted stale shadow AABBs)
@@ -1945,6 +1977,128 @@ Related: All other open issues at landing time — this is the
 
 
 ================================================================================
+#65. RENAME: BOXEL -> HANIXEL — TERMINOLOGY OVERHAUL (mechanical, large-diff)
+================================================================================
+Priority: TIER 3 — Code/doc cosmetic.  No correctness, performance,
+          or behavioural impact.  Sweep of one identifier; touches
+          most source files but every change is a literal word
+          substitution.
+Where:    Sweeping rename across:
+          - Source: ~150 occurrences of `boxel`/`Boxel`/`BoxelData`
+            etc. in *.py (boxel_data.py, boxel_env.py, boxel_types.py,
+            pddlstream_planner.py, streams.py, visualization.py,
+            execution.py, uniform_grid.py, reboxelize.py,
+            cell_merger.py, free_space.py, shadow_calculator.py,
+            test_full_pipeline.py, eval_runner.py, eval_plotter.py,
+            run_logger.py, plus tests/ and any utility scripts).
+          - File names: boxel_data.py -> hanixel_data.py;
+            boxel_env.py -> hanixel_env.py; boxel_types.py ->
+            hanixel_types.py.
+          - PDDL: predicate `(Boxel ?b)` -> `(Hanixel ?b)`;
+            `(obj_at_boxel ?o ?b)` -> `(obj_at_hanixel ?o ?b)`;
+            `(boxel_fits ?o ?b)` -> `(hanixel_fits ?o ?b)`.
+            Mirror in pddl/domain_pddlstream.pddl + pddl/stream.pddl
+            + pddlstream_planner._build_init() tuple emission +
+            goal-construction code in test_full_pipeline.py.
+          - Docs: README.md, the FORWARD-LOOKING / LIVE issue
+            bodies in CODEBASE_AUDIT.txt (NOT the historical
+            changelog — keep "boxel" wording there as audit trail),
+            THESIS_NOTES.md, wiki (11 pages), in-line docstrings.
+          - Data files: boxel_data.json (artefact written by
+            BoxelRegistry.save_to_json) -> hanixel_data.json;
+            search-and-replace any references in run logs / test
+            fixtures.
+          - Repo name (Semantic_Boxels) — separate decision,
+            optional, can be left as-is.
+          - Thesis title and chapter text — out of scope here;
+            handled on the writing side.
+Depends:  None — purely mechanical.  No code logic changes.
+          However: land AFTER any in-flight branch merges or
+          rebases (audit-64-tampura-binary-grid is currently
+          open) to avoid identifier-collision merge noise across
+          every renamed identifier.
+Effort:   ~1 hour mechanical pass + ~30 min smoke run.  Single-day
+          execution.
+
+What:  "Boxel" originated as a portmanteau of box + (vo)xel —
+       fine etymologically but the team has soured on the word.
+       User raised 2026-05-09 after looking at TAMPURA's voxel-grid
+       code (Curtis et al. 2024) and reflecting on the project
+       vocabulary.
+
+       Replacement chosen 2026-05-09: HANIXEL.
+       - HANI = "Heterogeneous Axis-aligned Named Interval" —
+         each letter is a literal property of the data structure:
+           H = Heterogeneous (the semantic label can be OBJECT /
+               SHADOW / FREE_SPACE — exactly the polymorphic
+               distinguishing feature of the project)
+           A = Axis-aligned (AABB representation, true in every
+               mode: semantic octree, semantic merged, uniform
+               lattice)
+           N = Named (every entry carries a string `id` — the
+               planner's handle, e.g. `red_object`,
+               `shadow_of_red_object`, `free_011`)
+           I = Interval (rigorous geometry term: a 3-D interval
+               = AABB; defines what the thing geometrically is)
+       - XEL = inherited voxel-suffix; same construction as
+         vo(lumetric) + (pi)xel and te(xture) + (pi)xel.
+
+Fix:   ONE BRANCH — `rename-boxel-to-hanixel`, off `main`.
+       (a) Mechanical case-preserved sed: boxel->hanixel,
+           Boxel->Hanixel, BOXEL->HANIXEL across *.py, *.pddl,
+           README.md, and the LIVE issue-body sections of
+           CODEBASE_AUDIT.txt — but EXCLUDING the changelog
+           history block at the top of CODEBASE_AUDIT.txt and
+           ALL of archive/CODEBASE_AUDIT_RESOLVED.txt /
+           archive/CODEBASE_AUDIT_DEFERRED.txt.  Those record
+           historical wording and stay verbatim.
+       (b) File renames: boxel_*.py -> hanixel_*.py; update
+           every import and from-import to match.
+       (c) Data-artefact rename: any place that writes or reads
+           "boxel_data.json" updates to "hanixel_data.json"
+           (run_logger.py, BoxelRegistry.save_to_json caller,
+           any test fixtures).  Old artefacts in logs/ stay
+           with their historical names.
+       (d) py_compile across all touched .py files; smoke run
+           (--scene default --baseline semantic --no-gui --seed 0)
+           to verify nothing broke.
+       (e) Two commits: one mechanical rename + one manual
+           cleanup (e.g. README "Semantic Boxels" -> "Semantic
+           Hanixels" for the public-facing prose; audit body
+           rebrand in TOC banner + SUMMARY block; visualizer
+           class-docstring polish).
+       (f) Audit DONE entry on this issue at landing.
+
+Care: Don't touch the changelog history at the top of this file —
+       every "Added:"/"Updated:"/"Slimmed:"/"Restructured:" entry
+       above mentions "boxel" because that was the term at the
+       time.  Rewriting history would lose the audit trail.  Same
+       for archive/CODEBASE_AUDIT_RESOLVED.txt and
+       archive/CODEBASE_AUDIT_DEFERRED.txt.  Only the
+       FORWARD-LOOKING / LIVE issue bodies and the SUMMARY block
+       get the rename.
+
+       Coordinate with audit-64-tampura-binary-grid: that branch
+       is currently sitting on the GUI uniform_mode flag work plus
+       its own #64 audit body.  Either merge it to main first
+       (preferred — clean main = clean rename diff) or rebase it
+       on top of #65 after #65 lands (every commit on the branch
+       gets a noisy text-rename hit).
+
+Related: #63 (README + wiki final doc sweep) — picks up the
+              hanixel terminology naturally if it lands first.
+              If #63 hasn't started yet at #65 landing time,
+              #63 inherits the rename for free.
+         #64 (open on audit-64-tampura-binary-grid) — see "Care"
+              above; merge order matters for diff cleanliness.
+         Repo name (Semantic_Boxels on disk + both remotes) —
+              separate decision, can stay as-is to avoid breaking
+              upstream URLs.
+         Thesis title ("Semantic Boxels for TAMP" -> "Semantic
+              Hanixels for TAMP") — your call on the writing side.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -2073,8 +2227,13 @@ TIER 3 — CODE QUALITY / LOW-PRIO:
        any other open issue that lands between now and submission.
        Explicitly the last commit before thesis submission per user
        2026-05-08.
+  #65  Rename: boxel -> hanixel.  HANI = Heterogeneous Axis-aligned
+       Named Interval; XEL inherited from voxel.  User decision
+       2026-05-09.  Mechanical case-preserved sweep on its own
+       branch (rename-boxel-to-hanixel).  Land after audit-64-
+       tampura-binary-grid merges/rebases to avoid rename noise.
 
-Total open: 6 items (#50, #57, #59, #61, #62, #63).
+Total open: 7 items (#50, #57, #59, #61, #62, #63, #65).
 
 Closed since previous summary:
   #10  [DONE 2026-05-08 (later)] — uniform voxelization baseline
