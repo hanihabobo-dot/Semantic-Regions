@@ -979,6 +979,29 @@ Added:        2026-05-09 (later) — #66 (uniform/tampura baselines —
               forward.  ONE shared #66 audit body across main and
               audit-64 — edit on main, merge forward.  Open count:
               7 -> 8.
+Updated:      2026-05-09 (later) — #66 [Plan A DONE on main].  Auto-tune
+              uniform cell size to fit the largest object AABB +
+              0.01 m headroom in test_full_pipeline.main, applied
+              inside the existing `if baseline == 'uniform':` block
+              (test_full_pipeline.py:445-481).  Acts as a safety
+              guard: if --uniform-cell-size is already >= the auto
+              value, keep it; otherwise bump up.  Smoke-test
+              correction vs the audit body's "~0.10 m" estimate:
+              `test_boxel_fits` (streams.py:369) checks all 3 axes,
+              so cell size is forced to fit the OCCLUDER HEIGHT
+              (12-16 cm), not the XY footprint — auto_cell ≈ 0.17 m
+              for the default scene (not 0.10 m).  Lattice drops
+              4x4x2 = 32 cells (was 16x16x10 = 2560 at 0.05 m on
+              the 0.8x0.8x0.5 _SAFE_TABLE workspace), ~20 free
+              after obstacle rejection.  ~100x cell reduction (not
+              ~8x as the audit body predicted) but plenty for
+              grounding place.  Risk-2 (annotate_free_space_surface
+              on_z check) verified clean: bottom-layer cell's
+              min_corner[2] = table_z exactly at any cell size, so
+              `on_z = b.min_corner[2] <= table_z + 0.01` always
+              passes for the bottom layer.  Plan C still pending on
+              audit-64-tampura-binary-grid; #66 stays open.  Open
+              count: 8 -> 8 (Plan A is half of #66).
 Added:        2026-05-09 — #65 (rename: boxel -> hanixel terminology
               overhaul).  User decision 2026-05-09: "boxel" retired
               in favour of HANIXEL = HANI + XEL, where
@@ -2145,6 +2168,10 @@ Related: #63 (README + wiki final doc sweep) — picks up the
 ================================================================================
 #66. UNIFORM/TAMPURA BASELINES — PLACE FAILS WHEN OBJECT > CELL (split fix)
 ================================================================================
+Status:   Plan A [DONE on main 2026-05-09 (later)] — auto-tune cell
+          size landed in test_full_pipeline.main.  Plan C [PENDING on
+          audit-64-tampura-binary-grid] — continuous-pose placement
+          (the actual TAMPURA-faithful approach).
 Priority: TIER 1 — correctness blocker for the uniform baseline.
           Without this, --baseline uniform with default cell size
           0.05 m cannot ground occluder-relocation place actions
@@ -2387,10 +2414,11 @@ TIER 0 — TOP PRIORITY:
 TIER 1 — UNIFORM/TAMPURA BASELINE PLACEMENT (correctness blocker):
   #66  Place fails when object > cell.  Default uniform 5 cm
        cells can't fit 6-7 cm occluders -> boxel_fits empty ->
-       PDDLStream stalls.  Split fix: Plan A (auto-tune cell
-       size) on main; Plan C (continuous-pose place, real
-       TAMPURA) on audit-64-tampura-binary-grid.  Single
-       shared issue body across both branches.
+       PDDLStream stalls.  Split fix: Plan A [DONE on main
+       2026-05-09 (later)] (auto-tune cell size); Plan C
+       [PENDING on audit-64-tampura-binary-grid] (continuous-
+       pose place, real TAMPURA).  Single shared issue body
+       across both branches.
 
 TIER 2 — PERF (planner wall-clock):
   #50  Planner perf investigation — profile, cache static init, kill
