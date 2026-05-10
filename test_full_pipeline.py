@@ -442,42 +442,52 @@ def main(gui=True, run_logger=None, scene_config=None,
     # cell size before any boxel/registry work in Phase 2.  Default
     # path (baseline='semantic') leaves env.use_uniform_grid=False, so
     # generate_free_space falls through to the octree pipeline as before.
+    # Audit #66 (Plan A) — auto-tune cell size to fit the largest
+    # object AABB.  Default uniform cell 0.05 m is smaller than default
+    # occluders (6-7 cm wide, 12-16 cm tall), so under uniform mode
+    # every (boxel_fits ?occluder ?cell) atom is unsatisfiable on all
+    # 3 axes (streams.py:369), the place precondition can't ground,
+    # and PDDLStream loops searching for a plan that cannot exist
+    # (logs/run_2026-05-09_10-48-13/: 2480 cells, 2472 boxel_fits,
+    # iter-1 Cost: inf).  Largest AABB axis is the OCCLUDER HEIGHT,
+    # so auto_cell ~ 0.17 m for the default scene.  Headroom +0.01 m
+    # for PyBullet contact margin.  Acts as a SAFETY GUARD: if the
+    # user passes --uniform-cell-size already >= auto_cell, keep it;
+    # otherwise bump up.
+    #
+    # Audit #67 follow-up — also propagate the same value to the
+    # semantic octree's min_resolution so both baselines have the
+    # SAME smallest possible boxel size.  Without this match, the
+    # octree subdivides down to its 0.035 m default while uniform
+    # uses 0.06-0.17 m cells — the comparison ends up dominated by
+    # grounding cost (number of cells), not the underlying
+    # discretization strategy.  We compute effective_cell
+    # unconditionally and apply it to whichever baseline is active.
+    max_extent = 0.0
+    for name, info in env.objects.items():
+        if name in ("plane", "table", "robot"):
+            continue
+        if getattr(info, "is_tray", False):
+            continue
+        if info.size is None:
+            continue
+        max_extent = max(max_extent, float(np.max(info.size)))
+    auto_cell = max_extent + 0.01
+    effective_cell = max(uniform_cell_size, auto_cell)
+    print(f"  [audit-66/67] Effective minimum boxel size: "
+          f"{effective_cell:.3f} m (largest object AABB "
+          f"{max_extent:.3f} m + 0.01 m headroom).")
+
     if baseline == 'uniform':
         env.use_uniform_grid = True
-
-        # Audit #66 (Plan A) — auto-tune cell size to fit the largest
-        # object AABB.  Default uniform cell 0.05 m is smaller than
-        # default occluders (6-7 cm wide, 12-16 cm tall), so under
-        # uniform mode every (boxel_fits ?occluder ?cell) atom is
-        # unsatisfiable on all 3 axes (streams.py:369), the place
-        # precondition can't ground, and PDDLStream loops searching
-        # for a plan that cannot exist (logs/run_2026-05-09_10-48-13/:
-        # 2480 cells, 2472 boxel_fits, iter-1 Cost: inf).  Largest
-        # AABB axis is the OCCLUDER HEIGHT, so auto_cell ~ 0.17 m for
-        # the default scene.  Headroom +0.01 m for PyBullet contact
-        # margin.  Acts as a SAFETY GUARD: if the user passes
-        # --uniform-cell-size already >= auto_cell, keep it; otherwise
-        # bump up.  Side effect: lattice drops 4x4x2 = 32 cells (was
-        # 16x16x10 = 2560 at 0.05 m), ~20 free after obstacle
-        # rejection — coarse but plenty for grounding.
-        max_extent = 0.0
-        for name, info in env.objects.items():
-            if name in ("plane", "table", "robot"):
-                continue
-            if getattr(info, "is_tray", False):
-                continue
-            if info.size is None:
-                continue
-            max_extent = max(max_extent, float(np.max(info.size)))
-        auto_cell = max_extent + 0.01
-        effective_cell = max(uniform_cell_size, auto_cell)
-        if effective_cell > uniform_cell_size + 1e-9:
-            print(f"  [audit-66] Auto-bumped uniform cell size: "
-                  f"{uniform_cell_size:.3f} m -> {effective_cell:.3f} m "
-                  f"(largest object AABB {max_extent:.3f} m + 0.01 m "
-                  f"headroom).")
         if abs(effective_cell - 0.05) > 1e-9:
             env.set_uniform_cell_size(effective_cell)
+    else:
+        # Semantic octree — clamp the minimum leaf size to
+        # effective_cell so leaves can't be smaller than uniform's
+        # cells.  Larger leaves are still allowed (CellMerger keeps
+        # collapsing same-colour neighbours).
+        env.free_space_generator.min_resolution = effective_cell
 
     # Let settle: 50 steps at 240 Hz ≈ 0.2 s.  Enough for the loaded
     # Panda + cubes to reach static equilibrium after spawning.
