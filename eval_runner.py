@@ -72,9 +72,45 @@ SMOKE_MATRIX = {
     "_n_hidden_strategy": "all_or_max",
 }
 
+# "default" matrix — semantic-vs-uniform comparison across goal types
+# on canonical default scenes (vs. SCALABILITY_MATRIX, which sweeps
+# n_occluders / n_targets on the random scalability scene).  3 (scene,
+# goal) pairs × 10 seeds × 2 baselines = 60 cells.
+#
+# Per-seed variation:
+#   - 'default' scene has fixed object positions, so --seed only varies
+#     planner-level RNG (Phase 4 random.choice() target pick + PDDLStream
+#     stream sampling).  Same scene geometry across all 10 seeds for
+#     holding and find-and-tray-stack.
+#   - 'stack' scene has random per-seed cube placement
+#     (constrain_to_reach=True), so layout varies across seeds.
+#
+# (default, stack) is intentionally skipped because run_logger
+# auto-promotes it to (stack, stack).  (stack, holding) and
+# (stack, find-and-tray-stack) are skipped because no occluders means
+# 0 hidden — degenerate for both goals.
+DEFAULT_MATRIX = [
+    {
+        "scene":              [scene],
+        "goal":               [goal],
+        "seed":               list(range(10)),
+        "baseline":           ["semantic", "uniform"],
+        "unit_costs":         [False],
+        "n_occluders":        [3],
+        "n_targets":          [4],
+        "_n_hidden_strategy": "none",
+    }
+    for scene, goal in [
+        ("default", "holding"),
+        ("stack",   "stack"),
+        ("default", "find-and-tray-stack"),
+    ]
+]
+
 MATRIX_PRESETS = {
     "scalability": SCALABILITY_MATRIX,
-    "smoke": SMOKE_MATRIX,
+    "smoke":       SMOKE_MATRIX,
+    "default":     DEFAULT_MATRIX,
 }
 
 
@@ -82,13 +118,22 @@ MATRIX_PRESETS = {
 # Cell expansion
 # ---------------------------------------------------------------------------
 
-def iterate_matrix(matrix: dict) -> Iterator[Dict]:
-    """Expand the matrix dict into cell dicts (cartesian product).
+def iterate_matrix(matrix) -> Iterator[Dict]:
+    """Expand the matrix into cell dicts.
+
+    A dict value is a single axis-bundle and gets cartesian-product
+    expansion.  A list value means union — iterate each sub-matrix in
+    turn.  The list form is useful when two axes need to be paired
+    (e.g. scene + goal in the "default" matrix), not crossed.
 
     Keys starting with ``_`` are policies, not axes — they don't multiply
     the product but instead derive fields from other axes.  Currently
     supported: ``_n_hidden_strategy`` ∈ {"all_or_max", "none"}.
     """
+    if isinstance(matrix, list):
+        for sub in matrix:
+            yield from iterate_matrix(sub)
+        return
     axis_keys = [k for k in matrix.keys() if not k.startswith("_")]
     axis_vals = [matrix[k] for k in axis_keys]
     n_hidden_strategy = matrix.get("_n_hidden_strategy", "none")
@@ -365,9 +410,19 @@ def main(argv=None):
                              "(repeatable).")
     args = parser.parse_args(argv)
 
-    matrix = dict(MATRIX_PRESETS[args.matrix])
-    if args.seeds is not None:
-        matrix["seed"] = _parse_seed_spec(args.seeds)
+    matrix_preset = MATRIX_PRESETS[args.matrix]
+    seeds_override = (_parse_seed_spec(args.seeds)
+                      if args.seeds is not None else None)
+    if isinstance(matrix_preset, list):
+        if seeds_override is not None:
+            matrix = [{**sub, "seed": seeds_override}
+                      for sub in matrix_preset]
+        else:
+            matrix = matrix_preset
+    else:
+        matrix = dict(matrix_preset)
+        if seeds_override is not None:
+            matrix["seed"] = seeds_override
 
     cells = list(iterate_matrix(matrix))
     print(f"[runner] matrix={args.matrix}, {len(cells)} cells")
