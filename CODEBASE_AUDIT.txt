@@ -1127,6 +1127,35 @@ Added:        2026-05-10 (later) — FOR LATER bullet for "Parallel
               #50/#62 (Python-side perf hunt — same goal,
               different layer).  Not numbered; lives as a bullet
               in the FOR LATER backlog.
+Updated:      2026-05-10 (later) — FOR LATER "Parallel FastDownward"
+              bullet rewritten with prior-work findings from a
+              web search the same day.  Substantial CPU prior
+              work exists (HDA* / Distributed FD by Kishimoto-
+              Fukunaga-Botea ICAPS 2009 — 30-60x on 128 cores,
+              live code at github.com/jinnaiyuu/distributed-
+              fast-downward; ArvandHerd IPC 2011 winner —
+              4 Arvand + 1 LAMA configs; FD Stone Soup; Springer
+              2021 multi-core BFS; arXiv 2407.21485 generalized
+              planning).  GPU is a dead-end for classical PDDL
+              specifically (FD pointer-heavy data structures);
+              PyBullet GPU pipeline is dormant; Isaac/MuJoCo MJX/
+              Genesis are the GPU-sim escape hatches but require
+              a full simulator swap.  Bullet now also explains
+              WHY it stays FOR LATER not promoted (the wall-clock
+              complaint is upstream of FD search per #50/#62).
+Added:        2026-05-10 (later) — #69 (PyBullet rayTestBatch —
+              pass numThreads on the 5 existing call sites).
+              TIER 3, low effort, measurable win.  Promoted from
+              the FOR LATER bullet to a numbered issue because
+              (unlike the speculative FD/GPU angle) this is just
+              an unused PyBullet feature with a 1-kwarg patch.
+              Five call sites identified by grep: boxel_env.py
+              (oracle_detect_objects, compute_shadow_blockers),
+              shadow_calculator.py, execution.py x2 (sense_shadow
+              _raycasting — 147 rays per call, biggest single
+              batch).  Default numThreads=0 (Bullet auto-picks).
+              Thread-safety footgun documented in Care.  Open
+              count: 9 -> 10.
 Slimmed:      2026-05-10 (later) — moved 3 inline bodies to
               archive/CODEBASE_AUDIT_RESOLVED.txt under a new
               "2026-05-10 SLIM ADDITIONS" section:
@@ -2432,6 +2461,119 @@ Related: #29 [archived] — hidden-target placement raycast
 
 
 ================================================================================
+#69. PYBULLET rayTestBatch — PASS numThreads ON THE 5 EXISTING CALL SITES
+================================================================================
+Status:   OPEN.  Raised 2026-05-10 (later) after web search for
+          PyBullet parallelism support (logs in chat history).
+Priority: TIER 3 — low priority, low effort, measurable win.
+          Promoted from the FOR LATER "Parallel FastDownward"
+          bullet to a numbered issue because (unlike the
+          speculative FD/GPU angle) this is just an unused
+          PyBullet feature with a 1-kwarg patch.
+Where:    Five rayTestBatch call sites, all currently single-
+          threaded:
+            boxel_env.py:1074  oracle_detect_objects
+                               — 8 rays (camera→AABB corners)
+                               × N visible objects per scene
+            boxel_env.py:1475  compute_shadow_blockers
+                               — 5×5 ray grid per shadow
+            shadow_calculator.py:111  ShadowCalculator
+                               — back-corner rays per occluder
+            execution.py:113   sense_shadow_raycasting
+                               — 7×7 grid × 3 Z levels
+                               = 147 rays per sense action
+            execution.py:212   sense_shadow_raycasting
+                               (second batch in same handler)
+Depends:  None.  Independent of #50/#62 perf hunts (different
+          layer — those are Python-side stream/init redundancy).
+
+What:  PyBullet's rayTestBatch accepts a numThreads kwarg
+       (added upstream in bullet3 PR #1760).  Rays are dispatched
+       across threads from a shared work queue (greedy schedule —
+       per-ray cost varies a lot, so pre-distribution is worse).
+       None of the 5 call sites in this codebase pass it, so we
+       single-thread every raycast.
+
+       Raycasting is on the planner-call hot path:
+         - oracle_detect_objects fires once per Phase 1 visibility
+           check and once per Phase 4 oracle re-check.
+         - compute_shadow_blockers fires once at scene setup and
+           per replan (registry rebuild).
+         - sense_shadow_raycasting fires once per sense action;
+           147 rays per call is the largest single batch.
+
+       Independent measurement of the wall-clock share comes
+       from timing_summary.json (#9 instrumentation), but the
+       147-ray sense batch alone is large enough to benefit from
+       4-8 threads on a modern laptop CPU.  Phase 1 scenes with
+       many visible objects multiply by N for that one call too.
+
+Fix:   ONE-LINE PATCH PER CALL SITE.
+
+       (1) Add numThreads kwarg to all 5 rayTestBatch invocations.
+           Default to 0 (= "Bullet picks max available threads",
+           per upstream docs) so behavior auto-scales with the
+           host's core count.  Allow override via a single
+           SetPhysicsEngineParameter-style runtime knob if the
+           eval matrix wants to compare 1-thread vs N-thread
+           cells (worth doing; it doubles the matrix axis cost
+           but produces a clean "yes-this-actually-helps" plot
+           for the THESIS_NOTES side).
+
+       (2) Verify the thread-safety constraint: rayTestBatch
+           cannot run concurrently with stepSimulation on the
+           same physics client.  Our code paths are sequential
+           (one phase at a time), so no concurrent risk — but
+           document it in a comment near each call site so a
+           future refactor doesn't introduce one.
+
+       (3) Smoke run on default scene + scalability scene with
+           the new flag; confirm ray hit results are identical
+           between numThreads=1 and numThreads=N (greedy
+           scheduling preserves results, only ordering of
+           hit-collection changes within the batch — we already
+           consume the result as a list indexed by ray id, so
+           order-independence holds).
+
+       (4) Optional — re-run a small eval cell (smoke matrix)
+           and compare timing_summary.json planning_time_s
+           before/after.  If the win is measurable, mention in
+           THESIS_NOTES §17 (or a new §22) as a "free wall-clock
+           reduction independent of the discretization-strategy
+           comparison being measured."
+
+Care:  - PyBullet's GPU rigid-body pipeline is dormant (Bullet
+         3.x has an OpenCL pipeline but it was never wired into
+         PyBullet — see FOR LATER bullet for the FastDownward /
+         PyBullet GPU summary).  Don't conflate this issue with
+         "go GPU" — this is purely CPU thread parallelism within
+         a single rayTestBatch call.
+       - Thread-safety footgun (forum-confirmed): "you cannot be
+         raycasting from one thread while you are stepping the
+         world in another".  Currently fine — every call site
+         is sequential w.r.t. stepSimulation — but the Care
+         note above prevents accidental future regressions.
+       - This is NOT a substitute for #50/#62 (Python-side perf
+         hunt).  Different layer entirely.  Land both.
+
+Related: #50/#62 — Python-side perf hunt; raycast multithreading
+              is a different layer of the same wall-clock budget.
+         #67 [DONE 2026-05-10] — Phase 4 camera-ray occlusion
+              swap.  Phase 4's oracle_detect_objects call was
+              one of the audit-#67-touched code paths; it is
+              also a numThreads candidate (same boxel_env.py:1074
+              call site).
+         #9 [DONE 2026-05-08 (later)] — timing_summary.json
+              instrumentation.  Without #9 the before/after
+              measurement above wouldn't be possible.
+         FOR LATER bullet "Parallel FastDownward / GPU sim" —
+              this issue is the realistic CPU-side spinoff;
+              the bullet covers the speculative angles
+              (FD parallelisation, GPU sim swap to Isaac /
+              MuJoCo MJX / Genesis) that stay out of scope.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -2516,23 +2658,77 @@ FOR LATER
   seeds — no domain re-encoding by us if their published encodings cover
   the task; otherwise drop the comparison rather than shoehorn.
 
-- Parallel FastDownward — split the search space across CPU threads to
-  better utilise a multi-core machine; possibly extend to GPU.  Idea
-  raised 2026-05-10 (later) by user; super-low priority, post-thesis
-  research direction.  The hard part is "find a meaningful way to split
-  the search space" — naive worker-per-state-expansion duplicates work
-  and ignores heuristic estimates; FD's existing portfolio mode (run N
-  configurations in parallel and take whichever finishes first) is the
-  off-the-shelf option but doesn't actually grow the searchable space
-  per unit time.  More research-y angles: state-space partitioning by
-  goal-fact subset; per-thread h-bound bands so threads explore
-  different parts of the f-cost frontier; cooperative beam search with
-  a shared incumbent.  GPU is even more speculative — FD's data
-  structures are pointer-heavy and not trivially vectorisable; the
-  literature has very few wins here (mostly heuristic batching, e.g.
-  pattern-database lookups).  Out of scope for the thesis;
-  cross-references #50 / #62 (Python-side perf hunt — different layer
-  entirely, but same broad goal of "make the planner finish faster").
+- Parallel FastDownward / GPU robotics sim — post-thesis research
+  direction.  Idea raised 2026-05-10 (later) by user; web-searched
+  same day for prior work, findings below.  Bullet refined from
+  "speculative" to "mostly-solved on CPU; dead-end on GPU for FD
+  specifically; sim-side GPU exists but means a different simulator."
+
+  ON THE FASTDOWNWARD SIDE — substantial prior work exists:
+    - HDA* / Distributed Fast Downward (Kishimoto, Fukunaga, Botea —
+      ICAPS 2009; arXiv 1201.3204) — Hash-Distributed A* as a drop-in
+      replacement for FD's sequential A*.  MPI-based; works on shared
+      memory, distributed, or mixed.  30-60x speedup on 128 cores.
+      Uses Abstract Zobrist Hashing to assign each state to a unique
+      process for local duplicate detection.  Live code:
+      github.com/jinnaiyuu/distributed-fast-downward (research code,
+      not tracking modern FD; targets OPTIMAL A*, not the satisficing
+      greedy best-first that PDDLStream's adaptive algorithm uses —
+      so a drop-in port to our pipeline is non-trivial).
+    - ArvandHerd (IPC 2011 winner, parallel track) — 4 Arvand configs
+      + 1 LAMA config running on separate processors with minimal
+      cross-process comms.  This is exactly the "FD portfolio mode"
+      angle; it works because the "find a meaningful split" problem
+      is hard and config-portfolio is the practical workaround.
+    - Fast Downward Stone Soup (Helmert et al., ICAPS 2011) and
+      Fast Downward Remix — sequential portfolio configurators
+      (15 of 38 FD configs, varying time slices).
+    - Springer 2021 "Parallel best-first search algorithms for
+      planning problems on multi-core processors" — async work-pool
+      design with abstraction-based duplicate-detection partitioning;
+      maps directly to a "split by CPU thread count" framing.
+    - arXiv 2407.21485 (2024) — Parallel Strategies for Best-First
+      Generalized Planning; recent active research.
+
+  ON THE GPU SIDE — essentially dead-end for classical PDDL planning:
+    - FD's data structures are pointer-heavy and not trivially
+      vectorisable; the literature has very few wins.  The most
+      likely win is heuristic batching (e.g. pattern-database
+      lookups) — narrow, not a general parallelisation.
+    - LLM-generated heuristics on GPU (arXiv 2501.18784, 2025) is
+      the more promising angle: don't parallelise the search,
+      parallelise the heuristic computation.
+
+  ON THE SIMULATOR SIDE — PyBullet GPU is dormant; alternatives
+  exist but mean swapping simulator entirely:
+    - Bullet 3.x has an OpenCL GPU rigid-body pipeline (Erwin
+      Coumans, 2012) — 100k bodies real-time on a Radeon 7970.
+      Never wired into PyBullet; maintainer position on GitHub
+      issue #3105 is "may be enabled in the future."  Code dormant
+      since AMD stopped funding the work in ~2013.
+    - For GPU-accelerated robotics sim today: NVIDIA Isaac Sim /
+      Isaac Lab (thousands of envs in parallel, Omniverse-based);
+      MuJoCo MJX (JAX); Genesis.  All require a full simulator
+      swap — out of thesis scope.
+    - Within PyBullet itself, the realistic CPU-parallelism win
+      is rayTestBatch numThreads — see #69 for the 5-call-site
+      one-line patch.
+
+  WHY THIS STAYS FOR LATER (not promoted to a numbered issue):
+    - Even if HDA*/MPI was wired into the planner stack, our
+      wall-clock perf complaint is upstream of FD search itself
+      (see #50/#62 — Python-side stream/init redundancy).  An
+      infinitely-fast FD would shrink an already-small slice.
+    - The realistic CPU-side win that doesn't require any
+      simulator/planner swap is captured concretely as #69
+      (rayTestBatch numThreads).
+    - GPU is research-grade work measured in months, not days,
+      and the literature is thin enough that it's a dissertation
+      topic in its own right — not a pre-submission tweak.
+
+  Cross-references: #50/#62 (Python-side perf hunt — same goal,
+  different layer); #69 (rayTestBatch numThreads — the realistic
+  spinoff).
 
 ================================================================================
 SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-10 (later))
@@ -2600,8 +2796,15 @@ TIER 3 — CODE QUALITY / LOW-PRIO:
        2026-05-09.  Mechanical case-preserved sweep on its own
        branch (rename-boxel-to-hanixel).  Land after audit-64-
        tampura-binary-grid merges/rebases to avoid rename noise.
+  #69  PyBullet rayTestBatch — pass numThreads on the 5 existing
+       call sites (boxel_env.py x2, shadow_calculator.py,
+       execution.py x2 — 147 rays per sense action is the
+       largest single batch).  Unused upstream PyBullet feature;
+       1-kwarg patch.  Spinoff from the FOR LATER "Parallel
+       FastDownward" bullet — captures the realistic CPU-side
+       win that doesn't require simulator/planner swap.
 
-Total open: 9 items (#50, #57, #59, #61, #62, #63, #65, #66 Plan C, #68).
+Total open: 10 items (#50, #57, #59, #61, #62, #63, #65, #66 Plan C, #68, #69).
 
 Closed since previous summary:
   #67  [DONE 2026-05-10] — Phase 4 hidden-target criterion swap
