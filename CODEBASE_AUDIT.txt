@@ -1066,6 +1066,33 @@ Added:        2026-05-09 — #65 (rename: boxel -> hanixel terminology
               and archive/* keep "boxel" wording (audit trail).
               Repo name + thesis title separate decisions.  TIER 3.
               Open count: 6 -> 7.
+Updated:      2026-05-10 — #67 [DONE 2026-05-10].  Single-commit
+              resolution: dropped the audit body's two-commit plan
+              (placement tightening + Phase 4 criterion swap) in
+              favour of just the Phase 4 swap, after user pushback —
+              making Phase 4 use camera-ray occlusion (matching
+              Phase 1 / oracle_detect_objects) eliminates the
+              disagreement at its source, so placement does not need
+              tightening to make the AABB proxy succeed.
+              test_full_pipeline.py: oracle_detect_objects() runs
+              once at Phase 4 entry; hidden_targets_set drives the
+              holding-goal target pick and the find-and-tray-stack
+              visible/hidden classification; AABB containment is
+              demoted to a best-effort target_to_shadow lookup used
+              only for the oracle log line and is tolerated to be
+              empty per-target (new "boundary case" log message).
+              Reproducer (occ1 tgt3 hid1 seed2 holding semantic)
+              post-fix: Phase 4 prints "Target: green_object" with
+              the new boundary-case ORACLE log line, run reaches the
+              planner, executes 8 plans, then fails LOUDLY with
+              audit #21 (cascading-occlusion give-up after 3
+              still_blocked sense attempts) — strict improvement
+              over the previous silent abort with
+              exit_reason=no_summary.  The downstream cascading-
+              occlusion problem is known-deferred audit #47
+              (re-ground blocker atoms) territory, surfaced now
+              because no_summary aborts no longer hide it.
+              Open count: 9 -> 8.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -2350,7 +2377,7 @@ Related: #50 — planner perf investigation.  Plan A's cell-size
 
 
 ================================================================================
-#67. PHASE 1 / PHASE 4 HIDDEN-TARGET CRITERION DISAGREEMENT (silent run abort)
+#67. [DONE 2026-05-10] PHASE 1 / PHASE 4 HIDDEN-TARGET CRITERION DISAGREEMENT (silent run abort)
 ================================================================================
 Priority: TIER 1 — correctness blocker for the eval matrix.  Silent
           run aborts inflate the failure rate of BOTH baselines on
