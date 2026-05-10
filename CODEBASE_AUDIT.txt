@@ -1093,6 +1093,26 @@ Updated:      2026-05-10 — #67 [DONE 2026-05-10].  Single-commit
               (re-ground blocker atoms) territory, surfaced now
               because no_summary aborts no longer hide it.
               Open count: 9 -> 8.
+Added:        2026-05-10 (later) — #68 (scene randomizer — vary
+              the (occluder, hidden-target) pair count per run).
+              User direction 2026-05-10: "next top prio issue:
+              we need to do a scene randomizor.  So every time
+              there's some variable number of occluder-hidden
+              object pairs.  The task would be to let the AI do
+              the work of writing the scene randomizer and then
+              ask the user to test it out and wait for response."
+              Today scalability_scene takes fixed
+              --n-occluders / --n-targets / --n-hidden counts;
+              the eval matrix sweeps these axes deterministically
+              across cells but every CELL produces the same
+              count.  New issue captures the randomizer that
+              picks the pair count itself per run (within a CLI-
+              configurable range) so consecutive GUI runs and
+              per-cell scenes differ in N pairs as well as in
+              placement.  TIER 0 — top priority per user.
+              Workflow note in body: AI implements; user runs;
+              AI waits for response before declaring done.
+              Open count: 8 -> 9.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -2533,6 +2553,198 @@ Related: #29 [archived] — hidden-target placement raycast
 
 
 ================================================================================
+#68. SCENE RANDOMIZER — VARY THE (OCCLUDER, HIDDEN-TARGET) PAIR COUNT PER RUN
+================================================================================
+Status:   OPEN.  Raised 2026-05-10 (later) by user as "next top
+          prio issue".  No commits yet.
+Priority: TIER 0 — top priority per user direction.  Promotes
+          ahead of the previously-empty TIER 0 slot and ahead of
+          #66 Plan C (TIER 1, audit-64-tampura-binary-grid)
+          because the scene-variability gap blocks the kind of
+          qualitative evidence the user wants to see in single GUI
+          runs ("every run looks meaningfully different") and
+          would also broaden the eval matrix without adding
+          another explicit axis.
+Where:    Primary:
+            boxel_env.py — scalability_scene() and
+              _hidden_xy_positions() / _random_xy_positions()
+              (audit #29 placement helpers).  The randomizer
+              either (a) lives here as a new factory
+              (e.g. random_pairs_scene(min_pairs, max_pairs,
+              seed, ...)), or (b) extends scalability_scene with
+              a "count is itself random" mode toggled by passing
+              None for the explicit counts.
+          CLI surface:
+            run_logger.py::parse_args — new flag(s) to drive the
+              randomizer.  Candidate designs in the Fix section.
+          Eval integration:
+            eval_runner.py::SCALABILITY_MATRIX / DEFAULT_MATRIX —
+              optional new matrix preset that uses the randomizer
+              instead of cartesian-product over fixed counts.
+              MAY be deferred to a follow-up commit; the GUI-run
+              experience is the primary deliverable.
+          Tests:
+            none currently — manual GUI verification per the
+              workflow note in Care.
+Depends:  None.  Independent of in-flight #66 Plan C and #50/#62
+          perf work.  Does NOT depend on #65 (boxel -> hanixel
+          rename) — touches scene-generation surface area that #65
+          will mechanically rename later.
+
+What:  Today's scene-generation surface produces the SAME pair
+       count on every invocation:
+
+         scalability_scene(n_occluders, n_targets, seed, n_hidden)
+
+       takes the counts as required CLI inputs (run_logger.py
+       --n-occluders / --n-targets / --n-hidden), and the
+       eval_runner matrix sweeps those axes DETERMINISTICALLY
+       across cells: cell occ3_tgt4_hid2 always has exactly 3
+       occluders and 4 targets with 2 hidden, regardless of seed.
+       Only the per-object XY positions vary with --seed.
+
+       This means:
+       (a) Two consecutive `run_boxels --scene scalability` GUI
+           runs produce the SAME silhouette count and qualitative
+           difficulty.  Without changing CLI args, the user sees
+           the same scene shape every time — only object
+           positions differ.  This is fine for unit-test-style
+           regression seeds, but undermines any "look at this
+           variety of scenes" demonstration.
+       (b) The eval matrix conflates "scenes vary structurally"
+           with "scenes vary in placement".  The thesis Results
+           plots currently sweep the count axis as a deliberate
+           independent variable, but there is no within-axis
+           randomization at the count level — every n_occluders=3
+           cell is structurally identical to every other
+           n_occluders=3 cell.
+
+       The user wants a randomizer where the COUNT itself is a
+       random variable per run, drawn within a CLI-configurable
+       range, so that every invocation produces a structurally
+       distinct (occluder, hidden-target) pair budget.  "Pair"
+       here means: one occluder casting a shadow that has at
+       least one hidden target inside its frustum (audit #29
+       guarantees this at spawn time via raycast verification).
+
+Fix:   USER DIRECTION 2026-05-10:
+       "Let the AI do the work of writing the scene randomizer
+        and then ask the user to test it out and wait for
+        response."
+
+       Implementation outline (AI proposes, user validates the
+       choice via GUI smoke before any commit lands):
+
+       (1) Decide the API.  Two candidates, AI picks one and
+           justifies inline in the commit message:
+
+           (A) New scene preset.  --scene random-pairs.
+               scalability_scene gets a sibling
+               random_pairs_scene(min_pairs, max_pairs, seed,
+               extra_distractors=0) in boxel_env.py.  CLI gets
+               --n-pairs-range MIN-MAX (default e.g. "1-5").
+               Pros: zero impact on existing scalability matrix;
+               new flag is self-documenting; eval_runner can
+               leave SCALABILITY_MATRIX untouched and add a new
+               RANDOM_MATRIX preset later.
+               Cons: scene plumbing in boxel_env.py grows by
+               another factory; CLI surface widens.
+
+           (B) Extend scalability_scene with optional ranges.
+               --n-occluders / --n-targets / --n-hidden start
+               accepting either a single int (today) or a
+               MIN-MAX range string ("1-5") that is sampled per
+               run from the seeded RNG.  No new --scene preset;
+               no new factory.
+               Pros: reuses existing scene preset; minimal CLI
+               surface delta.
+               Cons: argparse type goes from int to a custom
+               parser; the eval matrix must distinguish "axis
+               value 3" from "axis value 1-5" semantically.
+
+           AI default recommendation: (A) for clean separation of
+           concerns and zero risk to existing eval cells.  User
+           may direct (B) instead.
+
+       (2) Hook the new factory / mode into the existing
+           hidden-target placement guarantee (audit #29
+           raycast verification).  The randomizer must NOT
+           bypass the guarantee: every spawned hidden target
+           must still pass camera-ray occlusion at spawn time.
+           Reuse _hidden_xy_positions() with the sampled count.
+
+       (3) Hook into the audit #67 fix (Phase 4 uses camera-ray
+           occlusion).  Since #67 already removed the AABB-
+           containment dependence, any scene the randomizer
+           produces should round-trip through Phase 4 cleanly.
+           No changes to test_full_pipeline.py expected.
+
+       (4) GUI smoke verification (USER STEP).  Before declaring
+           DONE, AI runs the new flag in a single
+           `run_boxels --scene <new>` invocation, captures the
+           Phase 1/4 logs and the spawn count, and posts the
+           output to the user.  User runs the same command on
+           their end at least 2-3 times, confirms the count
+           varies between runs and that each run completes
+           through to a planner call (no silent aborts).  AI
+           waits for explicit user OK before committing the
+           [DONE 2026-05-XX] entry.
+
+       (5) Optional follow-up: add a new eval_runner matrix
+           preset (e.g. "random") that uses the randomizer
+           instead of fixed counts.  Bundle in same commit if
+           the surface change is small; defer to a follow-up
+           commit otherwise.
+
+Care:  WORKFLOW (per user direction 2026-05-10):
+
+       This issue is explicitly framed as: AI implements, USER
+       tests the output via a real GUI run, AI waits for the
+       user's response before declaring the issue DONE.  Do NOT
+       self-mark this issue [DONE] based on a `--no-gui` smoke
+       run from the AI's side alone — the failure mode is
+       exactly the kind of "looks fine in headless, looks weird
+       in GUI" drift that benefits from human verification.
+
+       Concretely:
+       (i)   AI writes the implementation, runs `python -c
+             "import boxel_env; ..."` import-smoke, and runs ONE
+             headless invocation to confirm Phase 1/4 logs look
+             sensible.
+       (ii)  AI posts the diff summary + the headless-run logs
+             to the user as part of the implementation reply.
+             AI does NOT push or commit yet.
+       (iii) User runs `run_boxels --scene <new-preset>` (or
+             the equivalent new flag) 2-3 times in the GUI,
+             confirms scenes differ structurally between runs.
+       (iv)  User responds with "looks good" / "fix X" / etc.
+       (v)   AI either commits + adds [DONE] entry (on user OK)
+             or iterates (on user feedback).
+
+       This explicit hand-off is preserved in this Care block
+       so future audit slim passes don't lose the workflow
+       expectation.  Other audit issues (e.g. #67 single-commit
+       fix on AI direction) are NOT bound to this workflow —
+       this is a per-issue user request.
+
+Related: #29 [archived] — hidden-target placement raycast
+              verification.  The randomizer must call this
+              guarantee on every sampled count; do not bypass.
+         #67 [DONE 2026-05-10] — Phase 4 camera-ray occlusion
+              fix.  The randomizer benefits from the post-#67
+              clean Phase 4 path and should not need any
+              test_full_pipeline.py change.
+         #9 [DONE 2026-05-08] — eval runner.  Optional follow-up
+              matrix preset using the randomizer; out of scope
+              for the primary commit.
+         #59 — scaled-up find-and-stack with N hidden targets
+              (very low priority).  The randomizer is a
+              prerequisite for any "random N targets, all
+              hidden" find-and-tray-stack scaling demo, but
+              implementing #59 itself stays deferred.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -2618,7 +2830,7 @@ FOR LATER
   the task; otherwise drop the comparison rather than shoehorn.
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-08)
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-10 (later))
 ================================================================================
 
 Aligns with the ROADMAP banner above (pre-eval → eval prerequisites → eval).
@@ -2629,11 +2841,21 @@ Each issue is ideally one commit; parallelise where dependencies allow.
 The pre-evaluation correctness chain ended 2026-05-08 with #60 [DONE].
 Eval (#9, #10) was the user's critical path to the thesis Results
 chapter and was promoted from TIER 3 to TIER 1 in the 2026-05-08 (later)
-restructure; both have now landed (#9 in commit e8237b6, #10 in commit
-afdaadd) and TIER 1 is empty pending the WSL sweep run.
+restructure; both landed 2026-05-08.  #67 [DONE 2026-05-10] closed
+the silent-abort failure mode that was inflating eval no_summary
+counts.  TIER 0 repopulates with #68 (scene randomizer) per user
+direction 2026-05-10 (later).
 
 TIER 0 — TOP PRIORITY:
-  (empty — no open correctness blockers.)
+  #68  Scene randomizer — vary the (occluder, hidden-target) pair
+       count per run (within a CLI-configurable range), not just
+       per-object placement.  Today scalability_scene takes fixed
+       --n-occluders / --n-targets / --n-hidden counts so two
+       consecutive GUI runs produce structurally identical scenes
+       (only XY positions differ).  AI implements; user runs in
+       GUI 2-3 times for verification; AI waits for user OK
+       before committing [DONE].  Workflow expectation captured
+       in the Care block.
 
 TIER 1 — UNIFORM/TAMPURA BASELINE PLACEMENT (correctness blocker):
   #66  Place fails when object > cell.  Default uniform 5 cm
@@ -2643,15 +2865,6 @@ TIER 1 — UNIFORM/TAMPURA BASELINE PLACEMENT (correctness blocker):
        [PENDING on audit-64-tampura-binary-grid] (continuous-
        pose place, real TAMPURA).  Single shared issue body
        across both branches.
-  #67  Phase 1 / Phase 4 hidden-target criterion disagreement —
-       silent run abort.  Phase 1 uses camera-ray occlusion;
-       Phase 4 uses AABB-shadow-containment; ~16 % of cells in
-       sweep_2026-05-10_uc-false abort silently before any
-       planner call (exit_reason=no_summary).  Two-commit fix
-       per user direction 2026-05-10: tighten placement so
-       hidden = inside-shadow-AABB by construction, then drop
-       Phase 4's AABB test in favour of camera-ray occlusion as
-       the single source of truth.  Independent of #66 / #50.
 
 TIER 2 — PERF (planner wall-clock):
   #50  Planner perf investigation — profile, cache static init, kill
@@ -2664,24 +2877,36 @@ TIER 3 — CODE QUALITY / LOW-PRIO:
   #57  Registry should own cube geometry (audit #55 follow-up;
        replace PyBullet AABB fallback in compute_stack_kin_solution)
   #59  Scaled-up find-and-stack — N hidden targets + size-compat
-       PDDL predicate (very low priority per user 2026-05-08)
+       PDDL predicate (very low priority per user 2026-05-08).
+       #68 (scene randomizer) is a prerequisite for any "random N
+       hidden targets" find-and-tray-stack demo.
   #61  Smart console filter — strip residual startup/shutdown garbage
        and add Claude-Code-style thinking-animation affordance during
        long planner.plan() / RRT / stream-sample calls
        (UX polish; user-flagged 2026-05-08)
-  #63  README + wiki final doc sweep — gated on #9 / #10 (eval) plus
-       any other open issue that lands between now and submission.
+  #63  README + wiki final doc sweep — gated on remaining open issues
+       (now: #50, #57, #59, #61, #62, #65, #66 Plan C, #68).
        Explicitly the last commit before thesis submission per user
-       2026-05-08.
+       2026-05-08.  Periodic refresh sweep landed 2026-05-10
+       (commits 56d6001 README + de218bb / 169800b wiki); #63 itself
+       remains open as the final pre-submission pass.
   #65  Rename: boxel -> hanixel.  HANI = Heterogeneous Axis-aligned
        Named Interval; XEL inherited from voxel.  User decision
        2026-05-09.  Mechanical case-preserved sweep on its own
        branch (rename-boxel-to-hanixel).  Land after audit-64-
        tampura-binary-grid merges/rebases to avoid rename noise.
 
-Total open: 9 items (#50, #57, #59, #61, #62, #63, #65, #66, #67).
+Total open: 9 items (#50, #57, #59, #61, #62, #63, #65, #66 Plan C, #68).
 
 Closed since previous summary:
+  #67  [DONE 2026-05-10] — Phase 4 hidden-target criterion swap
+       (commit 4c9e4d5).  Single-commit resolution: dropped the
+       audit body's two-commit plan in favour of just the Phase 4
+       swap, after user pushback — making Phase 4 use camera-ray
+       occlusion (matching Phase 1 / oracle_detect_objects)
+       eliminates the disagreement at its source.  Eval no_summary
+       cells drop to zero (modulo unrelated #21 / #47 cascading-
+       occlusion give-ups now surfaced).
   #10  [DONE 2026-05-08 (later)] — uniform voxelization baseline
        (commit afdaadd).  Free-space-only swap: UniformGridGenerator
        (uniform_grid.py) replaces FreeSpaceGenerator under
