@@ -1113,6 +1113,20 @@ Added:        2026-05-10 (later) — #68 (scene randomizer — vary
               Workflow note in body: AI implements; user runs;
               AI waits for response before declaring done.
               Open count: 8 -> 9.
+Added:        2026-05-10 (later) — FOR LATER bullet for "Parallel
+              FastDownward — split search space across CPU threads
+              (possibly GPU)."  User-raised idea, super-low
+              priority, post-thesis research direction.  Captured
+              with the hard problem flagged ("find a meaningful
+              way to split the search space"), the off-the-shelf
+              option (FD portfolio mode) acknowledged, and a few
+              more research-y angles (goal-fact partitioning,
+              per-thread h-bound bands, cooperative beam search
+              with shared incumbent) sketched so a future
+              attempt has a starting point.  Cross-references
+              #50/#62 (Python-side perf hunt — same goal,
+              different layer).  Not numbered; lives as a bullet
+              in the FOR LATER backlog.
 Slimmed:      2026-05-10 (later) — moved 3 inline bodies to
               archive/CODEBASE_AUDIT_RESOLVED.txt under a new
               "2026-05-10 SLIM ADDITIONS" section:
@@ -2501,6 +2515,24 @@ FOR LATER
   scenes used for #12 scalability, reuse #9 metric hooks, run the same
   seeds — no domain re-encoding by us if their published encodings cover
   the task; otherwise drop the comparison rather than shoehorn.
+
+- Parallel FastDownward — split the search space across CPU threads to
+  better utilise a multi-core machine; possibly extend to GPU.  Idea
+  raised 2026-05-10 (later) by user; super-low priority, post-thesis
+  research direction.  The hard part is "find a meaningful way to split
+  the search space" — naive worker-per-state-expansion duplicates work
+  and ignores heuristic estimates; FD's existing portfolio mode (run N
+  configurations in parallel and take whichever finishes first) is the
+  off-the-shelf option but doesn't actually grow the searchable space
+  per unit time.  More research-y angles: state-space partitioning by
+  goal-fact subset; per-thread h-bound bands so threads explore
+  different parts of the f-cost frontier; cooperative beam search with
+  a shared incumbent.  GPU is even more speculative — FD's data
+  structures are pointer-heavy and not trivially vectorisable; the
+  literature has very few wins here (mostly heuristic batching, e.g.
+  pattern-database lookups).  Out of scope for the thesis;
+  cross-references #50 / #62 (Python-side perf hunt — different layer
+  entirely, but same broad goal of "make the planner finish faster").
 
 ================================================================================
 SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-10 (later))
