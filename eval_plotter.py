@@ -57,6 +57,27 @@ def load_rows(csv_path: Path) -> List[dict]:
     return rows
 
 
+def _split_by_baseline(rows: List[dict]) -> tuple:
+    """Split rows by ``baseline`` column when BOTH 'semantic' and 'uniform'
+    are present.
+
+    Audit #50/#66 follow-up: ``eval_runner.SCALABILITY_MATRIX`` runs both
+    baselines in one sweep, so the produced ``aggregated.csv`` mixes them.
+    Without this split ``group_metric`` would compute means over a mixed
+    series and the comparison plot would be meaningless.
+
+    Returns:
+        (semantic_rows, uniform_rows) when both baselines are present,
+        (rows, None) when only one or zero baseline values are present
+        (preserves the pre-#50/#66 single-series behaviour).
+    """
+    semantic = [r for r in rows if r.get("baseline") == "semantic"]
+    uniform = [r for r in rows if r.get("baseline") == "uniform"]
+    if semantic and uniform:
+        return semantic, uniform
+    return rows, None
+
+
 def group_metric(rows: List[dict],
                  axis_x: str = "n_occluders",
                  series: str = "n_targets",
@@ -111,11 +132,14 @@ def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
                 ylim: Optional[tuple] = None,
                 series_label: str = "n_targets",
                 xlabel: str = "n_occluders",
-                baseline_grouped: Optional[Dict] = None) -> Optional[Path]:
+                baseline_grouped: Optional[Dict] = None,
+                main_label_suffix: str = "",
+                baseline_label_suffix: str = " (baseline)") -> Optional[Path]:
     if not HAVE_MPL:
-        _print_text_table(grouped, title)
+        _print_text_table(grouped, title + main_label_suffix)
         if baseline_grouped is not None:
-            _print_text_table(baseline_grouped, f"{title} — baseline")
+            _print_text_table(baseline_grouped,
+                              f"{title}{baseline_label_suffix}")
         return None
 
     fig, ax = plt.subplots(figsize=(7, 5))
@@ -129,9 +153,9 @@ def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
                         linestyle=linestyle,
                         label=f"{series_label}={s_val}{suffix}")
 
-    _plot(grouped, "", "-")
+    _plot(grouped, main_label_suffix, "-")
     if baseline_grouped is not None:
-        _plot(baseline_grouped, " (baseline)", "--")
+        _plot(baseline_grouped, baseline_label_suffix, "--")
 
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
@@ -167,9 +191,23 @@ def main(argv=None) -> int:
         print(f"[plotter] no rows in {args.csv_path}", file=sys.stderr)
         return 1
 
-    baseline_rows = (
-        load_rows(args.baseline_csv) if args.baseline_csv else None
-    )
+    # Audit #50/#66 follow-up — when --baseline-csv is not given but the
+    # input CSV contains BOTH 'semantic' and 'uniform' rows (the
+    # SCALABILITY_MATRIX default), auto-split by the baseline column so
+    # the plot draws semantic vs uniform without manual CSV slicing.
+    # Explicit --baseline-csv overrides this and behaves as before.
+    main_label_suffix = ""
+    baseline_label_suffix = " (baseline)"
+    if args.baseline_csv:
+        baseline_rows = load_rows(args.baseline_csv)
+    else:
+        rows, baseline_rows = _split_by_baseline(rows)
+        if baseline_rows is not None:
+            main_label_suffix = " (semantic)"
+            baseline_label_suffix = " (uniform)"
+            print(f"[plotter] auto-split by baseline column: "
+                  f"semantic={len(rows)} rows, "
+                  f"uniform={len(baseline_rows)} rows")
 
     out_dir = args.csv_path.parent
 
@@ -183,6 +221,8 @@ def main(argv=None) -> int:
                                        metric="total_planning_time_s",
                                        success_only=True)
                           if baseline_rows else None),
+        main_label_suffix=main_label_suffix,
+        baseline_label_suffix=baseline_label_suffix,
     )
     plot_metric(
         group_success_rate(rows),
@@ -192,6 +232,8 @@ def main(argv=None) -> int:
         ylim=(0.0, 1.05),
         baseline_grouped=(group_success_rate(baseline_rows)
                           if baseline_rows else None),
+        main_label_suffix=main_label_suffix,
+        baseline_label_suffix=baseline_label_suffix,
     )
     plot_metric(
         group_metric(rows, metric="plan_count", success_only=True),
@@ -201,6 +243,8 @@ def main(argv=None) -> int:
         baseline_grouped=(group_metric(baseline_rows, metric="plan_count",
                                        success_only=True)
                           if baseline_rows else None),
+        main_label_suffix=main_label_suffix,
+        baseline_label_suffix=baseline_label_suffix,
     )
     return 0
 
