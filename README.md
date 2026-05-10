@@ -12,10 +12,16 @@ python3 -u test_full_pipeline.py
 | Flag | Description |
 |------|-------------|
 | `--no-gui` | Headless mode (no PyBullet window) |
-| `--log-level verbose` | Full debug output |
-| `--scene default\|mixed\|scalability` | Scene preset |
+| `--no-boxel-viz` / `--show-free` | Skip boxel overlay / include free-space cells in overlay |
+| `--log-level smart\|normal\|quiet\|verbose` | Console verbosity (default: `smart`) |
+| `--scene default\|mixed\|scalability\|stack` | Scene preset |
 | `--goal holding\|stack\|find-and-tray-stack` | Goal mode |
-| `--n-occluders N` / `--n-targets N` / `--n-hidden N` / `--seed N` | Scene size + RNG |
+| `--n-occluders N` / `--n-targets N` / `--n-hidden N` | Scalability scene size (counts) |
+| `--n-objects N` / `--stack-height N` | Stack scene size / tower height |
+| `--seed N` | RNG seed (scalability/mixed/stack scenes) |
+| `--baseline semantic\|uniform` | Free-space discretization (semantic = octree+merge, uniform = static grid) |
+| `--uniform-cell-size F` | Uniform cell edge length in metres (default 0.05; floored at largest-object AABB + 1 cm so `place` can fit) |
+| `--unit-costs` | Override domain action costs (stack=2, others=1) with all-cost-1 |
 
 ## Running on this machine (WSL + PowerShell)
 
