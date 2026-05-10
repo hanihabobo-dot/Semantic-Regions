@@ -52,6 +52,18 @@ Archived: 2026-05-07 (moved from CODEBASE_AUDIT.txt: #31, #36, #41, #48, #49 —
          landed across 4 commits + hotfix; superseded as the default
          thesis demo by new TIER 0 #52 (find-and-stack-on-base).
          Open count after slim: 4.)
+Archived: 2026-05-10 (moved from CODEBASE_AUDIT.txt: #9, #10, #67 —
+         the 2026-05-08 eval push and the 2026-05-10 Phase 4 hidden-
+         target criterion fix.  #9 [DONE 2026-05-08 (later)] eval
+         framework + matrix runner (commit e8237b6).  #10 [DONE
+         2026-05-08 (later)] uniform-vox baseline (commit afdaadd).
+         #67 [DONE 2026-05-10] Phase 4 camera-ray occlusion swap
+         (commit 4c9e4d5; single-commit resolution after user
+         pushback on the body's two-commit plan).  Bodies preserved
+         verbatim under "2026-05-10 SLIM ADDITIONS" near the end of
+         this file, including the full "Outcome [DONE ...]" blocks
+         #9 and #10 grew during implementation.  Open audit shrinks
+         from 12 inline bodies to 9.)
 
 These issues have been fixed, reclassified as not-an-issue, or corrected.
 The active audit with remaining open issues is in CODEBASE_AUDIT.txt.
@@ -4507,3 +4519,369 @@ Related: #36 [DONE 2026-05-07; archived] — introduced the hardcoded
               collision-detected runs (rather than outright physics
               breakage), #58's grasp-preservation would compound the
               wins.
+
+
+================================================================================
+2026-05-10 SLIM ADDITIONS
+================================================================================
+Bodies preserved verbatim for #9 [DONE 2026-05-08 (later)], #10
+[DONE 2026-05-08 (later)], and #67 [DONE 2026-05-10].  All closed
+issues; bodies preserved here while CODEBASE_AUDIT.txt removes them
+to keep the open audit short.
+
+  - #9 (eval framework + matrix runner) and #10 (uniform-vox baseline)
+    landed together in the 2026-05-08 (later) eval push (commits
+    e8237b6, afdaadd).  Both bodies preserved as the full
+    "Outcome [DONE ...]" blocks they grew during implementation.
+  - #67 (Phase 1 / Phase 4 hidden-target criterion disagreement)
+    landed in commit 4c9e4d5 on 2026-05-10 — a single-commit
+    resolution after user pushback on the audit body's two-commit
+    plan.  Phase 4 swap alone eliminates the disagreement at its
+    source; placement-tightening branch of the original fix plan
+    is documented in the body but not implemented (and intentionally
+    so per user direction).
+
+================================================================================
+#9. [DONE 2026-05-08 (later)] EVALUATION — METRIC COLLECTION, EXPERIMENT RUNNER + SCALABILITY MATRIX (absorbs #12)
+================================================================================
+Priority: TIER 1 — Thesis-critical, independent of code fixes
+Where:    New module(s); integrates with test_full_pipeline.py
+Depends:  None (can be built on current pipeline)
+Effort:   3-5 days (was 3-5 + 2-3 when split; doing the matrix in
+          the same eval module is essentially free once the runner
+          loop exists)
+
+What:  The thesis proposal (Section 5) defines metrics and baselines
+       that need an automation layer.  Without benchmarking code, the
+       thesis cannot have a Results/Evaluation section.
+
+       Metric hooks are PARTIALLY DONE (commit fed063a, plus the
+       2026-05-06 unit_costs run_config field): plan_count,
+       total_plan_time, plan_times[], physical_failures_per_action,
+       physical_failures_at_goal, run_config — all written into
+       per-run logs/run_<ts>/timing_summary.json.
+
+       Remaining work is the BATCH layer:
+       - Experiment runner that loops over a scene-config matrix and
+         a seed range, invokes test_full_pipeline.main() per cell.
+       - Cross-run aggregator that collates timing_summary.json files
+         into a single CSV/JSON for analysis.
+       - Scalability matrix evaluation (was #12, merged 2026-05-06):
+         vary n_occluders ∈ 1..6 × n_targets ∈ 1..3 × seeds (5–10
+         per config) on the scalability_scene preset.
+       - Plot generation for the Results chapter: planning time vs
+         scene size, success rate vs scene size (baseline #10
+         overlay; tray-goal #49 as a third data series if completed).
+
+       Scene variation infrastructure already exists (old #55 DONE):
+       SceneConfig, scalability_scene(), CLI --scene/--n-occluders/
+       --n-targets/--seed/--unit-costs.  The experiment runner wires
+       these up.
+
+Fix:   ONE COMMIT — create evaluation module:
+       (a) Add eval_runner.py that accepts scene configs and seed
+           ranges, runs test_full_pipeline.main() per config,
+           collects metrics, outputs structured results.
+       (b) Define the scalability config matrix
+           (n_occluders × n_targets × seeds) and run it via
+           eval_runner.
+       (c) Add a thin plotter that consumes the aggregated CSV/JSON
+           and produces the planning-time / success-rate curves the
+           Results chapter cites.
+
+Subsumes: #12 (scalability analysis) — merged 2026-05-06 per user
+          decision; the matrix is one configuration of the eval
+          runner, not a separate issue.
+
+Related: #10 (uniform-vox baseline; consumes the same runner).
+         #50 (planner perf hunt; uses the same per-call timing).
+
+Outcome [DONE 2026-05-08 (later)]:
+  Two new files, no edits to existing pipeline modules beyond a
+  3-line --seed hook:
+  - eval_runner.py — subprocess-per-cell driver.  Walks a matrix dict,
+    launches `python test_full_pipeline.py --no-gui ...` per cell,
+    locates the freshly-written logs/run_<ts>/timing_summary.json by
+    mtime, copies it into eval_results/sweep_<ts>/cells/<tag>/, and
+    aggregates into aggregated.csv + aggregated.jsonl.  Stub rows
+    written for timeout / crash / no_summary so the aggregator never
+    skips a cell.  Built-in presets: "scalability" (90 cells:
+    n_occluders 1..6 × n_targets 1..3 × 5 seeds × goal=holding,
+    n_hidden = min(n_targets, n_occluders) for deepest-search
+    benchmark) and "smoke" (1 cell).  Flags: --skip-existing
+    (resume), --timeout (default 300s), --max-failures, --dry-run,
+    --extra-arg (pass-through).  Stdlib only — no matplotlib /
+    pandas dependency.
+  - eval_plotter.py — Results-chapter figures from aggregated.csv:
+    planning_time_vs_n_occluders.png, success_rate_vs_n_occluders.png,
+    plan_count_vs_n_occluders.png.  matplotlib if available; falls
+    back to printed text tables if not.  --baseline-csv hook stubbed
+    for #10 (uniform-vox) overlay; line styles distinguish primary
+    vs baseline series.
+  - test_full_pipeline.py __main__ — `random.seed(args.seed)` +
+    `np.random.seed(args.seed)` immediately after parse_pipeline_args()
+    so the 8 unseeded random / np.random call sites become deterministic
+    given a single --seed:
+      * test_full_pipeline.py:569,579,641,642 — random.choice for
+        target / tray-stack participant selection
+      * pddlstream_planner.py:553 — random.shuffle of PDDL init facts
+      * streams.py:425 — random.shuffle of placement offsets
+      * streams.py:657 — np.random.uniform for IK joint sampling
+      * streams.py:761 — random.random for RRT goal bias
+      * streams.py:835-836 — random.randint for path-smoothing pivots
+    Local np.random.RandomState(seed) instances in scalability_scene
+    et al. were already deterministic and are unaffected.  FD's
+    internal random_seed=-1 (hardcoded inside vendored PDDLStream)
+    is NOT overridden — adding equal noise to every approach at the
+    same seed, so the approach-vs-baseline mean comparison remains
+    statistically valid.
+  Validation: ast.parse passes on all three files; --dry-run on both
+  matrix presets produces the expected cell counts (smoke=1,
+  scalability=90).  Real-cell smoke run + first scalability sweep
+  to be run by user on WSL (planner needs pddlstream_lib).
+
+
+================================================================================
+#10. [DONE 2026-05-08 (later)] EVALUATION BASELINE — UNIFORM VOXELIZATION
+================================================================================
+Priority: TIER 1 (promoted from TIER 3 in 2026-05-08 (later) restructure once
+          the pre-eval correctness chain ended; thesis-critical path)
+Where:    New module + small wire-ins; integrates with eval_runner
+Depends:  #9 (experiment runner to collect metrics) — DONE
+Effort:   3-5 days as scoped; landed in ~1 day per the simplified
+          free-space-only swap approach (decided 2026-05-08 after
+          consulting TAMPURA's voxel-grid representation).
+
+What:  The proposal defines "uniform voxelization" as a baseline:
+       the workspace is divided into equal-sized voxels with no
+       semantic awareness (no shadow/object/free distinction).  The
+       planner uses the same PDDL domain but with uniform grid cells
+       instead of semantically-derived boxels.
+
+Fix:   ONE COMMIT — implement uniform voxelization baseline:
+       (a) Add a uniform grid generator (fixed cell size, no octree,
+           no shadow computation) as an alternative to the current
+           FreeSpaceGenerator + shadow_calculator pipeline.
+       (b) Wire into the experiment runner as --baseline uniform.
+       (c) Run same scenes/seeds as the semantic boxel approach and
+           compare metrics.
+
+Outcome [DONE 2026-05-08 (later)]:
+  Decision: free-space-only swap, OBJECT + SHADOW pipelines untouched.
+  Rationale (after the 2026-05-08 TAMPURA consultation): TAMPURA's
+  find_dice/env.py keeps voxel labels purely Python-side — the planner
+  only reasons over per-OBJECT atoms (`known-pose(?o)`, etc.) produced
+  by `abstract()` from the Python belief.  Our project's _build_init()
+  re-emit pattern is the same (CODEBASE POLICY L893-905), so adding
+  the uniform baseline does not require ANY PDDL domain change — only
+  the registry's free-space cells switch from octree+merge to a fixed
+  static lattice under the flag.  Keeping OBJECT + SHADOW boxels
+  semantically shaped preserves the planner contract (same predicates,
+  same ids) so the comparison isolates the discretisation strategy as
+  the single variable being measured.
+
+  Implementation (commit afdaadd, 5 files, +232 / -5):
+    - uniform_grid.py (NEW): UniformGridGenerator mirrors
+      FreeSpaceGenerator's `generate(known_boxels, visualize)` signature.
+      Default cell_size=0.05 m (~one cube footprint per cell — fine
+      enough for boxel_fits, coarse enough to keep the cell count
+      bounded).  Workspace bounds match FreeSpaceGenerator
+      (free_space.py:47-48) so the two generators cover identical
+      physical region.  AABB-AABB rejection test identical to the
+      octree path.  FP-imprecision epsilon (1e-9) on the floor()
+      so evenly-divisible workspaces don't silently drop a row of
+      cells (caught in sanity-check: 1440 vs 1210 on (0.6 x 0.6 x 0.5)
+      at 0.05 m).
+    - boxel_env.py: import + instantiate UniformGridGenerator;
+      use_uniform_grid: bool = False (default semantic).
+      generate_free_space() dispatches; set_uniform_cell_size() rebuilds
+      the lattice for cell-size sweeps.  reboxelize.py is automatically
+      baseline-aware via the same single dispatch seam (no separate
+      changes).
+    - run_logger.py: --baseline {semantic,uniform} (default semantic)
+      + --uniform-cell-size FLOAT (default 0.05).
+    - test_full_pipeline.py: thread baseline + uniform_cell_size
+      through run_config (cross-run filterable in aggregated.csv),
+      main() kwargs, and the post-construction env config.
+    - eval_runner.py: baseline axis on SCALABILITY_MATRIX
+      (90 -> 180 cells), --baseline in cell_to_argv, cell_tag
+      gains _semantic/_uniform suffix, baseline + uniform_cell_size
+      promoted into PRIMARY_COLUMNS.
+
+  eval_plotter.py needs no changes — its --baseline-csv overlay
+  hook (eval_plotter.py:157) was stubbed for exactly this purpose
+  (#9 outcome).  Run the matrix, split aggregated.csv by baseline
+  column, feed the two halves through.
+
+  Sanity checks: py_compile across all 5 files; UniformGridGenerator
+  smoke test (lattice size, obstacle rejection, return shape);
+  parse_pipeline_args round-trip on the new flags;
+  `python eval_runner.py --matrix scalability --dry-run` prints
+  180 cells with _semantic/_uniform tags as expected.  WSL end-to-end
+  run (run_eval --matrix scalability --skip-existing) deferred to next
+  WSL session — PyBullet spins up only under WSL on this machine.
+
+  Per-cell timing for the upper-right of the matrix (n_occluders=6,
+  n_targets=3) under uniform may exceed the 300 s default --timeout;
+  worth bumping to 600 s if early failures are timeout-dominated.
+  This is data, not bug — the timeout-heavy upper-right of the
+  uniform sweep is the predicted "uniform discretisation degrades
+  with scene size faster than semantic" result.
+
+
+================================================================================
+#67. [DONE 2026-05-10] PHASE 1 / PHASE 4 HIDDEN-TARGET CRITERION DISAGREEMENT (silent run abort)
+================================================================================
+Priority: TIER 1 — correctness blocker for the eval matrix.  Silent
+          run aborts inflate the failure rate of BOTH baselines on
+          affected seeds, identically (matched-pair failure), so the
+          semantic-vs-uniform comparison is not corrupted in mean
+          terms — but the absolute success rate is artificially
+          deflated and any "this scene is too hard" narrative is
+          wrong: the planner never even got to attempt.
+
+          Quantified from sweep_2026-05-10_uc-false running 2026-05-10:
+          25/67 cells failed at the n_occluders=1..3 prefix; 11 of
+          those (~44 %) had exit_reason=no_summary, i.e. main()
+          returned False before any planner call.  Direct trace
+          via GUI replay of cell occ1_tgt3_hid1_seed2_holding_uc0
+          confirms the abort signature below.
+
+Where:    test_full_pipeline.py main()
+            - Phase 1 hidden check (line 504-508):
+                hidden_now = sum(1 for t in target_names if t not in visible)
+              Uses `oracle_detect_objects()` -> camera-ray occlusion test.
+            - Phase 4 hidden mapping (line 599-610):
+                target_to_shadow = {}
+                for tname in all_targets:
+                    tpos = np.array(env.objects[tname].position)
+                    for shadow_id in shadows:
+                        sb = registry.get_boxel(shadow_id)
+                        if sb and np.all(tpos >= sb.min_corner) and np.all(tpos <= sb.max_corner):
+                            target_to_shadow[tname] = shadow_id
+                            break
+              Uses AABB-containment of target.position inside a shadow
+              boxel's discrete AABB.  THESE TWO CRITERIA CAN DISAGREE.
+            - Phase 4 fallback (line 624-640): when target_to_shadow
+              is empty, falls into "all visible" branch, picks a
+              random target, looks up its OBJECT boxel in the
+              registry, hits "WARNING: Target ... has no boxel in
+              registry" because Phase 2 only emits OBJECT boxels for
+              CAMERA-VISIBLE objects (the very ones Phase 1 marked
+              hidden), then `env.close(); return False`.
+          boxel_env.py _hidden_xy_positions / _random_xy_positions
+            (~line 200-280, audit #29): scene generator already
+            raycast-verifies hidden placement at spawn time, so the
+            camera-occlusion side IS guaranteed.  The disagreement
+            is purely between camera occlusion (Phase 1) and the
+            shadow boxel's AABB approximation (Phase 4).
+Depends:  None.  Independent of in-flight #66 Plan A / Plan C and
+          #50/#62 perf work.
+
+What:  Phase 1 ("Hidden-target guarantee OK: 1/3 hidden") and Phase 4
+       ("No targets hidden — all visible from camera") use DIFFERENT
+       hidden-target criteria.  Phase 1 is camera-ray occlusion (the
+       physically meaningful definition: "robot can't see it from
+       the camera").  Phase 4 is AABB-containment in a shadow boxel
+       (a downstream geometric proxy: "target's center lies inside
+       the discrete shadow volume the boxel pipeline computed").
+
+       These can disagree because shadow boxels are AXIS-ALIGNED
+       APPROXIMATIONS of the camera-to-occluder back-face frustum.
+       A target near a shadow edge can be camera-occluded but lie
+       outside the shadow AABB.  When this happens:
+
+       (1) Phase 1 reports the placement guarantee passed.
+       (2) Phase 4's `target_to_shadow` map is empty for that target.
+       (3) Phase 4 falls into the "all visible" branch.
+       (4) Phase 4 picks a random target whose OBJECT boxel doesn't
+           exist (Phase 2 didn't emit one — the camera couldn't see
+           it).
+       (5) Line 638-640 prints "WARNING: Target ... has no boxel in
+           registry", calls env.close(), returns False.
+       (6) report_run_outcome() is never called.
+           timing_summary.json is written by eval_runner with
+           exit_reason="no_summary", success=false, total_planning_-
+           time_s=null.
+
+       Reproducer (verified 2026-05-10 via GUI replay):
+         python test_full_pipeline.py --scene scalability \
+             --n-occluders 1 --n-targets 3 --n-hidden 1 \
+             --seed 2 --goal holding --baseline semantic \
+             --log-level normal
+       Output: "Hidden-target guarantee OK: 1/3 hidden" in Phase 1,
+               "No targets hidden — all visible from camera" in
+               Phase 4, "WARNING: Target green_object has no boxel
+               in registry", silent abort.  Same trace under
+               --baseline uniform.
+
+Fix:   USER DIRECTION 2026-05-10:
+       "Always make sure the placement is so that the targets are
+        actually hidden and then only use camera ray occlusions."
+
+       Two-part fix.  ONE COMMIT each, in this order:
+
+       (1) PLACEMENT (boxel_env.py _hidden_xy_positions or wherever
+           the n_hidden raycast verification lives).  Tighten the
+           hidden-target spawn so the camera-ray occlusion criterion
+           AND the downstream "target lies in some shadow boxel
+           AABB" criterion BOTH hold.  Either:
+             (a) Reseed the candidate XY when the target's spawn
+                 position lies outside every shadow boxel AABB
+                 (after Phase 2 boxel computation has run on the
+                 candidate scene), or
+             (b) Bias the placement toward an occluder's footprint
+                 + small inset so the spawn position is well inside
+                 the shadow AABB by construction (cheaper than
+                 reseeding, but requires per-occluder shadow
+                 estimation at spawn time).
+           (b) is preferred — single-pass, no scene rebuild.
+           Keep the audit #29 raycast verification as the final
+           gate so the camera-occlusion guarantee remains.
+
+       (2) PHASE 4 (test_full_pipeline.py:599-610).  Drop the AABB-
+           shadow-containment test entirely.  Replace with the
+           camera-ray occlusion criterion (matches Phase 1 — the
+           physically meaningful definition).  After (1), every
+           hidden target IS guaranteed to lie in some shadow AABB,
+           so the target->shadow mapping can be constructed via
+           that AABB lookup as a follow-up step (no longer the
+           hidden-detection criterion, just the search-loop seed).
+
+       After both commits land, the Phase 1 / Phase 4 reports must
+       agree on the same N hidden targets per run.  Sweep
+       eval_results/sweep_2026-05-10_uc-false/ then re-runs cleanly
+       with no_summary failures dropping to zero (modulo other
+       unrelated issues — see #50/#62/#66 perf work).
+
+Care:  - The bug is independent of baseline.  Both --baseline
+         semantic and --baseline uniform fail at the same seed
+         identically.  The semantic-vs-uniform mean comparison is
+         therefore NOT corrupted (matched-pair failure cancels).
+         Only the absolute success-rate axis is affected.
+       - This issue MUST be flagged in THESIS_NOTES.md as an
+         evaluation caveat: any pre-fix sweep numbers under-report
+         success rate by N% (where N = no_summary cells / total
+         cells; observed 11/67 ≈ 16 % at the n_occluders=1..3
+         prefix on 2026-05-10).
+       - Do NOT touch test_full_pipeline.py while sweep
+         eval_results/sweep_2026-05-10_uc-false/ is running —
+         in-flight cells re-import nothing (they're already
+         spawned subprocesses with the file as it was at sweep
+         start), but post-sweep replay will pick up the new code.
+
+Related: #29 [archived] — hidden-target placement raycast
+              verification; this audit's fix tightens that
+              guarantee further.
+         #50, #62 — perf investigations; unrelated to this
+              correctness bug but share the eval-matrix runtime
+              budget.
+         #66 — Plan A landed 2026-05-09; #66 fixes a different
+              eval failure mode (uniform cell too small to fit
+              occluder), independent of #67's Phase 4 abort.  Both
+              issues currently inflate failure rates on affected
+              cells.
+         #9 — eval runner; this issue is the primary cause of the
+              elevated no_summary count in sweep aggregations.
+
+
