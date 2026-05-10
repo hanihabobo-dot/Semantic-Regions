@@ -161,14 +161,23 @@ def cell_to_argv(cell: Dict, extra_args: List[str]) -> List[str]:
         sys.executable, "test_full_pipeline.py",
         "--no-gui",
         "--scene", str(cell["scene"]),
-        "--n-occluders", str(cell["n_occluders"]),
-        "--n-targets", str(cell["n_targets"]),
-        "--n-hidden", str(cell["n_hidden"]),
         "--seed", str(cell["seed"]),
         "--goal", str(cell["goal"]),
         "--baseline", str(cell.get("baseline", "semantic")),
         "--log-level", "quiet",
     ]
+    # audit #67 follow-up — only emit count knobs when the scene
+    # actually consumes them.  run_logger auto-promotes
+    # --scene default --goal holding to --scene scalability whenever
+    # --n-occluders / --n-targets / --n-hidden is on the CLI, so passing
+    # them unconditionally turned every (default, holding) cell into a
+    # scalability run.
+    if cell["scene"] == "scalability":
+        argv.extend([
+            "--n-occluders", str(cell["n_occluders"]),
+            "--n-targets",   str(cell["n_targets"]),
+            "--n-hidden",    str(cell["n_hidden"]),
+        ])
     if cell["unit_costs"]:
         argv.append("--unit-costs")
     return argv + list(extra_args)
