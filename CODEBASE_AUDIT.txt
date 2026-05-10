@@ -979,6 +979,47 @@ Added:        2026-05-09 (later) — #66 (uniform/tampura baselines —
               forward.  ONE shared #66 audit body across main and
               audit-64 — edit on main, merge forward.  Open count:
               7 -> 8.
+Added:        2026-05-10 — #67 (Phase 1 / Phase 4 hidden-target
+              criterion disagreement — silent run abort).  TIER 1
+              correctness blocker, surfaced during the
+              eval_results/sweep_2026-05-10_uc-false/ smoke trace.
+              Reproducer: `python test_full_pipeline.py --scene
+              scalability --n-occluders 1 --n-targets 3 --n-hidden
+              1 --seed 2 --goal holding --baseline semantic`
+              (also reproduces under --baseline uniform — bug is
+              baseline-independent).  GUI replay 2026-05-10
+              confirmed: Phase 1 reports "Hidden-target guarantee
+              OK: 1/3 hidden" via camera-ray occlusion;
+              Phase 4 reports "No targets hidden — all visible
+              from camera" via AABB-containment in a shadow boxel;
+              the two criteria disagree because shadow boxels are
+              axis-aligned approximations of the camera-to-occluder
+              frustum, so a target near a shadow edge can be
+              camera-occluded but lie outside the shadow AABB.
+              When this happens, Phase 4 falls into "all visible",
+              picks a random target whose OBJECT boxel was never
+              registered (Phase 2 only emits OBJECT boxels for
+              camera-visible objects), prints "WARNING: Target X
+              has no boxel in registry", calls env.close() and
+              return False.  No planner call is made;
+              report_run_outcome() is never invoked;
+              eval_runner writes a stub timing_summary.json with
+              exit_reason=no_summary.  In-flight sweep
+              eval_results/sweep_2026-05-10_uc-false/ at 67/180
+              cells: 11 of 25 failures (~44 % of failures, ~16 %
+              of all cells) match this signature on both
+              baselines identically — matched-pair failure, so
+              semantic-vs-uniform mean comparisons are NOT
+              corrupted, but absolute success rates are
+              under-reported by ~16 % at the n_occluders=1..3
+              prefix.  Two-commit fix per user direction
+              2026-05-10: (1) tighten hidden placement so
+              hidden = inside-shadow-AABB by construction (bias
+              toward occluder footprint inset, audit #29 raycast
+              gate retained as final check), (2) drop Phase 4's
+              AABB test in favour of camera-ray occlusion as the
+              single source of truth.  Independent of #66 (Plan A
+              landed) / #50 / #62.  Open count: 8 -> 9.
 Updated:      2026-05-09 (later) — #66 [Plan A DONE on main].  Auto-tune
               uniform cell size to fit the largest object AABB +
               0.01 m headroom in test_full_pipeline.main, applied
@@ -2309,6 +2350,162 @@ Related: #50 — planner perf investigation.  Plan A's cell-size
 
 
 ================================================================================
+#67. PHASE 1 / PHASE 4 HIDDEN-TARGET CRITERION DISAGREEMENT (silent run abort)
+================================================================================
+Priority: TIER 1 — correctness blocker for the eval matrix.  Silent
+          run aborts inflate the failure rate of BOTH baselines on
+          affected seeds, identically (matched-pair failure), so the
+          semantic-vs-uniform comparison is not corrupted in mean
+          terms — but the absolute success rate is artificially
+          deflated and any "this scene is too hard" narrative is
+          wrong: the planner never even got to attempt.
+
+          Quantified from sweep_2026-05-10_uc-false running 2026-05-10:
+          25/67 cells failed at the n_occluders=1..3 prefix; 11 of
+          those (~44 %) had exit_reason=no_summary, i.e. main()
+          returned False before any planner call.  Direct trace
+          via GUI replay of cell occ1_tgt3_hid1_seed2_holding_uc0
+          confirms the abort signature below.
+
+Where:    test_full_pipeline.py main()
+            - Phase 1 hidden check (line 504-508):
+                hidden_now = sum(1 for t in target_names if t not in visible)
+              Uses `oracle_detect_objects()` -> camera-ray occlusion test.
+            - Phase 4 hidden mapping (line 599-610):
+                target_to_shadow = {}
+                for tname in all_targets:
+                    tpos = np.array(env.objects[tname].position)
+                    for shadow_id in shadows:
+                        sb = registry.get_boxel(shadow_id)
+                        if sb and np.all(tpos >= sb.min_corner) and np.all(tpos <= sb.max_corner):
+                            target_to_shadow[tname] = shadow_id
+                            break
+              Uses AABB-containment of target.position inside a shadow
+              boxel's discrete AABB.  THESE TWO CRITERIA CAN DISAGREE.
+            - Phase 4 fallback (line 624-640): when target_to_shadow
+              is empty, falls into "all visible" branch, picks a
+              random target, looks up its OBJECT boxel in the
+              registry, hits "WARNING: Target ... has no boxel in
+              registry" because Phase 2 only emits OBJECT boxels for
+              CAMERA-VISIBLE objects (the very ones Phase 1 marked
+              hidden), then `env.close(); return False`.
+          boxel_env.py _hidden_xy_positions / _random_xy_positions
+            (~line 200-280, audit #29): scene generator already
+            raycast-verifies hidden placement at spawn time, so the
+            camera-occlusion side IS guaranteed.  The disagreement
+            is purely between camera occlusion (Phase 1) and the
+            shadow boxel's AABB approximation (Phase 4).
+Depends:  None.  Independent of in-flight #66 Plan A / Plan C and
+          #50/#62 perf work.
+
+What:  Phase 1 ("Hidden-target guarantee OK: 1/3 hidden") and Phase 4
+       ("No targets hidden — all visible from camera") use DIFFERENT
+       hidden-target criteria.  Phase 1 is camera-ray occlusion (the
+       physically meaningful definition: "robot can't see it from
+       the camera").  Phase 4 is AABB-containment in a shadow boxel
+       (a downstream geometric proxy: "target's center lies inside
+       the discrete shadow volume the boxel pipeline computed").
+
+       These can disagree because shadow boxels are AXIS-ALIGNED
+       APPROXIMATIONS of the camera-to-occluder back-face frustum.
+       A target near a shadow edge can be camera-occluded but lie
+       outside the shadow AABB.  When this happens:
+
+       (1) Phase 1 reports the placement guarantee passed.
+       (2) Phase 4's `target_to_shadow` map is empty for that target.
+       (3) Phase 4 falls into the "all visible" branch.
+       (4) Phase 4 picks a random target whose OBJECT boxel doesn't
+           exist (Phase 2 didn't emit one — the camera couldn't see
+           it).
+       (5) Line 638-640 prints "WARNING: Target ... has no boxel in
+           registry", calls env.close(), returns False.
+       (6) report_run_outcome() is never called.
+           timing_summary.json is written by eval_runner with
+           exit_reason="no_summary", success=false, total_planning_-
+           time_s=null.
+
+       Reproducer (verified 2026-05-10 via GUI replay):
+         python test_full_pipeline.py --scene scalability \
+             --n-occluders 1 --n-targets 3 --n-hidden 1 \
+             --seed 2 --goal holding --baseline semantic \
+             --log-level normal
+       Output: "Hidden-target guarantee OK: 1/3 hidden" in Phase 1,
+               "No targets hidden — all visible from camera" in
+               Phase 4, "WARNING: Target green_object has no boxel
+               in registry", silent abort.  Same trace under
+               --baseline uniform.
+
+Fix:   USER DIRECTION 2026-05-10:
+       "Always make sure the placement is so that the targets are
+        actually hidden and then only use camera ray occlusions."
+
+       Two-part fix.  ONE COMMIT each, in this order:
+
+       (1) PLACEMENT (boxel_env.py _hidden_xy_positions or wherever
+           the n_hidden raycast verification lives).  Tighten the
+           hidden-target spawn so the camera-ray occlusion criterion
+           AND the downstream "target lies in some shadow boxel
+           AABB" criterion BOTH hold.  Either:
+             (a) Reseed the candidate XY when the target's spawn
+                 position lies outside every shadow boxel AABB
+                 (after Phase 2 boxel computation has run on the
+                 candidate scene), or
+             (b) Bias the placement toward an occluder's footprint
+                 + small inset so the spawn position is well inside
+                 the shadow AABB by construction (cheaper than
+                 reseeding, but requires per-occluder shadow
+                 estimation at spawn time).
+           (b) is preferred — single-pass, no scene rebuild.
+           Keep the audit #29 raycast verification as the final
+           gate so the camera-occlusion guarantee remains.
+
+       (2) PHASE 4 (test_full_pipeline.py:599-610).  Drop the AABB-
+           shadow-containment test entirely.  Replace with the
+           camera-ray occlusion criterion (matches Phase 1 — the
+           physically meaningful definition).  After (1), every
+           hidden target IS guaranteed to lie in some shadow AABB,
+           so the target->shadow mapping can be constructed via
+           that AABB lookup as a follow-up step (no longer the
+           hidden-detection criterion, just the search-loop seed).
+
+       After both commits land, the Phase 1 / Phase 4 reports must
+       agree on the same N hidden targets per run.  Sweep
+       eval_results/sweep_2026-05-10_uc-false/ then re-runs cleanly
+       with no_summary failures dropping to zero (modulo other
+       unrelated issues — see #50/#62/#66 perf work).
+
+Care:  - The bug is independent of baseline.  Both --baseline
+         semantic and --baseline uniform fail at the same seed
+         identically.  The semantic-vs-uniform mean comparison is
+         therefore NOT corrupted (matched-pair failure cancels).
+         Only the absolute success-rate axis is affected.
+       - This issue MUST be flagged in THESIS_NOTES.md as an
+         evaluation caveat: any pre-fix sweep numbers under-report
+         success rate by N% (where N = no_summary cells / total
+         cells; observed 11/67 ≈ 16 % at the n_occluders=1..3
+         prefix on 2026-05-10).
+       - Do NOT touch test_full_pipeline.py while sweep
+         eval_results/sweep_2026-05-10_uc-false/ is running —
+         in-flight cells re-import nothing (they're already
+         spawned subprocesses with the file as it was at sweep
+         start), but post-sweep replay will pick up the new code.
+
+Related: #29 [archived] — hidden-target placement raycast
+              verification; this audit's fix tightens that
+              guarantee further.
+         #50, #62 — perf investigations; unrelated to this
+              correctness bug but share the eval-matrix runtime
+              budget.
+         #66 — Plan A landed 2026-05-09; #66 fixes a different
+              eval failure mode (uniform cell too small to fit
+              occluder), independent of #67's Phase 4 abort.  Both
+              issues currently inflate failure rates on affected
+              cells.
+         #9 — eval runner; this issue is the primary cause of the
+              elevated no_summary count in sweep aggregations.
+
+
+================================================================================
 FOR LATER
 ================================================================================
  backlog (not scheduled — cross-reference open/resolved/deferred audits):
@@ -2419,6 +2616,15 @@ TIER 1 — UNIFORM/TAMPURA BASELINE PLACEMENT (correctness blocker):
        [PENDING on audit-64-tampura-binary-grid] (continuous-
        pose place, real TAMPURA).  Single shared issue body
        across both branches.
+  #67  Phase 1 / Phase 4 hidden-target criterion disagreement —
+       silent run abort.  Phase 1 uses camera-ray occlusion;
+       Phase 4 uses AABB-shadow-containment; ~16 % of cells in
+       sweep_2026-05-10_uc-false abort silently before any
+       planner call (exit_reason=no_summary).  Two-commit fix
+       per user direction 2026-05-10: tighten placement so
+       hidden = inside-shadow-AABB by construction, then drop
+       Phase 4's AABB test in favour of camera-ray occlusion as
+       the single source of truth.  Independent of #66 / #50.
 
 TIER 2 — PERF (planner wall-clock):
   #50  Planner perf investigation — profile, cache static init, kill
@@ -2446,7 +2652,7 @@ TIER 3 — CODE QUALITY / LOW-PRIO:
        branch (rename-boxel-to-hanixel).  Land after audit-64-
        tampura-binary-grid merges/rebases to avoid rename noise.
 
-Total open: 8 items (#50, #57, #59, #61, #62, #63, #65, #66).
+Total open: 9 items (#50, #57, #59, #61, #62, #63, #65, #66, #67).
 
 Closed since previous summary:
   #10  [DONE 2026-05-08 (later)] — uniform voxelization baseline
