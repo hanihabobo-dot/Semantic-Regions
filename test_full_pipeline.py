@@ -581,9 +581,10 @@ def main(gui=True, run_logger=None, scene_config=None,
     # PHASE 4: Hidden Object Scenario (ORACLE ONLY)
     # =========================================================
     # This phase establishes ground truth that the ROBOT does NOT have
-    # access to.  We use AABB containment (is the target inside a shadow
-    # volume?) to verify the scene is valid — at least one target must be
-    # genuinely occluded.  The robot only discovers this through sensing.
+    # access to.  Hidden detection uses camera-ray occlusion (the same
+    # criterion as Phase 1 / oracle_detect_objects — the physically
+    # meaningful definition: "robot can't see it from the camera").
+    # The robot only discovers this through sensing.
     print("\n--- Phase 4: Hidden Object Scenario ---")
 
     # audit #49 — also exclude is_tray=True (the fixed-base tray is a
@@ -596,12 +597,21 @@ def main(gui=True, run_logger=None, scene_config=None,
         and name not in ("plane", "table", "robot")
     ]
 
-    # AABB containment test: a target is "in" a shadow if its position
-    # falls within the shadow boxel's axis-aligned bounding box.
-    # This is an oracle check — it uses the simulator's ground-truth
-    # positions that the robot cannot directly observe.
+    # audit #67 — Hidden detection uses camera-ray occlusion, matching
+    # Phase 1.  The previous AABB-containment criterion (target's
+    # position lies inside a shadow boxel's AABB) is a downstream
+    # geometric proxy that disagrees with camera-ray occlusion near
+    # shadow-cone edges; using it as the hidden criterion silently
+    # aborts ~16% of seeds in the n_occluders=1..3 eval prefix when a
+    # target is camera-occluded but lies just outside every shadow
+    # AABB.  AABB containment is now a best-effort follow-up that
+    # supplies one shadow id per hidden target for the oracle log
+    # line; it is allowed to be empty for individual targets without
+    # aborting the run.
+    visible_now, _ = env.oracle_detect_objects()
+    hidden_targets_set = set(all_targets) - set(visible_now)
     target_to_shadow = {}
-    for tname in all_targets:
+    for tname in hidden_targets_set:
         tpos = np.array(env.objects[tname].position)
         for shadow_id in shadows:
             sb = registry.get_boxel(shadow_id)
@@ -615,11 +625,20 @@ def main(gui=True, run_logger=None, scene_config=None,
     stack_target_objects = []              # populated only for --goal stack
 
     if goal_kind == 'holding':
-        if target_to_shadow:
-            target_name = random.choice(list(target_to_shadow.keys()))
-            oracle_hidden_shadow = target_to_shadow[target_name]
+        if hidden_targets_set:
+            hidden_targets_ordered = [t for t in all_targets
+                                      if t in hidden_targets_set]
+            target_name = random.choice(hidden_targets_ordered)
+            oracle_hidden_shadow = target_to_shadow.get(target_name)
             print(f"  Target: {target_name}")
-            print(f"  ORACLE: Actually hidden in {oracle_hidden_shadow} (ground-truth AABB containment)")
+            if oracle_hidden_shadow is not None:
+                print(f"  ORACLE: Actually hidden in {oracle_hidden_shadow} "
+                      f"(camera-ray occlusion; shadow AABB also contains "
+                      f"its centre)")
+            else:
+                print(f"  ORACLE: Actually hidden by camera-ray occlusion "
+                      f"(shadow AABB is an axis-aligned approximation and "
+                      f"does not contain its centre — boundary case)")
             print(f"  Robot must search to find it!")
         else:
             # No target is hidden — all are visible from the camera.
@@ -676,10 +695,12 @@ def main(gui=True, run_logger=None, scene_config=None,
                 "The CLI auto-enables it; if you constructed the SceneConfig "
                 "manually, set enable_tray=True."
             )
+        # audit #67 — classify by camera-ray occlusion (matches Phase 1
+        # and the holding-goal path above), not AABB containment.
         visible_targets = [t for t in all_targets
-                           if t not in target_to_shadow]
+                           if t not in hidden_targets_set]
         hidden_targets = [t for t in all_targets
-                          if t in target_to_shadow]
+                          if t in hidden_targets_set]
         if not visible_targets or not hidden_targets:
             env.close()
             raise RuntimeError(
