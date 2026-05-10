@@ -111,12 +111,13 @@ Detailed documentation lives there, including:
 |------|---------------|
 | Architecture Overview | Module dependencies, data flow diagrams, file structure |
 | Scene Environment | PyBullet setup, camera model, scene presets, object detection |
-| Spatial Reasoning | Shadow calculation, free-space octree, cell merging |
+| Spatial Reasoning | Shadow calculation, free-space octree, cell merging, uniform-grid baseline |
 | Planning System | PDDLStream integration, problem construction, replanning |
 | Robot Control and Streams | IK, RRT-Connect motion planning, grasp sampling |
 | Execution Pipeline | End-to-end walkthrough, action handlers, concrete scenario |
 | Core Data Structures | All types, dataclasses, and enums |
 | PDDL Domain Reference | Predicates, actions, streams, PDDL/Python alignment |
+| Evaluation Framework | `eval_runner.py` matrix sweeps, `eval_plotter.py` PNG output, reproducing Results plots |
 | Design Decisions | Rationale for key choices and proposal deviations |
 | Known Issues and Roadmap | Audit status, open issues, future work |
 
