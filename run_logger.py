@@ -419,6 +419,19 @@ def parse_pipeline_args(argv=None):
              'and without the stack-cost bias.',
     )
     parser.add_argument(
+        '--seed-retry',
+        action='store_true',
+        help='Allow the placement-retry layer to re-roll the seed even '
+             'when --seed was passed explicitly (default: strict pinning, '
+             'fail loud).  Re-roll source is deterministic — a Python '
+             'random.Random seeded from the original --seed — so the '
+             'effective seed sequence is reproducible from the matrix '
+             'seed.  Used by eval_runner --matrix random-pairs to recover '
+             'from infeasible geometries (some small seeds produce '
+             'occluder layouts with no valid shadow lane) without '
+             'silently mutating an interactive --seed.',
+    )
+    parser.add_argument(
         '--baseline',
         choices=['semantic', 'uniform'],
         default='semantic',

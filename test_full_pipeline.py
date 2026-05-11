@@ -1625,7 +1625,17 @@ if __name__ == "__main__":
     # in scene_cfg.seed, so the pre-flight verifies the EXACT scene that
     # the real run will build a moment later.
     seed_auto = getattr(args, 'seed_auto', False)
-    max_attempts = 11 if seed_auto else 1
+    seed_retry = getattr(args, 'seed_retry', False)
+    allow_retry = seed_auto or seed_retry
+    max_attempts = 11 if allow_retry else 1
+    # When --seed-retry is set (eval-runner path), use a deterministic
+    # re-roll source seeded from the original --seed so re-runs of the
+    # same matrix cell produce the same effective-seed sequence.  When
+    # --seed-retry is not set, ``seed_auto`` implies the seed was
+    # auto-drawn in the first place — pull rerolls from the unseeded
+    # global random so each invocation differs (consistent with the
+    # interactive "draw fresh seed" intent).
+    retry_rng = random.Random(args.seed) if seed_retry else random
     for attempt in range(max_attempts):
         try:
             probe_env = BoxelTestEnv(gui=False, scene_config=scene_cfg)
@@ -1634,7 +1644,7 @@ if __name__ == "__main__":
         except RuntimeError as e:
             if "Could not place" not in str(e) or attempt + 1 >= max_attempts:
                 raise
-            args.seed = random.randint(0, 2**31 - 1)
+            args.seed = retry_rng.randint(0, 2**31 - 1)
             random.seed(args.seed)
             np.random.seed(args.seed)
             scene_cfg = scene_builders[args.scene]()
