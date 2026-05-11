@@ -78,6 +78,122 @@ def _split_by_baseline(rows: List[dict]) -> tuple:
     return rows, None
 
 
+def _is_default_matrix(rows: List[dict]) -> bool:
+    """Detect a default-style matrix shape: constant n_occluders with
+    multiple (scene, goal) pairs.  This shape doesn't fit the
+    line-plot-vs-n_occluders layout — the new ``plot_grouped_bars``
+    path renders it as one bar group per (scene, goal) instead.
+    """
+    occs = {r.get("n_occluders") for r in rows
+            if r.get("n_occluders") not in (None, "")}
+    pairs = {(r.get("scene"), r.get("goal")) for r in rows}
+    return len(occs) <= 1 and len(pairs) >= 2
+
+
+def group_by_scene_goal_baseline(
+    rows: List[dict],
+    metric: Optional[str] = None,
+    success_only: bool = True,
+) -> Dict[tuple, Dict[str, List[float]]]:
+    """Returns ``{(scene, goal): {baseline: [samples]}}``.
+
+    ``metric=None`` -> samples are 1.0/0.0 success flags (for success
+    rate plots).  Otherwise samples are the per-cell metric value;
+    ``success_only`` drops failed cells.
+    """
+    out: Dict = defaultdict(lambda: defaultdict(list))
+    for r in rows:
+        scene = r.get("scene")
+        goal = r.get("goal")
+        baseline = r.get("baseline") or "semantic"
+        if metric is None:
+            out[(scene, goal)][baseline].append(
+                1.0 if r.get("success") else 0.0
+            )
+            continue
+        if success_only and not r.get("success"):
+            continue
+        v = r.get(metric)
+        if v in (None, ""):
+            continue
+        try:
+            out[(scene, goal)][baseline].append(float(v))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _print_grouped_bars_text(grouped, title: str) -> None:
+    print(f"\n=== {title} (matplotlib not available) ===")
+    for pair in sorted(grouped.keys()):
+        for b in sorted(grouped[pair].keys()):
+            samples = grouped[pair][b]
+            if not samples:
+                continue
+            m = mean(samples)
+            sd = pstdev(samples) if len(samples) > 1 else 0.0
+            print(f"  {pair[0]}/{pair[1]}/{b}: mean={m:.3f} "
+                  f"std={sd:.3f} n={len(samples)}")
+
+
+def plot_grouped_bars(
+    grouped: Dict[tuple, Dict[str, List[float]]],
+    title: str,
+    ylabel: str,
+    out_path: Path,
+    ylim: Optional[tuple] = None,
+    log_y: bool = False,
+    annotate_means: bool = True,
+) -> Optional[Path]:
+    """One bar group per (scene, goal), one bar per baseline."""
+    if not HAVE_MPL:
+        _print_grouped_bars_text(grouped, title)
+        return None
+
+    pairs = sorted(grouped.keys())
+    baselines = sorted({b for v in grouped.values() for b in v.keys()})
+    labels = [f"{s}\n{g}" for s, g in pairs]
+    n_groups = len(pairs)
+    n_bars = max(len(baselines), 1)
+    bar_w = 0.8 / n_bars
+    xs = list(range(n_groups))
+
+    fig, ax = plt.subplots(figsize=(max(6, 1.8 * n_groups), 5))
+    for i, b in enumerate(baselines):
+        means, stds, ns = [], [], []
+        for p in pairs:
+            samples = grouped[p].get(b, [])
+            ns.append(len(samples))
+            means.append(mean(samples) if samples else 0.0)
+            stds.append(pstdev(samples) if len(samples) > 1 else 0.0)
+        offsets = [x + (i - (n_bars - 1) / 2) * bar_w for x in xs]
+        ax.bar(offsets, means, bar_w, yerr=stds, capsize=3, label=b)
+        if annotate_means:
+            for off, m, s, n in zip(offsets, means, stds, ns):
+                if n == 0:
+                    continue
+                top = m + (s if s else 0)
+                ax.text(off, top, f"{m:.2g}",
+                        ha="center", va="bottom", fontsize=8)
+
+    ax.set_xticks(xs)
+    ax.set_xticklabels(labels)
+    ax.set_xlabel("(scene, goal)")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    if ylim:
+        ax.set_ylim(*ylim)
+    if log_y:
+        ax.set_yscale("log")
+    ax.grid(True, axis="y", alpha=0.3)
+    ax.legend(title="baseline")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
+
+
 def group_metric(rows: List[dict],
                  axis_x: str = "n_occluders",
                  series: str = "n_targets",
@@ -191,6 +307,38 @@ def main(argv=None) -> int:
         print(f"[plotter] no rows in {args.csv_path}", file=sys.stderr)
         return 1
 
+    out_dir = args.csv_path.parent
+
+    # Dispatch on matrix shape.  Default-style matrix (constant
+    # n_occluders, multiple (scene, goal) pairs) doesn't fit the
+    # line-plot-vs-n_occluders layout — render grouped bars instead.
+    # Scalability-style matrices fall through to the legacy line-plot
+    # path below.
+    if _is_default_matrix(rows):
+        plot_grouped_bars(
+            group_by_scene_goal_baseline(rows, metric=None),
+            title="Success rate per (scene, goal)",
+            ylabel="success rate (over seeds)",
+            out_path=out_dir / "success_rate_per_scene_goal.png",
+            ylim=(0.0, 1.05),
+        )
+        plot_grouped_bars(
+            group_by_scene_goal_baseline(
+                rows, metric="total_planning_time_s", success_only=True),
+            title="Mean planning time per (scene, goal) (success-only)",
+            ylabel="mean total planning time (s)",
+            out_path=out_dir / "planning_time_per_scene_goal.png",
+            log_y=True,
+        )
+        plot_grouped_bars(
+            group_by_scene_goal_baseline(
+                rows, metric="plan_count", success_only=True),
+            title="Mean plan count per (scene, goal) (success-only)",
+            ylabel="mean plan_count",
+            out_path=out_dir / "plan_count_per_scene_goal.png",
+        )
+        return 0
+
     # Audit #50/#66 follow-up — when --baseline-csv is not given but the
     # input CSV contains BOTH 'semantic' and 'uniform' rows (the
     # SCALABILITY_MATRIX default), auto-split by the baseline column so
@@ -208,8 +356,6 @@ def main(argv=None) -> int:
             print(f"[plotter] auto-split by baseline column: "
                   f"semantic={len(rows)} rows, "
                   f"uniform={len(baseline_rows)} rows")
-
-    out_dir = args.csv_path.parent
 
     plot_metric(
         group_metric(rows, metric="total_planning_time_s",
