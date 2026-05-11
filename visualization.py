@@ -249,6 +249,16 @@ class BoxelVisualizer:
             p.removeBody(body_id)
             self.shadow_bodies.discard(body_id)
 
+    def tracks_boxel(self, boxel_id: str) -> bool:
+        """Whether any debug item or phantom body is still tracked for ``boxel_id``.
+
+        Used as a sanity check by the execution layer after removing a
+        sensed shadow — if this returns True post-``remove_boxel_viz``,
+        the GUI overlay was not actually cleared (the shadow wireframe /
+        label / phantom box is still drawn on screen).
+        """
+        return boxel_id in self._items_by_id or boxel_id in self._bodies_by_id
+
     def clear_all(self):
         """Clear all debug items and shadow bodies."""
         for body_id in self.shadow_bodies:
