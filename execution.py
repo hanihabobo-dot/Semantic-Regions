@@ -927,6 +927,21 @@ def handle_sense_action(
         shadow_occluder_map.pop(sid_str, None)
         boxel_centers.pop(sid_str, None)
 
+        # Sanity check: the registry entry and every GUI overlay (wireframe
+        # lines + label + phantom AABB body) for this shadow MUST be gone
+        # after a successful sense_empty.  A leftover surfaces as the
+        # "sensed shadow still painted on the GUI" bug (user-reported).
+        # Loud warning here lets us catch the regression without crashing
+        # the run; the planner already updated belief so execution can
+        # continue, but the GUI is lying to the user.
+        if registry.get_boxel(sid_str) is not None:
+            print(f"    WARNING: shadow {sid_str} still in registry after "
+                  f"sense_empty — viz/planner state will diverge")
+        if viz is not None and viz.tracks_boxel(sid_str):
+            print(f"    WARNING: shadow {sid_str} GUI overlay still tracked "
+                  f"after remove_boxel_viz — wireframe/phantom likely "
+                  f"painted at the stale location")
+
         if sense_outcome == "contains_nontarget":
             # Non-target objects discovered inside the shadow.
             # Create OBJECT + SHADOW boxels for each one so the
