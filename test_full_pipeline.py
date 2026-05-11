@@ -60,7 +60,8 @@ import pybullet as p
 
 from boxel_env import (BoxelTestEnv, SceneConfig,
                        default_scene, mixed_shapes_scene,
-                       scalability_scene, stack_scene)
+                       scalability_scene, stack_scene,
+                       random_pairs_scene)
 from boxel_data import BoxelRegistry, BoxelType
 from cell_merger import merge_free_space_cells
 from free_space import split_free_boxel  # noqa: F401  (kept for future use)
@@ -1560,6 +1561,12 @@ if __name__ == "__main__":
             n_objects=max(args.n_objects, args.stack_height),
             seed=args.seed,
         ),
+        'random-pairs': lambda: random_pairs_scene(
+            min_pairs=args.n_pairs_range[0],
+            max_pairs=args.n_pairs_range[1],
+            extra_distractors=args.n_extra_distractors,
+            seed=args.seed,
+        ),
     }
     scene_cfg = scene_builders[args.scene]()
 
@@ -1574,11 +1581,21 @@ if __name__ == "__main__":
     # JSON timing summary so cross-run comparisons can group by config
     # (consumed by eval runner audit #9).  Booleans match the kwargs we
     # hand to main() rather than the inverted no_* arg names for readability.
+    # For ``random-pairs`` the per-axis counts (occluders/targets/hidden)
+    # are derived from the randomized pair draw inside the scene builder,
+    # so we report the ACTUALLY-SPAWNED counts here rather than the unused
+    # CLI defaults — otherwise the banner contradicts the scene that was
+    # built (was a debugging trap when placement failed).
+    effective_n_occluders = len(scene_cfg.occluders)
+    effective_n_targets = len(scene_cfg.targets)
+    effective_n_hidden = scene_cfg.n_hidden_targets
     run_config = {
         "scene":        args.scene,
-        "n_occluders":  args.n_occluders,
-        "n_targets":    args.n_targets,
-        "n_hidden":     args.n_hidden,
+        "n_occluders":  effective_n_occluders,
+        "n_targets":    effective_n_targets,
+        "n_hidden":     effective_n_hidden,
+        "n_pairs_range":      f"{args.n_pairs_range[0]}-{args.n_pairs_range[1]}",
+        "n_extra_distractors": args.n_extra_distractors,
         "n_objects":    args.n_objects,
         "seed":         args.seed,
         "goal":         args.goal,
@@ -1595,20 +1612,52 @@ if __name__ == "__main__":
     # RunLogger captures all artefacts (PDDL files, boxel data, logs)
     # regardless of console verbosity for post-mortem analysis.
     logger = RunLogger(verbosity=args.log_level)
+
+    # Placement-retry layer (audit #68 follow-up).  ``random-pairs`` with
+    # no explicit ``--seed`` auto-rolls a fresh seed (run_logger sets
+    # ``args.seed_auto=True``); at unlucky seeds the hidden-target placer
+    # exhausts its budget because each occluder hosts only ~1 hidden
+    # target (lateral jitter ≈ occ_half − target_half ≈ 0) and the
+    # back-of-table occluders project shadows off the safe-window edge.
+    # Re-rolling the seed and rebuilding the scene clears it.  When the
+    # user pinned ``--seed``, we DO NOT silently mutate it — fail loud so
+    # reproducibility is not broken.
+    seed_auto = getattr(args, 'seed_auto', False)
+    max_attempts = 6 if seed_auto else 1
     try:
-        success = main(
-            gui=not args.no_gui,
-            run_logger=logger,
-            scene_config=scene_cfg,
-            draw_boxel_overlays=not args.no_boxel_viz,
-            show_free=args.show_free,
-            goal_kind=args.goal,
-            stack_height=args.stack_height,
-            unit_costs=args.unit_costs,
-            baseline=args.baseline,
-            uniform_cell_size=args.uniform_cell_size,
-            run_config=run_config,
-        )
+        for attempt in range(max_attempts):
+            try:
+                success = main(
+                    gui=not args.no_gui,
+                    run_logger=logger,
+                    scene_config=scene_cfg,
+                    draw_boxel_overlays=not args.no_boxel_viz,
+                    show_free=args.show_free,
+                    goal_kind=args.goal,
+                    stack_height=args.stack_height,
+                    unit_costs=args.unit_costs,
+                    baseline=args.baseline,
+                    uniform_cell_size=args.uniform_cell_size,
+                    run_config=run_config,
+                )
+                break
+            except RuntimeError as e:
+                if "Could not place" not in str(e) or attempt + 1 >= max_attempts:
+                    raise
+                args.seed = random.randint(0, 2**31 - 1)
+                random.seed(args.seed)
+                np.random.seed(args.seed)
+                scene_cfg = scene_builders[args.scene]()
+                if args.goal == 'find-and-tray-stack':
+                    scene_cfg.enable_tray = True
+                run_config["seed"] = args.seed
+                run_config["n_occluders"] = len(scene_cfg.occluders)
+                run_config["n_targets"] = len(scene_cfg.targets)
+                run_config["n_hidden"] = scene_cfg.n_hidden_targets
+                print(f"[retry {attempt + 1}/{max_attempts - 1}] "
+                      f"placement failed ({e}); rerolling to "
+                      f"seed={args.seed}",
+                      file=sys.stderr)
     finally:
         logger.close()
     sys.exit(0 if success else 1)

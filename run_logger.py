@@ -35,6 +35,7 @@ import argparse
 import json
 import logging
 import os
+import random
 import shutil
 import sys
 from datetime import datetime
@@ -330,6 +331,22 @@ def report_run_outcome(
 # ---------------------------------------------------------------------------
 
 
+def _parse_pairs_range(s: str):
+    """argparse type for --n-pairs-range MIN-MAX (audit #68)."""
+    try:
+        lo_s, hi_s = s.split('-', 1)
+        lo, hi = int(lo_s), int(hi_s)
+    except (ValueError, AttributeError):
+        raise argparse.ArgumentTypeError(
+            f"--n-pairs-range expects MIN-MAX (e.g. 1-5), got {s!r}"
+        )
+    if lo < 1 or hi < lo:
+        raise argparse.ArgumentTypeError(
+            f"--n-pairs-range expects 1 <= MIN <= MAX (got {lo}-{hi})"
+        )
+    return (lo, hi)
+
+
 def parse_pipeline_args(argv=None):
     """Parse the pipeline CLI args and return the validated Namespace.
 
@@ -358,11 +375,14 @@ def parse_pipeline_args(argv=None):
                              '"verbose" leave stdout untouched. The log file '
                              'always captures everything.')
     parser.add_argument('--scene', choices=['default', 'mixed',
-                                            'scalability', 'stack'],
+                                            'scalability', 'stack',
+                                            'random-pairs'],
                         default='default',
                         help='Scene preset: default (original cubes), mixed (diverse '
                              'shapes), scalability (random for evaluation), '
-                             'stack (N identical cubes, no occluders).')
+                             'stack (N identical cubes, no occluders), '
+                             'random-pairs (audit #68 — pair count drawn '
+                             'per run from --n-pairs-range).')
     parser.add_argument('--n-occluders', type=int, default=3,
                         help='Number of occluders (scalability scene only)')
     parser.add_argument('--n-targets', type=int, default=4,
@@ -373,6 +393,17 @@ def parse_pipeline_args(argv=None):
                              'holding only, audit #29). 0 = no guarantee '
                              '(emergent from RNG). Capped at --n-targets. '
                              'Requires --n-occluders >= 1.')
+    parser.add_argument('--n-pairs-range', type=_parse_pairs_range,
+                        default=(1, 5),
+                        metavar='MIN-MAX',
+                        help='Inclusive range for the per-run (occluder, '
+                             'hidden-target) pair count (--scene random-pairs '
+                             'only, audit #68). Format MIN-MAX, both >= 1, '
+                             'MIN <= MAX. Default 1-5.')
+    parser.add_argument('--n-extra-distractors', type=int, default=0,
+                        help='Visible (non-hidden) distractor targets added '
+                             'on top of the K hidden targets in --scene '
+                             'random-pairs (audit #68). Default 0.')
     parser.add_argument('--n-objects', type=int, default=3,
                         help='Number of cubes for the stack scene '
                              '(must be >= --stack-height)')
@@ -469,6 +500,33 @@ def parse_pipeline_args(argv=None):
                   f"--n-targets={args.n_targets}; capping to "
                   f"{args.n_targets}.", file=sys.stderr)
             args.n_hidden = args.n_targets
+
+    # Audit #68: random-pairs derives n_hidden/n_occluders/n_targets
+    # from the randomized pair count; the per-axis count knobs are
+    # mutually exclusive with this scene.  Also draw a fresh seed by
+    # default so consecutive runs differ structurally — that is the
+    # whole point of #68.  Explicit --seed N keeps reproducibility.
+    if args.scene == 'random-pairs':
+        if args.goal not in ('holding', 'find-and-tray-stack'):
+            parser.error(
+                f"--scene random-pairs requires --goal holding or "
+                f"--goal find-and-tray-stack (got --goal {args.goal})."
+            )
+        _argv_for_check = argv if argv is not None else sys.argv
+        for flag in ('--n-hidden', '--n-occluders', '--n-targets'):
+            if flag in _argv_for_check:
+                parser.error(
+                    f"{flag} is mutually exclusive with --scene "
+                    f"random-pairs (pair count is randomized; use "
+                    f"--n-pairs-range instead)."
+                )
+        if '--seed' not in _argv_for_check:
+            args.seed = random.randint(0, 2**31 - 1)
+            args.seed_auto = True  # consumed by the placement-retry layer
+            print(f"[random-pairs] no --seed given; using fresh "
+                  f"seed={args.seed}", file=sys.stderr)
+        else:
+            args.seed_auto = False
 
     # When --goal stack is requested without an explicit --scene, fall
     # back to stack_scene so the spawned objects are reach-constrained
