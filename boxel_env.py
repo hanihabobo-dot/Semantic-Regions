@@ -293,33 +293,25 @@ def scalability_scene(n_occluders: int = 3, n_targets: int = 4,
         )
     rng = np.random.RandomState(seed)
 
-    occ_pool = [
-        lambda: ObjectSpec(ObjectShape.CYLINDER,
-                           [rng.uniform(0.025, 0.035),
-                            rng.uniform(0.06, 0.08)],
-                           mass=0.5),
-        lambda: ObjectSpec(ObjectShape.BOX,
-                           [rng.uniform(0.025, 0.035),
-                            rng.uniform(0.025, 0.035),
-                            rng.uniform(0.06, 0.08)],
-                           mass=0.5),
+    # Cubes only — big occluders, small targets.  No cylinders, no
+    # spheres, no rectangular boxes (user pref).  Half-extent ranges
+    # are sized so an occluder reliably hides a target placed in its
+    # shadow cone: big_half ≥ small_half + buffer in every axis, and
+    # the lateral jitter window in ``_hidden_xy_positions`` (≈ occ_half
+    # − target_half) stays positive so multiple hidden targets can sit
+    # behind the same occluder.
+    occluders = [
+        ObjectSpec(ObjectShape.BOX,
+                   [rng.uniform(0.030, 0.045)] * 3,
+                   mass=0.5)
+        for _ in range(n_occluders)
     ]
-
-    tgt_pool = [
-        lambda: ObjectSpec(ObjectShape.BOX,
-                           [rng.uniform(0.02, 0.03)] * 3,
-                           mass=0.1),
-        lambda: ObjectSpec(ObjectShape.CYLINDER,
-                           [rng.uniform(0.015, 0.025),
-                            rng.uniform(0.025, 0.035)],
-                           mass=0.1),
-        lambda: ObjectSpec(ObjectShape.SPHERE,
-                           [rng.uniform(0.02, 0.028)],
-                           mass=0.1),
+    targets = [
+        ObjectSpec(ObjectShape.BOX,
+                   [rng.uniform(0.020, 0.028)] * 3,
+                   mass=0.1)
+        for _ in range(n_targets)
     ]
-
-    occluders = [rng.choice(occ_pool)() for _ in range(n_occluders)]
-    targets = [rng.choice(tgt_pool)() for _ in range(n_targets)]
 
     # Assign palette colours and names in index order.
     # Sizes/shapes above are unchanged; only color and name are set here.

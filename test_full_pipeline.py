@@ -1623,7 +1623,12 @@ if __name__ == "__main__":
     # user pinned ``--seed``, we DO NOT silently mutate it — fail loud so
     # reproducibility is not broken.
     seed_auto = getattr(args, 'seed_auto', False)
-    max_attempts = 6 if seed_auto else 1
+    # 11 attempts (10 retries) keeps the cube-only random-pairs scenes
+    # well below 1% effective failure: cubes are shorter than the old
+    # rectangular pillars, so each hidden-target slot has less along-axis
+    # shadow room and occluders near the back edge of the placement
+    # window leave no valid spot for the target behind them.
+    max_attempts = 11 if seed_auto else 1
     try:
         for attempt in range(max_attempts):
             try:
