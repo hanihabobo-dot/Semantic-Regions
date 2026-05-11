@@ -349,6 +349,45 @@ def scalability_scene(n_occluders: int = 3, n_targets: int = 4,
     )
 
 
+def random_pairs_scene(min_pairs: int = 1, max_pairs: int = 5,
+                       extra_distractors: int = 0,
+                       seed: int = 0) -> SceneConfig:
+    """
+    Scene where the number of (occluder, hidden-target) pairs is drawn
+    uniformly at random from [min_pairs, max_pairs] per call (audit #68).
+
+    A "pair" is one occluder + one hidden target placed in its shadow.
+    Drawing K pairs spawns K occluders and K hidden targets; per-target
+    raycast verification (audit #29) still applies via the underlying
+    scalability_scene + _hidden_xy_positions path.  ``extra_distractors``
+    adds visible distractor targets on top of the K hidden ones.
+
+    Determinism: a fixed ``seed`` always produces the same scene
+    (same K, same positions).  Vary ``seed`` per run for structurally
+    distinct scenes; run_logger draws a fresh seed by default when
+    --scene random-pairs is selected without an explicit --seed.
+    """
+    if min_pairs < 1:
+        raise ValueError("random_pairs_scene: min_pairs must be >= 1")
+    if max_pairs < min_pairs:
+        raise ValueError(
+            f"random_pairs_scene: max_pairs ({max_pairs}) must be "
+            f">= min_pairs ({min_pairs})"
+        )
+    if extra_distractors < 0:
+        raise ValueError(
+            "random_pairs_scene: extra_distractors must be >= 0"
+        )
+    rng = np.random.RandomState(seed)
+    n_pairs = int(rng.randint(min_pairs, max_pairs + 1))
+    return scalability_scene(
+        n_occluders=n_pairs,
+        n_targets=n_pairs + int(extra_distractors),
+        n_hidden=n_pairs,
+        seed=seed,
+    )
+
+
 class BoxelTestEnv:
     """
     PyBullet environment for testing Semantic Boxel-based POD-TAMP.
@@ -462,8 +501,16 @@ class BoxelTestEnv:
         # Store object information
         self.objects: Dict[str, ObjectInfo] = {}
 
-        # Initialize the scene
-        self._setup_scene()
+        # Initialize the scene.  If placement fails partway (e.g. the
+        # hidden-target budget is exhausted at an unlucky seed) we'd
+        # otherwise leak the two PyBullet clients already opened above;
+        # disconnect them so the caller's retry layer can reseed and
+        # rebuild without accumulating dead physics servers.
+        try:
+            self._setup_scene()
+        except Exception:
+            self.close()
+            raise
         
         # Initialize helper components
         self.shadow_calculator = ShadowCalculator(
@@ -754,17 +801,27 @@ class BoxelTestEnv:
     _ROBOT_BASE_XY = (-0.4, 0.0)
     _PANDA_REACH_RADIUS = 0.65
 
-    # Reach-constrained XY window: the intersection of the actual table
-    # mesh footprint (which is centred at [0.5, 0]) and the Panda's
-    # reach disk.  This is NOT a redefinition of table_x_range /
-    # table_y_range — those describe the LOGICAL voxel-grid workspace
-    # (which extends back to x=-0.4 to enclose the robot's near field
-    # for boxelization).  Sampling x < ~0.05 there would land off the
-    # actual table mesh and the cube would fall instantly when physics
-    # starts.  This tighter window is only used by stack_scene-style
-    # scenes that demand every object be both pickable and on-table.
+    # Reach-constrained on-table window: intersection of the actual
+    # table mesh, the Panda reach disk, and a small edge buffer.  Used
+    # by ``stack_scene`` (and any scene with ``constrain_to_reach=True``)
+    # where every cube must be both pickable AND a viable stack target.
     _SAFE_TABLE_X_RANGE = (-0.1, 0.70)
     _SAFE_TABLE_Y_RANGE = (-0.40, 0.40)
+
+    # Random-placement window for scenes that DO NOT constrain to reach
+    # (scalability / random-pairs / scalability-derived).  Contained
+    # inside the actual table mesh footprint (probed AABB ≈ x ∈ [-0.251,
+    # 1.251], y ∈ [-0.501, 0.501] for the standard pybullet_data table
+    # at [0.5, 0]) with an edge buffer that survives the additional
+    # 0.10 m intra-object margin.  Lower x bound shifted from the old
+    # voxel-grid value (-0.4) inward to -0.20 because anything at
+    # x < -0.251 sat off the mesh and tipped off when physics started
+    # (this was the "object placed outside the table" bug).  The wider
+    # ``table_x_range`` / ``table_y_range`` describe the LOGICAL
+    # voxel-grid workspace (extended back to x=-0.4 to enclose the
+    # robot's near field for boxelization), NOT a valid spawn area.
+    _TABLE_PLACE_X_RANGE = (-0.20, 0.60)
+    _TABLE_PLACE_Y_RANGE = (-0.50, 0.50)
 
     def _random_xy_positions(self, n: int, rng: np.random.RandomState,
                              margin: float = 0.10,
@@ -773,18 +830,18 @@ class BoxelTestEnv:
                              reserved_xys: Optional[List[List[float]]] = None,
                              ) -> List[List[float]]:
         """
-        Sample *n* non-overlapping XY positions within the table bounds.
+        Sample *n* non-overlapping XY positions inside the on-table
+        placement window (``_TABLE_PLACE_*_RANGE``; or
+        ``_SAFE_TABLE_*_RANGE`` plus a reach-disk filter when
+        ``constrain_to_reach`` is True).
 
         Uses rejection sampling with a minimum separation of ``margin``
         metres to avoid objects spawning on top of each other.
 
-        When ``constrain_to_reach`` is True, samples are restricted to
-        the intersection of (a) the safe on-table window
-        (``_SAFE_TABLE_*_RANGE`` — not the wider ``table_*_range``) and
-        (b) a disk of radius ``reach_radius`` around the robot base.
-        Both constraints are needed for scenes like ``stack`` where every
-        object must be both pickable AND a viable stack destination
-        (audit #30).
+        When ``constrain_to_reach`` is True, samples must ALSO lie inside
+        a disk of radius ``reach_radius`` around the robot base.  Used by
+        scenes like ``stack`` where every object must be both pickable
+        and a viable stack destination (audit #30).
 
         When ``reserved_xys`` is provided, samples must also stay at
         least ``margin`` away from those pre-existing positions.  Used
@@ -795,8 +852,8 @@ class BoxelTestEnv:
             x_lo, x_hi = self._SAFE_TABLE_X_RANGE
             y_lo, y_hi = self._SAFE_TABLE_Y_RANGE
         else:
-            x_lo, x_hi = self.table_x_range
-            y_lo, y_hi = self.table_y_range
+            x_lo, x_hi = self._TABLE_PLACE_X_RANGE
+            y_lo, y_hi = self._TABLE_PLACE_Y_RANGE
         x_lo += margin
         x_hi -= margin
         y_lo += margin
@@ -825,12 +882,10 @@ class BoxelTestEnv:
                    for px, py in positions):
                 positions.append([x, y])
         if len(positions) < n:
+            bounds_msg = (f"placement window x=({x_lo}, {x_hi}) "
+                          f"y=({y_lo}, {y_hi})")
             if constrain_to_reach:
-                bounds_msg = (f"safe table window x=({x_lo}, {x_hi}) "
-                              f"y=({y_lo}, {y_hi}) within reach={r_max}")
-            else:
-                bounds_msg = (f"table bounds x={self.table_x_range} "
-                              f"y={self.table_y_range}")
+                bounds_msg += f" within reach={r_max}"
             raise RuntimeError(
                 f"Could not place {n} objects with margin={margin} m in "
                 f"{bounds_msg}"
@@ -978,8 +1033,12 @@ class BoxelTestEnv:
             return None
         cam = [float(v) for v in self.camera_position]
         cam_x, cam_y = cam[0], cam[1]
-        x_lo, x_hi = self.table_x_range
-        y_lo, y_hi = self.table_y_range
+        # Match _random_xy_positions: bound spawns to the actual table
+        # mesh, not the wider voxelization workspace.  Otherwise a
+        # candidate placed at x < ~-0.25 would tip off the table edge
+        # when physics steps and the scene would silently lose objects.
+        x_lo, x_hi = self._TABLE_PLACE_X_RANGE
+        y_lo, y_hi = self._TABLE_PLACE_Y_RANGE
         x_lo += hidden_margin
         x_hi -= hidden_margin
         y_lo += hidden_margin
