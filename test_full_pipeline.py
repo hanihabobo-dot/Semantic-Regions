@@ -1611,58 +1611,62 @@ if __name__ == "__main__":
 
     # RunLogger captures all artefacts (PDDL files, boxel data, logs)
     # regardless of console verbosity for post-mortem analysis.
-    logger = RunLogger(verbosity=args.log_level)
-
-    # Placement-retry layer (audit #68 follow-up).  ``random-pairs`` with
+    # Placement pre-flight (audit #68 follow-up).  ``random-pairs`` with
     # no explicit ``--seed`` auto-rolls a fresh seed (run_logger sets
     # ``args.seed_auto=True``); at unlucky seeds the hidden-target placer
     # exhausts its budget because each occluder hosts only ~1 hidden
     # target (lateral jitter ≈ occ_half − target_half ≈ 0) and the
     # back-of-table occluders project shadows off the safe-window edge.
-    # Re-rolling the seed and rebuilding the scene clears it.  When the
-    # user pinned ``--seed``, we DO NOT silently mutate it — fail loud so
-    # reproducibility is not broken.
+    # We probe scene construction headlessly (DIRECT mode) and re-roll
+    # the seed on failure BEFORE the GUI is opened — otherwise every
+    # retry flashes a new PyBullet window open and closed and the user
+    # only sees the final scene appear after several aborted ones (real
+    # bug report).  Up to 10 retries when ``seed_auto``; an explicit
+    # ``--seed`` is checked once and must succeed or fail loud so
+    # reproducibility is preserved.  Scene construction is deterministic
+    # in scene_cfg.seed, so the pre-flight verifies the EXACT scene that
+    # the real run will build a moment later.
     seed_auto = getattr(args, 'seed_auto', False)
-    # 11 attempts (10 retries) keeps the cube-only random-pairs scenes
-    # well below 1% effective failure: cubes are shorter than the old
-    # rectangular pillars, so each hidden-target slot has less along-axis
-    # shadow room and occluders near the back edge of the placement
-    # window leave no valid spot for the target behind them.
     max_attempts = 11 if seed_auto else 1
+    for attempt in range(max_attempts):
+        try:
+            probe_env = BoxelTestEnv(gui=False, scene_config=scene_cfg)
+            probe_env.close()
+            break
+        except RuntimeError as e:
+            if "Could not place" not in str(e) or attempt + 1 >= max_attempts:
+                raise
+            args.seed = random.randint(0, 2**31 - 1)
+            random.seed(args.seed)
+            np.random.seed(args.seed)
+            scene_cfg = scene_builders[args.scene]()
+            if args.goal == 'find-and-tray-stack':
+                scene_cfg.enable_tray = True
+            run_config["seed"] = args.seed
+            run_config["n_occluders"] = len(scene_cfg.occluders)
+            run_config["n_targets"] = len(scene_cfg.targets)
+            run_config["n_hidden"] = scene_cfg.n_hidden_targets
+            print(f"[retry {attempt + 1}/{max_attempts - 1}] "
+                  f"placement failed ({e}); rerolling to "
+                  f"seed={args.seed}",
+                  file=sys.stderr)
+
+    # Single real-pipeline run with the validated scene_cfg.
+    logger = RunLogger(verbosity=args.log_level)
     try:
-        for attempt in range(max_attempts):
-            try:
-                success = main(
-                    gui=not args.no_gui,
-                    run_logger=logger,
-                    scene_config=scene_cfg,
-                    draw_boxel_overlays=not args.no_boxel_viz,
-                    show_free=args.show_free,
-                    goal_kind=args.goal,
-                    stack_height=args.stack_height,
-                    unit_costs=args.unit_costs,
-                    baseline=args.baseline,
-                    uniform_cell_size=args.uniform_cell_size,
-                    run_config=run_config,
-                )
-                break
-            except RuntimeError as e:
-                if "Could not place" not in str(e) or attempt + 1 >= max_attempts:
-                    raise
-                args.seed = random.randint(0, 2**31 - 1)
-                random.seed(args.seed)
-                np.random.seed(args.seed)
-                scene_cfg = scene_builders[args.scene]()
-                if args.goal == 'find-and-tray-stack':
-                    scene_cfg.enable_tray = True
-                run_config["seed"] = args.seed
-                run_config["n_occluders"] = len(scene_cfg.occluders)
-                run_config["n_targets"] = len(scene_cfg.targets)
-                run_config["n_hidden"] = scene_cfg.n_hidden_targets
-                print(f"[retry {attempt + 1}/{max_attempts - 1}] "
-                      f"placement failed ({e}); rerolling to "
-                      f"seed={args.seed}",
-                      file=sys.stderr)
+        success = main(
+            gui=not args.no_gui,
+            run_logger=logger,
+            scene_config=scene_cfg,
+            draw_boxel_overlays=not args.no_boxel_viz,
+            show_free=args.show_free,
+            goal_kind=args.goal,
+            stack_height=args.stack_height,
+            unit_costs=args.unit_costs,
+            baseline=args.baseline,
+            uniform_cell_size=args.uniform_cell_size,
+            run_config=run_config,
+        )
     finally:
         logger.close()
     sys.exit(0 if success else 1)
