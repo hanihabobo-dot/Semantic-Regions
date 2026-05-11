@@ -1562,8 +1562,7 @@ if __name__ == "__main__":
             seed=args.seed,
         ),
         'random-pairs': lambda: random_pairs_scene(
-            min_pairs=args.n_pairs_range[0],
-            max_pairs=args.n_pairs_range[1],
+            n_occluders=args.n_occluders,
             extra_distractors=args.n_extra_distractors,
             seed=args.seed,
         ),
@@ -1594,7 +1593,6 @@ if __name__ == "__main__":
         "n_occluders":  effective_n_occluders,
         "n_targets":    effective_n_targets,
         "n_hidden":     effective_n_hidden,
-        "n_pairs_range":      f"{args.n_pairs_range[0]}-{args.n_pairs_range[1]}",
         "n_extra_distractors": args.n_extra_distractors,
         "n_objects":    args.n_objects,
         "seed":         args.seed,

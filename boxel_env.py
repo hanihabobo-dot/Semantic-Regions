@@ -341,41 +341,41 @@ def scalability_scene(n_occluders: int = 3, n_targets: int = 4,
     )
 
 
-def random_pairs_scene(min_pairs: int = 1, max_pairs: int = 5,
+def random_pairs_scene(n_occluders: int = 3,
                        extra_distractors: int = 0,
                        seed: int = 0) -> SceneConfig:
     """
-    Scene where the number of (occluder, hidden-target) pairs is drawn
-    uniformly at random from [min_pairs, max_pairs] per call (audit #68).
+    Scene with a fixed occluder count and a randomly-drawn hidden-target
+    count (audit #68).
 
-    A "pair" is one occluder + one hidden target placed in its shadow.
-    Drawing K pairs spawns K occluders and K hidden targets; per-target
-    raycast verification (audit #29) still applies via the underlying
-    scalability_scene + _hidden_xy_positions path.  ``extra_distractors``
-    adds visible distractor targets on top of the K hidden ones.
+    ``n_occluders`` is set by the caller (default 3); the per-run hidden
+    count is drawn uniformly from ``[1, n_occluders]`` using ``seed`` so
+    the same seed always produces the same scene.  Each hidden target is
+    placed behind one of the occluders via the standard scalability_scene
+    + _hidden_xy_positions path (audit #29 raycast verification).
+    ``extra_distractors`` adds visible (non-hidden) distractor targets on
+    top of the K hidden ones; required >= 1 for ``--goal
+    find-and-tray-stack`` (auto-bumped in run_logger).
 
-    Determinism: a fixed ``seed`` always produces the same scene
-    (same K, same positions).  Vary ``seed`` per run for structurally
-    distinct scenes; run_logger draws a fresh seed by default when
-    --scene random-pairs is selected without an explicit --seed.
+    Vary ``seed`` per run for structurally distinct scenes; run_logger
+    draws a fresh seed by default when --scene random-pairs is selected
+    without an explicit --seed.
     """
-    if min_pairs < 1:
-        raise ValueError("random_pairs_scene: min_pairs must be >= 1")
-    if max_pairs < min_pairs:
+    if n_occluders < 1:
         raise ValueError(
-            f"random_pairs_scene: max_pairs ({max_pairs}) must be "
-            f">= min_pairs ({min_pairs})"
+            f"random_pairs_scene: n_occluders must be >= 1 "
+            f"(got {n_occluders})"
         )
     if extra_distractors < 0:
         raise ValueError(
             "random_pairs_scene: extra_distractors must be >= 0"
         )
     rng = np.random.RandomState(seed)
-    n_pairs = int(rng.randint(min_pairs, max_pairs + 1))
+    n_hidden = int(rng.randint(1, n_occluders + 1))
     return scalability_scene(
-        n_occluders=n_pairs,
-        n_targets=n_pairs + int(extra_distractors),
-        n_hidden=n_pairs,
+        n_occluders=n_occluders,
+        n_targets=n_hidden + int(extra_distractors),
+        n_hidden=n_hidden,
         seed=seed,
     )
 
