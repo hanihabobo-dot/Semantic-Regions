@@ -1264,12 +1264,23 @@ class BoxelTestEnv:
         # boxel is generated and no blocks_view_at facts emit for it.
         # The tray remains in obstacles for OTHER objects' shadow rays
         # (its 3 cm walls barely obstruct anything anyway).
+        #
+        # Audit #68 follow-up — previously-computed shadows are passed
+        # in as obstacles too, so overlap regions get carved out of the
+        # later shadow and each table point belongs to at most one
+        # SHADOW boxel.  Without this, two shadows that overlap both
+        # claim "target might be here", and sensing one leaves the
+        # other's overlap region still flagged unknown — the planner
+        # then re-plans to sense the same physical volume from the
+        # other shadow's name.  Iteration order is sorted by parent
+        # object name so the carve is deterministic across runs.
         shadow_boxels: List[BoxelData] = []
-        for obj_boxel in object_boxels:
+        for obj_boxel in sorted(object_boxels, key=lambda b: b.id):
             obj_info = self.objects.get(obj_boxel.id)
             if obj_info is not None and obj_info.is_tray:
                 continue
             obstacles = [b for b in object_boxels if b.id != obj_boxel.id]
+            obstacles.extend(shadow_boxels)
             shadow_parts = self.shadow_calculator.calculate_shadow_boxel(
                 obj_boxel, obstacles)
 
