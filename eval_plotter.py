@@ -90,6 +90,17 @@ def _is_default_matrix(rows: List[dict]) -> bool:
     return len(occs) <= 1 and len(pairs) >= 2
 
 
+def _is_random_pairs_matrix(rows: List[dict]) -> bool:
+    """Detect a random-pairs sweep: every row has scene='random-pairs'.
+
+    random_pairs_scene draws n_hidden/n_targets per seed, so n_targets
+    is not a meaningful series axis here — the user-controlled axes are
+    n_occluders and goal.  Plot with goal as the series instead.
+    """
+    scenes = {r.get("scene") for r in rows}
+    return scenes == {"random-pairs"}
+
+
 def group_by_scene_goal_baseline(
     rows: List[dict],
     metric: Optional[str] = None,
@@ -194,43 +205,70 @@ def plot_grouped_bars(
     return out_path
 
 
+def _coerce_series(val):
+    """Return a hashable, plot-friendly series key.
+
+    Integer-looking values are int-converted (so ``"3"`` and ``3`` share
+    a series); everything else passes through as-is.  Without this the
+    line plots would split numeric series across two keys when the CSV
+    loader emits one value as str and another as int.
+    """
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return int(val) if float(val).is_integer() else val
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return val
+
+
 def group_metric(rows: List[dict],
                  axis_x: str = "n_occluders",
                  series: str = "n_targets",
                  metric: str = "total_planning_time_s",
-                 success_only: bool = True) -> Dict[int, Dict[int, List[float]]]:
-    """Returns ``{series_value: {x_value: [metric_samples]}}``."""
+                 success_only: bool = True) -> Dict[object, Dict[int, List[float]]]:
+    """Returns ``{series_value: {x_value: [metric_samples]}}``.
+
+    ``series`` may name a numeric column (e.g. ``n_targets``) or a
+    string-valued column (e.g. ``goal``).  String series stay as-is;
+    numeric strings are coerced via ``_coerce_series``.
+    """
     out: Dict = defaultdict(lambda: defaultdict(list))
     for r in rows:
         if success_only and not r.get("success"):
             continue
         try:
             x = int(r[axis_x])
-            s = int(r[series])
             v = float(r[metric])
         except (KeyError, TypeError, ValueError):
             continue
-        out[s][x].append(v)
+        s = r.get(series)
+        if s in (None, ""):
+            continue
+        out[_coerce_series(s)][x].append(v)
     return out
 
 
 def group_success_rate(rows: List[dict],
                        axis_x: str = "n_occluders",
-                       series: str = "n_targets") -> Dict[int, Dict[int, List[float]]]:
+                       series: str = "n_targets") -> Dict[object, Dict[int, List[float]]]:
     out: Dict = defaultdict(lambda: defaultdict(list))
     for r in rows:
         try:
             x = int(r[axis_x])
-            s = int(r[series])
         except (KeyError, ValueError, TypeError):
             continue
-        out[s][x].append(1.0 if r.get("success") else 0.0)
+        s = r.get(series)
+        if s in (None, ""):
+            continue
+        out[_coerce_series(s)][x].append(1.0 if r.get("success") else 0.0)
     return out
 
 
 def _print_text_table(grouped, title: str) -> None:
     print(f"\n=== {title} (matplotlib not available) ===")
-    for s_val, xy in sorted(grouped.items()):
+    for s_val, xy in sorted(grouped.items(), key=lambda kv: str(kv[0])):
         for x in sorted(xy.keys()):
             samples = xy[x]
             if not samples:
@@ -261,7 +299,7 @@ def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
     fig, ax = plt.subplots(figsize=(7, 5))
 
     def _plot(grp, suffix, linestyle):
-        for s_val, xy in sorted(grp.items()):
+        for s_val, xy in sorted(grp.items(), key=lambda kv: str(kv[0])):
             xs = sorted(xy.keys())
             means = [mean(xy[x]) for x in xs]
             stds = [pstdev(xy[x]) if len(xy[x]) > 1 else 0.0 for x in xs]
@@ -357,38 +395,55 @@ def main(argv=None) -> int:
                   f"semantic={len(rows)} rows, "
                   f"uniform={len(baseline_rows)} rows")
 
+    # random-pairs draws (n_hidden, n_targets) per seed, so n_targets is
+    # not a meaningful series axis here.  Use goal as the series so the
+    # line plot becomes one line per goal (with baseline as the dashed
+    # overlay if both are present).
+    if _is_random_pairs_matrix(rows + (baseline_rows or [])):
+        series_key = "goal"
+        series_label = "goal"
+    else:
+        series_key = "n_targets"
+        series_label = "n_targets"
+
     plot_metric(
-        group_metric(rows, metric="total_planning_time_s",
+        group_metric(rows, series=series_key,
+                     metric="total_planning_time_s",
                      success_only=True),
         title="Planning time vs scene size (success-only)",
         ylabel="mean total planning time (s)",
         out_path=out_dir / "planning_time_vs_n_occluders.png",
-        baseline_grouped=(group_metric(baseline_rows,
+        baseline_grouped=(group_metric(baseline_rows, series=series_key,
                                        metric="total_planning_time_s",
                                        success_only=True)
                           if baseline_rows else None),
+        series_label=series_label,
         main_label_suffix=main_label_suffix,
         baseline_label_suffix=baseline_label_suffix,
     )
     plot_metric(
-        group_success_rate(rows),
+        group_success_rate(rows, series=series_key),
         title="Success rate vs scene size",
         ylabel="success rate (over seeds)",
         out_path=out_dir / "success_rate_vs_n_occluders.png",
         ylim=(0.0, 1.05),
-        baseline_grouped=(group_success_rate(baseline_rows)
+        baseline_grouped=(group_success_rate(baseline_rows, series=series_key)
                           if baseline_rows else None),
+        series_label=series_label,
         main_label_suffix=main_label_suffix,
         baseline_label_suffix=baseline_label_suffix,
     )
     plot_metric(
-        group_metric(rows, metric="plan_count", success_only=True),
+        group_metric(rows, series=series_key,
+                     metric="plan_count", success_only=True),
         title="Plan count (replans) vs scene size (success-only)",
         ylabel="mean plan_count",
         out_path=out_dir / "plan_count_vs_n_occluders.png",
-        baseline_grouped=(group_metric(baseline_rows, metric="plan_count",
+        baseline_grouped=(group_metric(baseline_rows, series=series_key,
+                                       metric="plan_count",
                                        success_only=True)
                           if baseline_rows else None),
+        series_label=series_label,
         main_label_suffix=main_label_suffix,
         baseline_label_suffix=baseline_label_suffix,
     )

@@ -107,10 +107,27 @@ DEFAULT_MATRIX = [
     ]
 ]
 
+# Random-pairs sweep (audit #68): same scene and CLI shape as
+# random_pairs_scene + the updated --n-occluders knob.  Fixed
+# n_occluders ∈ {2, 3, 4}, hidden count is drawn per seed inside the
+# scene builder ([1, n_occluders]), so each seed lands at a different
+# (n_hidden, n_targets) within a cell.  3 seeds × 3 occluder counts ×
+# 2 goals × 2 baselines = 36 cells.
+RANDOM_PAIRS_MATRIX = {
+    "n_occluders": [2, 3, 4],
+    "seed":        [0, 1, 2],
+    "goal":        ["holding", "find-and-tray-stack"],
+    "baseline":    ["semantic", "uniform"],
+    "unit_costs":  [False],
+    "scene":       ["random-pairs"],
+    "_n_hidden_strategy": "none",
+}
+
 MATRIX_PRESETS = {
-    "scalability": SCALABILITY_MATRIX,
-    "smoke":       SMOKE_MATRIX,
-    "default":     DEFAULT_MATRIX,
+    "scalability":  SCALABILITY_MATRIX,
+    "smoke":        SMOKE_MATRIX,
+    "default":      DEFAULT_MATRIX,
+    "random-pairs": RANDOM_PAIRS_MATRIX,
 }
 
 
@@ -149,6 +166,15 @@ def iterate_matrix(matrix) -> Iterator[Dict]:
 
 def cell_tag(cell: Dict) -> str:
     """Deterministic short label used as the cell directory name."""
+    if cell["scene"] == "random-pairs":
+        # n_targets / n_hidden are randomized inside the scene builder
+        # per seed, so they are NOT part of the matrix axis and would
+        # be confusing in the directory name (they vary across runs of
+        # the same cell).  Tag by the user-controlled knobs only.
+        return (f"randpairs_occ{cell['n_occluders']}"
+                f"_seed{cell['seed']}"
+                f"_{cell['goal']}_uc{int(cell['unit_costs'])}"
+                f"_{cell.get('baseline', 'semantic')}")
     return (f"occ{cell['n_occluders']}_tgt{cell['n_targets']}"
             f"_hid{cell['n_hidden']}_seed{cell['seed']}"
             f"_{cell['goal']}_uc{int(cell['unit_costs'])}"
@@ -177,6 +203,18 @@ def cell_to_argv(cell: Dict, extra_args: List[str]) -> List[str]:
             "--n-occluders", str(cell["n_occluders"]),
             "--n-targets",   str(cell["n_targets"]),
             "--n-hidden",    str(cell["n_hidden"]),
+        ])
+    elif cell["scene"] == "random-pairs":
+        # random-pairs derives n_hidden/n_targets internally from seed
+        # and the user-supplied --n-occluders; the other count flags
+        # are mutually exclusive with this scene.  --seed-retry lets
+        # the pre-flight retry layer re-roll past infeasible-geometry
+        # seeds deterministically (some small seeds at n_occluders=2
+        # produce occluder layouts with no valid shadow lane); without
+        # it the cell would fail outright on the first bad draw.
+        argv.extend([
+            "--n-occluders", str(cell["n_occluders"]),
+            "--seed-retry",
         ])
     if cell["unit_costs"]:
         argv.append("--unit-costs")
