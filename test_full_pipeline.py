@@ -1642,7 +1642,18 @@ if __name__ == "__main__":
             probe_env.close()
             break
         except RuntimeError as e:
-            if "Could not place" not in str(e) or attempt + 1 >= max_attempts:
+            # Retryable placement errors:
+            # - "Could not place" from _random_xy_positions exhausting
+            #   its 400-attempt budget (pre-existing path).
+            # - "audit #70" from _assert_xys_in_reach catching a hidden
+            #   target placed beyond the reach disk by _hidden_xy_-
+            #   positions (still reach-disk-unaware; audit #70
+            #   hardening (iii) deferred until the assert fires often
+            #   enough to warrant plumbing constrain_to_reach into the
+            #   helper).
+            retryable = any(s in str(e)
+                            for s in ("Could not place", "audit #70"))
+            if not retryable or attempt + 1 >= max_attempts:
                 raise
             args.seed = retry_rng.randint(0, 2**31 - 1)
             random.seed(args.seed)
