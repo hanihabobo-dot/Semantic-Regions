@@ -845,14 +845,25 @@ def refresh_object_aabbs(env, registry, viz=None):
     accepted thesis gap per user-explicit scope cut; the SHADOW keyed
     to a refreshed OBJECT may now be slightly mis-aligned with the live
     silhouette.  Cost is ~0.1 ms for a 10-object scene.
+
+    Per-object early-out: if the new AABB matches the registry value
+    within _aabb_tol (0.1 mm — same FP-noise budget reboxelize uses),
+    skip the write AND the viz remove/redraw.  Without this, every
+    sense redraws every OBJECT wireframe even when nothing moved.
     """
+    _aabb_tol = 1e-4
     for obj_boxel in registry.get_boxels_by_type(BoxelType.OBJECT):
         obj_info = env.objects.get(obj_boxel.id)
         if obj_info is None:
             continue
         aabb_min, aabb_max = p.getAABB(obj_info.object_id)
-        obj_boxel.min_corner = np.array(aabb_min)
-        obj_boxel.max_corner = np.array(aabb_max)
+        new_min = np.array(aabb_min)
+        new_max = np.array(aabb_max)
+        if (np.allclose(new_min, obj_boxel.min_corner, atol=_aabb_tol) and
+                np.allclose(new_max, obj_boxel.max_corner, atol=_aabb_tol)):
+            continue
+        obj_boxel.min_corner = new_min
+        obj_boxel.max_corner = new_max
         if viz is not None and viz.tracks_boxel(obj_boxel.id):
             viz.remove_boxel_viz(obj_boxel.id)
             viz.draw_boxel_data(obj_boxel)
