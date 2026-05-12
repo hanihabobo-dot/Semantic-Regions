@@ -1207,6 +1207,21 @@ Added:        2026-05-12 (later) — #71 (refresh OBJECT boxel
               shadow region behind it (shadow recomputation is
               expensive and out of scope for this fix).
               Open count: 11 -> 12.
+Added:        2026-05-12 (later) — #72 (shadow AABB carves only
+              along dominant axis — lateral overhang beside the
+              occluder).  Calculate_shadow_boxel builds an AABB
+              enclosing both the cube AABB and the divergent ray
+              hit points, then carves the occluder out along
+              ONE axis (the dominant component of mean(hits) -
+              obj_center).  Perpendicular axes inherit the wide
+              hit-point bounds all the way back to the cube's
+              back face, so the SHADOW boxel "sticks out" beside
+              the cube on the camera-facing side (~7-10 cm of
+              non-shadow region absorbed into the AABB).  Free-
+              space generator and boxel_fits then carve cells
+              that the camera can actually see.  User-reported
+              visually 2026-05-12 (random-pairs GUI run, seed
+              779694423).  Open count: 12 -> 13.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -3080,6 +3095,252 @@ Related: #29 [archived] — hidden-target placement raycast
 
 
 ================================================================================
+#72. SHADOW AABB CARVED ONLY ALONG DOMINANT AXIS — LATERAL OVERHANG
+================================================================================
+Status:   OPEN.  Raised 2026-05-12 (later) by user after GUI
+          run on random-pairs scene (seed 779694423).  User
+          reported "shadow calculation is wrong" — visible as
+          shadow wireframes that extend laterally past the
+          occluder on the camera-facing side, into regions the
+          camera can directly see.
+Repro:    Exact run that surfaced the defect (preserve for
+          before/after comparison when the fix lands):
+            python run_logger.py \
+              --scene random-pairs \
+              --n-occluders 3 \
+              --seed 779694423 \
+              --goal find-and-tray-stack \
+              --stack-height 2 \
+              --baseline semantic \
+              --gui
+          Derived counts (random-pairs from seed): n_targets=3,
+          n_hidden=2, n_extra_distractors=1.  Camera:
+          eye=(0.1, -0.8, 0.7), target=(0.1, 0.0, 0.5).  Scene
+          objects (spawn order, body ids 4-9): red, green,
+          orange, blue, cyan, purple.  Occluder shadows
+          visible: shadow_of_{green, orange, purple}_object.
+          Original run log:
+            logs/run_2026-05-12_14-02-30/run_2026-05-12_14-02-30.log
+          (the run also surfaced #73 — plan_motion stuck on
+          stale held=[9] for 385 s before the user killed it;
+          unrelated bug, same scene.)
+Priority: TIER 1 — correctness drift.  Same tier as #71 because
+          the consequences are similar: planner reasons over
+          geometry that does not match physics.  In this case
+          the SHADOW boxel claims to occlude volume that is
+          actually visible, so free-space generator + boxel_fits
+          carve out non-shadow cells.  Downstream effect: place /
+          motion plans avoid passable regions, contributing to
+          the kind of long sampling stalls seen in the #73
+          held-set bug.
+Where:    shadow_calculator.py:147-178 (calculate_shadow_boxel,
+          AABB-construction + subtract-object block).  Concretely:
+            - Lines 147-156: full_min/full_max enclose both the
+              object's AABB and ALL ray hit points.  Hit points
+              spread laterally because rays from the 4 back
+              corners diverge outward from the camera through
+              each corner.
+            - Lines 168-178: only ONE face is trimmed back to
+              the object's back face — the face along the
+              dominant axis of shadow_dir.  The two perpendicular
+              axes keep the union of (object range) and (hit-
+              point range), so the shadow AABB extends past the
+              object's lateral footprint all the way from the
+              object's back face out to the hit-point cluster.
+          Visual evidence:
+            User GUI run 2026-05-12 — wireframes labelled
+            "shadow_of_<colour>_object" extend ~7-10 cm beside
+            the corresponding occluder on the camera-facing side
+            (-X for the run shown, because camera is offset to
+            +X relative to the occluder cluster).
+          Geometric evidence:
+            For a 5 cm cube at world (0, 0, 0.55), camera at
+            (0.1, -0.8, 0.7), the four back-corner rays land at:
+              (-0.043, 0.143, 0.5)
+              ( 0.014, 0.143, 0.5)
+              (-0.100, 0.519, 0.5)
+              (-0.020, 0.521, 0.5)
+            full_min/full_max gives shadow X range [-0.100,
+            0.025]; the object's X range is [-0.025, 0.025].
+            The strip X in [-0.100, -0.025] at any Y is
+            classified as shadow but is camera-visible.
+Depends:  None.  Independent of #70 (placement reachability),
+          #71 (OBJECT AABB refresh), #66 Plan C (TAMPURA), and
+          #50/#62 (planner perf).  Lands directly on main.
+
+What:  The shadow AABB is constructed in three steps:
+       (1) Cast rays from the 4 back corners (those with
+           positive dot-product to cam_to_obj) outward through
+           each corner.  Rays diverge laterally because they
+           originate at distinct corners.
+       (2) Build the bounding box of (object AABB ∪ hit points).
+           This box is wider than the object in BOTH lateral
+           axes because the hits land at wider X (and slightly
+           wider/higher Z, since top-back-corner rays hit
+           further than bottom-back-corner rays).
+       (3) Carve the object out of the shadow ALONG ONE AXIS
+           only (the dominant component of shadow_dir):
+             if shadow_dir[dom_axis] > 0:
+                 s_min[dom_axis] = max(s_min, o_max[dom_axis])
+             else:
+                 s_max[dom_axis] = min(s_max, o_min[dom_axis])
+           This trims the shadow's near face back to the
+           object's back face — correct for the dominant axis.
+           But the perpendicular axes keep the union bounds.
+
+       Geometrically, the true shadow is a frustum from the
+       camera through the occluder, and any axis-aligned box
+       containing it must overestimate.  The current code
+       OVERESTIMATES along both perpendicular axes ALL THE
+       WAY BACK to the occluder, instead of tapering toward
+       the occluder's own lateral footprint at the back face.
+
+       Visible failure: the shadow boxel "wraps around" the
+       occluder on the camera-facing lateral sides.  In the
+       reported run (seed 779694423, three occluders), each
+       shadow boxel includes 7-10 cm of clearly-visible
+       table beside its caster.
+
+       Downstream planner consequences:
+         - free_space.py / uniform_grid.py subtract SHADOW
+           AABBs from the workspace -> free cells are deleted
+           in the overhang strip beside each occluder.  The
+           robot is forbidden from placing in cells that are
+           actually free.
+         - pddlstream_planner.py boxel_fits checks SHADOW
+           AABBs as "occluded" for visibility planning -> the
+           camera "cannot see" cells that it actually can.
+         - In multi-occluder scenes (random-pairs N>=3), the
+           overhang strips of adjacent occluders can merge,
+           creating contiguous "occluded" regions that the
+           planner believes to be one big shadow when in
+           fact two separate cones exist.
+
+Fix:   Three fix shapes, AI picks one and justifies inline.
+       User direction on which option to take pending.
+
+       (A) Per-slab AABBs along the dominant axis.
+           Split the shadow into N slabs perpendicular to
+           dom_axis (e.g. N=4).  Each slab gets its own
+           tight lateral bounds from the rays' actual
+           lateral extent at that depth (interpolate between
+           object back-face bounds at slab nearest the
+           occluder, and full hit-point bounds at slab
+           furthest).  Output: N SHADOW boxels per occluder
+           instead of 1.
+           Pros: cleanest geometric tightening; works in
+                 the existing AABB-only planner; degrades
+                 gracefully (N=1 -> current behaviour).
+           Cons: registry has N x more shadow entries per
+                 occluder; PDDL fact emission grows
+                 accordingly (audit #50 perf concern).
+           Recommended: N=2 (one cube-bordering slab + one
+                 far slab); equivalent to option C below.
+
+       (B) OBB or frustum shadow boxels.
+           Replace SHADOW AABBs with oriented bounding
+           boxes (OBBs) or actual frustums.  Tighter, but
+           breaks the AABB-only assumption baked into
+           boxel_fits, _check_aabb_intersection, the free-
+           space generator, and the PDDL stream certificates.
+           Pros: geometrically exact.
+           Cons: pervasive type change across the planner
+                 stack.  Out of scope for this fix.
+
+       (C) Two-slab carve.
+           Equivalent to A with N=2.  After the dom_axis
+           carve, ALSO clamp the perpendicular axes to the
+           OBJECT's perpendicular range from the object's
+           back face up to halfway to the far hit-point
+           cluster, then expand to the full hit-point range
+           only beyond that midpoint.  In practice this
+           means:
+             - SHADOW boxel 1: cube-bordering slab, lateral
+               bounds = object's lateral range
+             - SHADOW boxel 2: far slab, lateral bounds =
+               hit-point range
+           Pros: only one extra SHADOW boxel per occluder;
+                 closes the visible defect; same AABB
+                 representation as today.
+           Cons: registry has 2x shadow entries (manageable);
+                 the midpoint heuristic is arbitrary (a
+                 perspective-correct split would compute the
+                 frustum cross-section at the midpoint
+                 depth, which is also cheap).
+
+       AI default recommendation: (C).  One extra SHADOW
+       boxel per occluder is acceptable overhead; closes
+       the user-visible defect; no PDDL stream surface
+       changes.  Implement the midpoint split with a
+       perspective-correct cross-section (cheap closed form
+       given camera_pos, occluder AABB, and slab depth) so
+       there's no arbitrary half-and-half heuristic.
+
+       Verification:
+       (i)   Headless smoke: log shadow AABBs before/after
+             for the seed 779694423 random-pairs run.  Expect
+             lateral overhang to drop from ~7-10 cm to <= 2 cm
+             on each occluder.
+       (ii)  GUI: user reruns the same seed (see Repro
+             block above); visually confirm the shadow
+             wireframes no longer extend past the occluders'
+             lateral footprint near the back face.
+       (iii) Regression: existing scalability matrix should
+             not regress on success rate (the fix removes
+             false-positive shadow cells; if any cell starts
+             succeeding that previously failed because of
+             that, that's the fix working).
+
+Care:  AABB-only planner assumption.
+       Boxel_fits, free-space generator, _check_aabb_
+       intersection, and PDDL certificates all assume SHADOW
+       boxels are AABBs.  Fix (C) preserves this; fix (B)
+       would require a wider refactor.  Stay in (A)/(C)
+       unless user explicitly directs (B).
+
+       Shadow ID continuity.
+       Today each occluder produces ONE SHADOW boxel with id
+       "shadow_of_<object>".  Splitting into 2 boxels needs
+       a naming scheme: "shadow_of_<object>__near" /
+       "__far", or numeric suffix.  Match the existing
+       fragment-naming convention in _subtract_aabb (line
+       208) so reboxelize / belief / sense don't need new
+       lookup paths.
+
+       sense_shadow_raycasting (execution.py:44).
+       The sense action takes one shadow_boxel and casts
+       rays.  With two slabs, the sense action would need to
+       either (a) walk both slabs in one call, or (b) treat
+       them as two PDDL "regions" that the planner senses
+       separately.  (a) is cheaper and preserves current
+       semantics; (b) is more honest but doubles sense
+       counts.  Default to (a) — concatenate the two slabs'
+       interiors before raycasting.
+
+Related: #4  [archived, accepted] — post-action re-
+              boxelization staleness.  #72 is a different
+              flavour of "SHADOW boxel inaccuracy"; #4 was
+              about staleness, this is about original
+              construction.
+         #71 — refresh OBJECT boxel AABBs on every sense.
+              Companion correctness drift.  Together #71
+              + #72 close the two main "registry geometry
+              vs reality" gaps; #57 is the long-term
+              consolidation.
+         #50 — planner performance investigation.  Doubling
+              SHADOW boxel count is a real cost — flag this
+              fix as a candidate for #50's cost-budget
+              consideration before landing.
+         #73 — plan_motion stream evaluated with stale
+              held=[purple] after stack(purple, tray).
+              Surfaced in the same seed-779694423 run; the
+              overhang-shadow free-space carve-out makes
+              the held-set bug bite harder by removing
+              passable cells the motion sampler would
+              otherwise have used.
+
+
+================================================================================
 SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-12 (later))
 ================================================================================
 
@@ -3139,6 +3400,17 @@ TIER 1 — UNIFORM/TAMPURA BASELINE PLACEMENT (correctness blocker):
        the shadow region behind it (out of scope).  ~0.1 ms
        overhead per sense.  Promotable to TIER 0 if false-
        success cases multiply.
+  #72  Shadow AABB carved only along dominant axis -> lateral
+       overhang beside the occluder.  full_min/full_max
+       encloses object AABB ∪ ray hit points; only the
+       dominant-axis face is trimmed back to the object.
+       Perpendicular axes keep the wide hit-point bounds all
+       the way back to the cube, so 7-10 cm of camera-visible
+       table beside each occluder is incorrectly classified
+       as shadow.  Free-space + boxel_fits then carve cells
+       the camera can see.  Fix C (two-slab carve) recommended;
+       one extra SHADOW boxel per occluder, no PDDL stream
+       refactor.  Repro seed 779694423 stored in body.
 
 TIER 2 — PERF (planner wall-clock):
   #50  Planner perf investigation — profile, cache static init, kill
@@ -3177,7 +3449,7 @@ TIER 3 — CODE QUALITY / LOW-PRIO:
        FastDownward" bullet — captures the realistic CPU-side
        win that doesn't require simulator/planner swap.
 
-Total open: 12 items (#50, #57, #59, #61, #62, #63, #65, #66 Plan C, #68, #69, #70, #71).
+Total open: 13 items (#50, #57, #59, #61, #62, #63, #65, #66 Plan C, #68, #69, #70, #71, #72).
 
 Closed since previous summary:
   #67  [DONE 2026-05-10] — Phase 4 hidden-target criterion swap
