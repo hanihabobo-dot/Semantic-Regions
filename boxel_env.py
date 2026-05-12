@@ -372,12 +372,27 @@ def random_pairs_scene(n_occluders: int = 3,
         )
     rng = np.random.RandomState(seed)
     n_hidden = int(rng.randint(1, n_occluders + 1))
-    return scalability_scene(
+    cfg = scalability_scene(
         n_occluders=n_occluders,
         n_targets=n_hidden + int(extra_distractors),
         n_hidden=n_hidden,
         seed=seed,
     )
+    # audit #70 (reopened 2026-05-12) — without this, occluders +
+    # visible targets sample in the wide _TABLE_PLACE_* window and
+    # ~half the placements fall outside the Panda's 0.65 m reach
+    # disk; pick IK then succeeds via slack-beyond-comfort-reach
+    # and the grasp constraint hangs the cube mid-air on lift.
+    # Forcing constrain_to_reach pins occluders and visible-target
+    # spawns to _SAFE_TABLE_* ∩ reach disk (same pattern as
+    # stack_scene).  Hidden targets are placed behind occluders by
+    # _hidden_xy_positions, which is reach-disk-unaware; if a
+    # hidden target lands outside reach despite its occluder being
+    # inside, the post-spawn assert in _create_objects /
+    # _create_targets (audit #70 hardening) will catch it and
+    # raise so the seed-retry layer can re-roll.
+    cfg.constrain_to_reach = True
+    return cfg
 
 
 class BoxelTestEnv:
@@ -884,6 +899,35 @@ class BoxelTestEnv:
             )
         return positions
 
+    def _assert_xys_in_reach(self, xys, label: str) -> None:
+        """audit #70 (reopened 2026-05-12) hardening.
+
+        Raise RuntimeError if any (x, y) lies outside the Panda's
+        _PANDA_REACH_RADIUS disk around _ROBOT_BASE_XY.  Callers gate
+        this on cfg.constrain_to_reach so non-reach-bound scenes
+        (default scalability matrix) are unaffected.
+
+        Catches _hidden_xy_positions placements that escape the reach
+        disk despite the parent occluder being inside it (the helper
+        samples behind occluders without filtering), and defends any
+        future caller-supplied cfg.{occluder,target}_positions that
+        sidesteps _random_xy_positions' filter.  RuntimeError surfaces
+        to the seed-retry layer in test_full_pipeline.main() (mirrors
+        audit #29's hidden-target post-spawn check).
+        """
+        bx, by = self._ROBOT_BASE_XY
+        r_max = self._PANDA_REACH_RADIUS
+        for i, xy in enumerate(xys):
+            d = float(np.hypot(float(xy[0]) - bx, float(xy[1]) - by))
+            if d > r_max:
+                raise RuntimeError(
+                    f"audit #70: {label}[{i}] spawned at "
+                    f"({float(xy[0]):.3f}, {float(xy[1]):.3f}) is "
+                    f"{d:.3f} m from robot base — outside reach disk "
+                    f"(r_max={r_max} m). Re-roll seed (--seed-retry) "
+                    f"or widen --n-occluders."
+                )
+
     # audit #49 — tray (fixed-base support surface, default-off).
     # Uses the built-in pybullet_data tray/traybox.urdf (textured mesh
     # visual, box-primitive collision, mass=0).  At globalScaling=0.4
@@ -950,6 +994,15 @@ class BoxelTestEnv:
                 constrain_to_reach=cfg.constrain_to_reach,
                 reserved_xys=reserved,
             )
+
+        # audit #70 (reopened 2026-05-12) hardening — defends against
+        # caller-supplied cfg.occluder_positions sidestepping the reach
+        # filter.  _random_xy_positions already filters by reach when
+        # constrain_to_reach=True; the assert is the safety net for
+        # the pre-baked-positions path.  Gated so non-reach-bound
+        # scenes stay on the wide _TABLE_PLACE_* window.
+        if cfg.constrain_to_reach:
+            self._assert_xys_in_reach(xys, "occluder")
 
         for i, (spec, xy) in enumerate(zip(cfg.occluders, xys)):
             he = spec.aabb_half_extents
@@ -1206,6 +1259,17 @@ class BoxelTestEnv:
                 visible_xys = []
 
             xys = hidden_xys + visible_xys
+
+        # audit #70 (reopened 2026-05-12) hardening — _hidden_xy_-
+        # positions is reach-disk-unaware (samples behind occluders
+        # without filtering), so a hidden target whose parent occluder
+        # sits at the back of the reach disk can land beyond it.  This
+        # assert catches that case (and any caller-supplied
+        # cfg.target_positions sidestepping the filter).  RuntimeError
+        # triggers seed-retry via test_full_pipeline.main() (audit #29
+        # mechanism).
+        if cfg.constrain_to_reach:
+            self._assert_xys_in_reach(xys, "target")
 
         for i, (spec, xy) in enumerate(zip(cfg.targets, xys)):
             he = spec.aabb_half_extents
