@@ -1,0 +1,172 @@
+============================================================
+FULL PIPELINE: PDDLStream + Replanning
+============================================================
+
+--- Run configuration ---
+  scene              = stack
+  n_occluders        = 3
+  n_targets          = 4
+  n_hidden           = 0
+  n_objects          = 3
+  seed               = 9
+  goal               = stack
+  stack_height       = 2
+  unit_costs         = False
+  baseline           = semantic
+  uniform_cell_size  = 0.05
+  gui                = False
+  boxel_viz          = True
+  show_free          = False
+  log_level          = quiet
+
+--- Phase 1: Environment Setup ---
+Boxel Test Environment initialized successfully!
+Camera position: [ 0.1 -0.8  0.7]
+Camera target: [0.1 0.  0.5]
+Occluders: 0 ()
+Targets:   3 (box, box, box)
+Objects in scene: ['plane', 'table', 'robot', 'red_object', 'green_object', 'orange_object']
+  [audit-66/67] Effective minimum boxel size: 0.060 m (largest object AABB 0.050 m + 0.01 m headroom).
+Robot ID: 2
+
+--- Phase 2: Calculating Boxels ---
+  Merge iteration 1: 47 merges, 47 boxels remaining
+  Merge iteration 2: 21 merges, 26 boxels remaining
+  Merge iteration 3: 9 merges, 17 boxels remaining
+  Merge iteration 4: 4 merges, 13 boxels remaining
+  Merging complete: 94 -> 13 boxels
+  Calculated 19 boxels
+
+--- Phase 3: Creating BoxelRegistry ---
+Saved 19 boxels to boxel_data.json
+  19 boxels, 3 shadows, 3 occluders
+
+--- Phase 4: Hidden Object Scenario ---
+  Stack goal: ('and', ('on', 'red_object', 'orange_object'), ('on_table', 'orange_object'))
+  Stackable cubes: ['red_object', 'green_object', 'orange_object']
+  Shadow blockers (audit #78):
+    shadow_of_red_object blocked by: ['red_object']
+    shadow_of_green_object blocked by: ['green_object']
+    shadow_of_orange_object blocked by: ['orange_object']
+  Boxel->PyBullet mapping: 3 objects
+
+--- Phase 5: Planning with Replanning ---
+  Exported initial problem to /mnt/c/Users/HaniAlassiriAlhabbou/git/Semantic_Boxels/pddl/problem_debug.pddl
+
+=== PLAN #1 ===
+Stack progress: {} (goal ('and', ('on', 'red_object', 'orange_object'), ('on_table', 'orange_object')))
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 171 | Eager Calls: 0 | Cost: inf | Search Time: 0.000 | Sample Time: 0.000 | Total Time: 0.000
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 0.080
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 171 | Eager Calls: 0 | Cost: inf | Search Time: 0.083 | Sample Time: 0.000 | Total Time: 0.083
+Attempt: 1 | Results: 4 | Depth: 0 | Success: False | Time: 0.024
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 171 | Eager Calls: 0 | Cost: inf | Search Time: 0.108 | Sample Time: 0.000 | Total Time: 0.108
+Attempt: 1 | Results: 70 | Depth: 0 | Success: False | Time: 0.097
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 171 | Eager Calls: 0 | Cost: inf | Search Time: 0.207 | Sample Time: 0.000 | Total Time: 0.207
+Attempt: 1 | Results: 78 | Depth: 1 | Success: False | Time: 0.158
+Attempt: 2 | Results: 105 | Depth: 1 | Success: False | Time: 0.343
+Attempt: 3 | Results: 105 | Depth: 0 | Success: True | Time: 0.533
+Stream plan (5, 5, 0.001): [sample-grasp:(red_object)->(#g0), compute-stack-kin:(red_object, orange_object, #g0)->(#q1), compute-kin:(red_object, red_object, #g0)->(#q2), plan-motion:(q_home, #q2)->(#t3), plan-motion:(#q2, #q1)->(#t2)]
+Action plan (4, 5.000): [move(q_home, #q2, red_object, #t3), pick(red_object, red_object, #g0, #q2), move(#q2, #q1, orange_object, #t2), stack(red_object, orange_object, #g0, #q1)]
+Summary: {complexity: 3, cost: 5.000, evaluations: 183, iterations: 4, length: 2, run_time: 0.751, sample_time: 0.009, search_time: 0.742, skeletons: 1, solutions: 1, solved: True, timeout: False}
+  [timing] planner.plan() #1: 0.788s (cumulative 0.788s)
+Plan: 4 actions
+  1. move
+  2. pick
+  3. move
+  4. stack
+
+  Executing: move
+    Moving to red_object (10 waypoints)...
+    -> Arrived at red_object
+
+  Executing: pick
+    Picking red_object from red_object...
+    *** red_object PICKED UP! ***
+
+  Executing: move
+    Moving to orange_object (10 waypoints)...
+    -> Arrived at orange_object
+
+  Executing: stack
+    Stacking red_object on orange_object...
+    PHYSICAL_FAILURE: stack red_object on orange_object — bottom_z=0.3250 not ≈ top_z=0.3750 (Δ=0.0500 > ε=0.005)
+
+=== PLAN #2 ===
+Stack progress: {} (goal ('and', ('on', 'red_object', 'orange_object'), ('on_table', 'orange_object')))
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 171 | Eager Calls: 0 | Cost: inf | Search Time: 0.000 | Sample Time: 0.000 | Total Time: 0.000
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 0.018
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 171 | Eager Calls: 0 | Cost: inf | Search Time: 0.020 | Sample Time: 0.000 | Total Time: 0.020
+Attempt: 1 | Results: 4 | Depth: 0 | Success: False | Time: 0.021
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 171 | Eager Calls: 0 | Cost: inf | Search Time: 0.043 | Sample Time: 0.000 | Total Time: 0.043
+Attempt: 1 | Results: 70 | Depth: 0 | Success: False | Time: 0.087
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 171 | Eager Calls: 0 | Cost: inf | Search Time: 0.132 | Sample Time: 0.000 | Total Time: 0.132
+Attempt: 1 | Results: 78 | Depth: 1 | Success: False | Time: 0.157
+Attempt: 2 | Results: 105 | Depth: 0 | Success: True | Time: 0.364
+Stream plan (5, 5, 0.001): [sample-grasp:(red_object)->(#g1), compute-kin:(red_object, red_object, #g1)->(#q4), compute-stack-kin:(red_object, orange_object, #g1)->(#q3), plan-motion:(post_stack_red_object_on_orange_object, #q4)->(#t4), plan-motion:(#q4, #q3)->(#t5)]
+Action plan (4, 5.000): [move(post_stack_red_object_on_orange_object, #q4, red_object, #t4), pick(red_object, red_object, #g1, #q4), move(#q4, #q3, orange_object, #t5), stack(red_object, orange_object, #g1, #q3)]
+Summary: {complexity: 3, cost: 5.000, evaluations: 183, iterations: 4, length: 2, run_time: 0.506, sample_time: 0.007, search_time: 0.499, skeletons: 1, solutions: 1, solved: True, timeout: False}
+  [timing] planner.plan() #2: 0.542s (cumulative 1.330s)
+Plan: 4 actions
+  1. move
+  2. pick
+  3. move
+  4. stack
+
+  Executing: move
+    Moving to red_object (10 waypoints)...
+    -> Arrived at red_object
+
+  Executing: pick
+    Picking red_object from red_object...
+    *** red_object PICKED UP! ***
+
+  Executing: move
+    Moving to orange_object (10 waypoints)...
+    -> Arrived at orange_object
+
+  Executing: stack
+    Stacking red_object on orange_object...
+    *** red_object STACKED on orange_object! ***
+
+============================================================
+SUCCESS!
+  Stack goal: ('and', ('on', 'red_object', 'orange_object'), ('on_table', 'orange_object'))
+  Final on-relations: {'red_object': 'orange_object'}
+  Plans executed: 2
+
+--- Planning timing summary ---
+  Total plan() calls       : 2
+  Cumulative planning time : 1.330s
+  Average per call         : 0.665s
+  Per-call (s)             : [0.788, 0.542]
+  Timing summary written to logs/run_2026-05-10_23-21-42/timing_summary.json
+============================================================
+
+--- STDERR ---
+pybullet build time: Jan 29 2025 23:16:28

@@ -1,0 +1,145 @@
+============================================================
+FULL PIPELINE: PDDLStream + Replanning
+============================================================
+
+--- Run configuration ---
+  scene              = default
+  n_occluders        = 3
+  n_targets          = 4
+  n_hidden           = 0
+  n_objects          = 3
+  seed               = 1
+  goal               = holding
+  stack_height       = 2
+  unit_costs         = False
+  baseline           = uniform
+  uniform_cell_size  = 0.05
+  gui                = False
+  boxel_viz          = True
+  show_free          = False
+  log_level          = quiet
+
+--- Phase 1: Environment Setup ---
+Boxel Test Environment initialized successfully!
+Camera position: [ 0.1 -0.8  0.7]
+Camera target: [0.1 0.  0.5]
+Occluders: 3 (box, box, box)
+Targets:   4 (box, box, box, box)
+Objects in scene: ['plane', 'table', 'robot', 'red_object', 'green_object', 'orange_object', 'blue_object', 'cyan_object', 'purple_object', 'yellow_object']
+  [audit-66/67] Effective minimum boxel size: 0.085 m (largest object AABB 0.075 m + 0.01 m headroom).
+Robot ID: 2
+
+--- Phase 2: Calculating Boxels ---
+  Calculated 388 boxels
+
+--- Phase 3: Creating BoxelRegistry ---
+Saved 388 boxels to boxel_data.json
+  388 boxels, 4 shadows, 4 occluders
+
+--- Phase 4: Hidden Object Scenario ---
+  Target: blue_object
+  ORACLE: Actually hidden in shadow_of_red_object (camera-ray occlusion; shadow AABB also contains its centre)
+  Robot must search to find it!
+  Shadow blockers (audit #78):
+    shadow_of_red_object blocked by: ['red_object']
+    shadow_of_green_object blocked by: ['green_object']
+    shadow_of_orange_object blocked by: ['orange_object']
+    shadow_of_yellow_object blocked by: ['yellow_object']
+  Boxel->PyBullet mapping: 4 objects
+
+--- Phase 5: Planning with Replanning ---
+  Exported initial problem to /mnt/c/Users/HaniAlassiriAlhabbou/git/Semantic_Boxels/pddl/problem_debug.pddl
+
+=== PLAN #1 ===
+Unknown shadows remaining: 4
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 3002 | Eager Calls: 0 | Cost: inf | Search Time: 0.002 | Sample Time: 0.000 | Total Time: 0.002
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 2.936
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 3002 | Eager Calls: 0 | Cost: inf | Search Time: 2.942 | Sample Time: 0.000 | Total Time: 2.942
+Attempt: 1 | Results: 6 | Depth: 0 | Success: False | Time: 3.676
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 3002 | Eager Calls: 0 | Cost: inf | Search Time: 6.624 | Sample Time: 0.000 | Total Time: 6.624
+Attempt: 1 | Results: 1971 | Depth: 0 | Success: False | Time: 19.256
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 3002 | Eager Calls: 0 | Cost: inf | Search Time: 25.892 | Sample Time: 0.000 | Total Time: 25.892
+Attempt: 1 | Results: 1979 | Depth: 1 | Success: False | Time: 20.484
+Attempt: 2 | Results: 2019 | Depth: 1 | Success: False | Time: 42.473
+Attempt: 3 | Results: 2091 | Depth: 1 | Success: False | Time: 64.853
+Attempt: 4 | Results: 2195 | Depth: 1 | Success: False | Time: 89.626
+Attempt: 5 | Results: 2331 | Depth: 1 | Success: False | Time: 113.864
+Attempt: 6 | Results: 2411 | Depth: 1 | Success: False | Time: 138.781
+Attempt: 7 | Results: 2499 | Depth: 1 | Success: False | Time: 166.711
+Attempt: 8 | Results: 2499 | Depth: 0 | Success: True | Time: 192.613
+Stream plan (8, 8, 0.001): [sample-grasp:(blue_object)->(#g0), sample-grasp:(red_object)->(#g1), compute-kin:(blue_object, shadow_of_red_object, #g0)->(#q0), compute-kin:(red_object, red_object, #g1)->(#q3), compute-kin:(red_object, free_280, #g1)->(#q17), plan-motion:(q_home, #q3)->(#t4), plan-motion:(#q3, #q17)->(#t12), plan-motion:(#q17, #q0)->(#t7)]
+Action plan (7, 7.000): [move(q_home, #q3, red_object, #t4), pick(red_object, red_object, #g1, #q3), move(#q3, #q17, free_280, #t12), place(red_object, free_280, #g1, #q17), move(#q17, #q0, shadow_of_red_object, #t7), sense(blue_object, shadow_of_red_object), pick(blue_object, shadow_of_red_object, #g0, #q0)]
+Summary: {complexity: 3, cost: 7.000, evaluations: 3021, iterations: 4, length: 2, run_time: 218.521, sample_time: 0.010, search_time: 218.511, skeletons: 1, solutions: 1, solved: True, timeout: False}
+  [timing] planner.plan() #1: 219.123s (cumulative 219.123s)
+Plan: 7 actions
+  1. move
+  2. pick
+  3. move
+  4. place
+  5. move
+  6. sense
+  7. pick
+
+  Executing: move
+    Moving to red_object (10 waypoints)...
+    -> Arrived at red_object
+
+  Executing: pick
+    Picking red_object from red_object...
+    *** red_object PICKED UP! ***
+
+  Executing: move
+    Moving to free_280 (10 waypoints)...
+    -> Arrived at free_280
+
+  Executing: place
+    Placing red_object at free_280...
+  Shadow blockers (audit #78):
+    shadow_of_red_object blocked by: ['red_object']
+    shadow_of_green_object blocked by: ['green_object']
+    shadow_of_orange_object blocked by: ['orange_object']
+    shadow_of_yellow_object blocked by: ['yellow_object']
+    *** red_object PLACED at free_280! ***
+
+  Executing: move
+    Moving to shadow_of_red_object (10 waypoints)...
+    -> Arrived at shadow_of_red_object
+
+  Executing: sense
+    Sensing shadow_of_red_object (fixed camera)...
+    *** TARGET FOUND in shadow_of_red_object! (ray-cast) ***
+
+  Executing: pick
+    Picking blue_object from shadow_of_red_object...
+    *** blue_object PICKED UP! ***
+
+============================================================
+SUCCESS!
+  Target: blue_object
+  Found in: picked
+  Plans executed: 1
+  Shadows searched: 1
+
+--- Planning timing summary ---
+  Total plan() calls       : 1
+  Cumulative planning time : 219.123s
+  Average per call         : 219.123s
+  Per-call (s)             : [219.123]
+  Timing summary written to logs/run_2026-05-10_19-50-51/timing_summary.json
+============================================================
+
+--- STDERR ---
+pybullet build time: Jan 29 2025 23:16:28
