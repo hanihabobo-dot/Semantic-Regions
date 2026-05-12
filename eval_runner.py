@@ -110,16 +110,16 @@ DEFAULT_MATRIX = [
 # Random-pairs sweep (audit #68 + #73 step 1(d) re-run).  Mixed-scene
 # list so all 3 goals are covered: random-pairs sub-tier carries the
 # 2 occluder-driven goals (holding, find-and-tray-stack) at
-# n_occluders ∈ {3, 4}; stack sub-tier carries the 3rd goal (stack),
+# n_occluders ∈ {2, 3, 4}; stack sub-tier carries the 3rd goal (stack),
 # which random-pairs hard-rejects at parse time (run_logger.py:531).
 # stack_scene ignores --n-occluders / --n-targets (no occluders;
 # n_objects defaults to 3 — boxel_env.stack_scene); those values are
 # tag-only for the stack sub-tier.  Cells: random-pairs
-# (2 occluders × 2 goals × 5 seeds × 2 baselines = 40) +
-# stack       (5 seeds × 2 baselines = 10) = 50.
+# (3 occluders × 2 goals × 5 seeds × 2 baselines = 60) +
+# stack       (5 seeds × 2 baselines = 10) = 70.
 RANDOM_PAIRS_MATRIX = [
     {
-        "n_occluders": [3, 4],
+        "n_occluders": [2, 3, 4],
         "seed":        [0, 1, 2, 3, 4],
         "goal":        ["holding", "find-and-tray-stack"],
         "baseline":    ["semantic", "uniform"],
