@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(python -m py_compile test_full_pipeline.py)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:aidan-curtis.github.io)",
+      "WebFetch(domain:arxiv.org)",
+      "Bash(gh repo *)",
+      "PowerShell(\\(Get-Content C:\\\\Users\\\\HaniAlassiriAlhabbou\\\\git\\\\Semantic_Boxels\\\\SEMANTIC_AUDIT_2026-04-28.md | Measure-Object -Line\\).Lines)",
+      "PowerShell($file = \"C:\\\\Users\\\\HaniAlassiriAlhabbou\\\\git\\\\Semantic_Boxels\\\\SEMANTIC_AUDIT_2026-04-28.md\"; $lines = Get-Content -LiteralPath $file; \"Total lines: $\\($lines.Count\\)\"; \"Last 8 lines:\"; $lines | Select-Object -Last 8 | ForEach-Object { $i = [array]::IndexOf\\($lines, $_\\) + 1; \"$i`: $_\" })",
+      "PowerShell(if \\(Test-Path \"eval_results\\\\sweep_2026-05-10_uc-false\"\\) { Get-ChildItem \"eval_results\\\\sweep_2026-05-10_uc-false\" | Measure-Object | Select-Object -ExpandProperty Count; Write-Host \"Latest mtime in sweep dir:\"; \\(Get-ChildItem \"eval_results\\\\sweep_2026-05-10_uc-false\" -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 1\\).LastWriteTime } else { Write-Host \"No sweep dir found\" })",
+      "PowerShell($tmp = Join-Path $env:TEMP \"boxels_wiki_$\\(Get-Random\\)\"; git clone https://git.rwth-aachen.de/hani.alassiri.alhabboub/pybullet.wiki.git $tmp 2>&1 | Select-Object -Last 5; Set-Location $tmp; \"WIKI_PATH=$tmp\")",
+      "PowerShell(Get-ChildItem \"$env:TEMP\\\\boxels_wiki_1760599604\" -Force | Select-Object Name, Length, LastWriteTime)",
+      "PowerShell(\"---\")",
+      "PowerShell(git stash push -u -m \"audit-50-sweep: stash pre-branch WIP\" -- SEMANTIC_AUDIT_2026-04-28.md)",
+      "PowerShell($latest = Get-ChildItem eval_results/ -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1; Write-Output \"Latest sweep: $\\($latest.Name\\)\"; Get-ChildItem $latest.FullName | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize | Out-String; if \\(Test-Path \\(Join-Path $latest.FullName \"cells\"\\)\\) { $cells = Get-ChildItem \\(Join-Path $latest.FullName \"cells\"\\) -Directory; Write-Output \"Cells: $\\($cells.Count\\)\"; $done = $cells | Where-Object { Test-Path \\(Join-Path $_.FullName 'timing_summary.json'\\) }; Write-Output \"With summary: $\\($done.Count\\)\" })",
+      "PowerShell(python -c \"from boxel_env import random_pairs_scene; cfg = random_pairs_scene\\(min_pairs=1, max_pairs=5, seed=7\\); print\\('occluders:', len\\(cfg.occluders\\), 'targets:', len\\(cfg.targets\\), 'n_hidden_targets:', cfg.n_hidden_targets, 'seed:', cfg.seed\\)\")"
+    ]
+  }
+}

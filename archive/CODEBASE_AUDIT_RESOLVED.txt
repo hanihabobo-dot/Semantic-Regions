@@ -64,6 +64,12 @@ Archived: 2026-05-10 (moved from CODEBASE_AUDIT.txt: #9, #10, #67 —
          this file, including the full "Outcome [DONE ...]" blocks
          #9 and #10 grew during implementation.  Open audit shrinks
          from 12 inline bodies to 9.)
+Archived: 2026-05-12 (changelog slim - moved entire changelog from
+         CODEBASE_AUDIT.txt head, ~1235 lines / ~75 entries from
+         2026-03-24 "Restructured" through 2026-05-12 "Added #73",
+         verbatim, to the "2026-05-12 CHANGELOG SLIM" section at end
+         of file.  No issue bodies moved - slim is changelog-only,
+         source bodies were already archived in prior slims.)
 
 These issues have been fixed, reclassified as not-an-issue, or corrected.
 The active audit with remaining open issues is in CODEBASE_AUDIT.txt.
@@ -4885,3 +4891,1249 @@ Related: #29 [archived] — hidden-target placement raycast
               elevated no_summary count in sweep aggregations.
 
 
+
+
+================================================================================
+2026-05-12 CHANGELOG SLIM
+================================================================================
+The full update history from the CODEBASE_AUDIT.txt open-audit head, archived
+verbatim during the 2026-05-12 slim.  Issue bodies these entries reference
+live in this file (the resolved archive) under their own section headers, or
+in archive/CODEBASE_AUDIT_DEFERRED.txt for deferred items; this section is
+the audit-trail changelog only.
+
+Restructured: 2026-03-24 — open issues renumbered in priority order.
+Slimmed:      2026-04-24 — moved older RESOLVED inline entries (#3, #24, #25,
+              #26, #27, #28, #35) and the pre-2026-04-22 changelog journal to
+              archive/CODEBASE_AUDIT_RESOLVED.txt.
+Slimmed:      2026-04-27 — moved #29, #33, #39, #43, #44 (fully DONE) and the
+              #30 implementation debrief to archive/CODEBASE_AUDIT_RESOLVED.txt;
+              moved #37, #38 (low-priority deferred) to
+              archive/CODEBASE_AUDIT_DEFERRED.txt.  Collapsed the old
+              "META-ISSUE DISSOLUTION" block (old #95) into a one-line note
+              in the policy section — all four drift channels now live as
+              individual resolved/open entries.  Merged two overlapping
+              boxel_fits / static-init policy blocks.
+Slimmed:      2026-05-03 — moved #45, #46 (fully DONE) to
+              archive/CODEBASE_AUDIT_RESOLVED.txt.
+Added:        2026-05-03 — CODEBASE POLICY: always push to both remotes
+              (`github` = GitHub, `origin` = RWTH GitLab).
+Restructured: 2026-05-03 — roadmap (pre-eval / eval); archive #4; drop #6;
+              mistakenly dropped #41 from open list (later corrected);
+              defer #42 collisions; refresh FOR LATER.
+Corrected:    #41 — back in open audit (was dropped in error in 7003dca;
+              user had asked for open/closed status only, not closure).
+Slimmed:      2026-05-05 — moved #21 to archive/CODEBASE_AUDIT_RESOLVED.txt
+              (log-only band-aid landed: print messages distinguish
+              observed-empty shadows from blocked-unresolved 3-strike
+              give-ups; behavior unchanged); added #47 to the open list
+              (real fix — re-ground planner blocker atoms after repeated
+              still_blocked).
+Updated:      2026-05-05 — #40 marked [DONE] (per-action _verify_cube_on
+              gate on the on_relations write + end-of-run
+              _verify_goal_physics walk over the goal AST; both feed
+              timing_summary.json via physical_failures_per_action /
+              physical_failures_at_goal); added #48 (pick from a stack
+              does not clear on_relations[X] — write-side counterpart
+              to #40); added FOR LATER bullet for safe-inset XY check.
+Updated:      2026-05-06 — supervisor sync.  Added #49 (find-hidden-then-
+              stack-on-tray goal — new evaluation goal mode requested by
+              user/supervisor: discover targets via sense and stack them
+              on a designated tray entity); added #50 (planner perf
+              investigation — find and remove big redundancies in
+              pddlstream_planner / streams; user-flagged "planner is
+              too slow").  Updated #36: recommended fix is now a
+              hardcoded small post-action lift in execute_place /
+              execute_stack (primary — plan_motion has to start clear
+              of the freshly placed/stacked cube; pick lift is cosmetic
+              only).  Supervisor: "this is not cheating, it's a
+              workaround for shotty motion planning."  The prior
+              at_config-q_home goal-clause approach is dropped.  Marked #30 [WONTFIX
+              2026-05-06] — supervisor scrapped the split-pick / strip-
+              stack-action mitigation experiment as "not interesting or
+              relevant for the thesis"; the ~2× holding-goal slowdown
+              is accepted as the cost of the stack feature.  Confirmed
+              archive-deferred #42 stance (no replan on collisions —
+              "no need to track knocked-down objects").  Confirmed #10
+              (uniform-vox baseline) and #12 (scalability eval) remain
+              in scope.  Added LW1 / TAMPURA empirical comparison to
+              FOR LATER (post-thesis-writing, conditional on ≥1 free
+              week).
+Updated:      2026-05-06 (later) — triage pass.  Marked #47 [DEFERRED
+              OUT OF SCOPE] per user decision: the archived #21
+              log-only band-aid is the accepted level of correctness
+              for the thesis; eval (#9–#12) can filter "gave up
+              blocked" cases as failures.  Open count: 14 → 13.
+              TIER 0 is now empty.  THESIS_NOTES §18 updated to
+              note the deferral.
+Updated:      2026-05-06 (triage) — promoted #41 from TIER 3 to
+              TIER 1 per user decision ("make top prio").  Reordered
+              pre-evaluation roadmap to put #41 (on_table) first.
+              Reasoning: the (on a b) chain alone admits floating-
+              tower interpretations the #40 verifier cannot rule out
+              without an on_table clause, and #49 (tray goal) reuses
+              the same predicate plumbing — fixing the goal language
+              once before either lands.
+Updated:      2026-05-06 (triage) — merged #32 (comment/code drift
+              sweep) into #31 per user decision; promoted the merged
+              issue to TIER 1 and put it FIRST in the pre-evaluation
+              roadmap so the comment-quality category is "knocked
+              out and not thought about" before the substantive
+              pre-eval work begins.  #32 now [MERGED INTO #31] —
+              moves to RESOLVED on next slim.  Open count: 13 → 12.
+Updated:      2026-05-06 (triage) — killed #34 [WONTFIX] per user
+              decision: redundant with #50 (planner perf
+              investigation).  #34's own fix instructions already
+              conditioned on "if #12 reveals this as a bottleneck,"
+              which is exactly #50's profile-then-fix flow.  If
+              profiling shows _compute_placement_view_blocks as a
+              real bottleneck, the fix lands in #50 with measurements
+              rather than as a speculative one-off.  Open count:
+              12 → 11.
+Updated:      2026-05-06 (triage) — promoted #48 from TIER 3 to
+              TIER 1 per user decision; bundled with #41 in the
+              stack-language correctness pass.  Reasoning: #49
+              (tray goal) makes pick→place(tray) plan shapes normal,
+              and any target starting on top of another cube triggers
+              the stale-(on X Y) gap.  Fix is one line; landing it
+              alongside #41's on_table clause is a single
+              symbolic-plumbing commit.
+Updated:      2026-05-06 (triage) — killed #11 [WONTFIX] per user
+              decision: the semantic-vs-uniform comparison via #10
+              alone carries the thesis claim that semantic boxels do
+              real work.  A third "semantic-but-static" baseline
+              would add 3–5 days for marginal narrative gain.  The
+              tray entity in #49 already exemplifies a fixed
+              labelled region, so extending to a 4×4 fixed-regions
+              sweep can be cited as straightforward future work
+              without running it.  Open count: 11 → 10.
+Updated:      2026-05-06 (triage) — merged #12 (scalability analysis)
+              into #9 per user decision.  Scope (n_occluders ×
+              n_targets matrix, scalability plots) folded into #9's
+              "remaining work" so there's a single eval-implementation
+              milestone instead of two.  Open count: 10 → 9.
+Updated:      2026-05-06 (triage) — killed #13 [WONTFIX] per user
+              decision: recursive free-space discovery is dead code
+              under this thesis's fixed-camera + no-concave-geometry
+              setup; would only matter for partial-coverage sensors
+              or objects hidden inside containers.  Already documented
+              as accepted simplification in THESIS_NOTES §20.  Open
+              count: 9 → 8.  Triage pass complete.
+Slimmed:      2026-05-06 — moved 7 entries to archives:
+              archive/CODEBASE_AUDIT_RESOLVED.txt: #11 (WONTFIX),
+              #12 (MERGED INTO #9), #13 (WONTFIX), #30 (WONTFIX),
+              #32 (MERGED INTO #31), #34 (WONTFIX), #40 (DONE
+              2026-05-05).
+              archive/CODEBASE_AUDIT_DEFERRED.txt: #47 (DEFERRED
+              OUT OF SCOPE).
+              Body of each closed issue preserved verbatim under a
+              "2026-05-06 SLIM ADDITIONS" section in the archive.
+              Open audit shrunk to 8 active items.
+Added:        2026-05-07 — #51 (stale shadow blocker fallback after
+              occluder relocation; user-discovered runtime bug —
+              compute_shadow_blockers parent-relationship fallback
+              wrongly force-adds creator after creator has moved
+              out of corridor; visible shadows symbolically reported
+              as view_blocked; sense action precondition fails).
+              Open count: 8 -> 9.
+Updated:      2026-05-07 (later) — #31 marked [DONE 2026-05-07].
+              Comment-quality sweep across 9 files completed (17 drift
+              edits, no behavioral change, py_compile clean).  Scope
+              narrowed mid-task per user direction: pure narration
+              kept (NOT deleted as the original rubric prescribed);
+              only comments that were actively wrong / outdated were
+              touched.  Common drift categories: stale "push" wording
+              from #53 push -> pick/place transition; "tracked as
+              audit #47" framings (deferred 2026-05-06); "audit #30
+              keep/kill" parentheticals (decided WONTFIX 2026-05-06);
+              missing newer streams in module/class docstrings.
+              Open count: 9 -> 8.
+Updated:      2026-05-07 (later) — Marked #51 [DEFERRED 2026-05-07]
+              per user decision.  A fix attempt was committed to main
+              (compute_shadow_blockers hit_pos filter on the primary
+              5x5 ray batch + slab-method outside-shadow gate on the
+              parent-relationship fallback, regression tests in
+              tests/test_audit_51_blocker.py covering both bug paths
+              and the geometry-skew regression) and then reverted.
+              Work preserved on branch audit-51-shadow-blocker-fix
+              (pushed to both github and origin) for later revisit.
+              Open count: 8 -> 7.  TIER 0 again empty.
+Slimmed:      2026-05-07 (same day) — moved #51 (DEFERRED 2026-05-07)
+              to archive/CODEBASE_AUDIT_DEFERRED.txt.  Body preserved
+              verbatim with Source / Archived headers per existing
+              archive convention.  Fix attempt remains reachable via
+              branch audit-51-shadow-blocker-fix on both github and
+              origin.
+Updated:      2026-05-07 (later) — #41 marked [DONE 2026-05-07].
+              Added (on_table ?o) predicate to the domain (pick removes,
+              place emits; stack untouched — held cube was already off-
+              table); _build_init emits (on_table X) for every cube not
+              stacked; build_stack_goal appends (on_table base) so the
+              tower base is grounded in the goal AST; goal_satisfied
+              and the #40 physics verifier (_verify_on_table) handle
+              the new head.  py_compile clean across the three modules.
+              Open count: 7 -> 6.  TIER 1 reduces to #48 alone.
+Updated:      2026-05-07 (later) — #48 marked [DONE 2026-05-07].
+              on_relations.pop(obj_str, None) in the pick handler after
+              the PICKED UP log line; mirrors the PDDL pick conditional
+              effect that clears (on ?o ?x).  py_compile clean.
+              Open count: 6 -> 5.  TIER 1 now empty.
+Updated:      2026-05-07 (later) — #36 marked [DONE 2026-05-07].
+              New _apply_post_action_lift helper in execution.py:
+              Cartesian +Z lift seeded from the contact joints, fail-safe
+              fall-through on IK failure.  10 cm in execute_place and
+              execute_stack (gives the next plan_motion safe headroom
+              over the freshly placed/stacked cube), 5 cm cosmetic in
+              execute_pick.  actual_joints read AFTER the lift so
+              final_config carries the lifted pose forward as the next
+              move's plan_motion seed.  Docstrings updated to point at
+              THESIS_NOTES §19.  py_compile clean.  Open count: 5 -> 4.
+Updated:      2026-05-07 (later) — #49 commit 1/4 landed (tray entity
+              in scene).  ObjectInfo.is_tray flag, SceneConfig.enable_tray
+              flag (default False), BoxelTestEnv._create_tray() loads
+              pybullet_data tray/traybox.urdf via _mirror_load_urdf
+              (mass=0, globalScaling=0.4) at (-0.130, 0.380) — back-left
+              tray corner exactly on the back-left table corner.  Tray
+              footprint reserved by _create_occluders / _create_targets
+              for random-placement scenes.  generate_boxels skips
+              is_tray=True as a shadow CASTER so no shadow_of_tray boxel
+              or blocks_view_at facts emit.  Visual verification done
+              against default_scene with a temporary enable_tray=True
+              toggle (reverted before commit).  py_compile clean.
+              #49 still open — commits 2-4 (PDDL is_tray gate, --goal
+              find-and-tray-stack, polish/scalability sweep) remain.
+Updated:      2026-05-07 (later) — #49 commit 2/4 landed (PDDL is_tray
+              gate).  Added (is_tray ?o) predicate to
+              pddl/domain_pddlstream.pddl alongside the existing stacking
+              predicates; no action body changes.  PDDLStreamPlanner
+              constructor takes a new tray_name kwarg (default None);
+              _build_init emits (Obj tray) + (is_tray tray) when set,
+              and the existing all_obj_ids loop emits (clear tray) +
+              (on_table tray) automatically.  test_full_pipeline.py
+              detects the tray by scanning env.objects for
+              ObjectInfo.is_tray and passes tray_name=... to the
+              planner; backward compatible (tray_name=None when
+              enable_tray=False default).  pick is implicitly unpickable
+              on tray since no (obj_at_boxel tray ?b) is emitted; place
+              targets free-space boxels (tray has none); stack accepts
+              tray as ?on_obj once (Obj tray) + (clear tray) are in
+              init.  py_compile clean across pddlstream_planner.py and
+              test_full_pipeline.py.  #49 still open — commits 3-4
+              (streams placement on tray top + stack_kin for tray;
+              --goal find-and-tray-stack + verifier extension) remain.
+Updated:      2026-05-07 (later) — #49 commit 3/4 landed (Boxel tray
+              init fact for move-to-tray plannability).  Triage of the
+              existing pipeline showed that compute_stack_kin_solution
+              already handles the tray as a generic Obj (resolves the
+              tray body via object_body_ids, reads its AABB, drops the
+              held cube at tray_center_xy + wall_top + cube_half_height;
+              physics settles the cube into the tray cavity).  The real
+              gap was symbolic: commit 2/4 emitted (Obj tray) +
+              (is_tray tray) but NOT (Boxel tray); since
+              compute-stack-kin certifies (config_for_boxel ?q tray),
+              the move action's (Boxel ?b) precondition would have
+              failed when delivering the arm to the stack-on-tray pose.
+              One-line fix in pddlstream_planner._build_init: when
+              tray_name is set, also append ('Boxel', tray_name).
+              Multi-xy sampling within the tray footprint deferred —
+              not required for the goal AST (on t_1 tray) (on t_2 t_1)
+              ... which always uses centered placement on tray (and
+              cube-on-cube for the rest of the tower).  py_compile
+              clean.  #49 still open — commit 4 (--goal find-and-
+              tray-stack + verifier extension + smoke tests) remains.
+Updated:      2026-05-07 (later) — #49 commit 4/4 landed (--goal find-
+              and-tray-stack + verifier extension).  CLI: 'find-and-
+              tray-stack' added to --goal choices in run_logger.py;
+              auto-enables the tray entity in test_full_pipeline.py
+              __main__ regardless of selected scene; --n-hidden > 0
+              now allowed with this goal (sense-side use case
+              symmetric with holding).  Goal builder:
+              build_tray_stack_goal(targets, tray_name) produces (and
+              (on c_0 tray) (on c_1 c_0) ... (on c_{H-1} c_{H-2})) —
+              base-up convention inverted from build_stack_goal
+              because the tray plays the role of the table-anchor (no
+              on_table tray clause emitted; the planner-side init fact
+              already covers it).  main() branch: discovers env tray
+              via ObjectInfo.is_tray, sets visible_target_locations
+              only for VISIBLE targets (hidden ones must be sensed),
+              generalises the 'stack'-only plumbing
+              (planner_target_objects, on_relations /
+              stackable_objects into planner.plan(), per-iteration
+              banner) to include find-and-tray-stack; max_replans =
+              4*shadows + 2*targets + 3.  Verifier: _verify_cube_on
+              now branches on support_info.is_tray — cube settles
+              INSIDE the cavity (not on the wall-top), so bottom-z
+              match becomes a z-range check; XY centre check
+              unchanged; cube-on-cube path bit-identical to pre-#49.
+              py_compile clean; build_tray_stack_goal smoke-tested
+              standalone (1/2/3-target shapes + empty-list ValueError).
+              Manual end-to-end smoke tests on default and scalability
+              scenes (audit step f) deferred to next WSL session.
+              #49 [DONE 2026-05-07].  Open count: 4 -> 3.  TIER 2
+              reduces to #50 alone.
+Updated:      2026-05-07 (later) — #49 hotfix: exclude is_tray=True
+              from all_targets in test_full_pipeline.py main().  First
+              WSL run of --goal find-and-tray-stack on default_scene
+              produced (and (on cyan tray) (on blue cyan) (on yellow
+              blue) (on tray yellow) (on purple tray)) — the (on tray
+              yellow) clause is geometric nonsense (the tray is fixed-
+              base) and the planner returned no plan after 46s.  Root
+              cause: the all_targets filter dropped is_occluder /
+              plane / table / robot but NOT is_tray, so the tray
+              leaked into stack_target_objects and the build_tray_-
+              stack_goal shuffle landed it mid-chain.  One-line fix
+              at the source ("not info.is_tray" added to the filter)
+              — no behaviour change on enable_tray=False runs (the
+              tray never spawns), and removes the same latent bug
+              from the holding / stack branches if either is run
+              with enable_tray=True manually.  py_compile clean.
+              #49 stays [DONE 2026-05-07] — hotfix is a follow-up
+              within the same audit, not a new audit item.
+Added:        2026-05-07 (later) — #52 (find-one-hidden-target-stack-
+              on-big-visible-base — new TIER 0 demo goal mode
+              requested by user post-#49 hotfix).  Last WSL run of
+              --goal find-and-tray-stack still failed after commit
+              62d435b; root-cause analysis flagged size-compat gap
+              (no big-on-small check anywhere — confirmed by
+              inspection of domain_pddlstream.pddl :action stack
+              and streams.compute_stack_kin_solution) and goal-AST
+              length scaling with --n-targets.  User proposal:
+              simplest possible end-to-end goal = one big visible
+              base + one small hidden target stacked on top.
+              Replaces find-and-tray-stack as the demo default;
+              tray goal stays available.  New FOR LATER bullet
+              records the size-compat gap as a parallel concern.
+              Open count: 3 -> 4.
+Slimmed:      2026-05-07 (later) — moved #31, #36, #41, #48, #49
+              (all DONE 2026-05-07) to archive/CODEBASE_AUDIT_-
+              RESOLVED.txt.  Bodies preserved verbatim under a new
+              "2026-05-07 SLIM ADDITIONS" section at the end of the
+              archive; #49 entry includes a 4-commit + hotfix recap.
+              Open audit shrunk from ~395 lines of issue bodies to
+              the four still-active items (#9, #10, #50, #52).
+              No code changes.
+Added:        2026-05-07 (later) — #53 (TIER 0 diagnostic — trim
+              --goal find-and-tray-stack to 1 target temporarily so
+              we can tell whether the planner failure is goal-AST
+              length, size-compat, or something else.  Gates #52:
+              if the 1-cube run succeeds, #52 is "nicer demo" not
+              "only path to passing"; if it also fails, the size-
+              compat FOR LATER bullet promotes to fix-this status).
+              Open count: 4 -> 5.
+Updated:      2026-05-07 (later) — #53 marked [DONE 2026-05-07].
+              Diagnostic slice landed in test_full_pipeline.py
+              find-and-tray-stack branch (commit 4d7fa37); WSL run
+              logs/run_2026-05-07_21-26-18 read off the triage
+              signal: 1-CUBE TRAY-STACK ALSO FAILS.  Slice fired
+              correctly — chose hidden target cyan_object, goal AST
+              collapsed to ('and', ('on', 'cyan_object', 'tray'))
+              (the smallest possible shape).  Planner returned NO
+              PLAN after a single 45.87 s attempt; exit_reason
+              "planner_failed", plan_count 1.  Implications for the
+              gate logic in #53's "Outcomes inform the next steps"
+              block:
+                - Hypothesis (a) goal-AST length: REJECTED.  The
+                  1-clause goal is the floor; cap-N on
+                  build_tray_stack_goal is NOT the fix.
+                - Hypothesis (b) size-compat: NOT the diagnosis
+                  either, at least not on its own — the 1-cube tray
+                  goal never invokes cube-on-cube stacking (the cube
+                  drops into the tray cavity per
+                  compute_stack_kin_solution + #49 commit 3/4), so
+                  the big-on-small footprint check would fire on
+                  zero stacking operations.  The size-compat FOR
+                  LATER bullet does NOT auto-promote.
+                - The "or another deeper issue" branch is the live
+                  one.  #52's full big-base/small-target redesign
+                  proceeds as the recommended path; understanding
+                  WHY the 1-cube tray goal failed (sense
+                  precondition?  stack-into-cavity stream sampling?
+                  single (Boxel tray) pose vs. the move action?)
+                  is a separate sub-investigation that can fold
+                  into #50 (planner perf / hotspot hunt) or stay
+                  out of scope if #52 succeeds without it.
+              No domain / verifier changes from the slice itself.
+              Slice itself is "intentionally temporary" per the
+              issue body — left in place pending #52 lands and the
+              tray goal's role is settled (revert, --tray-stack-cap
+              N flag, or audit-history note).  py_compile clean.
+              Open count: 5 -> 4.
+Added:        2026-05-07 (later) — #54 (TIER 0 follow-up triage —
+              force VISIBLE target on --goal find-and-tray-stack to
+              isolate sense from pick/stack/streams.  #53 ruled out
+              goal-AST length and size-compat as causes; the "deeper
+              issue" branch has three live candidates — sense-side
+              (stale view_blocked / blocker re-grounding), pick/
+              stack-into-cavity sampling, and single (Boxel tray)
+              move plannability.  Visible-only run drops sense from
+              the AST, separating sense-side from {pick, stack,
+              streams}).  Slice landed in commit 826bb21
+              (test_full_pipeline.py find-and-tray-stack branch);
+              supersedes #53's hidden-preferred slice.  py_compile
+              clean.  Open count: 4 -> 5.
+Updated:      2026-05-07 (later) — #54 marked [DONE 2026-05-07].
+              Visible-only triage run (logs/run_2026-05-07_21-48-02)
+              succeeded in 5.19 s (1 plan, success: true, 0 physical
+              failures, full pipeline ran end-to-end).  Diagnosis:
+              sense is NOT broken, but it is the dominant search-cost
+              driver for this goal — the prior 1-cube hidden run
+              (#53, logs/run_2026-05-07_21-26-18) gave up at 45.87 s
+              on adaptive-search exhaustion UNDER the 120 s max_time
+              cap, meaning the planner ran out of skeletons / stream
+              samples before time expired.  Slice reverted to the
+              original #49 multi-cube behaviour (commit b287450); the
+              planner.plan() max_time cap bumped 120 -> 1800 s in
+              the same commit so the adaptive sampler has more rope
+              for the multi-cube hidden+visible mix.  py_compile
+              clean.  Next: WSL run on default scene with the
+              reverted goal + uncapped time to confirm whether
+              sense-heavy multi-cube tray-stack converges with more
+              budget or fails on a deeper bottleneck.  Open count:
+              5 -> 4.
+Added:        2026-05-07 (later) — #55 (TIER 0 — find-and-tray-stack
+              redesigned as 2-cube goal: 1 VISIBLE cube on tray + 1
+              HIDDEN cube stacked on top.  Smallest goal that
+              exercises sense → pick → stack end-to-end.  User
+              direction post-#54: "place a big visible object on
+              tray and then find a small hidden object and place it
+              on top of the object on top of tray. just that."
+              Replaces #49's multi-cube definition; build_tray_-
+              stack_goal preserved per CODEBASE POLICY but unused
+              by current goal.  Commit fa069bd.  Cap inventory at
+              landing: max_time=1800 s (#54 follow-up), max_replans
+              healthy for 2-cube, ik_max_iterations=100; PDDLStream
+              solve internals (max_skeletons / effort_weight /
+              max_planner_time) still on defaults — next lever if
+              2-cube also fails.  py_compile clean.  Open count:
+              4 -> 5.
+Updated:      2026-05-08 — #55 Path C explored on branch audit-55-pose-
+              aware-stack and DEFERRED in favour of a simpler lazy-
+              collision hack on main (commit 9a64aa1).  Branch
+              convention shift: this is the first multi-commit refactor
+              to follow the new "branch first" rule.  Branch pushed to
+              both github and origin for later revisit (audit-51
+              precedent).
+
+              Diagnosis from logs/run_2026-05-07_22-07-31 (commit
+              fa069bd on main): the 9-action skeleton found at iter 4
+              didn't ground because plan_motion couldn't connect from
+              above-cyan-shadow to "above yellow's initial pose" (the
+              IK target compute_stack_kin_solution derived via getAABB
+              on yellow's static planning-time body).  yellow at its
+              planning-time location blocks the RRT path; the
+              trajectory is rejected.  This is the SUPPORT analogue of
+              the moved-occluder gap that compute_kin_solution
+              sidesteps via lazy collision-check + ignored_body_ids
+              (its docstring at L843-851 explicitly calls out this
+              pattern).  The analog for stack was simply missing.
+
+              Path C exploration (6 commits on branch, in order):
+                9eca2a1 — predicates (Pose, at_pose) + SymbolicPose
+                          dataclass + initial-pose facts in
+                          _build_init.  No-op groundwork.
+                ed7ecff — audit changelog for commit 1.
+                81c0405 — pose-aware compute-stack-kin (?p_on, ?p_new
+                          inputs/outputs) + stack action signature
+                          updated; at_pose updated by stack effect via
+                          forall-when delete + add.  Real fix layer.
+                8b6b68d — stack_kin predicate declaration arity 4->6
+                          (FastDownward parser hotfix from WSL run
+                          #1).
+                5c10e36 — tighten compute-stack-kin :domain to
+                          (at_pose ?on_obj ?p_on) only (kill
+                          combinatorial blowup from WSL run #2 — 10-
+                          min hang, ~750+ IK calls per round).  Over-
+                          corrected.
+                d5c2a2d — add (Pose ?p_on) back alongside (at_pose)
+                          (fluent-stream pattern from WSL run #3
+                          KeyError on '?p_on' not covered by static
+                          :domain).
+
+              Result (logs/run_2026-05-08_09-05-23, WSL run #4):
+              skeleton found at iteration 5 / complexity 4 / attempt 2
+              in 56.6 s, with the second stack correctly chaining
+              ?p_on = ?p_new of the first stack — Path C functionally
+              correct.  Stream sample-validation phase started; user
+              killed at 10 min, ~3 min into iteration 6.  The 7x
+              skeleton-search slowdown vs baseline comes from
+              PDDLStream's exogenous-axiom compilation
+              (compile_to_exogenous_axioms in
+              pddlstream_lib/.../exogenous.py), triggered whenever a
+              stream :domain references a fluent that is also an
+              action effect.  Cost is structural — derived predicates
+              and added axioms inflate the grounded planning problem.
+              Acceptable for a one-shot demo, too slow for the eval
+              sweep (#9).
+
+              Decision: defer Path C, apply the simpler lazy-collision
+              hack on main as commit 9a64aa1 — a one-place edit in
+              streams.compute_stack_kin_solution that adds the support
+              cube's body to ignored_body_ids alongside the held cube.
+              This is the direct analog of compute_kin_solution's
+              pattern; should have been applied from the start.  IK
+              target stays "above support's planning-time pose" (the
+              pre-#55 wrong-pose behaviour); execute_stack at runtime
+              reads the support's LIVE AABB and re-solves IK seeded
+              with the planner's config, so the wrong-pose IK becomes
+              correct at execution.  plan_motion ignores the support
+              body throughout the trajectory (per
+              RobotConfig.ignored_body_ids), so RRT can route through
+              where the support statically sits — no more "trajectory
+              blocked by support's static body" rejection.
+
+              New FOR LATER bullet records the residual edge case:
+              the planned trajectory may pass through the support's
+              RUNTIME location, so the arm could collide at execution
+              if the support's destination happens to lie on the path.
+              For find-and-tray-stack on default scene the destination
+              (back-left tray corner) is unlikely to intersect a
+              typical arm route between two table-spread cubes;
+              flagged for revisit if any goal mode lands the support
+              somewhere a planner trajectory naturally traverses.
+              #55 still open pending WSL retry on main.
+Updated:      2026-05-08 (later) — #55 marked [DONE 2026-05-08].  Real
+              root cause was DIFFERENT from the prompt's diagnosis: it
+              was the held-cube boxel guard, not the support's pose.
+              compute_stack_kin_solution at streams.py:962-965 returned
+              early when held_boxel was None, which is the case for
+              hidden targets — they have no OBJECT-type registry
+              boxel until sense reveals them.  The on_obj pose
+              "wrongness" Path C tried to fix was a downstream symptom
+              that never actually got hit because the function returned
+              at the held-boxel check first.  Confirmed via diff
+              between logs/run_2026-05-08_10-20-03 (failure with the
+              lazy-collision hack only — no compute_stack_kin debug
+              entries past sample-grasp + compute-kin, indicating early
+              return before the IK loop) and the Path C run #4
+              (logs/run_2026-05-08_09-05-23, where future-compute-
+              stack-kin placeholders masked the gap during skeleton
+              search — sample validation would have hit the same held-
+              boxel check eventually).
+
+              Fix landed on main as commit 8281d73: PyBullet AABB
+              fallback for held cube half-height when no registry
+              boxel exists.  The hidden cube's body IS mirrored in
+              plan_client via _mirror_load_urdf (independent of sense),
+              so getAABB returns its actual extent.  Half-height for
+              IK = (h_max[2] - h_min[2]) / 2.  Cube z-extent doesn't
+              depend on knowing where it is, so reading it pre-sense
+              doesn't leak position info into init facts.
+
+              WSL verification (logs/run_2026-05-08_10-49-01) on
+              default scene with --goal find-and-tray-stack:
+              success=true, plan_count=4, total_planning_time=76.593 s
+              (per-call: 9.129 / 13.528 / 27.757 / 26.180 s),
+              physical_failures_per_action=0,
+              physical_failures_at_goal=0.  Goal AST satisfied:
+              (on yellow_object tray) + (on cyan_object yellow_object).
+              No regression on --goal holding (logs/run_2026-05-08_-
+              10-46-40: success in 3 plans / 58.4 s).
+
+              #55 [DONE 2026-05-08].  Open count: 5 -> 4.  TIER 0
+              now contains only #52 (find-and-stack-on-base) which
+              stays as a backup demo; the find-and-tray-stack 2-cube
+              minimum demonstrates sense -> pick -> stack end-to-end
+              and is the cleaner thesis story.  Path C (branch
+              audit-55-pose-aware-stack) remains archived on both
+              remotes for revisit if a future goal mode requires
+              precise pre-execution arm-routing through clutter.  The
+              lazy-collision hack (commit 9a64aa1) + the held-boxel
+              fallback (commit 8281d73) together close all known #55
+              gaps; the trajectory-clipping FOR LATER bullet remains
+              as the documented residual.
+Slimmed:      2026-05-08 — moved #53 (DONE 2026-05-07), #54 (DONE
+              2026-05-07), and #55 (DONE 2026-05-08) to
+              archive/CODEBASE_AUDIT_RESOLVED.txt under a new
+              "2026-05-08 SLIM ADDITIONS" section.  #55's body
+              includes a 2-commit (lazy-collision hack +
+              held-cube AABB fallback on main) + 6-commit-archived-
+              branch (Path C exploration on audit-55-pose-aware-stack)
+              recap.  Open audit shrunk to the four still-active
+              items (#9, #10, #50, #52).  No code changes.
+Added:        2026-05-08 (later) — #56 (CLI flag for post-action
+              safe-distance lift; currently hardcoded ~10 cm in
+              execute_place / execute_stack and 5 cm in execute_pick
+              per audit #36).  Code-quality / eval-knob; affects no
+              current functionality but unblocks sensitivity analysis
+              and parameterisation in the eval sweep (#9).
+Added:        2026-05-08 (later) — #57 (registry should own cube
+              geometry instead of compute_stack_kin_solution reading
+              p.getAABB on the plan-client).  Architectural cleanup;
+              the AABB fallback (commit 8281d73) reads only z-extent
+              (size, not position) so it's not an oracle leak in
+              practice, but the registry is the proper "what the
+              planner knows" boundary.  Replace the PyBullet read
+              with a registry.object_geometry table populated at
+              scene init.
+Added:        2026-05-08 (later) — #58 (preserve grasp across replans;
+              currently release_held_object_in_place drops the held
+              object before each replan to keep symbolic state
+              consistent with planner._build_init's unconditional
+              ('handempty',) emission).  User-flagged 2026-05-08
+              after observing yellow_object dropped mid-air at the
+              PLAN #1 -> PLAN #2 transition in
+              logs/run_2026-05-08_10-49-01 when sense returned empty
+              post-pick.  Wasteful — the next plan re-picks the
+              dropped object, adding ~4 actions per re-grasp cycle.
+              Fix: thread held_obj + grasp into planner.plan(), have
+              _build_init emit ('holding', ?o) instead of
+              ('handempty',) when set.
+Killed:       2026-05-08 (later) — #52 (find-and-stack-on-base) dropped
+              from open audit per user direction: "scrab 52 ... just
+              delete from existance".  NOT marked WONTFIX (no archive
+              trace) — issue body, roadmap entry, SUMMARY slot, and
+              OPEN ISSUES header reference all removed.  Historical
+              changelog entries that reference #52 (2026-05-07
+              additions, the #53 / #54 / #55 diagnostic chain) left
+              untouched as factual record.  Reasoning: "we already
+              have find-and-stack [via #55]; we dont need to make it
+              simpler" — scale UP (#59) instead of DOWN.
+Added:        2026-05-08 (later) — #59 (scaled-up find-and-stack —
+              N hidden targets stacked physically-sensibly with a
+              (compat_stack ?o ?on_obj) symbolic predicate gating
+              :action stack).  Very low priority per user direction.
+              Replaces #52 as the demo-evolution path; absorbs
+              option (i) of the FOR LATER size-compat bullet (which
+              now back-links here).  Open count net 6 -> 6 (#52
+              out, #59 in).
+Updated:      2026-05-08 (later) — #56 marked [DONE 2026-05-08].
+              Single CLI flag --post-action-lift FLOAT (default 0.10
+              m, range [0.0, 0.30]) added in run_logger.py with
+              parse-time range validation; threaded through
+              test_full_pipeline.main() into execute_place /
+              execute_stack, both of which now take post_action_lift
+              kwarg defaulting to 0.10 (preserves pre-#56 behaviour
+              exactly when the flag is omitted).  execute_pick's
+              5 cm cosmetic lift unchanged per #56 spec ("pick stays
+              cosmetic at 5 cm unless the user wants three separate
+              flags").  run_config dict + timing_summary.json pick
+              up the new field automatically for cross-run
+              correlation (audit #9 dep).  Commit bf0800c.
+              py_compile clean across run_logger.py /
+              test_full_pipeline.py / execution.py.  Open count:
+              7 -> 6.  TIER 3 reduces to #9, #10, #57.
+Reverted:     2026-05-08 (later) — #56 rolled back on main (commit
+              ac47aa6 reverts bf0800c) because --post-action-lift had
+              no observable effect on robot behaviour at any value
+              tested in the validated [0.0, 0.30] range.  Hardcoded
+              10 cm restored via _apply_post_action_lift's default
+              lift_height kwarg (execution.py:395); 5 cm cosmetic
+              pick lift unchanged.  Manual override now requires
+              editing the kwarg default or passing an explicit
+              lift_height at execution.py:644 / 761.  #56 stays
+              [DONE then REVERTED 2026-05-08] in the closed list —
+              the plumbing landed correctly, but the underlying lift
+              mechanism is broken (see #60).  Re-attempt #56 only
+              after #60 lands.
+Added:        2026-05-08 (later) — #60 (TIER 0 — post-action lift
+              fails to prevent collisions during the next move
+              action; root cause behind #56's ineffectiveness).
+              User-flagged 2026-05-08 after find-and-place /
+              find-and-tray-stack runs collided despite manual lift
+              values up to 30 cm.  Symptom: the arm visibly drops
+              back toward contact height before the next move's
+              traversal phase, then routes through the
+              just-placed cube.  Open count: 6 -> 7.  TIER 0
+              repopulated (was empty since #52's removal 2026-05-08).
+Updated:      2026-05-08 (later) — #58 marked [DONE 2026-05-08].
+              Held-object name now threaded through planner.plan() as
+              held_obj kwarg (commit 690f86d); _build_init emits
+              ('holding', held_obj) instead of ('handempty',) when
+              set, sample-grasp re-fires on (Obj ?o) for a fresh
+              (Grasp ?g) + (valid_grasp ?o ?g).  Mid-plan-break
+              replans now continue from (holding ?o) instead of
+              dropping the cube, eliminating the ~4-action re-grasp
+              cycle observed in logs/run_2026-05-08_10-49-01 at the
+              PLAN #1 -> PLAN #2 transition.  release_held_object_-
+              in_place stays as a SAFETY NET: triggered only when
+              planner.plan() returns None with held_obj set, falls
+              back to release-and-replan from (handempty).
+              py_compile clean across pddlstream_planner.py /
+              test_full_pipeline.py.  Other init facts
+              (obj_at_boxel ?o, on_table ?o) intentionally left
+              emitting for held cubes — pick's (handempty)
+              precondition blocks any misuse, and the audit's spec
+              was minimal-swap.  Companion commit b248c76 raises
+              execute_pick post-action lift from 5 cm to 10 cm
+              (drops explicit lift_height=0.05 override, uses
+              _apply_post_action_lift default) — equalises per-
+              action lift while #60 investigation is open.  Open
+              count: 7 -> 6.  TIER 2 reduces to #50 alone.
+Updated:      2026-05-08 (later) — #60 step (a) landed (commit
+              23687af): diagnostic-only logging across three sites,
+              no behaviour change.  (1) execution.py
+              _apply_post_action_lift — IK-failure branch was silent,
+              now prints "[#60-diag] lift IK FAILED..." (candidate
+              iii signal); success branch prints target vs actual EE
+              z and |joint_diff|.  (2) execution.py execute_place /
+              execute_stack (end of body, before final_config return)
+              — query the placed/stacked body's pose in BOTH
+              env.client_id and env.plan_client_id; print DESYNC
+              warning when xyz delta > 1 mm (candidate ii signal —
+              sync_to_plan_client only fires once per replan, mid-
+              plan placements do not propagate).  (3)
+              test_full_pipeline.py move handler — log
+              |current_config - traj.waypoints[0]| and warn if
+              > 1e-4 rad (candidate i signal — arm starts move
+              ABOVE the trajectory's first waypoint).  All three
+              gated on signal so clean runs (e.g. holding-only
+              goals) print nothing.  py_compile clean.  #60 stays
+              OPEN — next commit applies the targeted fix once a
+              WSL run of --goal find-and-tray-stack identifies
+              which candidate dominates.  Audit's own ranking is
+              (i) > (ii) > (iii); #56 revert ("no observable effect
+              at any value tested") corroborates that the lifted
+              pose is not reaching plan_motion regardless of
+              magnitude.  Open count unchanged at 6.
+Added:        2026-05-08 (later) — #61 (TIER 3 — smart console filter
+              still leaks startup/shutdown garbage and has no thinking-
+              animation affordance during long blocking calls).  User-
+              flagged 2026-05-08: "the terminal output is still not
+              smart enough.  in the begining and the end there still
+              garbage that no one cares about and it would be cute to
+              have thinking animations or stuff like that so that it
+              really looks like claude."  smart_filter.py already
+              implements the drop / dedupe / aggregate / transform
+              pipeline (verbosity='smart' default since #56-era log
+              hygiene work) but two gaps remain: (1) the leak set
+              outside the "Phase 1 ... -> SUCCESS / FAIL" envelope is
+              not in _DROP_PATTERNS, (2) long planner.plan() / RRT /
+              stream-sample calls show nothing on the console — looks
+              frozen.  Open count: 6 -> 7.
+Updated:      2026-05-08 (later) — #60 marked [DONE 2026-05-08].
+              Option B (sync + replan) landed in commit c08dc65 —
+              addresses the two firing causes from logs/run_-
+              2026-05-08_12-57-42 [#60-diag] data: candidate (i)
+              fired 7/7 moves with |current - traj[0]| 0.064–0.498
+              rad, candidate (ii) fired 3/3 place/stack with cube
+              pose desync 0.124–0.686 m; candidate (iii) silent IK
+              fall-through never fired.  Fix (ii): execute_place /
+              execute_stack mirror the placed/stacked body's
+              runtime pose into env.plan_client_id via
+              p.resetBasePositionAndOrientation right after the
+              post-action lift.  Fix (i): the move action handler
+              compares current_config against the planner's q1 and
+              if |diff| > 1e-2 rad, builds a runtime q1 carrying
+              the original q1's collision-check metadata
+              (ignored_body_ids, held_body_ids, grasp_ee_offset)
+              and replans via planner.streams.plan_motion;
+              StopIteration breaks the dispatch loop to trigger an
+              outer replan from current_config (same path as IK
+              failures).  Diagnostic prints from commit 23687af
+              ([#60-diag] lift OK / DESYNC / move-above-traj[0])
+              all removed; the new [#60-fix(i)] one-liner only
+              fires when a runtime replan happens, and the lift
+              IK-failure print stays as a hard-error signal.
+              Mechanism behind #56's revert ("no observable
+              effect at any value tested") is now closed: the
+              lifted pose now reaches plan_motion via the
+              execution-time replan, so re-attempting the
+              --post-action-lift CLI flag becomes meaningful as a
+              regression test (lower values should now break the
+              run when cube top exceeds lifted altitude).
+              py_compile clean across execution.py and
+              test_full_pipeline.py.  TIER 0 again empty.  Open
+              count: 7 -> 6.
+Added:        2026-05-08 (later) — #62 (TIER 2 — replan-while-holding
+              still slow after #58.  User-flagged 2026-05-08: "the
+              planner still takes too much time to replan while
+              holding object.  its faster but still slow.").  Sub-
+              hotspot of #50 (planner perf investigation) localised
+              to the held-cube replan path.  After #58 commit
+              690f86d eliminated the ~4-action re-grasp cycle by
+              emitting ('holding', ?o) instead of dropping the cube,
+              the user observes a measurable improvement but
+              residual slowness on the same path.  Profile-first
+              suspects: (a) sample-grasp re-firing every replan to
+              certify a fresh (Grasp ?g) + (valid_grasp ?o ?g) on
+              the same held cube — grasp atom could be threaded
+              through planner.plan() the same way held_obj is;
+              (b) compute-stack-kin / compute-kin re-running IK
+              against the unchanged held-cube transform on every
+              candidate skeleton; (c) full _build_init rebuild on
+              every replan (broader #50 concern but felt sharply on
+              the held branch — (holding ?o) grounds more per-
+              skeleton state than (handempty)).  Open count: 6 -> 7.
+Slimmed:      2026-05-08 (later) — moved #56 (DONE then REVERTED
+              2026-05-08), #58 (DONE 2026-05-08), and #60 (DONE
+              2026-05-08) to archive/CODEBASE_AUDIT_RESOLVED.txt
+              under a new "2026-05-08 SLIM ADDITIONS" section.
+              Bodies preserved verbatim with Outcome paragraphs
+              recapping the actual landings (commits bf0800c +
+              ac47aa6 for #56; commit 690f86d + companion b248c76
+              for #58; commits 23687af + c08dc65 for #60).  Open
+              audit shrunk by ~270 lines of issue bodies; still-
+              active items: #9, #10, #50, #57, #59, #61, #62.
+              No code changes.
+Restructured: 2026-05-08 (later) — pre-evaluation correctness chain
+              complete (#31, #36, #41, #48, #49, #53, #54, #55, #58,
+              #60 all DONE).  Eval (#9, #10) is now the user's
+              critical path to the thesis Results chapter; promoted
+              from TIER 3 to TIER 1.  Re-tiered SUMMARY block:
+                TIER 0 — empty (no open correctness blockers).
+                TIER 1 — ACTIVE EVAL: #9 (eval runner + scalability
+                         matrix), #10 (uniform-vox baseline).
+                TIER 2 — PERF: #50 (planner perf investigation),
+                         #62 (replan-while-holding sub-hotspot).
+                TIER 3 — CODE QUALITY / LOW-PRIO: #57 (registry
+                         geometry), #59 (scaled find-and-stack —
+                         very low prio per user), #61 (smart console
+                         filter UX polish).
+              SUMMARY total-count line corrected from "6 items" to
+              "7 items" (#62 was added 2026-05-08 but the count was
+              never refreshed).  Roadmap "Pre-evaluation" /
+              "Evaluation prerequisites" / "Parallel" sections kept
+              as-is; the TIER move is a SUMMARY-only shift that
+              reflects reality without rewriting the roadmap
+              narrative.  No code changes.
+Added:        2026-05-08 (later) — #63 (TIER 3 — README + wiki
+              final doc sweep, gated on eval.  User-flagged
+              2026-05-08: "we need to update the read me and
+              wiki.  this is should be done post eval.  most
+              likly the last thing we change.").  Doc-state
+              catch-up at thesis-submission time: walk audit
+              changelog since the last full wiki pass, page-by-
+              page diff against current code (PDDL_Domain_-
+              Reference, Execution_Pipeline, Planning_System,
+              Architecture_Overview, Known_Issues_and_Roadmap,
+              Design_Decisions per the obvious drift hotspots
+              from the 2026-05-07/08 audit chain), refresh
+              README flags table (missing --goal, --n-hidden,
+              --n-occluders, --seed today).  Per CODEBASE POLICY
+              L823-828 the wiki is updated after every behaviour
+              change anyway — this issue is the safety-net
+              final pass, not the primary update mechanism.
+              Gate: do NOT start before #9 / #10 land; eval
+              results drive the Known_Issues_and_Roadmap +
+              Design_Decisions narrative.  New "Post-evaluation
+              (final doc sweep)" section added to the ROADMAP
+              between "Evaluation phase" and "Parallel".  Open
+              count: 7 -> 8.
+
+Updated:      2026-05-08 (later) — #9 [DONE].  eval_runner.py +
+              eval_plotter.py landed.  Subprocess-per-cell driver;
+              built-in "scalability" preset (n_occluders 1..6 ×
+              n_targets 1..3 × 5 seeds × goal=holding, n_hidden =
+              min(n_targets, n_occluders) for deepest search) and
+              "smoke" preset (1 cell).  Aggregator collates
+              cells/*/timing_summary.json into aggregated.csv +
+              aggregated.jsonl.  Plotter consumes aggregated.csv,
+              produces planning_time / success_rate / plan_count
+              vs n_occluders PNGs (matplotlib) or text tables
+              (fallback); --baseline-csv hook stubbed for #10
+              uniform-vox overlay.  Master --seed plumbing in
+              test_full_pipeline.py __main__: random.seed() +
+              np.random.seed() right after parse_pipeline_args() so
+              the 8 process-global RNG call sites (target choice,
+              PDDL init shuffle, IK joint sampling, RRT goal bias,
+              placement offsets, path-smoothing pivots) become
+              deterministic.  FD's internal random_seed=-1 left
+              alone — same noise hits every approach at the same
+              seed, mean comparison still valid.  Open count: 8 -> 7
+              (#10, #50, #57, #59, #61, #62, #63).  TIER 1 narrows
+              to #10 alone.
+
+Updated:      2026-05-08 (later) — README updated with a "Running on
+              this machine (WSL + PowerShell)" section enumerating the
+              three project-specific PowerShell aliases and what they
+              translate to.  Aliases (defined in
+              $PROFILE = Microsoft.PowerShell_profile.ps1):
+                run_boxels  -> wsl bash -c "cd .../Semantic_Boxels &&
+                               source wsl_env/bin/activate && DISPLAY=:0
+                               LIBGL_ALWAYS_SOFTWARE=1 PYTHONPATH=
+                               .../pddlstream_lib python3
+                               test_full_pipeline.py $args"
+                run_eval    -> wsl bash -c "cd .../Semantic_Boxels &&
+                               source wsl_env/bin/activate && PYTHONPATH=
+                               .../pddlstream_lib python3 eval_runner.py
+                               $args"
+                plot_eval   -> wsl bash -c "cd .../Semantic_Boxels &&
+                               source wsl_env/bin/activate && python3
+                               eval_plotter.py $args"
+              (cursor-agent shim also lives in $PROFILE but is editor
+              tooling, not part of the boxels pipeline — noted in the
+              README parenthetical for completeness.)
+
+              Trigger: 2026-05-08 WSL session — first eval sweep
+              (sweep_2026-05-08_14-28-22_scalability, 90 cells, 31/90
+              failures-or-timeouts) ran fine via run_eval, but
+              plot_eval produced "=== ... (matplotlib not available)
+              ==="  text tables instead of PNGs because wsl_env was
+              missing matplotlib (eval_plotter.py L26-32 try/except
+              import sets HAVE_MPL=False, _print_text_table fallback at
+              L94-104).  Diagnosis chain that the README's "Common
+              pitfalls" subsection now documents:
+                (1) Initial fix attempt targeted ~/anaconda3 — wrong
+                    Python entirely; the shims activate wsl_env, not
+                    base.
+                (2) PowerShell quoting traps surfaced too:
+                    plot_eval (Get-ChildItem ...).FullName + 'aggregated.csv'
+                    splits into two args; "$(...)\aggregated.csv"
+                    eats the FullName backslashes because PowerShell's
+                    double-quote interpolation interprets \U, \H, \g,
+                    \S as escape sequences before the string crosses
+                    into bash.  README documents the wslpath /
+                    /mnt/c/... workaround.
+                (3) Real fix: pip install matplotlib INTO wsl_env
+                    (matplotlib-3.10.9 + 8 deps).  Re-running
+                    plot_eval on the same aggregated.csv produced
+                    planning_time / success_rate / plan_count PNGs
+                    next to the CSV as designed.
+
+              README change: new section between "Quick Start" and
+              "Documentation" — alias table, one-time wsl_env
+              bootstrap line (now includes matplotlib so this won't
+              re-bite a fresh checkout), single-scene + sweep + plot
+              command examples, "Common pitfalls" subsection covering
+              the three traps above.  No code change.
+
+              Cross-ref: WSL VIRTUAL ENVIRONMENT — DO NOT DELETE
+              policy block (L888-891) updated implicitly — the README's
+              bootstrap line now includes matplotlib, which the policy
+              block's recreate command does not yet.  Defer touching
+              the policy block to the #63 final doc sweep so the
+              policy section stays a one-pass edit.
+
+Updated:      2026-05-08 (later) — #10 [DONE 2026-05-08].  Uniform-
+              voxelization baseline landed in commit afdaadd as a
+              free-space-only swap (OBJECT + SHADOW boxel pipelines
+              untouched).  Strict static uniform 3D lattice mirrors
+              FreeSpaceGenerator's signature; positions are computed
+              once at scene init and never change, only per-cell
+              labels flip as objects are revealed/moved (consulted
+              TAMPURA — Curtis et al. 2024 — find_dice/env.py: voxel
+              labels live in Python, planner sees per-OBJECT atoms;
+              same pattern as our existing _build_init re-emit).
+              Fix shape, 5 files:
+                - uniform_grid.py (NEW): UniformGridGenerator,
+                  cell_size kwarg (default 0.05 m ~ one cube footprint),
+                  workspace bounds match FreeSpaceGenerator (free_-
+                  space.py:47-48), AABB-AABB rejection identical to
+                  the octree path, FP-imprecision epsilon (1e-9) on
+                  the floor() so evenly-divisible workspaces don't
+                  silently lose a row of cells.
+                - boxel_env.py: instantiate UniformGridGenerator next
+                  to FreeSpaceGenerator; use_uniform_grid flag (default
+                  False) gates the dispatch in generate_free_space();
+                  set_uniform_cell_size() recreates the lattice for
+                  matrix sweeps.  reboxelize.py is automatically
+                  baseline-aware via the same single dispatch seam.
+                - run_logger.py: --baseline {semantic,uniform}
+                  (default semantic) + --uniform-cell-size FLOAT
+                  (default 0.05).
+                - test_full_pipeline.py: thread baseline +
+                  uniform_cell_size through run_config, main()
+                  kwargs, and the post-construction env config
+                  (env.use_uniform_grid + set_uniform_cell_size if
+                  non-default).
+                - eval_runner.py: baseline axis added to
+                  SCALABILITY_MATRIX (90 -> 180 cells, semantic +
+                  uniform), --baseline pipe-through in cell_to_argv,
+                  cell_tag suffix _semantic / _uniform, baseline +
+                  uniform_cell_size in PRIMARY_COLUMNS for stable
+                  CSV ordering.
+              eval_plotter.py needs no changes — its --baseline-csv
+              overlay hook (eval_plotter.py:157) already consumes a
+              second aggregated.csv; running the sweep + filtering
+              rows by baseline produces the comparison inputs.
+              Sanity checks: py_compile across all 5 files;
+              UniformGridGenerator on a (0.6 x 0.6 x 0.5) workspace at
+              0.05 m -> 1440 cells (12 x 12 x 10) post-FP-fix
+              (was 1210 = 11 x 11 x 10 with naive floor); obstacle
+              rejection drops 120 cells for a 0.2 m^3 obstacle; eval
+              dry-run prints 180 cells with _semantic/_uniform tags;
+              parse_pipeline_args round-trip on the new flags
+              returns the expected values.  WSL end-to-end run
+              deferred to next session (PyBullet only spins up under
+              WSL on this machine).  Open count: 7 -> 6.  TIER 1 now
+              empty (eval prerequisites complete, #9 + #10 both DONE).
+Added:        2026-05-09 (later) — #66 (uniform/tampura baselines —
+              place fails when object > cell; fix split A on main,
+              C on audit-64-tampura-binary-grid).  Diagnosed from
+              the 2026-05-09 stalled run (logs/run_2026-05-09_10-48-
+              13/): default uniform cell size 0.05 m is smaller than
+              default occluder AABB (5-7 cm wide, 12-16 cm tall),
+              so `(boxel_fits ?occluder ?cell)` is unsatisfiable on
+              every uniform cell, the PDDL place action's
+              precondition can't ground, and PDDLStream loops at
+              increasing complexity searching for a plan that
+              cannot exist.  Two-branch fix:
+                Plan A (main, free-space-only-swap baseline):
+                  auto-tune cell size to fit the largest visible
+                  AABB + 1 cm headroom.  ~30 LOC patch in
+                  test_full_pipeline.main; no domain change.
+                  Side-effect: cuts cell count ~8x, also
+                  resolves the grounding-cost half of the stall.
+                Plan C (audit-64-tampura-binary-grid, TAMPURA-
+                  faithful baseline): replace boxel-indexed place
+                  with continuous SE(3)-pose place via a new
+                  sample-place-pose stream.  Domain rewrite +
+                  streams + planner init changes; the actual
+                  TAMPURA approach (find_dice/env.py uses
+                  continuous poses).
+              Plan B (multi-cell place over a cluster of cells)
+              ruled out 2026-05-09 — neither faithful to TAMPURA
+              nor cheap.  Branch consolidation: baseline-freespace-
+              only-swap deleted (it was a stale snapshot of main);
+              main IS the free-space-only-swap baseline going
+              forward.  ONE shared #66 audit body across main and
+              audit-64 — edit on main, merge forward.  Open count:
+              7 -> 8.
+Added:        2026-05-10 — #67 (Phase 1 / Phase 4 hidden-target
+              criterion disagreement — silent run abort).  TIER 1
+              correctness blocker, surfaced during the
+              eval_results/sweep_2026-05-10_uc-false/ smoke trace.
+              Reproducer: `python test_full_pipeline.py --scene
+              scalability --n-occluders 1 --n-targets 3 --n-hidden
+              1 --seed 2 --goal holding --baseline semantic`
+              (also reproduces under --baseline uniform — bug is
+              baseline-independent).  GUI replay 2026-05-10
+              confirmed: Phase 1 reports "Hidden-target guarantee
+              OK: 1/3 hidden" via camera-ray occlusion;
+              Phase 4 reports "No targets hidden — all visible
+              from camera" via AABB-containment in a shadow boxel;
+              the two criteria disagree because shadow boxels are
+              axis-aligned approximations of the camera-to-occluder
+              frustum, so a target near a shadow edge can be
+              camera-occluded but lie outside the shadow AABB.
+              When this happens, Phase 4 falls into "all visible",
+              picks a random target whose OBJECT boxel was never
+              registered (Phase 2 only emits OBJECT boxels for
+              camera-visible objects), prints "WARNING: Target X
+              has no boxel in registry", calls env.close() and
+              return False.  No planner call is made;
+              report_run_outcome() is never invoked;
+              eval_runner writes a stub timing_summary.json with
+              exit_reason=no_summary.  In-flight sweep
+              eval_results/sweep_2026-05-10_uc-false/ at 67/180
+              cells: 11 of 25 failures (~44 % of failures, ~16 %
+              of all cells) match this signature on both
+              baselines identically — matched-pair failure, so
+              semantic-vs-uniform mean comparisons are NOT
+              corrupted, but absolute success rates are
+              under-reported by ~16 % at the n_occluders=1..3
+              prefix.  Two-commit fix per user direction
+              2026-05-10: (1) tighten hidden placement so
+              hidden = inside-shadow-AABB by construction (bias
+              toward occluder footprint inset, audit #29 raycast
+              gate retained as final check), (2) drop Phase 4's
+              AABB test in favour of camera-ray occlusion as the
+              single source of truth.  Independent of #66 (Plan A
+              landed) / #50 / #62.  Open count: 8 -> 9.
+Updated:      2026-05-09 (later) — #66 [Plan A DONE on main].  Auto-tune
+              uniform cell size to fit the largest object AABB +
+              0.01 m headroom in test_full_pipeline.main, applied
+              inside the existing `if baseline == 'uniform':` block
+              (test_full_pipeline.py:445-481).  Acts as a safety
+              guard: if --uniform-cell-size is already >= the auto
+              value, keep it; otherwise bump up.  Smoke-test
+              correction vs the audit body's "~0.10 m" estimate:
+              `test_boxel_fits` (streams.py:369) checks all 3 axes,
+              so cell size is forced to fit the OCCLUDER HEIGHT
+              (12-16 cm), not the XY footprint — auto_cell ≈ 0.17 m
+              for the default scene (not 0.10 m).  Lattice drops
+              4x4x2 = 32 cells (was 16x16x10 = 2560 at 0.05 m on
+              the 0.8x0.8x0.5 _SAFE_TABLE workspace), ~20 free
+              after obstacle rejection.  ~100x cell reduction (not
+              ~8x as the audit body predicted) but plenty for
+              grounding place.  Risk-2 (annotate_free_space_surface
+              on_z check) verified clean: bottom-layer cell's
+              min_corner[2] = table_z exactly at any cell size, so
+              `on_z = b.min_corner[2] <= table_z + 0.01` always
+              passes for the bottom layer.  Plan C still pending on
+              audit-64-tampura-binary-grid; #66 stays open.  Open
+              count: 8 -> 8 (Plan A is half of #66).
+Added:        2026-05-09 — #65 (rename: boxel -> hanixel terminology
+              overhaul).  User decision 2026-05-09: "boxel" retired
+              in favour of HANIXEL = HANI + XEL, where
+                HANI = Heterogeneous Axis-aligned Named Interval
+                       (each letter a literal property of the data
+                       structure: H = polymorphic semantic label
+                       OBJECT/SHADOW/FREE_SPACE; A = AABB
+                       representation in every mode; N = string
+                       `id` handle; I = 3-D interval = AABB in the
+                       formal geometry sense)
+                XEL  = inherited voxel-suffix; same construction as
+                       vo(lumetric) + (pi)xel and te(xture) + (pi)xel.
+              Mechanical rename — no correctness, performance, or
+              behavioural change.  Single dedicated branch
+              (rename-boxel-to-hanixel) off main, case-preserved
+              sed across *.py / *.pddl / forward-looking *.md, file
+              renames (boxel_*.py -> hanixel_*.py), PDDL predicates
+              (Boxel -> Hanixel; obj_at_boxel -> obj_at_hanixel;
+              boxel_fits -> hanixel_fits) mirrored in domain +
+              _build_init + goal-construction.  Changelog history
+              and archive/* keep "boxel" wording (audit trail).
+              Repo name + thesis title separate decisions.  TIER 3.
+              Open count: 6 -> 7.
+Updated:      2026-05-10 — #67 [DONE 2026-05-10].  Single-commit
+              resolution: dropped the audit body's two-commit plan
+              (placement tightening + Phase 4 criterion swap) in
+              favour of just the Phase 4 swap, after user pushback —
+              making Phase 4 use camera-ray occlusion (matching
+              Phase 1 / oracle_detect_objects) eliminates the
+              disagreement at its source, so placement does not need
+              tightening to make the AABB proxy succeed.
+              test_full_pipeline.py: oracle_detect_objects() runs
+              once at Phase 4 entry; hidden_targets_set drives the
+              holding-goal target pick and the find-and-tray-stack
+              visible/hidden classification; AABB containment is
+              demoted to a best-effort target_to_shadow lookup used
+              only for the oracle log line and is tolerated to be
+              empty per-target (new "boundary case" log message).
+              Reproducer (occ1 tgt3 hid1 seed2 holding semantic)
+              post-fix: Phase 4 prints "Target: green_object" with
+              the new boundary-case ORACLE log line, run reaches the
+              planner, executes 8 plans, then fails LOUDLY with
+              audit #21 (cascading-occlusion give-up after 3
+              still_blocked sense attempts) — strict improvement
+              over the previous silent abort with
+              exit_reason=no_summary.  The downstream cascading-
+              occlusion problem is known-deferred audit #47
+              (re-ground blocker atoms) territory, surfaced now
+              because no_summary aborts no longer hide it.
+              Open count: 9 -> 8.
+Added:        2026-05-10 (later) — #68 (scene randomizer — vary
+              the (occluder, hidden-target) pair count per run).
+              User direction 2026-05-10: "next top prio issue:
+              we need to do a scene randomizor.  So every time
+              there's some variable number of occluder-hidden
+              object pairs.  The task would be to let the AI do
+              the work of writing the scene randomizer and then
+              ask the user to test it out and wait for response."
+              Today scalability_scene takes fixed
+              --n-occluders / --n-targets / --n-hidden counts;
+              the eval matrix sweeps these axes deterministically
+              across cells but every CELL produces the same
+              count.  New issue captures the randomizer that
+              picks the pair count itself per run (within a CLI-
+              configurable range) so consecutive GUI runs and
+              per-cell scenes differ in N pairs as well as in
+              placement.  TIER 0 — top priority per user.
+              Workflow note in body: AI implements; user runs;
+              AI waits for response before declaring done.
+              Open count: 8 -> 9.
+Added:        2026-05-10 (later) — FOR LATER bullet for "Parallel
+              FastDownward — split search space across CPU threads
+              (possibly GPU)."  User-raised idea, super-low
+              priority, post-thesis research direction.  Captured
+              with the hard problem flagged ("find a meaningful
+              way to split the search space"), the off-the-shelf
+              option (FD portfolio mode) acknowledged, and a few
+              more research-y angles (goal-fact partitioning,
+              per-thread h-bound bands, cooperative beam search
+              with shared incumbent) sketched so a future
+              attempt has a starting point.  Cross-references
+              #50/#62 (Python-side perf hunt — same goal,
+              different layer).  Not numbered; lives as a bullet
+              in the FOR LATER backlog.
+Updated:      2026-05-10 (later) — FOR LATER "Parallel FastDownward"
+              bullet rewritten with prior-work findings from a
+              web search the same day.  Substantial CPU prior
+              work exists (HDA* / Distributed FD by Kishimoto-
+              Fukunaga-Botea ICAPS 2009 — 30-60x on 128 cores,
+              live code at github.com/jinnaiyuu/distributed-
+              fast-downward; ArvandHerd IPC 2011 winner —
+              4 Arvand + 1 LAMA configs; FD Stone Soup; Springer
+              2021 multi-core BFS; arXiv 2407.21485 generalized
+              planning).  GPU is a dead-end for classical PDDL
+              specifically (FD pointer-heavy data structures);
+              PyBullet GPU pipeline is dormant; Isaac/MuJoCo MJX/
+              Genesis are the GPU-sim escape hatches but require
+              a full simulator swap.  Bullet now also explains
+              WHY it stays FOR LATER not promoted (the wall-clock
+              complaint is upstream of FD search per #50/#62).
+Added:        2026-05-10 (later) — #69 (PyBullet rayTestBatch —
+              pass numThreads on the 5 existing call sites).
+              TIER 3, low effort, measurable win.  Promoted from
+              the FOR LATER bullet to a numbered issue because
+              (unlike the speculative FD/GPU angle) this is just
+              an unused PyBullet feature with a 1-kwarg patch.
+              Five call sites identified by grep: boxel_env.py
+              (oracle_detect_objects, compute_shadow_blockers),
+              shadow_calculator.py, execution.py x2 (sense_shadow
+              _raycasting — 147 rays per call, biggest single
+              batch).  Default numThreads=0 (Bullet auto-picks).
+              Thread-safety footgun documented in Care.  Open
+              count: 9 -> 10.
+Slimmed:      2026-05-10 (later) — moved 3 inline bodies to
+              archive/CODEBASE_AUDIT_RESOLVED.txt under a new
+              "2026-05-10 SLIM ADDITIONS" section:
+                #9  [DONE 2026-05-08 (later)] eval framework +
+                    matrix runner (commit e8237b6).
+                #10 [DONE 2026-05-08 (later)] uniform-vox
+                    baseline (commit afdaadd).
+                #67 [DONE 2026-05-10] Phase 1/4 hidden-target
+                    criterion swap (commit 4c9e4d5).
+              Bodies preserved verbatim including the
+              "Outcome [DONE ...]" implementation notes #9 and #10
+              grew during the 2026-05-08 push.  Open audit shrinks
+              from 12 inline issue bodies to 9 (one per still-open
+              issue: #50, #57, #59, #61, #62, #63, #65, #66, #68).
+              SUMMARY block already references closed issues by
+              short summary, not by body, so no SUMMARY edits
+              needed beyond the changelog reference here.
+Added:        2026-05-12 — #70 (random-pairs scene — unreachable
+              placements hang objects in air).  TIER 0 per user
+              direction.  Post-merge defect against #68: random-
+              pairs delegates to scalability_scene, which builds
+              its SceneConfig without constrain_to_reach=True
+              (unlike stack_scene); _random_xy_positions samples
+              in the wide _TABLE_PLACE_* window with no reach-
+              disk filter.  Robot base sits at (-0.4, 0.0),
+              reach radius 0.65 m -> reachable x ceiling drops
+              from 0.25 (at y=0) to 0.11 (at y=±0.4); the
+              placement window goes out to x=0.5.  Roughly
+              half the placement window lies outside the reach
+              disk, so the majority of multi-object spawns
+              produce at least one unreachable cube.  Pick IK
+              still succeeds via
+              the small slack beyond the comfort-reach disk,
+              the grasp constraint binds, post-pick lift then
+              wedges the cube in mid-air with the arm fully
+              extended ("object hung in air" artefact reported
+              by user GUI run).  Open count: 10 -> 11.
+Added:        2026-05-12 (later) — #71 (refresh OBJECT boxel
+              AABBs on every sense — shadow regions untouched).
+              Currently the registry's OBJECT AABBs are written
+              once at scene creation (or once at discovery for
+              non-target objects found via sense_contains_
+              nontarget) and never refreshed.  Cubes that shift
+              between actions (settle, get bumped, jiggle on a
+              stack) drift away from the registry's stored
+              AABB; the planner then reasons over stale
+              geometry and may emit false-free or stale-on
+              facts.  User direction: refresh BB only, not the
+              shadow region behind it (shadow recomputation is
+              expensive and out of scope for this fix).
+              Open count: 11 -> 12.
+Added:        2026-05-12 (later) — #72 (shadow AABB carves only
+              along dominant axis — lateral overhang beside the
+              occluder).  Calculate_shadow_boxel builds an AABB
+              enclosing both the cube AABB and the divergent ray
+              hit points, then carves the occluder out along
+              ONE axis (the dominant component of mean(hits) -
+              obj_center).  Perpendicular axes inherit the wide
+              hit-point bounds all the way back to the cube's
+              back face, so the SHADOW boxel "sticks out" beside
+              the cube on the camera-facing side (~7-10 cm of
+              non-shadow region absorbed into the AABB).  Free-
+              space generator and boxel_fits then carve cells
+              that the camera can actually see.  User-reported
+              visually 2026-05-12 (random-pairs GUI run, seed
+              779694423).  Open count: 12 -> 13.
+Added:        2026-05-12 (later) — #73 (eval-chapter figures
+              backlog — 11 plots + logging prerequisite).
+              Current eval output covers planning time, success
+              rate, plan count; missing the COMPACTNESS evidence
+              (boxel-count breakdown), the INIT-STATE FACT count
+              (the planner-side cost story), the SENSE-EFFICIENCY
+              comparison, per-replan timing detail, wall-clock
+              vs planning scatter, replan distribution, failure-
+              mode breakdown, TAMPURA comparison bar, perception-
+              density sweep (THESIS_NOTES §14), and boxel
+              evolution across replans.  Most are blocked on a
+              5-10 LOC logging change in run_logger.py and
+              pddlstream_planner.py (dump boxel counts and init-
+              fact counts to timing_summary.json).  TIER 1 —
+              gates eval chapter writeup.  Open count: 13 -> 14.
