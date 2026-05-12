@@ -1059,3 +1059,527 @@ Related: #4  [archive RESOLVED] — accepted stale shadow AABBs after
               change for the geometry-skew case.
 
 
+
+
+
+================================================================================
+2026-05-12 TRIAGE — DEFERRED
+================================================================================
+Issues deferred during the 2026-05-12 (later) triage pass per user
+direction.  Moved from CODEBASE_AUDIT.txt verbatim.  Reasoning per
+issue captured in the SUMMARY block of the open audit at the time
+of the move; common thread is "not on the thesis-submission critical
+path; revisit post-submission if still wanted."
+
+================================================================================
+#50. PLANNER PERFORMANCE INVESTIGATION — REDUNDANCY HUNT
+================================================================================
+Priority: TIER 2 — Affects every eval-run wall-clock time;
+          user-flagged 2026-05-06 ("planner is too slow").
+Where:    pddlstream_planner.py (_build_init, planner.plan, stream
+          stitching), streams.py (test/gen streams; per-call cost),
+          execution.py (between-replan re-grounding paths), and the
+          adaptive search inner loop (FastDownward grounder).
+Depends:  None (independent investigation).  Pairs naturally with
+          #9 / #12 — any wins should show up in the scalability plots.
+Effort:   1 week of focused profiling, then variable per-redundancy fix.
+
+What:  User raised at 2026-05-06 sync:
+         "Personally I think the planner is too slow and want to find
+          out ways to make it faster or at least discover and remove
+          some big redundancies."
+
+       This is broader than #30 (which targeted one specific
+       conditional-effect cost in the pick action and is now
+       [WONTFIX]).  #50 is a profiling-driven sweep — find ALL the
+       big redundancies, regardless of whether they live in the
+       grounder, the streams, or the Python init-fact construction.
+
+       Known suspects (no measurement yet — confirm with profiler
+       before fixing):
+       (a) _build_init re-emits ALL static facts every replan.  Many
+           of them (boxel_fits, semantics, geometry-derived
+           predicates) are invariant under sense / pick / place and
+           could be cached across replans of the same run.  Cf.
+           archive note "BOXEL_FITS / STATIC INIT FACTS — REBUILT
+           EACH REPLAN" — that note explained WHY the test-stream
+           variant was abandoned, but did not rule out caching the
+           Python-side computation.
+       (b) _compute_placement_view_blocks runs every _build_init at
+           O(S × 25 × F) ray-AABB tests (#34 audit).  Cache by
+           (shadow geometry, free-boxel layout) hash; invalidate only
+           when reboxelize_free_space mutates the registry.
+       (c) The placement sampler in streams.py may be re-sampling
+           geometrically equivalent poses; check if pose-level
+           dedup would help.
+       (d) `test_*` streams that fire many times per skeleton against
+           Python-side data that doesn't change between calls — fold
+           the test result into init facts and drop the stream.
+       (e) Any per-action Python loop in execute_* that scales with
+           registry size (look for O(N^2) over object/shadow lists).
+       (f) FastDownward grounder cost: how much grounded-state size
+           is inflated by predicates that have only a handful of
+           true ground atoms at runtime?  candidate for
+           negative-precondition / typing tightening.
+
+Fix:   APPROACH (no single commit — investigation first):
+       (a) Land a profiling pass: cProfile around planner.plan() and
+           around _build_init separately; aggregate over a fixed seed
+           sweep on the default scene and on scalability_scene (small
+           and large).  Output a Python-side flame graph + a
+           FastDownward translator-time / search-time / total-time
+           breakdown (the translator already prints these; capture
+           them into timing_summary.json).
+       (b) For each hotspot ≥ 10% of total time, decide:
+             - Cache (input is deterministic and stable across replans)
+             - Vectorise / numpy-ify (pure-Python ray loops, etc.)
+             - Drop / replace (dead code path or redundant fact)
+       (c) Land each redundancy fix as its own commit with a before-
+           after timing entry in the commit message + a one-line
+           note in THESIS_NOTES.md "evaluation methodology" if it
+           changes the per-call time used in the Results chapter.
+       (d) Re-run the seed sweep after each fix to make sure the
+           change does not regress success rate.
+
+Care: Do not start optimising before profiling.  The planner has many
+       plausible-looking suspects (init build, streams, grounder) and
+       only one of them is likely to dominate at any given scene size.
+       Premature optimisation will make the code harder to read for
+       little wall-clock gain.
+
+Related: #9 (experiment runner — needed to gather timing samples),
+         #12 (scalability eval — wins land here visibly),
+         #30 [WONTFIX] (the per-action conditional-effect cost is one
+              specific instance of the broader question — out of
+              scope per supervisor; revisit only if profiling shows
+              it dominates after other wins),
+         #34 (placement-view-blocks ray-AABB cost — concrete suspect),
+         FOR LATER bullets (incremental boxel recomputation, dense
+              lattice — both touch planner cost).
+
+
+
+
+================================================================================
+#57. REGISTRY SHOULD OWN CUBE GEOMETRY (REPLACE PyBullet AABB FALLBACK)
+================================================================================
+Priority: TIER 3 — Code quality.  No correctness bug — current behaviour
+          is right; just an architectural cleanup.
+Where:    streams.py compute_stack_kin_solution — currently reads
+          p.getAABB(held_body_id) when no registry boxel exists
+          (commit 8281d73, audit #55 fix).
+          boxel_data.py BoxelRegistry — add object_geometry dict.
+          test_full_pipeline.py — populate object_geometry at scene
+          init from env.objects[name].size for every cube (visible
+          AND hidden), since cube dimensions are URDF-determined and
+          unknown-position is independent of unknown-size.
+Depends:  None.
+Effort:   <0.5 day.
+
+What:  Audit #55's held-cube AABB fallback (commit 8281d73) reads
+       p.getAABB(body_id) on the plan-client to recover a hidden
+       cube's z-extent when the cube has no OBJECT-type registry
+       boxel pre-sense.  The data taken is pure geometry (size, not
+       position), so this is NOT an oracle leak — but bypassing the
+       registry for object metadata is architecturally suboptimal:
+       the registry is supposed to be the "what the planner knows"
+       boundary, and one stream now reaches around it.
+
+       The clean fix: separate KNOWN-from-URDF metadata (size, mass,
+       grasp affordances) from OBSERVABLE-via-sense state (position).
+       Cube sizes are URDF-determined and the same regardless of
+       observability — they belong in the registry from scene init.
+
+Fix:   ONE COMMIT:
+       (a) BoxelRegistry: add object_geometry: Dict[str, np.ndarray]
+           mapping object name -> half-extents (or full extents).
+       (b) test_full_pipeline.py scene-init: populate
+           registry.object_geometry from env.objects for every cube
+           (visible + hidden + tray).
+       (c) streams.compute_stack_kin_solution: replace the
+           p.getAABB(body_id) fallback branch with a registry
+           lookup; drop the PyBullet read entirely from this stream.
+       (d) (optional) compute_kin_solution: same treatment — read
+           grasp Z height from registry.object_geometry instead of
+           hardcoding.
+
+       Behaviour-preserving.  Existing successful runs (logs/run_-
+       2026-05-08_10-49-01) should produce identical timing /
+       success metrics.
+
+Related: #55 [DONE 2026-05-08; archived] — introduced the AABB
+              fallback this issue replaces.
+         #9 — eval runner; benefits from registry as the single
+              metadata source.
+
+
+
+
+================================================================================
+#59. SCALED-UP FIND-AND-STACK — N HIDDEN TARGETS, SIZE-COMPAT STACKING
+================================================================================
+Priority: TIER 3 — Very low priority (user direction 2026-05-08:
+          "very very low prio").  Demo evolution; not on the
+          critical thesis path.  Builds on #55 rather than scaling
+          DOWN to a simpler goal.
+Where:    boxel_env.py default_scene
+                          — optionally mix target sizes (e.g. 30 / 40 /
+                            50 mm) so the size-compat predicate has
+                            real work to do.  Uniform-size targets
+                            keep the predicate trivially-satisfied.
+          pddl/domain_pddlstream.pddl
+                          — add (compat_stack ?o ?on_obj) to the
+                            :action stack precondition list.
+          pddlstream_planner.py _build_init
+                          — emit (compat_stack a b) for every ordered
+                            pair where horizontal_half_extent(a) +
+                            safety_margin <= horizontal_half_extent(b).
+                            Same one-pass-per-replan pattern as
+                            boxel_fits / clear.
+          test_full_pipeline.py
+                          — extend the find-and-tray-stack branch
+                            (or add a new --goal find-and-stack-N)
+                            to accept N hidden targets and build a
+                            tower in size-decreasing order.
+          run_logger.py   — relax --n-hidden upper cap if currently
+                            limited; surface the new goal kind.
+Depends:  - #55 [DONE; archived] — find-and-tray-stack pipeline
+                                    reused as-is for the multi-cube case.
+          - FOR LATER size-compat bullet (CODEBASE_AUDIT.txt FOR
+            LATER section) — this issue absorbs option (i) of that
+            bullet (symbolic predicate path).
+Effort:   1-2 days (predicate plumbing + scene mix + smoke test).
+
+What:  #55 demonstrates 1-visible + 1-hidden tray stack.  Scale up:
+       2-3 hidden targets, all stacked physically-sensibly.
+       "Sensibly" means the planner cannot plan big-on-small towers
+       that the physics step then fails to stabilise — a (compat_stack
+       ?o ?on_obj) static predicate gates :action stack so only
+       smaller-on-larger placements are permitted.
+
+       Currently safe by setup: every find-and-tray-stack run uses
+       40 mm uniform targets (default_scene targets), so size-compat
+       is mooted in practice.  Promoting to a numbered issue captures
+       the dependency BEFORE we mix sizes; otherwise the gap surfaces
+       silently the first time a richer scene composition is tried.
+
+       User direction 2026-05-08: "find two hidden targets and stack
+       them in a phiyical sensble way. or find three and do that.
+       that would be nice. we alreday have find and stack. we dont
+       need to make it simpler."  Hence this scales UP from #55,
+       does NOT replace #55 with a simpler goal.
+
+Fix:   ONE COMMIT (or split into domain change + scene mix):
+       (a) Domain: add (compat_stack ?o ?on_obj) predicate; add to
+           :action stack precondition list.
+       (b) _build_init: precompute (compat_stack a b) for every
+           ordered pair where horizontal_half_extent(a) +
+           safety_margin <= horizontal_half_extent(b).  Source the
+           half-extents from the registry once #57 lands; until
+           then, env.objects[name].size is the fallback.
+       (c) Optional default_scene size mix: e.g. 30 / 40 / 50 mm
+           target cubes so the predicate gates real planning
+           choices, not just no-ops.  Without the mix, every (a, b)
+           pair is compat and the predicate is informational only.
+       (d) Goal builder: build_find_and_stack_goal(targets) that
+           sorts targets by descending size and chains
+           (on smaller bigger).  Tray base optional; works on any
+           support entity.
+
+       Smoke test: --goal find-and-stack-N --n-hidden 2 (or 3) on
+       default_scene with mixed sizes.  Expect plan to discover all
+       hidden cubes via sense, then stack them smallest-on-top.
+
+Related: #55 [DONE 2026-05-08; archived] — find-and-tray-stack base
+              pipeline that this issue extends.
+         #57 (open) — registry should own cube geometry; once
+              landed, half-extents come from registry.object_geometry
+              instead of env.objects[name].size.
+         #58 (open) — preserve grasp across replans; longer towers
+              fire more replans, so #58 amplifies the wins from #59.
+         #50 (open) — planner perf; (compat_stack) adds O(N²)
+              static facts but those ground once per replan, so
+              the cost should not dominate.
+         FOR LATER size-compat bullet — this issue claims option (i)
+              (symbolic predicate); option (ii) (geometric sampler
+              filter) remains a parallel future option.
+
+
+
+
+================================================================================
+#61. SMART CONSOLE FILTER — STRIP STARTUP/SHUTDOWN GARBAGE + ADD THINKING ANIMATIONS
+================================================================================
+Priority: TIER 3 — UX / code-quality polish.  No correctness impact;
+          improves the developer-watching-a-run experience.  User-flagged
+          2026-05-08: "the terminal output is still not smart enough.
+          in the begining and the end there still garbage that no one
+          cares about and it would be cute to have thinking animations
+          or stuff like that so that it really looks like claude."
+Where:    smart_filter.py — _DROP_PATTERNS (~L88-120) covers PyBullet
+          GL/thread banner + a few PDDLStream lines, but startup and
+          shutdown garbage still leaks; SmartConsoleFilter (the line-
+          buffered drop / dedupe / aggregate / transform / pass-through
+          pipeline described in the module docstring L1-26) currently
+          has no time-based "thinking" affordance during long
+          planner.plan() / RRT / stream-sample calls.
+          run_logger.py — RunLogger wires SmartConsoleFilter onto stdout
+          when verbosity='smart' (the default; see L8-14, L44-58, the
+          _LEVEL_MAP / VALID_VERBOSITIES tuple); any spinner / animation
+          channel needs to coexist with the _TeeStream stdout->log split
+          (L63-77) so the log file stays clean and complete.
+          test_full_pipeline.py — emits the run banner / phase markers
+          / timing summaries that smart-mode reformats; surrounding
+          startup imports + atexit shutdown sequence is what currently
+          leaks at the edges of the "Phase 1 ... -> SUCCESS / FAIL"
+          envelope.
+Depends:  None.  Independent of #50 (planner perf — different concern;
+          this is presentation-layer only).  No interaction with #9
+          (eval runner; batch runs would use --log-level normal or
+          quiet anyway).
+Effort:   1-2 days.  Roughly half on extending DROP / aggregation rules
+          for the residual leak categories, half on the spinner /
+          progress affordance + ANSI cursor handling.
+
+What:  smart_filter.py already implements the Claude-Code-style filter
+       pipeline (drop / dedupe / aggregate / transform / pass-through —
+       see module docstring L1-26 and run_logger.py L8-14) and
+       run_logger.py defaults verbosity='smart'.  Two gaps remain that
+       the user flagged:
+
+       (1) STARTUP / SHUTDOWN LEAK.  _DROP_PATTERNS at smart_filter.py
+           L88-120 covers PyBullet's GL banner ("GL_VENDOR", "Direct
+           GLX", "startThreads creating", etc.) and the visible
+           thread-shutdown sequence ("stopping threads", "Thread
+           TERMINATED", "destroy ... semaphore"), but garbage still
+           appears at the run's edges.  Likely culprits not currently
+           in the drop list:
+             - Python-level import warnings (deprecation, futures, etc.)
+               that hit stderr before the pipeline banner prints.
+             - PDDLStream / FastDownward subprocess startup chatter
+               that doesn't match the existing "Iteration:" / "Attempt:"
+               aggregation rules.
+             - boxel_env / numpy / PyBullet "starting / loaded /
+               connected" status lines emitted before
+               "--- Phase 1: Environment Setup ---" prints.
+             - atexit / __del__ tear-down output (stray stderr after
+               the SUCCESS / FAIL summary, thread-join tracebacks).
+           Concrete reproduction: run --goal find-and-tray-stack
+           --log-level smart on default scene; capture the lines
+           emitted BEFORE "Phase 1: Environment Setup" and AFTER the
+           timing_summary.json line — those are the leak set.
+
+       (2) NO "THINKING" ANIMATION.  Long blocking calls (planner.plan()
+           — 9-30 s typical per replan per logs/run_2026-05-08_-
+           10-49-01; RRT inside plan_motion; stream sample loops) emit
+           nothing on the console in smart mode (the per-iteration
+           output is correctly aggregated to a single summary by
+           _ITER / _ATTEMPT / _PLAN_NONE / _NO_PLAN at L128-137).
+           From the user's seat the terminal looks frozen.  Claude
+           Code's UX trick is a compact spinner + rotating verb
+           ("Thinking…", "Planning…", "Sensing…") so the user knows
+           work is happening; smart_filter has the metadata (it sees
+           the dropped per-iteration lines internally before
+           aggregating) but doesn't render an affordance.
+
+What's already done (don't redo):
+       - Drop / dedupe / aggregate / transform / pass-through pipeline
+         with ANSI styling (smart_filter._Style L58-79).
+       - PyBullet GL/thread banner drop (_DROP_PATTERNS L88-120).
+       - Per-iteration / per-attempt PDDLStream rollup
+         (_ITER / _ATTEMPT / _PLAN_NONE / _NO_PLAN, L128-137).
+       - Action narrative reformat (_EXECUTING / _MOVING_TO /
+         _PICKING / _PLACING / _STACKING / _SENSING and matching
+         "***" success markers, L144-159).
+       - Shadow-blocker repetition collapse (_SHADOW_BLOCKERS_HDR /
+         _SHADOW_BLOCKER_ROW, L140-142).
+       - File-log tee preserves raw output for post-mortem
+         (_TeeStream in run_logger.py L63-77) — any presentation-
+         layer change here must NOT touch the log file.
+
+Fix:   ONE OR TWO COMMITS — extend the existing filter, no architectural
+       change.  Suggested split: (a) leak suppression first, (b) spinner
+       affordance second so each lands as a self-contained UX win.
+
+       (a) Leak suppression.
+           - Run --log-level smart on default + scalability scenes;
+             diff console output against the
+             "==..." banner -> "Phase 1 ..." -> "SUCCESS / FAILED"
+             envelope to enumerate the exact leak lines at both edges.
+           - Add the leak set to _DROP_PATTERNS (or a new STARTUP_DROP
+             / SHUTDOWN_DROP regex if the lines are stateful — e.g.
+             "drop everything until first --- Phase line" / "drop
+             everything after the timing_summary.json line").
+           - Suppress python import warnings reaching stderr (warnings
+             module; respect log-level so verbose mode keeps them).
+           - Add a smoke test in tests/ that spawns the pipeline and
+             asserts the first console line matches "^=+$" (banner)
+             and the last matches the SUCCESS / FAIL summary, no
+             trailing tracebacks.
+
+       (b) Thinking-animation affordance.
+           - Extend SmartConsoleFilter with a TimerSpinner that renders
+             "  ⠋ Planning… 12s" on a single line (carriage-return,
+             no newline) when no narrative output has been emitted for
+             > N seconds (default ~1 s) and a long-running phase is
+             active.  Erase + reprint on each tick (\r + ANSI clear
+             EOL); finalise to a static "  ✓ Planned in 13.2s" line on
+             phase exit.
+           - Verb selected from the active phase: "Planning" during
+             planner.plan() (already detected via _PLAN_HEADER /
+             _TIMING at L135-137), "Sensing" during sense_shadow_-
+             raycasting (_SENSING already matched), "Executing"
+             otherwise.
+           - Disable when stdout is non-TTY or NO_COLOR is set
+             (mirror _supports_color L42-55).
+           - Do NOT write spinner frames to the log file — the
+             _TeeStream split (run_logger.py L63-77) has to skip the
+             carriage-return updates; only the final static line
+             ("Planned in 13.2s") goes through to the log.
+
+       Out of scope:
+           - Changing the verbosity default away from 'smart' (it's
+             already the default, see VALID_VERBOSITIES + _LEVEL_MAP
+             at run_logger.py L46-60).
+           - Adding new presentation modes ('pretty', 'json', etc.).
+           - Reformatting timing_summary.json.
+
+Smoke test: --goal holding and --goal find-and-tray-stack on default
+       scene, --log-level smart.  Expect: (i) first console line is
+       the "==..." banner, no PyBullet/PDDLStream prelude; (ii) during
+       each planner.plan() the spinner renders + updates; (iii) last
+       console line is the SUCCESS / FAIL summary, no atexit
+       traceback/teardown noise.  Raw log file under logs/run_<ts>/
+       still contains every byte of stdout for post-mortem (verify
+       byte count against a --log-level normal run on the same seed).
+
+Related: #9   — eval runner; runs in batch (likely --log-level
+              normal or quiet); spinner only fires for interactive
+              smart mode so no impact on batch logs.
+         #50  — planner perf; reduces the time the spinner spends
+              rotating but is independent of the affordance.
+
+
+
+
+================================================================================
+#65. RENAME: BOXEL -> HANIXEL — TERMINOLOGY OVERHAUL (mechanical, large-diff)
+================================================================================
+Priority: TIER 3 — Code/doc cosmetic.  No correctness, performance,
+          or behavioural impact.  Sweep of one identifier; touches
+          most source files but every change is a literal word
+          substitution.
+Where:    Sweeping rename across:
+          - Source: ~150 occurrences of `boxel`/`Boxel`/`BoxelData`
+            etc. in *.py (boxel_data.py, boxel_env.py, boxel_types.py,
+            pddlstream_planner.py, streams.py, visualization.py,
+            execution.py, uniform_grid.py, reboxelize.py,
+            cell_merger.py, free_space.py, shadow_calculator.py,
+            test_full_pipeline.py, eval_runner.py, eval_plotter.py,
+            run_logger.py, plus tests/ and any utility scripts).
+          - File names: boxel_data.py -> hanixel_data.py;
+            boxel_env.py -> hanixel_env.py; boxel_types.py ->
+            hanixel_types.py.
+          - PDDL: predicate `(Boxel ?b)` -> `(Hanixel ?b)`;
+            `(obj_at_boxel ?o ?b)` -> `(obj_at_hanixel ?o ?b)`;
+            `(boxel_fits ?o ?b)` -> `(hanixel_fits ?o ?b)`.
+            Mirror in pddl/domain_pddlstream.pddl + pddl/stream.pddl
+            + pddlstream_planner._build_init() tuple emission +
+            goal-construction code in test_full_pipeline.py.
+          - Docs: README.md, the FORWARD-LOOKING / LIVE issue
+            bodies in CODEBASE_AUDIT.txt (NOT the historical
+            changelog — keep "boxel" wording there as audit trail),
+            THESIS_NOTES.md, wiki (11 pages), in-line docstrings.
+          - Data files: boxel_data.json (artefact written by
+            BoxelRegistry.save_to_json) -> hanixel_data.json;
+            search-and-replace any references in run logs / test
+            fixtures.
+          - Repo name (Semantic_Boxels) — separate decision,
+            optional, can be left as-is.
+          - Thesis title and chapter text — out of scope here;
+            handled on the writing side.
+Depends:  None — purely mechanical.  No code logic changes.
+          However: land AFTER any in-flight branch merges or
+          rebases (audit-64-tampura-binary-grid is currently
+          open) to avoid identifier-collision merge noise across
+          every renamed identifier.
+Effort:   ~1 hour mechanical pass + ~30 min smoke run.  Single-day
+          execution.
+
+What:  "Boxel" originated as a portmanteau of box + (vo)xel —
+       fine etymologically but the team has soured on the word.
+       User raised 2026-05-09 after looking at TAMPURA's voxel-grid
+       code (Curtis et al. 2024) and reflecting on the project
+       vocabulary.
+
+       Replacement chosen 2026-05-09: HANIXEL.
+       - HANI = "Heterogeneous Axis-aligned Named Interval" —
+         each letter is a literal property of the data structure:
+           H = Heterogeneous (the semantic label can be OBJECT /
+               SHADOW / FREE_SPACE — exactly the polymorphic
+               distinguishing feature of the project)
+           A = Axis-aligned (AABB representation, true in every
+               mode: semantic octree, semantic merged, uniform
+               lattice)
+           N = Named (every entry carries a string `id` — the
+               planner's handle, e.g. `red_object`,
+               `shadow_of_red_object`, `free_011`)
+           I = Interval (rigorous geometry term: a 3-D interval
+               = AABB; defines what the thing geometrically is)
+       - XEL = inherited voxel-suffix; same construction as
+         vo(lumetric) + (pi)xel and te(xture) + (pi)xel.
+
+Fix:   ONE BRANCH — `rename-boxel-to-hanixel`, off `main`.
+       (a) Mechanical case-preserved sed: boxel->hanixel,
+           Boxel->Hanixel, BOXEL->HANIXEL across *.py, *.pddl,
+           README.md, and the LIVE issue-body sections of
+           CODEBASE_AUDIT.txt — but EXCLUDING the changelog
+           history block at the top of CODEBASE_AUDIT.txt and
+           ALL of archive/CODEBASE_AUDIT_RESOLVED.txt /
+           archive/CODEBASE_AUDIT_DEFERRED.txt.  Those record
+           historical wording and stay verbatim.
+       (b) File renames: boxel_*.py -> hanixel_*.py; update
+           every import and from-import to match.
+       (c) Data-artefact rename: any place that writes or reads
+           "boxel_data.json" updates to "hanixel_data.json"
+           (run_logger.py, BoxelRegistry.save_to_json caller,
+           any test fixtures).  Old artefacts in logs/ stay
+           with their historical names.
+       (d) py_compile across all touched .py files; smoke run
+           (--scene default --baseline semantic --no-gui --seed 0)
+           to verify nothing broke.
+       (e) Two commits: one mechanical rename + one manual
+           cleanup (e.g. README "Semantic Boxels" -> "Semantic
+           Hanixels" for the public-facing prose; audit body
+           rebrand in TOC banner + SUMMARY block; visualizer
+           class-docstring polish).
+       (f) Audit DONE entry on this issue at landing.
+
+Care: Don't touch the changelog history at the top of this file —
+       every "Added:"/"Updated:"/"Slimmed:"/"Restructured:" entry
+       above mentions "boxel" because that was the term at the
+       time.  Rewriting history would lose the audit trail.  Same
+       for archive/CODEBASE_AUDIT_RESOLVED.txt and
+       archive/CODEBASE_AUDIT_DEFERRED.txt.  Only the
+       FORWARD-LOOKING / LIVE issue bodies and the SUMMARY block
+       get the rename.
+
+       Coordinate with audit-64-tampura-binary-grid: that branch
+       is currently sitting on the GUI uniform_mode flag work plus
+       its own #64 audit body.  Either merge it to main first
+       (preferred — clean main = clean rename diff) or rebase it
+       on top of #65 after #65 lands (every commit on the branch
+       gets a noisy text-rename hit).
+
+Related: #63 (README + wiki final doc sweep) — picks up the
+              hanixel terminology naturally if it lands first.
+              If #63 hasn't started yet at #65 landing time,
+              #63 inherits the rename for free.
+         #64 (open on audit-64-tampura-binary-grid) — see "Care"
+              above; merge order matters for diff cleanliness.
+         Repo name (Semantic_Boxels on disk + both remotes) —
+              separate decision, can stay as-is to avoid breaking
+              upstream URLs.
+         Thesis title ("Semantic Boxels for TAMP" -> "Semantic
+              Hanixels for TAMP") — your call on the writing side.
+

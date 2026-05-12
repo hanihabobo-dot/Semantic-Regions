@@ -70,6 +70,13 @@ Archived: 2026-05-12 (changelog slim - moved entire changelog from
          verbatim, to the "2026-05-12 CHANGELOG SLIM" section at end
          of file.  No issue bodies moved - slim is changelog-only,
          source bodies were already archived in prior slims.)
+Archived: 2026-05-12 (later) (triage pass — moved #68 [DONE 2026-05-10]
+         and #70 [DONE 2026-05-12] from CODEBASE_AUDIT.txt to this
+         file under "2026-05-12 TRIAGE — DONE" section at end.
+         #68 = scene randomizer (commit 63b1c64 + follow-ups); audit
+         was never closed despite feature landing — doc-state
+         correction.  #70 = random-pairs unreachable placements;
+         user-verified in GUI 2026-05-12.)
 
 These issues have been fixed, reclassified as not-an-issue, or corrected.
 The active audit with remaining open issues is in CODEBASE_AUDIT.txt.
@@ -6137,3 +6144,381 @@ Added:        2026-05-12 (later) — #73 (eval-chapter figures
               pddlstream_planner.py (dump boxel counts and init-
               fact counts to timing_summary.json).  TIER 1 —
               gates eval chapter writeup.  Open count: 13 -> 14.
+
+
+================================================================================
+2026-05-12 TRIAGE — DONE
+================================================================================
+Issues marked [DONE] during the 2026-05-12 (later) triage pass.  Moved
+from CODEBASE_AUDIT.txt verbatim.  #68's feature landed in commit
+63b1c64 (2026-05-10) but the open audit was never closed — recorded
+here as the doc-state correction.  #70 was implemented and user-
+verified in GUI 2026-05-12.
+
+================================================================================
+#68. SCENE RANDOMIZER — VARY THE (OCCLUDER, HIDDEN-TARGET) PAIR COUNT PER RUN
+================================================================================
+Status:   OPEN.  Raised 2026-05-10 (later) by user as "next top
+          prio issue".  No commits yet.
+Priority: TIER 0 — top priority per user direction.  Promotes
+          ahead of the previously-empty TIER 0 slot and ahead of
+          #66 Plan C (TIER 1, audit-64-tampura-binary-grid)
+          because the scene-variability gap blocks the kind of
+          qualitative evidence the user wants to see in single GUI
+          runs ("every run looks meaningfully different") and
+          would also broaden the eval matrix without adding
+          another explicit axis.
+Where:    Primary:
+            boxel_env.py — scalability_scene() and
+              _hidden_xy_positions() / _random_xy_positions()
+              (audit #29 placement helpers).  The randomizer
+              either (a) lives here as a new factory
+              (e.g. random_pairs_scene(min_pairs, max_pairs,
+              seed, ...)), or (b) extends scalability_scene with
+              a "count is itself random" mode toggled by passing
+              None for the explicit counts.
+          CLI surface:
+            run_logger.py::parse_args — new flag(s) to drive the
+              randomizer.  Candidate designs in the Fix section.
+          Eval integration:
+            eval_runner.py::SCALABILITY_MATRIX / DEFAULT_MATRIX —
+              optional new matrix preset that uses the randomizer
+              instead of cartesian-product over fixed counts.
+              MAY be deferred to a follow-up commit; the GUI-run
+              experience is the primary deliverable.
+          Tests:
+            none currently — manual GUI verification per the
+              workflow note in Care.
+Depends:  None.  Independent of in-flight #66 Plan C and #50/#62
+          perf work.  Does NOT depend on #65 (boxel -> hanixel
+          rename) — touches scene-generation surface area that #65
+          will mechanically rename later.
+
+What:  Today's scene-generation surface produces the SAME pair
+       count on every invocation:
+
+         scalability_scene(n_occluders, n_targets, seed, n_hidden)
+
+       takes the counts as required CLI inputs (run_logger.py
+       --n-occluders / --n-targets / --n-hidden), and the
+       eval_runner matrix sweeps those axes DETERMINISTICALLY
+       across cells: cell occ3_tgt4_hid2 always has exactly 3
+       occluders and 4 targets with 2 hidden, regardless of seed.
+       Only the per-object XY positions vary with --seed.
+
+       This means:
+       (a) Two consecutive `run_boxels --scene scalability` GUI
+           runs produce the SAME silhouette count and qualitative
+           difficulty.  Without changing CLI args, the user sees
+           the same scene shape every time — only object
+           positions differ.  This is fine for unit-test-style
+           regression seeds, but undermines any "look at this
+           variety of scenes" demonstration.
+       (b) The eval matrix conflates "scenes vary structurally"
+           with "scenes vary in placement".  The thesis Results
+           plots currently sweep the count axis as a deliberate
+           independent variable, but there is no within-axis
+           randomization at the count level — every n_occluders=3
+           cell is structurally identical to every other
+           n_occluders=3 cell.
+
+       The user wants a randomizer where the COUNT itself is a
+       random variable per run, drawn within a CLI-configurable
+       range, so that every invocation produces a structurally
+       distinct (occluder, hidden-target) pair budget.  "Pair"
+       here means: one occluder casting a shadow that has at
+       least one hidden target inside its frustum (audit #29
+       guarantees this at spawn time via raycast verification).
+
+Fix:   USER DIRECTION 2026-05-10:
+       "Let the AI do the work of writing the scene randomizer
+        and then ask the user to test it out and wait for
+        response."
+
+       Implementation outline (AI proposes, user validates the
+       choice via GUI smoke before any commit lands):
+
+       (1) Decide the API.  Two candidates, AI picks one and
+           justifies inline in the commit message:
+
+           (A) New scene preset.  --scene random-pairs.
+               scalability_scene gets a sibling
+               random_pairs_scene(min_pairs, max_pairs, seed,
+               extra_distractors=0) in boxel_env.py.  CLI gets
+               --n-pairs-range MIN-MAX (default e.g. "1-5").
+               Pros: zero impact on existing scalability matrix;
+               new flag is self-documenting; eval_runner can
+               leave SCALABILITY_MATRIX untouched and add a new
+               RANDOM_MATRIX preset later.
+               Cons: scene plumbing in boxel_env.py grows by
+               another factory; CLI surface widens.
+
+           (B) Extend scalability_scene with optional ranges.
+               --n-occluders / --n-targets / --n-hidden start
+               accepting either a single int (today) or a
+               MIN-MAX range string ("1-5") that is sampled per
+               run from the seeded RNG.  No new --scene preset;
+               no new factory.
+               Pros: reuses existing scene preset; minimal CLI
+               surface delta.
+               Cons: argparse type goes from int to a custom
+               parser; the eval matrix must distinguish "axis
+               value 3" from "axis value 1-5" semantically.
+
+           AI default recommendation: (A) for clean separation of
+           concerns and zero risk to existing eval cells.  User
+           may direct (B) instead.
+
+       (2) Hook the new factory / mode into the existing
+           hidden-target placement guarantee (audit #29
+           raycast verification).  The randomizer must NOT
+           bypass the guarantee: every spawned hidden target
+           must still pass camera-ray occlusion at spawn time.
+           Reuse _hidden_xy_positions() with the sampled count.
+
+       (3) Hook into the audit #67 fix (Phase 4 uses camera-ray
+           occlusion).  Since #67 already removed the AABB-
+           containment dependence, any scene the randomizer
+           produces should round-trip through Phase 4 cleanly.
+           No changes to test_full_pipeline.py expected.
+
+       (4) GUI smoke verification (USER STEP).  Before declaring
+           DONE, AI runs the new flag in a single
+           `run_boxels --scene <new>` invocation, captures the
+           Phase 1/4 logs and the spawn count, and posts the
+           output to the user.  User runs the same command on
+           their end at least 2-3 times, confirms the count
+           varies between runs and that each run completes
+           through to a planner call (no silent aborts).  AI
+           waits for explicit user OK before committing the
+           [DONE 2026-05-XX] entry.
+
+       (5) Optional follow-up: add a new eval_runner matrix
+           preset (e.g. "random") that uses the randomizer
+           instead of fixed counts.  Bundle in same commit if
+           the surface change is small; defer to a follow-up
+           commit otherwise.
+
+Care:  WORKFLOW (per user direction 2026-05-10):
+
+       This issue is explicitly framed as: AI implements, USER
+       tests the output via a real GUI run, AI waits for the
+       user's response before declaring the issue DONE.  Do NOT
+       self-mark this issue [DONE] based on a `--no-gui` smoke
+       run from the AI's side alone — the failure mode is
+       exactly the kind of "looks fine in headless, looks weird
+       in GUI" drift that benefits from human verification.
+
+       Concretely:
+       (i)   AI writes the implementation, runs `python -c
+             "import boxel_env; ..."` import-smoke, and runs ONE
+             headless invocation to confirm Phase 1/4 logs look
+             sensible.
+       (ii)  AI posts the diff summary + the headless-run logs
+             to the user as part of the implementation reply.
+             AI does NOT push or commit yet.
+       (iii) User runs `run_boxels --scene <new-preset>` (or
+             the equivalent new flag) 2-3 times in the GUI,
+             confirms scenes differ structurally between runs.
+       (iv)  User responds with "looks good" / "fix X" / etc.
+       (v)   AI either commits + adds [DONE] entry (on user OK)
+             or iterates (on user feedback).
+
+       This explicit hand-off is preserved in this Care block
+       so future audit slim passes don't lose the workflow
+       expectation.  Other audit issues (e.g. #67 single-commit
+       fix on AI direction) are NOT bound to this workflow —
+       this is a per-issue user request.
+
+Related: #29 [archived] — hidden-target placement raycast
+              verification.  The randomizer must call this
+              guarantee on every sampled count; do not bypass.
+         #67 [DONE 2026-05-10] — Phase 4 camera-ray occlusion
+              fix.  The randomizer benefits from the post-#67
+              clean Phase 4 path and should not need any
+              test_full_pipeline.py change.
+         #9 [DONE 2026-05-08] — eval runner.  Optional follow-up
+              matrix preset using the randomizer; out of scope
+              for the primary commit.
+         #59 — scaled-up find-and-stack with N hidden targets
+              (very low priority).  The randomizer is a
+              prerequisite for any "random N targets, all
+              hidden" find-and-tray-stack scaling demo, but
+              implementing #59 itself stays deferred.
+
+
+
+
+================================================================================
+#70. RANDOM-PAIRS SCENE — UNREACHABLE PLACEMENTS HANG OBJECTS IN AIR
+================================================================================
+Status:   OPEN.  Raised 2026-05-12 by user after GUI run on a
+          random-pairs scene where an occluder/target spawned far
+          from the Panda base.  The arm stretched to a borderline-
+          reachable IK solution; on lift, the grasp constraint
+          anchored the cube in mid-air (visible "hung object"
+          artefact in the GUI screenshot the user attached to
+          the request).
+Priority: TIER 0 — top priority per user direction 2026-05-12.
+          Promotes ahead of the previously-empty TIER 0 slot
+          (since #68 [DONE 2026-05-10 (later)]).  Blocks
+          qualitative use of --scene random-pairs in any thesis
+          figure / video demo and silently inflates holding /
+          find-and-tray-stack success on borderline cells (the
+          plan "succeeds" with a hung cube).
+Where:    Root cause:
+            boxel_env.py:271-341 (scalability_scene) returns a
+              SceneConfig with default constrain_to_reach=False
+              (line 336 — no kwarg passed).  Compare stack_scene
+              (boxel_env.py:263-268) which explicitly sets
+              constrain_to_reach=True.
+            boxel_env.py:344-380 (random_pairs_scene) inherits
+              this by delegating to scalability_scene unchanged.
+          Placement layer:
+            boxel_env.py:818-885 (_random_xy_positions) samples
+              from _TABLE_PLACE_X_RANGE = (-0.20, 0.60) and
+              _TABLE_PLACE_Y_RANGE = (-0.50, 0.50) when
+              constrain_to_reach=False (lines 847-848).  The
+              reach-disk filter at line 868 is dead code on this
+              path.
+            boxel_env.py:967+ (_hidden_xy_positions) anchors
+              hidden targets to occluder XYs and inherits the
+              same wide bounds via lines 1032-1033.  If the
+              occluder lands far, the hidden target lands far
+              too.
+          Constants involved:
+            _PANDA_REACH_RADIUS = 0.65          (line 794)
+            _SAFE_TABLE_X_RANGE = (-0.1, 0.70)  (line 800)
+            _SAFE_TABLE_Y_RANGE = (-0.40, 0.40) (line 801)
+            _TABLE_PLACE_X_RANGE = (-0.20, 0.60) (line 815)
+            _TABLE_PLACE_Y_RANGE = (-0.50, 0.50) (line 816)
+            Geometry: with base at (-0.4, 0.0) and reach 0.65 m,
+            the reachable x ceiling is -0.4 + sqrt(0.65^2 - y^2)
+            = 0.25 at y=0, 0.18 at y=±0.2, 0.11 at y=±0.4.
+            The placement window's x range goes to 0.50 (line
+            815) — i.e. ~half the window is outside the reach
+            disk for typical y.  This is not a corner-case
+            defect: every multi-object spawn is expected to
+            land at least one cube outside reach, and user
+            GUI runs confirm "almost all" of a 5-cube scene
+            land outside reach in practice.
+Depends:  None.  Independent of #50/#62 (planner perf), #66 Plan C
+          (TAMPURA-style placement), and #65 (boxel -> hanixel
+          rename).  Lands directly on main.
+
+What:  The random-pairs randomizer (#68 [DONE 2026-05-10 (later)])
+       can spawn occluders, visible targets, and (transitively)
+       hidden targets outside the Panda's reach disk.  Concretely:
+
+       (1) scalability_scene constructs its SceneConfig without
+           constrain_to_reach=True.  random_pairs_scene reuses
+           that config unchanged.
+       (2) _create_objects -> _random_xy_positions samples in
+           the WIDE _TABLE_PLACE_* bounds, not the SAFE_TABLE_*
+           + reach-disk path.
+       (3) Pick IK on the spawned object still finds a stretched
+           solution because the robot has a few extra cm of
+           reach beyond _PANDA_REACH_RADIUS (the constant is a
+           comfortable-reach disk, not a hard kinematic limit).
+       (4) execute_pick succeeds, the grasp constraint binds,
+           but the post-pick lift cannot satisfy both "keep the
+           cube at grasp pose" and "respect joint limits" — the
+           constraint takes priority, leaving the cube floating
+           where the end-effector last reached and the arm in
+           an awkward fully-extended stance.  In the GUI this
+           reads as "object hung in the air."
+
+       This is functionally identical in spirit to audit #36
+       (post-action lift workaround for shotty motion planning,
+       supervisor: "not cheating, a workaround"), but the
+       failure mode here is upstream: the scene generator
+       shouldn't be producing borderline-reachable spawns in
+       the first place.  #36 is the safety net; #70 closes the
+       hole.
+
+Fix:   Plumb constrain_to_reach into random-pairs at scene
+       construction time so every spawned object sits inside
+       _SAFE_TABLE_* AND inside the 0.65 m reach disk.
+
+       Two implementation options (AI picks one and justifies
+       inline in the commit message; user may direct otherwise):
+
+       (A) Targeted fix — flip random_pairs_scene only.
+           random_pairs_scene wraps the SceneConfig returned
+           by scalability_scene and overrides
+           constrain_to_reach=True (one-line dataclasses.replace
+           or in-place mutation).  No change to scalability_scene
+           itself.
+           Pros: zero risk to existing scalability matrix cells
+                 (eval_runner currently invokes scalability_scene
+                 directly via --scene scalability with explicit
+                 counts — those cells have been validated as
+                 reachable empirically for occ<=4 / tgt<=5).
+                 Tightest scope.
+           Cons: scalability_scene continues to silently allow
+                 the same regression if called with larger counts;
+                 the scalability matrix could hit this in the
+                 future when n_occluders or n_targets scales.
+
+       (B) Wider fix — make scalability_scene reach-bound by
+           default.
+           scalability_scene gets constrain_to_reach=True hard-
+           wired into its SceneConfig return; random_pairs_scene
+           inherits via the existing delegation.
+           Pros: closes the latent #70 in the scalability matrix
+                 too.  Removes the silent-fail mode entirely.
+           Cons: re-runs the existing SCALABILITY_MATRIX cells
+                 under tighter bounds — could shift placements
+                 enough to invalidate already-recorded seeds.
+                 Needs a sweep regression check before merging.
+
+       AI default recommendation: (A).  The eval matrix has
+       been measured under the current wide bounds; the
+       qualitative defect is only observed with random-pairs;
+       the targeted fix isolates the regression from the
+       existing evaluation surface.  If the user prefers (B),
+       bundle a fresh SCALABILITY_MATRIX smoke regression in
+       the same commit.
+
+       Hardening (cheap, on either path):
+       (i)  After spawn, in _create_objects / _create_targets,
+            assert max(|xy - robot_base|) <= _PANDA_REACH_RADIUS
+            for every pickable.  Raise a clear placement error
+            rather than letting it surface as a hung-cube in
+            the GUI.  Keep the existing 400-attempt rejection
+            budget; on exhaustion, raise so the retry layer in
+            test_full_pipeline.main() re-seeds (mirrors the
+            audit #29 hidden-target post-spawn check).
+       (ii) Optional: tighten _TABLE_PLACE_*_RANGE to match
+            _SAFE_TABLE_*_RANGE for the random-pairs path.
+            Skip if the assert in (i) is enough.
+
+Care:  Verification protocol:
+       (i)   AI implements either (A) or (B), runs ONE headless
+             `--scene random-pairs --seed 0/1/2` to confirm no
+             spawn exceeds reach.
+       (ii)  AI captures spawn XY logs + max-reach delta and
+             posts to user.
+       (iii) User runs `run_boxels --scene random-pairs` 2-3
+             times in GUI, confirms no object hangs in air
+             after pick, no arm-stretch artefact.
+       (iv)  Commit + [DONE 2026-05-XX] on user OK.
+
+       This issue inherits the AI-implements-USER-verifies
+       workflow from #68 (per-issue user request, not a global
+       policy).
+
+Related: #68 [DONE 2026-05-10 (later)] — random-pairs scene
+              generator.  This is the post-merge defect report
+              against that feature.
+         #29 [archived] — hidden-target raycast verification.
+              Provides the model for the post-spawn assert in
+              hardening (i).
+         #36 — post-action lift workaround.  Downstream safety
+              net for the same class of "borderline IK +
+              constraint" defect; #70 closes the upstream hole.
+         #49 [archived] — tray entity (find-and-tray-stack).
+              The find-and-tray-stack goal mode exposes this
+              defect more often because both the source cube
+              and the tray must be reachable.
+
