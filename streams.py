@@ -349,24 +349,42 @@ class BoxelStreams:
 
     def test_boxel_fits(self, obj_id: str, boxel_id: str) -> bool:
         """
-        Whether a free-space boxel is large enough to contain an object.
+        Whether a boxel is large enough to contain an object.
+
+        Used for two preconditions (audit #62):
+          - :action place — destination free-space boxel must contain ?o.
+          - :action sense — shadow region must be large enough to hide ?o.
 
         Compares axis-aligned extents (max_corner - min_corner) of both
-        boxels.  Returns True iff the free boxel's extent >= the object
-        boxel's extent on all three axes.
+        boxels.  Returns True iff the dest extent >= the obj extent on
+        all three axes.
+
+        Pre-sense targets lack OBJECT registry boxels; falls back to a
+        PyBullet AABB read on the plan-client mirror (same pattern as
+        compute_stack_kin_solution's held-cube fallback, audit #55).
 
         Args:
-            obj_id: Boxel ID of the object being placed
-            boxel_id: Boxel ID of the candidate free-space destination
+            obj_id: Boxel ID of the object being placed / sensed for
+            boxel_id: Boxel ID of the candidate destination / region
 
         Returns:
-            True if the free boxel can contain the object, False otherwise
+            True if the boxel can contain the object, False otherwise
         """
-        obj_boxel = self.registry.get_boxel(obj_id)
         dest_boxel = self.registry.get_boxel(boxel_id)
-        if obj_boxel is None or dest_boxel is None:
+        if dest_boxel is None:
             return False
-        obj_extents = obj_boxel.max_corner - obj_boxel.min_corner
+        obj_boxel = self.registry.get_boxel(obj_id)
+        if obj_boxel is not None:
+            obj_extents = obj_boxel.max_corner - obj_boxel.min_corner
+        else:
+            body_id = self._resolve_body_id(obj_id)
+            if body_id is None:
+                return False
+            try:
+                mn, mx = p.getAABB(body_id, physicsClientId=self.physics_client)
+            except Exception:
+                return False
+            obj_extents = np.array(mx) - np.array(mn)
         dest_extents = dest_boxel.max_corner - dest_boxel.min_corner
         return bool(np.all(dest_extents >= obj_extents))
 
