@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #72, #73, #75, #76                                       #
+#  OPEN ISSUES — #63, #73, #75, #76                                            #
 #                                                                              #
 ################################################################################
 
@@ -251,6 +251,20 @@ Closed / relocated since last summary:
        still_blocked).  Closes the OBJECT-side staleness gap left by
        pick/place/stack/settle; SHADOW recomputation deliberately
        skipped (accepted thesis gap per user scope cut).
+  #72 [DONE 2026-05-12 (later)] — commit 6e3e8dd: option C two-
+       slab carve.  shadow_calculator.calculate_shadow_boxel
+       splits each shadow along dom_axis at the midpoint into a
+       near slab clamped to the occluder's perpendicular footprint
+       (non-Z axis only) and a far slab with full hit-point
+       lateral range.  boxel_env.generate_boxels suffixes shadow
+       IDs with __NN when more than one slab exists so the
+       registry's id-keyed dict doesn't overwrite earlier slabs
+       (also fixes a latent collision in the existing _subtract_-
+       aabb multi-fragment path).  Closes the seed-779694423 user-
+       visible defect where shadow wireframes extended ~7-10 cm
+       past occluders on the camera-facing side.  GUI verification
+       on the same seed deferred to user; smart_filter regex
+       (shadow_of_\w+) still matches the suffixed IDs.
 
 ================================================================================
 #63. README + WIKI FINAL DOC SWEEP — POST-EVAL FREEZE-AND-WRITE
@@ -272,15 +286,17 @@ Where:    README.md (project root, currently 29 lines — quick-start
           and_Streams, Scene_Environment, Spatial_Reasoning.
 Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
           results drive Known_Issues_and_Roadmap + Design_Decisions
-          + the README story.  Any other open issue (#72, #73,
-          #75, #76) that lands between now and submission
-          extends the diff this sweep has to absorb.  Gate list
-          refreshed 2026-05-12 triage: dropped #50/#57/#59/#61/#65
+          + the README story.  Any other open issue (#73, #75,
+          #76) that lands between now and submission extends the
+          diff this sweep has to absorb.  Gate list refreshed
+          2026-05-12 triage: dropped #50/#57/#59/#61/#65
           (deferred) and #66 (relocated to TAMPURA_PLAN.md).
-          #62/#69/#70/#71 closed 2026-05-12 so they no longer extend
-          this sweep (#70 was REOPENED then CLOSED again same day
-          on user verification; see #70 body; #71 closed 2026-05-12
-          (later) — handle_sense_action refresh hook landed).
+          #62/#69/#70/#71/#72 closed 2026-05-12 so they no longer
+          extend this sweep (#70 was REOPENED then CLOSED again
+          same day on user verification; see #70 body; #71 closed
+          2026-05-12 (later) — handle_sense_action refresh hook
+          landed; #72 closed 2026-05-12 (later) — two-slab carve
+          + ID disambiguation landed).
           #75 + #76 added 2026-05-12 (later) — drop verification
           gap + planner-no-plan investigation (promoted to TIER 1
           on 2-of-2 recurrence).
@@ -684,12 +700,29 @@ Related: #29 [archived] — hidden-target placement raycast
 ================================================================================
 #72. SHADOW AABB CARVED ONLY ALONG DOMINANT AXIS — LATERAL OVERHANG
 ================================================================================
-Status:   OPEN.  Raised 2026-05-12 (later) by user after GUI
-          run on random-pairs scene (seed 779694423).  User
-          reported "shadow calculation is wrong" — visible as
-          shadow wireframes that extend laterally past the
-          occluder on the camera-facing side, into regions the
-          camera can directly see.
+Status:   [DONE 2026-05-12 (later)] — commit 6e3e8dd: option C
+          two-slab carve.  shadow_calculator.calculate_shadow_-
+          boxel now splits each shadow along dom_axis at the
+          midpoint into a near (cube-bordering) slab clamped to
+          the occluder's perpendicular footprint and a far slab
+          keeping the full hit-point range.  Only the non-Z
+          perpendicular axis is clamped so table-level shadow
+          cells aren't dropped (gravity axis keeps the existing
+          height overestimate).  boxel_env.generate_boxels
+          suffixes shadow IDs with __NN when shadow_parts
+          contains more than one entry so the registry's
+          id-keyed dict doesn't overwrite earlier slabs; also
+          fixes a latent same-name collision in the pre-existing
+          _subtract_aabb multi-fragment path.  smart_filter
+          regex (shadow_of_\w+) and visualization label fallback
+          unaffected.  py_compile clean.  GUI re-run on seed
+          779694423 deferred to user verification.
+Raised:   2026-05-12 (later) by user after GUI run on random-
+          pairs scene (seed 779694423).  User reported "shadow
+          calculation is wrong" — visible as shadow wireframes
+          that extend laterally past the occluder on the
+          camera-facing side, into regions the camera can
+          directly see.
 Repro:    Exact run that surfaced the defect (preserve for
           before/after comparison when the fix lands):
             python run_logger.py \
