@@ -55,7 +55,7 @@
     (motion ?q1 ?q2 ?t)           ; Trajectory ?t from ?q1 to ?q2
     (kin_solution ?o ?b ?g ?q)    ; Config ?q for picking ?o from ?b with ?g
     (config_for_boxel ?q ?b)      ; Config ?q targets boxel ?b (EE inside ?b)
-    (boxel_fits ?o ?b)            ; Free boxel ?b is large enough to contain ?o
+    (boxel_fits ?o ?b)            ; Boxel ?b is large enough to contain ?o (place dest or sense region; audit #62)
     (on_surface ?b)               ; Boxel ?b rests on a support surface (table)
     
     ;; --- Stacking (audit #30, #41, --goal stack) ---
@@ -159,6 +159,7 @@
       (Obj ?o)
       (Boxel ?region)
       (view_clear ?region)
+      (boxel_fits ?o ?region)              ; audit #62: ?o physically fits inside ?region
       (not (obj_at_boxel_KIF ?o ?region))  ; Only sense if unknown
     )
     :effect (and
