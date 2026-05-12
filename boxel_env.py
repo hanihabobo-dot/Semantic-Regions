@@ -1024,6 +1024,8 @@ class BoxelTestEnv:
         rng: np.random.RandomState,
         hidden_margin: float = 0.10,
         reserved_xys: Optional[List[List[float]]] = None,
+        constrain_to_reach: bool = False,
+        reach_radius: Optional[float] = None,
     ) -> Optional[List[List[float]]]:
         """
         Sample XY positions that are GUARANTEED hidden from the camera
@@ -1082,12 +1084,29 @@ class BoxelTestEnv:
         # mesh, not the wider voxelization workspace.  Otherwise a
         # candidate placed at x < ~-0.25 would tip off the table edge
         # when physics steps and the scene would silently lose objects.
-        x_lo, x_hi = self._TABLE_PLACE_X_RANGE
-        y_lo, y_hi = self._TABLE_PLACE_Y_RANGE
+        # audit #70 hardening (iii) — when constrain_to_reach, bound
+        # candidates to _SAFE_TABLE_* (matches _random_xy_positions'
+        # behaviour for visible-target placement) AND apply the
+        # Panda reach-disk filter at sample time inside the candidate
+        # loop below.  Without this the post-spawn _assert_xys_in_-
+        # reach catches out-of-reach hidden targets and aborts under
+        # strict --seed pinning (no --seed-retry).  Defended on
+        # 2026-05-12 (later) repro: --seed 505998003 placed target[0]
+        # at (0.225, 0.190), 3 mm beyond the reach disk, after the
+        # original (i)+(ii) fix.
+        if constrain_to_reach:
+            x_lo, x_hi = self._SAFE_TABLE_X_RANGE
+            y_lo, y_hi = self._SAFE_TABLE_Y_RANGE
+        else:
+            x_lo, x_hi = self._TABLE_PLACE_X_RANGE
+            y_lo, y_hi = self._TABLE_PLACE_Y_RANGE
         x_lo += hidden_margin
         x_hi -= hidden_margin
         y_lo += hidden_margin
         y_hi -= hidden_margin
+        bx, by = self._ROBOT_BASE_XY
+        r_max = (reach_radius if reach_radius is not None
+                 else self._PANDA_REACH_RADIUS)
 
         background_ids = set()
         for k in ("plane", "table", "robot"):
@@ -1117,11 +1136,18 @@ class BoxelTestEnv:
             target_half = max(hx, hy)
             cz = self.table_surface_height + hz
             placed = False
-            # 400 candidate attempts per hidden target — same empirical
-            # budget as _random_xy_positions; exhaustion returns None
-            # so _create_targets raises an actionable error rather than
-            # silently fall back to unconstrained placement.
-            for _ in range(400):
+            # 800 candidate attempts per hidden target — bumped from
+            # 400 on 2026-05-12 (later) when audit #70 hardening (iii)
+            # added the reach-disk filter inside the candidate loop.
+            # The added filter rejects ~10-20% more candidates near the
+            # back of the reach disk; the per-attempt success rate goes
+            # down accordingly, so the budget doubles to keep the
+            # exhaustion-rate-per-seed roughly constant for eval sweeps.
+            # On exhaustion we return None and _create_targets raises
+            # 'Could not place ...' which the seed-retry layer in
+            # test_full_pipeline.main() treats as retryable (audit #68
+            # auto-rolls under --seed-retry / seed_auto).
+            for _ in range(800):
                 idx = int(rng.randint(len(occluder_info)))
                 (ox, oy), occ_half = occluder_info[idx]
                 dx = ox - cam_x
@@ -1146,6 +1172,12 @@ class BoxelTestEnv:
                 tx = ox + ux * d + px_u * lat
                 ty = oy + uy * d + py_u * lat
                 if not (x_lo <= tx <= x_hi and y_lo <= ty <= y_hi):
+                    continue
+                # audit #70 hardening (iii) — reach-disk filter at
+                # sample time.  The post-spawn _assert_xys_in_reach
+                # remains as a safety net for caller-supplied
+                # cfg.target_positions that bypass this helper.
+                if constrain_to_reach and np.hypot(tx - bx, ty - by) > r_max:
                     continue
                 # Physical-overlap check against EVERY occluder (not
                 # just the one we biased toward — the candidate may
@@ -1231,6 +1263,7 @@ class BoxelTestEnv:
                     rng=rng,
                     hidden_margin=0.10,
                     reserved_xys=reserved_xys,
+                    constrain_to_reach=cfg.constrain_to_reach,
                 )
                 if result is None:
                     # Single-shot contract: if the raycast-verified
