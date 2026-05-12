@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #70, #71, #72, #73                                       #
+#  OPEN ISSUES — #63, #70, #71, #72, #73, #75                                  #
 #                                                                              #
 ################################################################################
 
@@ -1706,6 +1706,197 @@ Related: #50 — planner perf investigation.  Plot 2 (init-state
 
 
 ================================================================================
+#75. EXECUTE_PLACE / EXECUTE_STACK — NO POST-RELEASE VERIFICATION; GRIPPER-SNAG LEAVES OBJECT ATTACHED
+================================================================================
+Status:   OPEN.  Raised 2026-05-12 (later) by user after observing
+          the symptom in a recent --scene random-pairs --goal find-
+          and-tray-stack run: "gripper is still some times not
+          opening when it should.  so objects don't actually drop.
+          instead of trying again the robot continues and adds a new
+          object that just flows in the air."  The audit grep
+          confirmed this is not currently tracked anywhere — the
+          existing "hung object" / "floating cube" references all
+          point to #70 (a different upstream cause, spawn-time
+          unreachability, not mid-execution release failure).
+Priority: TIER 1 — correctness drift.  Silently produces invalid
+          scenes (cubes "stacked" without actually contacting; cubes
+          "placed" still attached to the EE and dragged across the
+          scene by the next move action).  Doesn't crash the
+          pipeline; the planner accepts the false-stack/false-place
+          and continues executing.  Visible in GUI as floating
+          cubes.  Promotable to TIER 0 if eval cells start showing
+          inflated success rates because false-stacks count as
+          goal-satisfied at the symbolic level.
+Where:    Action-execution release paths (no verification — these
+          are the leaks):
+            execution.py:639-650 (execute_place):
+                open_gripper(robot_id, gui)
+                if grasp_constraint_id is not None:
+                    p.removeConstraint(grasp_constraint_id)
+                for _ in range(30):
+                    p.stepSimulation()
+            execution.py:770-779 (execute_stack):
+                open_gripper(robot_id, gui)
+                p.removeConstraint(grasp_constraint_id)
+                for _ in range(60):
+                    p.stepSimulation()
+          Existing verify-and-retry helper (NOT WIRED to the
+          action paths; only used by the replan-break safety net
+          per audit #58):
+            execution.py:243-440 (release_held_object_in_place):
+              - removes the constraint exactly once
+              - opens the gripper
+              - settles
+              - verifies COM-distance (>=8 cm from EE) + speed (~0)
+              - retries with longer settle on failure (max 3)
+              Documented failure modes (execution.py:268-271 —
+              copied here so the gap is obvious):
+                * removeConstraint raises (already removed,
+                  invalid id).
+                * Fingers re-close on the object due to position-
+                  control overshoot.
+                * Object snags on a finger pad and stays at
+                  gripper height.
+Depends:  None directly.  Builds on audit #58's existing helper
+          (no API change to release_held_object_in_place — only
+          its internals).
+Effort:   <1 day — extract a shared inner helper from
+          release_held_object_in_place, call from execute_place
+          and execute_stack in place of the open-then-remove pair.
+          No new failure modes to invent; reuse the existing
+          thresholds.
+
+What:  When execute_place / execute_stack reach the release step,
+       the documented failure modes (re-close on overshoot, finger-
+       pad snag) can leave the cube attached to the gripper
+       visually even after the constraint is removed.  The current
+       code does not verify the drop:
+
+         (1) open_gripper(...) sends the open command — non-blocking,
+             no completion check.
+         (2) removeConstraint(...) drops the kinematic attachment —
+             but if the fingers are still pinching the cube, friction
+             keeps it at the EE height.
+         (3) 30-60 settle steps — not enough for a snagged object to
+             slip free under gravity (release_held_object_in_place
+             retries with 60-90 steps on attempt 2, then 90-120 on
+             attempt 3).
+         (4) The action returns a "post_place_contact" /
+             "post_stack_..." RobotConfig signalling success.
+         (5) The post-action lift (audit #36) carries the still-
+             attached cube upward.
+         (6) The next plan_motion drags the cube across the scene
+             to the next destination.
+         (7) The next pick / place / stack happens with the snagged
+             cube dangling, eventually leaving "objects flowing in
+             the air" as the user described.
+
+       The verify-and-retry semantics already exist in
+       release_held_object_in_place but were only wired into the
+       replan-break safety net by audit #58 [DONE 2026-05-08].  The
+       action-execution path was never updated to use it.  This
+       issue closes that gap.
+
+Fix:   ONE COMMIT — extract shared helper, wire to action paths.
+
+       (1) Refactor release_held_object_in_place: extract its
+           inner verify-and-retry block into a new helper, e.g.
+             _release_and_verify_drop(env, robot_id, gui,
+                                       grasp_constraint_id,
+                                       held_body_id, dropped_name,
+                                       max_attempts=3) -> bool
+           - removes the constraint exactly once
+           - opens the gripper, settles, checks COM-distance + speed
+           - retries with longer settle on failure
+           - returns True on success, False on failure-after-retries
+           release_held_object_in_place keeps its outer signature
+           (it does extra work for the replan path: registry refresh,
+           shadow_occluder_map rebuild, current_config update); it
+           delegates the release+verify inner block to the new
+           helper.
+
+       (2) execute_place (line 639-650): replace
+                open_gripper(...)
+                if grasp_constraint_id is not None:
+                    p.removeConstraint(...)
+                for _ in range(30): p.stepSimulation()
+           with a single call:
+                ok = _release_and_verify_drop(env, robot_id, gui,
+                                               grasp_constraint_id,
+                                               held_body_id,
+                                               obj_name)
+                if not ok:
+                    print(f"    ERROR: drop verification failed "
+                          f"for {obj_name} after place — aborting")
+                    return None
+           Caller replans (mirrors audit #30's IK-failure-during-
+           stack -> replan path; audit #58's held_obj kwarg keeps
+           the cube state across the replan boundary so the next
+           plan starts from (holding ?o)).
+
+       (3) execute_stack (line 770-779): same pattern.
+
+       (4) Optional lightening: the explicit
+              for _ in range(30/60): p.stepSimulation()
+           settles inside execute_place / execute_stack go away —
+           they live inside the helper now.  No semantic change;
+           the helper's first attempt uses the same step count.
+
+Care:
+       (1) Don't change the surface API of
+           release_held_object_in_place — only its internals.  The
+           replan-break call site (test_full_pipeline.py main loop,
+           via the (holding ?o) safety net per audit #58) keeps
+           working unchanged.
+       (2) The verify thresholds (>=8 cm COM-distance, near-zero
+           speed) are empirical and already tuned for the audit #58
+           safety net.  Reuse exactly; don't re-tune for the action
+           path without measurement.
+       (3) The post-action lift (audit #36) lives AFTER the release
+           in execute_place / execute_stack.  Keep it AFTER the
+           helper call — the lift is action-specific (place lifts
+           above the contact pose; stack lifts above the new tower
+           top) and shouldn't move into the generic helper.
+       (4) On failure-after-retries: the action returns None,
+           planner replans.  With audit #58 in place the next plan
+           starts from (holding ?o) and tries again.  Eval-runner
+           success counters correctly mark the original cell as a
+           failure if all retries are exhausted; the (holding ?o)
+           continuation gives the next plan a clean slate to
+           recover from.
+       (5) The new helper is also a natural call site for any
+           future drop-pose audit (e.g. "did the cube actually land
+           where the planner expected?") — but defer that until
+           the verify gate's effect on success rates is measured.
+
+Related:
+       #58 [DONE 2026-05-08; archived] — introduced
+            release_held_object_in_place for the replan-break
+            safety net.  This issue is the "wire it into the
+            action path too" follow-up that #58 explicitly did
+            NOT do.
+       #36 [DONE 2026-05-07; archived] — post-action lift
+            workaround.  The current lift quietly carries snagged
+            cubes upward; the verify gate would short-circuit
+            before the lift runs.
+       #40 [DONE 2026-05-05; archived] — physics verifier for
+            stack goals.  Operates on FINAL scene state at goal-
+            check time; doesn't catch mid-execution snags.  The
+            verify-on-release is upstream of #40's verification —
+            both layers are needed.
+       #70 [REOPENED] — different upstream cause ("hung object"
+            from unreachable pick spawn), but the visual symptom
+            in the GUI is similar.  Both produce floating cubes;
+            this issue closes the post-pick / mid-execution
+            channel, #70 closes the spawn-time channel.
+       #74 — placeholder forward-reference in #73 (investigate
+            semantic-uniform success-rate gap on random-pairs
+            find-and-tray-stack); not yet filed as its own body.
+            This issue is filed as #75 to avoid renumbering the
+            placeholder reference.
+
+
+================================================================================
 SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-12 (later))
 ================================================================================
 
@@ -1718,20 +1909,28 @@ The pre-evaluation correctness chain ended 2026-05-08 with #60 [DONE].
 Eval (#9, #10) landed 2026-05-08; #67 [DONE 2026-05-10] closed the
 silent-abort no_summary failure mode.  #68 (scene randomizer) landed
 2026-05-10 (later) via commit 63b1c64 + follow-ups (audit-state
-correction 2026-05-12).  #70 (random-pairs unreachable placements)
-fixed and user-verified 2026-05-12.  Triage pass 2026-05-12 (later)
-per user direction: deferred #50/#57/#59/#61/#65; relocated #66
-(uniform/TAMPURA baseline place) to TAMPURA_PLAN.md as the seed of
-a dedicated TAMPURA workstream (collect first, plan later); promoted
-#69 (rayTestBatch numThreads) to TIER 0 (top prio).
+correction 2026-05-12).  Triage pass 2026-05-12 (later) per user
+direction: deferred #50/#57/#59/#61/#65; relocated #66 (uniform/
+TAMPURA baseline place) to TAMPURA_PLAN.md as the seed of a
+dedicated TAMPURA workstream (collect first, plan later); promoted
+#69 (rayTestBatch numThreads) to TIER 0 (top prio).  #62 [DONE
+2026-05-12] (held-replan quick-fix), #69 [DONE 2026-05-12]
+(numThreads on all 6 rayTestBatch sites), and #70 [DONE 2026-05-12]
+all closed mid-day; #70 then [REOPENED 2026-05-12 (later)] when the
+user re-reported the symptom — the original [DONE] was a doc-state
+error (no code commit had applied the fix; commit 8d9b7ad now does).
+#75 added 2026-05-12 (later) — execute_place / execute_stack don't
+verify the gripper actually opened; the audit #58 verify-and-retry
+helper exists but was never wired to the action path.
 
 TIER 0 — TOP PRIORITY:
-  #69  PyBullet rayTestBatch — pass numThreads on the 5 existing
-       call sites (boxel_env.py x2, shadow_calculator.py,
-       execution.py x2 - 147 rays per sense action is the largest
-       single batch).  Unused upstream PyBullet feature; 1-kwarg
-       patch.  Promoted to TIER 0 per user direction 2026-05-12
-       (top prio - free CPU-side wall-clock win).
+  #70  Random-pairs scene — unreachable placements hang objects
+       in air.  REOPENED 2026-05-12 (later) — original [DONE] was
+       a doc-state error (no code commit had landed).  Commit
+       8d9b7ad now sets cfg.constrain_to_reach=True in random_-
+       pairs_scene + adds a post-spawn _assert_xys_in_reach gate
+       in _create_occluders / _create_targets.  Awaiting user GUI
+       verification per audit #70 Care (iii).
 
 TIER 1 — CORRECTNESS / HIGH-PRIO:
   #71  Refresh OBJECT boxel AABBs on every sense.  Currently
@@ -1753,22 +1952,22 @@ TIER 1 — CORRECTNESS / HIGH-PRIO:
        prerequisite.  Lands AFTER #71/#72 fixes so plots reflect
        post-fix instrumentation (user direction 2026-05-12 -
        "high prio but after fixes").
-
-TIER 2 — PERF (planner wall-clock):
-  #62  Replan-while-holding still slow after #58 - held-cube
-       replan hotspot.  Plus QUICK-FIX OPTION (user direction
-       2026-05-12): precompute static geometry classifications
-       (e.g. object_fits / shadow_big / shadow_small / compat_place
-       atoms) at _build_init time so the planner does not recompute
-       per replan/skeleton.  Lands without waiting for the broader
-       profile (which is deferred under #50).
+  #75  execute_place / execute_stack — no post-release
+       verification; gripper-snag leaves the object attached to
+       the EE and the next action drags it across the scene
+       ("objects flowing in the air", user-reported 2026-05-12
+       (later)).  Verify-and-retry helper exists in
+       release_held_object_in_place (audit #58) but was only
+       wired to the replan-break safety net.  Fix: extract
+       _release_and_verify_drop, call from execute_place and
+       execute_stack in place of the open-then-remove pair.
 
 TIER 3 — CODE QUALITY / DOC SWEEP:
   #63  README + wiki final doc sweep - gated on remaining open
-       issues (now: #62, #69, #71, #72, #73).  Explicitly the
+       issues (now: #70, #71, #72, #73, #75).  Explicitly the
        last commit before thesis submission per user 2026-05-08.
 
-Total open: 6 items (#62, #63, #69, #71, #72, #73).
+Total open: 6 items (#63, #70, #71, #72, #73, #75).
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
@@ -1780,18 +1979,40 @@ Relocated 2026-05-12:
        plan refresh.
 
 Closed since previous summary:
+  #62  [DONE 2026-05-12] - replan-while-holding QUICK-FIX OPTION
+       (commits 0816037 + ed1789e + audit amendments).  Reused
+       (boxel_fits ?o ?b) to gate :action sense; AABB fallback in
+       test_boxel_fits; widened _build_init emission to FREE_SPACE
+       union SHADOW; refined SHADOW branch with camera-raycast
+       visibility check + stable-resting-pose gate.
+  #69  [DONE 2026-05-12] - rayTestBatch numThreads=0 on all 6 call
+       sites (commits 1b63c46 + 2b6f595).  Audit body said 5 sites
+       but current code has 6 (streams.py site landed in #62 commit
+       ed1789e).  Largest wins: 147-ray sense batch + 72-ray
+       test_target_can_hide_in_shadow batch fired every replan via
+       _build_init.  Thread-safety comment added at each site.
   #68  [DONE 2026-05-10] - scene randomizer (commit 63b1c64);
        follow-ups: 4c65f0e (n-occluders flag), 060561d (headless
        probe), 2bfc1cd (eval-runner --seed-retry), c7e3243
        (cubes-only scalability).  Doc-state correction 2026-05-12.
-  #70  [DONE 2026-05-12] - random-pairs unreachable placements;
-       user-verified in GUI.
   #67  [DONE 2026-05-10] - Phase 4 hidden-target criterion swap
        (commit 4c9e4d5).
   #10  [DONE 2026-05-08 (later)] - uniform voxelization baseline
        (commit afdaadd).
   #9   [DONE 2026-05-08 (later)] - eval runner + scalability
        matrix + plots (commit e8237b6).
+
+Reopened since previous summary:
+  #70  [REOPENED 2026-05-12 (later)] - random-pairs unreachable
+       placements.  Original [DONE 2026-05-12] in triage commit
+       8b4dc74 was a doc-state error: the audit was marked done
+       without any code commit applying the fix.  User re-reported
+       symptom on seed 505998003.  Commit 8d9b7ad now applies
+       Option (A) + hardening (i): random_pairs_scene sets
+       cfg.constrain_to_reach=True before returning;
+       _assert_xys_in_reach helper called from _create_occluders /
+       _create_targets gated on constrain_to_reach.  Awaiting user
+       GUI verification.
 
 Deferred 2026-05-12 (later) -> archive/CODEBASE_AUDIT_DEFERRED.txt:
   #50  Planner perf investigation - DEFERRED per user 2026-05-12.
@@ -1814,4 +2035,5 @@ Deferred (earlier) -> archive/CODEBASE_AUDIT_DEFERRED.txt:
 Resolved/subsumed -> archive/CODEBASE_AUDIT_RESOLVED.txt:
              #1, #3, #4, #5, #7, #8, #9, #10, #11, #12, #13, #15-#22,
              #23-#36, #37-#41, #43-#46, #48-#49, #53-#56, #58, #60,
-             #67, #68, #70.
+             #67, #68 (#70 was archived 2026-05-12 then REOPENED
+             same day; see active body above).
