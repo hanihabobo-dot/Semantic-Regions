@@ -970,6 +970,16 @@ Status:   OPEN.  Raised 2026-05-12 (later) by user during eval
           introduction,approach,evaluation}.tex) and cross-
           checking against current eval_plotter.py + aggregated
           CSV columns + per-cell timing_summary.json.
+          Step 1 (logging change) landed 2026-05-12 (later) in
+          commit 9918047 — timing_summary.json now carries
+          n_object_boxels, n_shadow_boxels, n_free_space_boxels
+          (end-of-run from registry), n_init_state_facts (last
+          plan() call's _build_init length), and n_facts_by_-
+          predicate (Counter over fact[0]).  eval_runner.LIST_-
+          VALUED extended so the dict-valued breakdown lands in
+          aggregated.jsonl only, not the flat CSV.  User to
+          review the extended schema (Care block) before any
+          plot lands.  Steps 2-5 (plots) still pending.
 Priority: TIER 1 — high prio per user direction 2026-05-12,
           but lands AFTER #71 (refresh OBJECT AABBs on sense) and
           #72 (shadow lateral overhang) so the figures reflect
@@ -1687,7 +1697,12 @@ TIER 1 — CORRECTNESS / HIGH-PRIO:
   #73  Eval-chapter figures backlog - 11 plots + logging
        prerequisite.  Lands AFTER #71/#72 fixes so plots reflect
        post-fix instrumentation (user direction 2026-05-12 -
-       "high prio but after fixes").
+       "high prio but after fixes").  Step 1 logging landed
+       2026-05-12 (later) in commit 9918047 (boxel counts +
+       n_init_state_facts + per-predicate breakdown in
+       timing_summary.json; LIST_VALUED extended in eval_runner).
+       Steps 2-5 (plots) pending user schema review then
+       per-plot commits.
   #75  execute_place / execute_stack — no post-release
        verification; gripper-snag leaves the object attached to
        the EE and the next action drags it across the scene
