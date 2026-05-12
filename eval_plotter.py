@@ -43,7 +43,9 @@ def load_rows(csv_path: Path) -> List[dict]:
         reader = csv.DictReader(f)
         for r in reader:
             for k in ("n_occluders", "n_targets", "n_hidden", "seed",
-                      "plan_count"):
+                      "plan_count",
+                      "n_object_boxels", "n_shadow_boxels",
+                      "n_free_space_boxels", "n_init_state_facts"):
                 v = r.get(k)
                 if v not in (None, ""):
                     try:
@@ -96,14 +98,21 @@ def _is_default_matrix(rows: List[dict]) -> bool:
 
 
 def _is_random_pairs_matrix(rows: List[dict]) -> bool:
-    """Detect a random-pairs sweep: every row has scene='random-pairs'.
+    """Detect a random-pairs sweep — pure or mixed-scene.
 
     random_pairs_scene draws n_hidden/n_targets per seed, so n_targets
     is not a meaningful series axis here — the user-controlled axes are
     n_occluders and goal.  Plot with goal as the series instead.
+
+    Audit #73 step 1(d) widened RANDOM_PAIRS_MATRIX to a list-of-sub-
+    matrices that adds a stack-scene sub-tier for the 3rd goal.  Accept
+    a sweep whose scenes are {random-pairs} OR {random-pairs, stack};
+    reject anything else (so the default-matrix path still wins for the
+    'default' sweep's mixed scenes).
     """
     scenes = {r.get("scene") for r in rows}
-    return scenes == {"random-pairs"}
+    return ("random-pairs" in scenes
+            and not (scenes - {"random-pairs", "stack"}))
 
 
 def group_by_scene_goal_baseline(
@@ -269,6 +278,118 @@ def group_success_rate(rows: List[dict],
             continue
         out[_coerce_series(s)][x].append(1.0 if r.get("success") else 0.0)
     return out
+
+
+def group_boxel_counts(rows: List[dict],
+                       goal: Optional[str] = None
+                       ) -> Dict[str, Dict[int, Dict[str, List[int]]]]:
+    """``{baseline: {n_occluders: {type_key: [samples]}}}``.
+
+    Audit #73 TIER A plot 1 data prep.  Successful runs only — stale-
+    registry geometry on failed runs would skew the compactness story.
+    ``type_key`` ∈ {"object", "shadow", "free_space"}.
+    """
+    out: Dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    type_cols = {
+        "object":     "n_object_boxels",
+        "shadow":     "n_shadow_boxels",
+        "free_space": "n_free_space_boxels",
+    }
+    for r in rows:
+        if goal is not None and r.get("goal") != goal:
+            continue
+        if not r.get("success"):
+            continue
+        try:
+            x = int(r["n_occluders"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        baseline = r.get("baseline") or "semantic"
+        for k, col in type_cols.items():
+            v = r.get(col)
+            if v in (None, ""):
+                continue
+            try:
+                out[baseline][x][k].append(int(v))
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def plot_boxel_count_breakdown(
+    grouped: Dict[str, Dict[int, Dict[str, List[int]]]],
+    title: str,
+    out_path: Path,
+) -> Optional[Path]:
+    """Stacked bars OBJECT / SHADOW / FREE_SPACE by n_occluders;
+    semantic and uniform shown side-by-side per X position.
+
+    Audit #73 TIER A plot 1 — the compactness pillar's headline figure.
+    Uniform's bar grows with n_occluders × workspace_vol / cell_size^3;
+    semantic's grows linearly with (OBJECT + SHADOW) counts.
+    """
+    if not HAVE_MPL:
+        print(f"\n=== {title} (matplotlib not available) ===")
+        for baseline in sorted(grouped):
+            for x in sorted(grouped[baseline]):
+                parts = grouped[baseline][x]
+                summary = ", ".join(
+                    f"{k}={mean(parts[k]):.1f}" if parts.get(k) else f"{k}=-"
+                    for k in ("object", "shadow", "free_space"))
+                print(f"  {baseline}/n_occluders={x}: {summary}")
+        return None
+
+    baselines = sorted(grouped.keys())
+    xs_all = sorted({x for b in baselines for x in grouped[b]})
+    if not xs_all:
+        print(f"[plotter] no data for {title}")
+        return None
+    n_baselines = max(len(baselines), 1)
+    bar_w = 0.8 / n_baselines
+    type_keys = ["object", "shadow", "free_space"]
+    type_colors = {"object": "#1f77b4",
+                   "shadow": "#ff7f0e",
+                   "free_space": "#2ca02c"}
+    type_labels = {"object": "OBJECT",
+                   "shadow": "SHADOW",
+                   "free_space": "FREE_SPACE"}
+
+    fig, ax = plt.subplots(figsize=(max(6, 1.8 * len(xs_all)), 5))
+    for i, baseline in enumerate(baselines):
+        offsets = [x + (i - (n_baselines - 1) / 2) * bar_w for x in xs_all]
+        bottoms = [0.0] * len(xs_all)
+        for tk in type_keys:
+            means = []
+            for x in xs_all:
+                samples = grouped[baseline].get(x, {}).get(tk, [])
+                means.append(mean(samples) if samples else 0.0)
+            ax.bar(offsets, means, bar_w, bottom=bottoms,
+                   color=type_colors[tk],
+                   alpha=1.0 if baseline == "semantic" else 0.55,
+                   edgecolor="black", linewidth=0.5)
+            bottoms = [b + m for b, m in zip(bottoms, means)]
+
+    ax.set_xlabel("n_occluders")
+    ax.set_ylabel("boxel count (mean over seeds, success-only)")
+    ax.set_title(title)
+    ax.set_xticks(xs_all)
+    ax.grid(True, axis="y", alpha=0.3)
+    from matplotlib.patches import Patch
+    handles = [Patch(facecolor=type_colors[tk], label=type_labels[tk])
+               for tk in type_keys]
+    if len(baselines) > 1:
+        handles += [
+            Patch(facecolor="lightgrey", edgecolor="black",
+                  label="semantic (solid)"),
+            Patch(facecolor="lightgrey", edgecolor="black",
+                  alpha=0.55, label="uniform (faded)"),
+        ]
+    ax.legend(handles=handles, loc="best")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
 
 
 def _print_text_table(grouped, title: str) -> None:
@@ -465,6 +586,16 @@ def main(argv=None) -> int:
             series_label=series_label,
             main_label_suffix=main_label_suffix,
             baseline_label_suffix=baseline_label_suffix,
+        )
+        # Audit #73 TIER A plot 1: boxel-count breakdown (OBJECT /
+        # SHADOW / FREE_SPACE stacked, semantic-vs-uniform side-by-
+        # side).  Compactness pillar's headline figure.  No-op on
+        # pre-9918047 CSVs (the new columns are missing; the helper
+        # prints '[plotter] no data ...' and skips the figure).
+        plot_boxel_count_breakdown(
+            group_boxel_counts(g_rows + (g_baseline or []), goal=goal),
+            title=f"Boxel count breakdown vs n_occluders{title_suffix}",
+            out_path=out_dir / f"boxel_count_breakdown{suffix}.png",
         )
     return 0
 
