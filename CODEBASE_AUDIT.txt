@@ -858,12 +858,31 @@ Status:   [REOPENED 2026-05-12 (later)] — original [DONE 2026-05-12]
           0.661 m from robot base, just 1.1 cm beyond the 0.65 m
           reach disk.  Post-refinement: seed_auto's 10-retry
           budget covers the assert as a retryable error.
-          Awaiting user GUI verification per Care (iii) — re-run
-          on --seed 505998003 should now pass cleanly; unseeded
-          random-pairs runs may print '[retry N/10] placement
-          failed (audit #70: ...)' a small number of times before
-          settling on a clean seed.  Will mark [DONE 2026-05-12
-          (later, again)] on user OK.
+          Verification 2026-05-12 (later, again) — user re-ran
+          --seed 505998003 (strict pinning, no --seed-retry); the
+          assert correctly fired on target[0] at (0.225, 0.190) =
+          0.653 m (3 mm beyond reach disk).  Hidden-target
+          placement was the culprit — _hidden_xy_positions was
+          still reach-disk-unaware (hardening (iii) deferred).
+          User direction: land (iii) so eval can't crash on any
+          seed.  Refinement commit b48c667 plumbs constrain_to_-
+          reach + reach_radius into _hidden_xy_positions; bounds
+          switch to _SAFE_TABLE_* and a disk filter runs inside
+          the candidate loop.  Per-target candidate budget bumped
+          400 -> 800 to keep the per-seed exhaustion rate roughly
+          constant under the new ~10-20% extra rejection rate.
+          Post-spawn _assert_xys_in_reach kept as a safety net
+          for caller-supplied cfg.target_positions that bypass
+          the helper.  Side-finding from the unseeded test run
+          (seed=1905790753): scene built reach-clean, no #70
+          assert, but planner returned solved=False / 'No plan
+          found!' at complexity 3 — separate concern, NOT a
+          regression of #70 (a no-plan-found path is a planner
+          failure mode, not a hung-cube failure mode); flag as
+          its own issue if it recurs across multiple eval seeds.
+          Awaiting user re-verification on --seed 505998003 with
+          (iii) in place.  Will mark [DONE 2026-05-12 (later,
+          again)] on user OK.
 Priority: TIER 0 — top priority per user direction 2026-05-12.
           Promoted (originally) ahead of the previously-empty TIER 0
           slot (since #68 [DONE 2026-05-10 (later)]).  Blocks
