@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #50, #57, #59, #61, #62, #63, #65, #66                         #
+#  OPEN ISSUES — #63, #69, #71, #72, #73                                        #
 #                                                                              #
 ################################################################################
 
@@ -185,11 +185,6 @@ Parallel / non-blocking:
        and add Claude-Code-style thinking-animation affordance during
        long planner.plan() / RRT / stream-sample calls.  UX polish on
        the existing smart_filter pipeline; no correctness impact.
-  #62  replan-while-holding still slow after #58 — sub-hotspot of #50
-       localised to the held-cube replan path.  User-flagged
-       2026-05-08 immediately after #58 landed: "its faster but
-       still slow."  Profile first; close as MERGED INTO #50 if the
-       dominant cost turns out to be branch-agnostic.
   #65  rename: boxel -> hanixel (HANI = Heterogeneous Axis-aligned
        Named Interval; XEL = voxel-suffix).  User decision
        2026-05-09.  Mechanical case-preserved sweep across *.py,
@@ -228,10 +223,27 @@ Closed / relocated since last summary:
        threaded through planner.plan().  Archived 2026-05-08 (later) slim.
   #60 [DONE 2026-05-08] — post-action lift now reaches plan_motion (Option
        B: sync + replan).  Archived 2026-05-08 (later) slim.
+  #62 [DONE 2026-05-12] — quick-fix (4) landed in commit 0816037.
+       Reused (boxel_fits ?o ?b) to gate :action sense; AABB fallback
+       in test_boxel_fits handles pre-sense targets; widened
+       _build_init emission to FREE_SPACE ∪ SHADOW.  Profile-first
+       path (1-3) remains gated on #50 (deferred).
 
 ================================================================================
-#62. REPLAN-WHILE-HOLDING STILL SLOW AFTER #58 — HELD-CUBE REPLAN HOTSPOT
+#62. REPLAN-WHILE-HOLDING STILL SLOW AFTER #58 — HELD-CUBE REPLAN HOTSPOT  [DONE 2026-05-12]
 ================================================================================
+Status:   [DONE 2026-05-12] — quick-fix option (4) landed in commit
+          0816037.  Reused (boxel_fits ?o ?b) to gate :action sense:
+          extended test_boxel_fits with a PyBullet-AABB fallback for
+          pre-sense targets (mirrors compute_stack_kin_solution's
+          held-cube fallback, audit #55), widened _build_init's
+          emission loop to include SHADOW boxels alongside FREE_SPACE,
+          and added (boxel_fits ?o ?region) to :action sense's
+          precondition.  Prunes physically-impossible
+          (target × shadow) sense candidates at grounding time without
+          a domain-new predicate.  Profile-first path (1-3) remains
+          gated on #50 (deferred).
+
 Priority: TIER 2 — Per-replan wall-clock cost on the held branch;
           user-flagged 2026-05-08 immediately after #58 landed.  Sub-
           hotspot of #50 (planner perf investigation) localised to the
