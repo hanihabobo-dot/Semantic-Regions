@@ -223,26 +223,44 @@ Closed / relocated since last summary:
        threaded through planner.plan().  Archived 2026-05-08 (later) slim.
   #60 [DONE 2026-05-08] — post-action lift now reaches plan_motion (Option
        B: sync + replan).  Archived 2026-05-08 (later) slim.
-  #62 [DONE 2026-05-12] — quick-fix (4) landed in commit 0816037.
-       Reused (boxel_fits ?o ?b) to gate :action sense; AABB fallback
-       in test_boxel_fits handles pre-sense targets; widened
-       _build_init emission to FREE_SPACE ∪ SHADOW.  Profile-first
-       path (1-3) remains gated on #50 (deferred).
+  #62 [DONE 2026-05-12] — quick-fix (4) landed in two commits.
+       0816037: reused (boxel_fits ?o ?b) to gate :action sense; AABB
+       fallback in test_boxel_fits handles pre-sense targets; widened
+       _build_init emission to FREE_SPACE ∪ SHADOW.
+       ed1789e: refined SHADOW branch with a camera-raycast visibility
+       check + stable-resting-pose gate (rejects lifted shadow
+       fragments).  Addresses audit #72 lateral overhang directly.
+       Profile-first path (1-3) remains gated on #50 (deferred).
 
 ================================================================================
 #62. REPLAN-WHILE-HOLDING STILL SLOW AFTER #58 — HELD-CUBE REPLAN HOTSPOT  [DONE 2026-05-12]
 ================================================================================
-Status:   [DONE 2026-05-12] — quick-fix option (4) landed in commit
-          0816037.  Reused (boxel_fits ?o ?b) to gate :action sense:
-          extended test_boxel_fits with a PyBullet-AABB fallback for
-          pre-sense targets (mirrors compute_stack_kin_solution's
-          held-cube fallback, audit #55), widened _build_init's
-          emission loop to include SHADOW boxels alongside FREE_SPACE,
-          and added (boxel_fits ?o ?region) to :action sense's
-          precondition.  Prunes physically-impossible
+Status:   [DONE 2026-05-12] — quick-fix option (4) landed in two
+          commits.
+          Commit 0816037 reused (boxel_fits ?o ?b) to gate :action
+          sense: extended test_boxel_fits with a PyBullet-AABB
+          fallback for pre-sense targets (mirrors compute_stack_kin_-
+          solution's held-cube fallback, audit #55), widened
+          _build_init's emission loop to include SHADOW boxels
+          alongside FREE_SPACE, and added (boxel_fits ?o ?region) to
+          :action sense's precondition.  Prunes physically-impossible
           (target × shadow) sense candidates at grounding time without
-          a domain-new predicate.  Profile-first path (1-3) remains
-          gated on #50 (deferred).
+          a domain-new predicate.
+          Commit ed1789e refined the SHADOW branch with a visibility
+          raycast on top of the AABB extent check.  New
+          test_target_can_hide_in_shadow casts camera→target-corner
+          rays at a 3×3 grid of candidate placements and requires all
+          8 corners occluded for at least one placement; also rejects
+          lifted shadow fragments (shadow z_min above table_z, from
+          shadow_calculator._subtract_aabb's "top of obstacle" cut)
+          because a cube has exactly one stable axis-aligned resting
+          orientation and our scenes only support table-level rests.
+          Addresses audit #72 lateral overhang directly: an AABB-only
+          filter over-emits when the shadow's lateral excess is
+          actually visible from the camera.  _build_init now splits
+          the emission loop — FREE_SPACE destinations still use
+          test_boxel_fits, SHADOW destinations use the new function.
+          Profile-first path (1-3) remains gated on #50 (deferred).
 
 Priority: TIER 2 — Per-replan wall-clock cost on the held branch;
           user-flagged 2026-05-08 immediately after #58 landed.  Sub-
