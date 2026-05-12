@@ -5,7 +5,8 @@ in the Semantic Boxels codebase that should be acknowledged and
 discussed in the thesis.  Each entry references the relevant audit
 issue or archive entry for full context.
 
-For resolved issues see `archive/CODEBASE_AUDIT_RESOLVED.txt`.
+For resolved issues see `git log --grep="Fix #N"` or `git log --grep="audit: mark #N"`
+(the resolved-audit archive was deleted 2026-05-12 (later) — see CODEBASE_AUDIT.txt header).
 For deferred issues see `archive/CODEBASE_AUDIT_DEFERRED.txt`.
 For open issues see `CODEBASE_AUDIT.txt`.
 
@@ -152,9 +153,8 @@ This is functionally safe because:
 recomputation would require re-running the camera observation
 pipeline, which is a separate future-work item.
 
-**References**: Resolved archive #4 (post-action re-boxelization /
-stale shadow partition accepted 2026-05-03,
-`archive/CODEBASE_AUDIT_RESOLVED.txt`), old #44 (accepted).
+**References**: resolved #4 (post-action re-boxelization /
+stale shadow partition accepted 2026-05-03 — see git log), old #44 (accepted).
 
 ---
 
@@ -174,8 +174,8 @@ instance of the fixed-semantic-region baseline (audit #11).
 **Stack goal planner cost is accepted, not optimised**: enabling the
 stack feature roughly doubles per-call planning time on holding-goal
 runs, traced to the `:conditional-effects` requirement on the pick
-action's `forall` clause (audit #30, debrief in
-`archive/CODEBASE_AUDIT_RESOLVED.txt`).  A "split-pick" mitigation
+action's `forall` clause (audit #30, debrief in commit log —
+`git log --grep="Fix #30"`).  A "split-pick" mitigation
 was sketched (move the `forall` into a separate `unstack` action,
 drop `:conditional-effects`) but **scrapped 2026-05-06 per supervisor
 decision** as "not interesting or relevant for the thesis."  The ~2×
@@ -193,8 +193,8 @@ regression (#30 [WONTFIX]) and symbolic-vs-physics verification gaps
 main thesis claim.
 
 **References**: `CODEBASE_AUDIT.txt` #30 [WONTFIX], #40 [DONE], #41,
-#48, #49, #50; `archive/CODEBASE_AUDIT_RESOLVED.txt` (2026-04-24 stack
-debrief).
+#48, #49, #50; commit log for the 2026-04-24 stack debrief
+(`git log --before=2026-04-25 --after=2026-04-23 --grep="stack"`).
 
 ---
 
@@ -439,12 +439,12 @@ gave-up case as a failure outcome.  In a real deployment the
 give-up would be replaced by the atom-regrounding remedy described
 above; that work is out of scope for this thesis.
 
-**References**: `archive/CODEBASE_AUDIT_RESOLVED.txt` #21 (log-only
-band-aid), `CODEBASE_AUDIT.txt` #47 [DEFERRED OUT OF SCOPE 2026-05-06]
-(real fix abandoned), `belief.py` `mark_sensed`,
-`test_full_pipeline.py` sense-handler still_blocked branch,
-`archive/CODEBASE_AUDIT_RESOLVED.txt` #78(c) (3-strike behavior
-historical context).
+**References**: resolved #21 (log-only band-aid; see
+`git log --grep="Fix #21"`), `CODEBASE_AUDIT.txt` #47 [DEFERRED
+OUT OF SCOPE 2026-05-06] (real fix abandoned), `belief.py`
+`mark_sensed`, `test_full_pipeline.py` sense-handler
+still_blocked branch, resolved #78(c) (3-strike behavior
+historical context — `git log --grep="#78"`).
 
 ---
 
