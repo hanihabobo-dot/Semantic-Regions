@@ -835,6 +835,29 @@ class ActionResult:
     reason: str = ""
 
 
+def refresh_object_aabbs(env, registry, viz=None):
+    """Refresh every OBJECT boxel's AABB from live PyBullet (audit #71).
+
+    Called at the end of each handle_sense_action outcome branch so the
+    next replan reads the registry over current geometry instead of the
+    spawn-time AABB.  Closes the OBJECT-side staleness gap left by
+    pick/place/stack/settle.  SHADOW boxels are NOT recomputed here —
+    accepted thesis gap per user-explicit scope cut; the SHADOW keyed
+    to a refreshed OBJECT may now be slightly mis-aligned with the live
+    silhouette.  Cost is ~0.1 ms for a 10-object scene.
+    """
+    for obj_boxel in registry.get_boxels_by_type(BoxelType.OBJECT):
+        obj_info = env.objects.get(obj_boxel.id)
+        if obj_info is None:
+            continue
+        aabb_min, aabb_max = p.getAABB(obj_info.object_id)
+        obj_boxel.min_corner = np.array(aabb_min)
+        obj_boxel.max_corner = np.array(aabb_max)
+        if viz is not None and viz.tracks_boxel(obj_boxel.id):
+            viz.remove_boxel_viz(obj_boxel.id)
+            viz.draw_boxel_data(obj_boxel)
+
+
 def handle_sense_action(
     *,
     action_params,
@@ -914,6 +937,7 @@ def handle_sense_action(
     if sense_outcome == "found_target":
         belief.mark_sensed(str(shadow_id), found=True)
         print(f"    *** TARGET FOUND in {shadow_id}! (ray-cast) ***")
+        refresh_object_aabbs(env, registry, viz)
         return ActionResult(continue_=True, reason="sense_found_target")
 
     if sense_outcome in ("clear_but_empty", "contains_nontarget"):
@@ -1076,6 +1100,11 @@ def handle_sense_action(
         # (and possibly new object/shadow boxels were added).
         if viz is not None:
             viz.remove_boxel_viz(sid_str)
+        # audit #71 — refresh OBJECT AABBs from live PyBullet BEFORE
+        # reboxelize so the free-space carve uses current geometry,
+        # not the spawn-time snapshot.  SHADOW boxels intentionally
+        # left stale (scope cut).
+        refresh_object_aabbs(env, registry, viz)
         reboxelize_free_space(
             registry, env, boxel_centers, viz, show_free)
 
@@ -1103,4 +1132,5 @@ def handle_sense_action(
         belief.mark_sensed(sid_str, found=False)
     else:
         print(f"    -> REPLANNING without marking shadow empty...")
+    refresh_object_aabbs(env, registry, viz)
     return ActionResult(continue_=False, reason="sense_still_blocked")
