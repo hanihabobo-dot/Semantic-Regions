@@ -169,26 +169,65 @@ class ShadowCalculator:
         
         # Subtract object from shadow
         shadow_dir = np.mean(hit_points, axis=0) - obj_center
-        dom_axis = np.argmax(np.abs(shadow_dir))
-        
+        dom_axis = int(np.argmax(np.abs(shadow_dir)))
+
         s_min = full_min.copy()
         s_max = full_max.copy()
-        
+
         if shadow_dir[dom_axis] > 0:
             s_min[dom_axis] = max(s_min[dom_axis], o_max[dom_axis])
         else:
             s_max[dom_axis] = min(s_max[dom_axis], o_min[dom_axis])
-            
-        # Initial Shadow BoxelData (ID assigned later by registry).
-        initial_shadow = BoxelData(
-            boxel_type=BoxelType.SHADOW,
-            min_corner=s_min.copy(),
-            max_corner=s_max.copy(),
-            created_by_object=obj_boxel.object_name,
-        )
-        
+
+        # --- Step 2.5: Two-slab lateral tightening (audit #72) ---
+        # Hit points spread laterally because rays from the 4 back corners
+        # diverge outward from the camera.  s_min/s_max along the perpendicular
+        # axes inherits the full hit-point spread, so the shadow AABB
+        # overhangs past the occluder's back face on the camera-facing sides
+        # — visible as wireframes extending ~7-10 cm beside the occluder in
+        # the seed 779694423 random-pairs GUI run.
+        #
+        # Fix per audit #72 option C: split the shadow along dom_axis at the
+        # midpoint.  The near slab (cube-bordering) is clamped to the
+        # OBJECT's perpendicular range so it doesn't overhang past the
+        # occluder; the far slab keeps the full hit-point range where the
+        # frustum has actually widened to that extent.  Only the non-Z
+        # perpendicular axis is clamped so table-level shadow cells aren't
+        # dropped (gravity axis keeps the existing height overestimate).
+        mid_depth = 0.5 * (s_min[dom_axis] + s_max[dom_axis])
+        lateral_axes = [a for a in range(3) if a != dom_axis and a != 2]
+
+        near_min = s_min.copy()
+        near_max = s_max.copy()
+        if shadow_dir[dom_axis] > 0:
+            near_max[dom_axis] = mid_depth
+        else:
+            near_min[dom_axis] = mid_depth
+        for pa in lateral_axes:
+            near_min[pa] = max(near_min[pa], o_min[pa])
+            near_max[pa] = min(near_max[pa], o_max[pa])
+
+        far_min = s_min.copy()
+        far_max = s_max.copy()
+        if shadow_dir[dom_axis] > 0:
+            far_min[dom_axis] = mid_depth
+        else:
+            far_max[dom_axis] = mid_depth
+
+        # Initial Shadow BoxelData(s) (IDs assigned later by registry).
+        initial_shadows: List[BoxelData] = []
+        for slab_min, slab_max in [(near_min, near_max), (far_min, far_max)]:
+            if np.any(slab_max - slab_min <= 1e-6):
+                continue
+            initial_shadows.append(BoxelData(
+                boxel_type=BoxelType.SHADOW,
+                min_corner=slab_min.copy(),
+                max_corner=slab_max.copy(),
+                created_by_object=obj_boxel.object_name,
+            ))
+
         # --- Step 3: Handle Obstacles (Splitting) ---
-        active_shadows = [initial_shadow]
+        active_shadows = initial_shadows
         
         for obstacle in obstacles:
             next_active = []
