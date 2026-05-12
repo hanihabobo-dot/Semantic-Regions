@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #71, #72, #73                                            #
+#  OPEN ISSUES — #63, #70, #71, #72, #73                                       #
 #                                                                              #
 ################################################################################
 
@@ -436,12 +436,14 @@ Where:    README.md (project root, currently 29 lines — quick-start
           and_Streams, Scene_Environment, Spatial_Reasoning.
 Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
           results drive Known_Issues_and_Roadmap + Design_Decisions
-          + the README story.  Any other open issue (#71, #72, #73)
-          that lands between now and submission extends the diff
-          this sweep has to absorb.  Gate list refreshed 2026-05-12
-          triage: dropped #50/#57/#59/#61/#65 (deferred) and #66
-          (relocated to TAMPURA_PLAN.md).  #62/#69 closed 2026-05-12
-          so they no longer extend this sweep.
+          + the README story.  Any other open issue (#70, #71, #72,
+          #73) that lands between now and submission extends the
+          diff this sweep has to absorb.  Gate list refreshed
+          2026-05-12 triage: dropped #50/#57/#59/#61/#65 (deferred)
+          and #66 (relocated to TAMPURA_PLAN.md).  #62/#69 closed
+          2026-05-12 so they no longer extend this sweep; #70
+          REOPENED 2026-05-12 (later) — original [DONE] was a doc-
+          state error and #70 is back on the gate list.
 Effort:   1-2 days (one focused pass per page).
 
 What:  CODEBASE POLICY (L823-828) already requires per-change wiki
@@ -813,6 +815,226 @@ FOR LATER
   Cross-references: #50/#62 (Python-side perf hunt — same goal,
   different layer); #69 (rayTestBatch numThreads — the realistic
   spinoff).
+
+
+================================================================================
+#70. RANDOM-PAIRS SCENE — UNREACHABLE PLACEMENTS HANG OBJECTS IN AIR  [REOPENED 2026-05-12 (later)]
+================================================================================
+Status:   [REOPENED 2026-05-12 (later)] — original [DONE 2026-05-12]
+          in triage commit 8b4dc74 was a doc-state error.  The
+          archived entry asserted "user-verified in GUI 2026-05-12"
+          and the body was relocated to archive/CODEBASE_AUDIT_-
+          RESOLVED.txt (lines 6353-6524), but NO code commit had
+          actually applied the fix — scalability_scene still
+          returned SceneConfig without constrain_to_reach=True and
+          random_pairs_scene inherited the default.  User re-reported
+          the symptom 2026-05-12 (later) on seed 505998003 (cyan_-
+          object spawned at (0.457, -0.193), 0.88 m from robot base
+          at (-0.4, 0.0) — outside the 0.65 m reach disk by ~23 cm;
+          full log at logs/run_2026-05-12_20-14-43).  Commit 8d9b7ad
+          applies Option (A) below plus hardening (i):
+          (1) random_pairs_scene now sets cfg.constrain_to_reach=True
+              before returning the SceneConfig built by scalability_-
+              scene.
+          (2) A new BoxelTestEnv._assert_xys_in_reach helper is
+              called from _create_occluders and _create_targets,
+              gated on cfg.constrain_to_reach.  Catches the edge
+              case where _hidden_xy_positions (reach-disk-unaware)
+              places a target behind an occluder that sits at the
+              back of the reach disk, AND defends caller-supplied
+              cfg.{occluder,target}_positions that bypass _random_-
+              xy_positions' filter.  RuntimeError surfaces to the
+              seed-retry layer in test_full_pipeline.main() (audit
+              #29 mechanism).
+          scalability_scene is unchanged so the existing eval
+          matrix (--scene scalability) stays on the wide _TABLE_-
+          PLACE_* window per Option (A)'s rationale.
+          Awaiting user GUI verification per Care (iii) — re-run
+          on --seed 505998003 should now either pass cleanly or
+          fail loud at the post-spawn assert (in which case we
+          plumb constrain_to_reach into _hidden_xy_positions as a
+          follow-up).  Will mark [DONE 2026-05-12 (later, again)]
+          on user OK.
+Priority: TIER 0 — top priority per user direction 2026-05-12.
+          Promoted (originally) ahead of the previously-empty TIER 0
+          slot (since #68 [DONE 2026-05-10 (later)]).  Blocks
+          qualitative use of --scene random-pairs in any thesis
+          figure / video demo and silently inflates holding /
+          find-and-tray-stack success on borderline cells (the
+          plan "succeeds" with a hung cube).
+Where:    Root cause:
+            boxel_env.py:271-341 (scalability_scene) returns a
+              SceneConfig with default constrain_to_reach=False
+              (line 336 — no kwarg passed).  Compare stack_scene
+              (boxel_env.py:263-268) which explicitly sets
+              constrain_to_reach=True.
+            boxel_env.py:344-396 (random_pairs_scene) post-fix:
+              line 394 mutates cfg.constrain_to_reach=True before
+              returning.  Pre-fix the function delegated unchanged
+              to scalability_scene.
+          Placement layer:
+            boxel_env.py:818-885 (_random_xy_positions) samples
+              from _TABLE_PLACE_X_RANGE = (-0.20, 0.60) and
+              _TABLE_PLACE_Y_RANGE = (-0.50, 0.50) when
+              constrain_to_reach=False (lines 847-848).  The
+              reach-disk filter at line 868 is dead code on this
+              path.
+            boxel_env.py:967+ (_hidden_xy_positions) anchors
+              hidden targets to occluder XYs and inherits the
+              same wide bounds via lines 1032-1033 — STILL
+              reach-disk-unaware post-fix.  Mitigated by
+              _assert_xys_in_reach at the spawn call site.
+          Hardening surface:
+            boxel_env.py:902-930 (new _assert_xys_in_reach helper).
+            boxel_env.py:1004-1005 (call in _create_occluders).
+            boxel_env.py:1271-1272 (call in _create_targets).
+          Constants involved:
+            _PANDA_REACH_RADIUS = 0.65          (line 794)
+            _SAFE_TABLE_X_RANGE = (-0.1, 0.70)  (line 800)
+            _SAFE_TABLE_Y_RANGE = (-0.40, 0.40) (line 801)
+            _TABLE_PLACE_X_RANGE = (-0.20, 0.60) (line 815)
+            _TABLE_PLACE_Y_RANGE = (-0.50, 0.50) (line 816)
+            Geometry: with base at (-0.4, 0.0) and reach 0.65 m,
+            the reachable x ceiling is -0.4 + sqrt(0.65^2 - y^2)
+            = 0.25 at y=0, 0.18 at y=±0.2, 0.11 at y=±0.4.
+            The placement window's x range goes to 0.50 (line
+            815) — i.e. ~half the window is outside the reach
+            disk for typical y.  This is not a corner-case
+            defect: every multi-object spawn is expected to
+            land at least one cube outside reach, and user
+            GUI runs confirm "almost all" of a 5-cube scene
+            land outside reach in practice.
+Depends:  None.  Independent of #50/#62 (planner perf), #66 Plan C
+          (TAMPURA-style placement), and #65 (boxel -> hanixel
+          rename).  Lands directly on main.
+
+What:  The random-pairs randomizer (#68 [DONE 2026-05-10 (later)])
+       can spawn occluders, visible targets, and (transitively)
+       hidden targets outside the Panda's reach disk.  Concretely:
+
+       (1) scalability_scene constructs its SceneConfig without
+           constrain_to_reach=True.  random_pairs_scene reuses
+           that config unchanged.
+       (2) _create_objects -> _random_xy_positions samples in
+           the WIDE _TABLE_PLACE_* bounds, not the SAFE_TABLE_*
+           + reach-disk path.
+       (3) Pick IK on the spawned object still finds a stretched
+           solution because the robot has a few extra cm of
+           reach beyond _PANDA_REACH_RADIUS (the constant is a
+           comfortable-reach disk, not a hard kinematic limit).
+       (4) execute_pick succeeds, the grasp constraint binds,
+           but the post-pick lift cannot satisfy both "keep the
+           cube at grasp pose" and "respect joint limits" — the
+           constraint takes priority, leaving the cube floating
+           where the end-effector last reached and the arm in
+           an awkward fully-extended stance.  In the GUI this
+           reads as "object hung in the air."
+
+       This is functionally identical in spirit to audit #36
+       (post-action lift workaround for shotty motion planning,
+       supervisor: "not cheating, a workaround"), but the
+       failure mode here is upstream: the scene generator
+       shouldn't be producing borderline-reachable spawns in
+       the first place.  #36 is the safety net; #70 closes the
+       hole.
+
+Fix:   Plumb constrain_to_reach into random-pairs at scene
+       construction time so every spawned object sits inside
+       _SAFE_TABLE_* AND inside the 0.65 m reach disk.
+
+       Two implementation options (AI picks one and justifies
+       inline in the commit message; user may direct otherwise):
+
+       (A) [LANDED 2026-05-12 (later), commit 8d9b7ad]
+           Targeted fix — flip random_pairs_scene only.
+           random_pairs_scene wraps the SceneConfig returned
+           by scalability_scene and overrides
+           constrain_to_reach=True (one-line in-place mutation).
+           No change to scalability_scene itself.
+           Pros: zero risk to existing scalability matrix cells
+                 (eval_runner currently invokes scalability_scene
+                 directly via --scene scalability with explicit
+                 counts — those cells have been validated as
+                 reachable empirically for occ<=4 / tgt<=5).
+                 Tightest scope.
+           Cons: scalability_scene continues to silently allow
+                 the same regression if called with larger counts;
+                 the scalability matrix could hit this in the
+                 future when n_occluders or n_targets scales.
+
+       (B) Wider fix — make scalability_scene reach-bound by
+           default.
+           scalability_scene gets constrain_to_reach=True hard-
+           wired into its SceneConfig return; random_pairs_scene
+           inherits via the existing delegation.
+           Pros: closes the latent #70 in the scalability matrix
+                 too.  Removes the silent-fail mode entirely.
+           Cons: re-runs the existing SCALABILITY_MATRIX cells
+                 under tighter bounds — could shift placements
+                 enough to invalidate already-recorded seeds.
+                 Needs a sweep regression check before merging.
+
+       AI default recommendation: (A).  The eval matrix has
+       been measured under the current wide bounds; the
+       qualitative defect is only observed with random-pairs;
+       the targeted fix isolates the regression from the
+       existing evaluation surface.  If the user prefers (B),
+       bundle a fresh SCALABILITY_MATRIX smoke regression in
+       the same commit.
+
+       Hardening (cheap, on either path):
+       (i)  [LANDED 2026-05-12 (later), commit 8d9b7ad]
+            After spawn, in _create_occluders / _create_targets,
+            assert max(|xy - robot_base|) <= _PANDA_REACH_RADIUS
+            for every pickable.  Raise a clear placement error
+            rather than letting it surface as a hung-cube in
+            the GUI.  Keep the existing 400-attempt rejection
+            budget; on exhaustion, raise so the retry layer in
+            test_full_pipeline.main() re-seeds (mirrors the
+            audit #29 hidden-target post-spawn check).
+       (ii) Optional: tighten _TABLE_PLACE_*_RANGE to match
+            _SAFE_TABLE_*_RANGE for the random-pairs path.
+            Skip if the assert in (i) is enough.
+       (iii) NOT YET LANDED — plumb constrain_to_reach into
+            _hidden_xy_positions so hidden targets behind a
+            back-of-disk occluder are reach-filtered at sample
+            time rather than caught at the post-spawn assert.
+            Defer unless the assert fires more than rarely under
+            seed-retry; current expectation is "rarely" because
+            occluders are confined to _SAFE_TABLE_* under (A).
+
+Care:  Verification protocol:
+       (i)   [DONE — AI commit 8d9b7ad implements (A) + (i)].
+       (ii)  [DONE — pre-fix log shows cyan_object at
+             (0.457, -0.193) = 0.88 m from robot base; post-fix
+             the same seed should be reach-clean per (A) +
+             assert in (i).  Captured here as the verification
+             of the failure mode.]
+       (iii) User runs `run_boxels --scene random-pairs --goal
+             find-and-tray-stack --seed 505998003` (the exact
+             repro from logs/run_2026-05-12_20-14-43) plus 2-3
+             additional unseeded random-pairs runs in GUI;
+             confirms no object hangs in air after pick, no
+             arm-stretch artefact.
+       (iv)  Commit + [DONE 2026-05-XX] on user OK.
+
+       This issue inherits the AI-implements-USER-verifies
+       workflow from #68 (per-issue user request, not a global
+       policy).
+
+Related: #68 [DONE 2026-05-10 (later)] — random-pairs scene
+              generator.  This is the post-merge defect report
+              against that feature.
+         #29 [archived] — hidden-target raycast verification.
+              Provides the model for the post-spawn assert in
+              hardening (i).
+         #36 — post-action lift workaround.  Downstream safety
+              net for the same class of "borderline IK +
+              constraint" defect; #70 closes the upstream hole.
+         #49 [archived] — tray entity (find-and-tray-stack).
+              The find-and-tray-stack goal mode exposes this
+              defect more often because both the source cube
+              and the tray must be reachable.
 
 
 ================================================================================
