@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #70, #71, #72, #73, #75, #76                             #
+#  OPEN ISSUES — #63, #71, #72, #73, #75, #76                                  #
 #                                                                              #
 ################################################################################
 
@@ -436,16 +436,17 @@ Where:    README.md (project root, currently 29 lines — quick-start
           and_Streams, Scene_Environment, Spatial_Reasoning.
 Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
           results drive Known_Issues_and_Roadmap + Design_Decisions
-          + the README story.  Any other open issue (#70, #71, #72,
+          + the README story.  Any other open issue (#71, #72,
           #73, #75, #76) that lands between now and submission
           extends the diff this sweep has to absorb.  Gate list
           refreshed 2026-05-12 triage: dropped #50/#57/#59/#61/#65
           (deferred) and #66 (relocated to TAMPURA_PLAN.md).
-          #62/#69 closed 2026-05-12 so they no longer extend this
-          sweep; #70 REOPENED 2026-05-12 (later) — original [DONE]
-          was a doc-state error and #70 is back on the gate list.
-          #75 + #76 added 2026-05-12 (later) — drop verification
-          gap + planner-no-plan investigation.
+          #62/#69/#70 closed 2026-05-12 so they no longer extend
+          this sweep (#70 was REOPENED then CLOSED again same day
+          on user verification; see #70 body).  #75 + #76 added
+          2026-05-12 (later) — drop verification gap + planner-no-
+          plan investigation (promoted to TIER 1 on 2-of-2
+          recurrence).
 Effort:   1-2 days (one focused pass per page).
 
 What:  CODEBASE POLICY (L823-828) already requires per-change wiki
@@ -820,7 +821,7 @@ FOR LATER
 
 
 ================================================================================
-#70. RANDOM-PAIRS SCENE — UNREACHABLE PLACEMENTS HANG OBJECTS IN AIR  [REOPENED 2026-05-12 (later)]
+#70. RANDOM-PAIRS SCENE — UNREACHABLE PLACEMENTS HANG OBJECTS IN AIR  [DONE 2026-05-12 (later, again)]
 ================================================================================
 Status:   [REOPENED 2026-05-12 (later)] — original [DONE 2026-05-12]
           in triage commit 8b4dc74 was a doc-state error.  The
@@ -882,9 +883,16 @@ Status:   [REOPENED 2026-05-12 (later)] — original [DONE 2026-05-12]
           regression of #70 (a no-plan-found path is a planner
           failure mode, not a hung-cube failure mode); flag as
           its own issue if it recurs across multiple eval seeds.
-          Awaiting user re-verification on --seed 505998003 with
-          (iii) in place.  Will mark [DONE 2026-05-12 (later,
-          again)] on user OK.
+          User re-verified --seed 505998003 2026-05-12 (later)
+          post commit b48c667: scene built reach-clean (no #70
+          assert), planner found plan in 2.971s (4 iterations,
+          cost 15.000), all 13 actions executed, ✓ SUCCESS — goal
+          satisfied with cyan_object stacked on tray and
+          blue_object found in shadow_of_red_object then stacked
+          on cyan_object.  Log: logs/run_2026-05-12_20-54-07/.
+          [DONE 2026-05-12 (later, again)].  Side-finding from a
+          second unseeded run (seed=1562056700) hit #76 (planner
+          no-plan-found) — separate concern, tracked under #76.
 Priority: TIER 0 — top priority per user direction 2026-05-12.
           Promoted (originally) ahead of the previously-empty TIER 0
           slot (since #68 [DONE 2026-05-10 (later)]).  Blocks
@@ -1944,16 +1952,25 @@ Status:   OPEN.  Raised 2026-05-12 (later) by user as Follow-up B
           plan-doesn't-exist verdict for this seed under the
           post-#70 tighter _SAFE_TABLE_* window, or (b) the
           adaptive search giving up early before escalating to
-          complexity 4+, is the open question.  Flagged for
-          investigation; not blocking any other issue.
-Priority: TIER 2 — correctness drift / eval surface area.
-          Doesn't crash the run (logs as exit_reason=planner_-
-          failed; eval cell counts as non-success).  Promotable to
-          TIER 1 if the failure rate climbs above ~5-10% of random-
-          pairs eval cells post-#70 hardening (iii) — at which
-          point the eval matrix's headline success-rate plot
-          becomes misleading because a non-trivial fraction of
-          cells fail at planning rather than at execution.
+          complexity 4+, is the open question.
+          Recurrence 2026-05-12 (later) on a second unseeded run
+          (seed=1562056700): scene built clean (3 occluders +
+          2 targets + tray, 34 boxels, 4 shadows, no #70 assert),
+          but planner again returned "No plan found!" at
+          complexity 3 / 0.953 s — same failure mode.  Two-of-two
+          unseeded random-pairs runs post commit b48c667 hit this;
+          failure rate clearly exceeds the 5-10% TIER-1 promotion
+          threshold.  Promoted accordingly.  Log:
+          logs/run_2026-05-12_20-55-52/.
+Priority: TIER 1 — correctness drift / eval surface area.
+          PROMOTED 2026-05-12 (later) from TIER 2 after two-of-two
+          unseeded random-pairs runs hit the failure mode.  At a
+          >50% per-seed failure rate the eval matrix's headline
+          success-rate plot is misleading — a substantial fraction
+          of SEMANTIC random-pairs cells fail at planning rather
+          than at execution, under-reporting the baseline's
+          capability.  Doesn't crash the run (logs as exit_reason=
+          planner_failed; eval cell counts as non-success).
           Promotable to TIER 0 if it correlates with specific
           occluder-density / hidden-count configurations the
           thesis claims to handle.
@@ -2144,16 +2161,15 @@ error (no code commit had applied the fix; commit 8d9b7ad now does).
 verify the gripper actually opened; the audit #58 verify-and-retry
 helper exists but was never wired to the action path.
 
-TIER 0 — TOP PRIORITY:
-  #70  Random-pairs scene — unreachable placements hang objects
-       in air.  REOPENED 2026-05-12 (later) — original [DONE] was
-       a doc-state error (no code commit had landed).  Commit
-       8d9b7ad now sets cfg.constrain_to_reach=True in random_-
-       pairs_scene + adds a post-spawn _assert_xys_in_reach gate
-       in _create_occluders / _create_targets.  Awaiting user GUI
-       verification per audit #70 Care (iii).
-
 TIER 1 — CORRECTNESS / HIGH-PRIO:
+  #76  Planner returns no plan for some reach-constrained random-
+       pairs scenes.  PROMOTED 2026-05-12 (later) from TIER 2 to
+       TIER 1: 2-of-2 unseeded random-pairs runs hit the failure
+       mode (seeds 1905790753 and 1562056700, both complexity 3
+       / under 1s).  At a >50% per-seed failure rate the eval
+       success-rate plot is misleading.  Diagnostic step 1:
+       re-run with verbose logging + pre-#70 code on the same
+       seeds to disambiguate.
   #71  Refresh OBJECT boxel AABBs on every sense.  Currently
        written once at spawn (or at discovery for nontarget
        bodies); cubes that shift between actions drift away
@@ -2183,27 +2199,12 @@ TIER 1 — CORRECTNESS / HIGH-PRIO:
        _release_and_verify_drop, call from execute_place and
        execute_stack in place of the open-then-remove pair.
 
-TIER 2 — INVESTIGATION:
-  #76  Planner returns no plan for some reach-constrained random-
-       pairs scenes.  Side-finding 2026-05-12 (later) during #70
-       reach-fix verification: seed=1905790753 scene built clean
-       (no #70 assert) but planner returned solved=False at
-       complexity 3 after 4 iterations / 0.847 s.  Whether genuine
-       "no plan exists" under the tighter _SAFE_TABLE_* window or
-       adaptive search giving up early is the open question.
-       Diagnostic step 1: re-run with verbose logging + pre-#70
-       code on same seed to disambiguate.  Doesn't crash the run
-       (logs as exit_reason=planner_failed); promotable to TIER 1
-       if failure rate climbs above ~5-10% of random-pairs eval
-       cells.
-
 TIER 3 — CODE QUALITY / DOC SWEEP:
   #63  README + wiki final doc sweep - gated on remaining open
-       issues (now: #70, #71, #72, #73, #75, #76).  Explicitly
-       the last commit before thesis submission per user
-       2026-05-08.
+       issues (now: #71, #72, #73, #75, #76).  Explicitly the
+       last commit before thesis submission per user 2026-05-08.
 
-Total open: 7 items (#63, #70, #71, #72, #73, #75, #76).
+Total open: 6 items (#63, #71, #72, #73, #75, #76).
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
@@ -2227,6 +2228,19 @@ Closed since previous summary:
        ed1789e).  Largest wins: 147-ray sense batch + 72-ray
        test_target_can_hide_in_shadow batch fired every replan via
        _build_init.  Thread-safety comment added at each site.
+  #70  [DONE 2026-05-12 (later, again)] - random-pairs unreachable
+       placements.  Originally [DONE 2026-05-12] in triage commit
+       8b4dc74 but that was a doc-state error (no code commit had
+       applied the fix); REOPENED later same day after user re-
+       reported the symptom on seed 505998003.  Full fix landed
+       across commits 8d9b7ad (Option A + hardening (i)),
+       ca6746b (seed-retry guard widen) + 2b37d9 (audit Status),
+       b48c667 (hardening (iii) - constrain_to_reach plumbed into
+       _hidden_xy_positions + 400 -> 800 budget bump) + a2b37d9
+       (audit Status).  User re-verified on --seed 505998003 with
+       ✓ SUCCESS (13 actions, goal satisfied; log run_2026-05-12_-
+       20-54-07).  Side-finding from unseeded runs hit #76 — see
+       below.
   #68  [DONE 2026-05-10] - scene randomizer (commit 63b1c64);
        follow-ups: 4c65f0e (n-occluders flag), 060561d (headless
        probe), 2bfc1cd (eval-runner --seed-retry), c7e3243
@@ -2237,18 +2251,6 @@ Closed since previous summary:
        (commit afdaadd).
   #9   [DONE 2026-05-08 (later)] - eval runner + scalability
        matrix + plots (commit e8237b6).
-
-Reopened since previous summary:
-  #70  [REOPENED 2026-05-12 (later)] - random-pairs unreachable
-       placements.  Original [DONE 2026-05-12] in triage commit
-       8b4dc74 was a doc-state error: the audit was marked done
-       without any code commit applying the fix.  User re-reported
-       symptom on seed 505998003.  Commit 8d9b7ad now applies
-       Option (A) + hardening (i): random_pairs_scene sets
-       cfg.constrain_to_reach=True before returning;
-       _assert_xys_in_reach helper called from _create_occluders /
-       _create_targets gated on constrain_to_reach.  Awaiting user
-       GUI verification.
 
 Deferred 2026-05-12 (later) -> archive/CODEBASE_AUDIT_DEFERRED.txt:
   #50  Planner perf investigation - DEFERRED per user 2026-05-12.
