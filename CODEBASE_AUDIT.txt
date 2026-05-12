@@ -230,389 +230,6 @@ Closed / relocated since last summary:
        B: sync + replan).  Archived 2026-05-08 (later) slim.
 
 ================================================================================
-#50. PLANNER PERFORMANCE INVESTIGATION — REDUNDANCY HUNT
-================================================================================
-Priority: TIER 2 — Affects every eval-run wall-clock time;
-          user-flagged 2026-05-06 ("planner is too slow").
-Where:    pddlstream_planner.py (_build_init, planner.plan, stream
-          stitching), streams.py (test/gen streams; per-call cost),
-          execution.py (between-replan re-grounding paths), and the
-          adaptive search inner loop (FastDownward grounder).
-Depends:  None (independent investigation).  Pairs naturally with
-          #9 / #12 — any wins should show up in the scalability plots.
-Effort:   1 week of focused profiling, then variable per-redundancy fix.
-
-What:  User raised at 2026-05-06 sync:
-         "Personally I think the planner is too slow and want to find
-          out ways to make it faster or at least discover and remove
-          some big redundancies."
-
-       This is broader than #30 (which targeted one specific
-       conditional-effect cost in the pick action and is now
-       [WONTFIX]).  #50 is a profiling-driven sweep — find ALL the
-       big redundancies, regardless of whether they live in the
-       grounder, the streams, or the Python init-fact construction.
-
-       Known suspects (no measurement yet — confirm with profiler
-       before fixing):
-       (a) _build_init re-emits ALL static facts every replan.  Many
-           of them (boxel_fits, semantics, geometry-derived
-           predicates) are invariant under sense / pick / place and
-           could be cached across replans of the same run.  Cf.
-           archive note "BOXEL_FITS / STATIC INIT FACTS — REBUILT
-           EACH REPLAN" — that note explained WHY the test-stream
-           variant was abandoned, but did not rule out caching the
-           Python-side computation.
-       (b) _compute_placement_view_blocks runs every _build_init at
-           O(S × 25 × F) ray-AABB tests (#34 audit).  Cache by
-           (shadow geometry, free-boxel layout) hash; invalidate only
-           when reboxelize_free_space mutates the registry.
-       (c) The placement sampler in streams.py may be re-sampling
-           geometrically equivalent poses; check if pose-level
-           dedup would help.
-       (d) `test_*` streams that fire many times per skeleton against
-           Python-side data that doesn't change between calls — fold
-           the test result into init facts and drop the stream.
-       (e) Any per-action Python loop in execute_* that scales with
-           registry size (look for O(N^2) over object/shadow lists).
-       (f) FastDownward grounder cost: how much grounded-state size
-           is inflated by predicates that have only a handful of
-           true ground atoms at runtime?  candidate for
-           negative-precondition / typing tightening.
-
-Fix:   APPROACH (no single commit — investigation first):
-       (a) Land a profiling pass: cProfile around planner.plan() and
-           around _build_init separately; aggregate over a fixed seed
-           sweep on the default scene and on scalability_scene (small
-           and large).  Output a Python-side flame graph + a
-           FastDownward translator-time / search-time / total-time
-           breakdown (the translator already prints these; capture
-           them into timing_summary.json).
-       (b) For each hotspot ≥ 10% of total time, decide:
-             - Cache (input is deterministic and stable across replans)
-             - Vectorise / numpy-ify (pure-Python ray loops, etc.)
-             - Drop / replace (dead code path or redundant fact)
-       (c) Land each redundancy fix as its own commit with a before-
-           after timing entry in the commit message + a one-line
-           note in THESIS_NOTES.md "evaluation methodology" if it
-           changes the per-call time used in the Results chapter.
-       (d) Re-run the seed sweep after each fix to make sure the
-           change does not regress success rate.
-
-Care: Do not start optimising before profiling.  The planner has many
-       plausible-looking suspects (init build, streams, grounder) and
-       only one of them is likely to dominate at any given scene size.
-       Premature optimisation will make the code harder to read for
-       little wall-clock gain.
-
-Related: #9 (experiment runner — needed to gather timing samples),
-         #12 (scalability eval — wins land here visibly),
-         #30 [WONTFIX] (the per-action conditional-effect cost is one
-              specific instance of the broader question — out of
-              scope per supervisor; revisit only if profiling shows
-              it dominates after other wins),
-         #34 (placement-view-blocks ray-AABB cost — concrete suspect),
-         FOR LATER bullets (incremental boxel recomputation, dense
-              lattice — both touch planner cost).
-
-
-================================================================================
-#57. REGISTRY SHOULD OWN CUBE GEOMETRY (REPLACE PyBullet AABB FALLBACK)
-================================================================================
-Priority: TIER 3 — Code quality.  No correctness bug — current behaviour
-          is right; just an architectural cleanup.
-Where:    streams.py compute_stack_kin_solution — currently reads
-          p.getAABB(held_body_id) when no registry boxel exists
-          (commit 8281d73, audit #55 fix).
-          boxel_data.py BoxelRegistry — add object_geometry dict.
-          test_full_pipeline.py — populate object_geometry at scene
-          init from env.objects[name].size for every cube (visible
-          AND hidden), since cube dimensions are URDF-determined and
-          unknown-position is independent of unknown-size.
-Depends:  None.
-Effort:   <0.5 day.
-
-What:  Audit #55's held-cube AABB fallback (commit 8281d73) reads
-       p.getAABB(body_id) on the plan-client to recover a hidden
-       cube's z-extent when the cube has no OBJECT-type registry
-       boxel pre-sense.  The data taken is pure geometry (size, not
-       position), so this is NOT an oracle leak — but bypassing the
-       registry for object metadata is architecturally suboptimal:
-       the registry is supposed to be the "what the planner knows"
-       boundary, and one stream now reaches around it.
-
-       The clean fix: separate KNOWN-from-URDF metadata (size, mass,
-       grasp affordances) from OBSERVABLE-via-sense state (position).
-       Cube sizes are URDF-determined and the same regardless of
-       observability — they belong in the registry from scene init.
-
-Fix:   ONE COMMIT:
-       (a) BoxelRegistry: add object_geometry: Dict[str, np.ndarray]
-           mapping object name -> half-extents (or full extents).
-       (b) test_full_pipeline.py scene-init: populate
-           registry.object_geometry from env.objects for every cube
-           (visible + hidden + tray).
-       (c) streams.compute_stack_kin_solution: replace the
-           p.getAABB(body_id) fallback branch with a registry
-           lookup; drop the PyBullet read entirely from this stream.
-       (d) (optional) compute_kin_solution: same treatment — read
-           grasp Z height from registry.object_geometry instead of
-           hardcoding.
-
-       Behaviour-preserving.  Existing successful runs (logs/run_-
-       2026-05-08_10-49-01) should produce identical timing /
-       success metrics.
-
-Related: #55 [DONE 2026-05-08; archived] — introduced the AABB
-              fallback this issue replaces.
-         #9 — eval runner; benefits from registry as the single
-              metadata source.
-
-
-================================================================================
-#59. SCALED-UP FIND-AND-STACK — N HIDDEN TARGETS, SIZE-COMPAT STACKING
-================================================================================
-Priority: TIER 3 — Very low priority (user direction 2026-05-08:
-          "very very low prio").  Demo evolution; not on the
-          critical thesis path.  Builds on #55 rather than scaling
-          DOWN to a simpler goal.
-Where:    boxel_env.py default_scene
-                          — optionally mix target sizes (e.g. 30 / 40 /
-                            50 mm) so the size-compat predicate has
-                            real work to do.  Uniform-size targets
-                            keep the predicate trivially-satisfied.
-          pddl/domain_pddlstream.pddl
-                          — add (compat_stack ?o ?on_obj) to the
-                            :action stack precondition list.
-          pddlstream_planner.py _build_init
-                          — emit (compat_stack a b) for every ordered
-                            pair where horizontal_half_extent(a) +
-                            safety_margin <= horizontal_half_extent(b).
-                            Same one-pass-per-replan pattern as
-                            boxel_fits / clear.
-          test_full_pipeline.py
-                          — extend the find-and-tray-stack branch
-                            (or add a new --goal find-and-stack-N)
-                            to accept N hidden targets and build a
-                            tower in size-decreasing order.
-          run_logger.py   — relax --n-hidden upper cap if currently
-                            limited; surface the new goal kind.
-Depends:  - #55 [DONE; archived] — find-and-tray-stack pipeline
-                                    reused as-is for the multi-cube case.
-          - FOR LATER size-compat bullet (CODEBASE_AUDIT.txt FOR
-            LATER section) — this issue absorbs option (i) of that
-            bullet (symbolic predicate path).
-Effort:   1-2 days (predicate plumbing + scene mix + smoke test).
-
-What:  #55 demonstrates 1-visible + 1-hidden tray stack.  Scale up:
-       2-3 hidden targets, all stacked physically-sensibly.
-       "Sensibly" means the planner cannot plan big-on-small towers
-       that the physics step then fails to stabilise — a (compat_stack
-       ?o ?on_obj) static predicate gates :action stack so only
-       smaller-on-larger placements are permitted.
-
-       Currently safe by setup: every find-and-tray-stack run uses
-       40 mm uniform targets (default_scene targets), so size-compat
-       is mooted in practice.  Promoting to a numbered issue captures
-       the dependency BEFORE we mix sizes; otherwise the gap surfaces
-       silently the first time a richer scene composition is tried.
-
-       User direction 2026-05-08: "find two hidden targets and stack
-       them in a phiyical sensble way. or find three and do that.
-       that would be nice. we alreday have find and stack. we dont
-       need to make it simpler."  Hence this scales UP from #55,
-       does NOT replace #55 with a simpler goal.
-
-Fix:   ONE COMMIT (or split into domain change + scene mix):
-       (a) Domain: add (compat_stack ?o ?on_obj) predicate; add to
-           :action stack precondition list.
-       (b) _build_init: precompute (compat_stack a b) for every
-           ordered pair where horizontal_half_extent(a) +
-           safety_margin <= horizontal_half_extent(b).  Source the
-           half-extents from the registry once #57 lands; until
-           then, env.objects[name].size is the fallback.
-       (c) Optional default_scene size mix: e.g. 30 / 40 / 50 mm
-           target cubes so the predicate gates real planning
-           choices, not just no-ops.  Without the mix, every (a, b)
-           pair is compat and the predicate is informational only.
-       (d) Goal builder: build_find_and_stack_goal(targets) that
-           sorts targets by descending size and chains
-           (on smaller bigger).  Tray base optional; works on any
-           support entity.
-
-       Smoke test: --goal find-and-stack-N --n-hidden 2 (or 3) on
-       default_scene with mixed sizes.  Expect plan to discover all
-       hidden cubes via sense, then stack them smallest-on-top.
-
-Related: #55 [DONE 2026-05-08; archived] — find-and-tray-stack base
-              pipeline that this issue extends.
-         #57 (open) — registry should own cube geometry; once
-              landed, half-extents come from registry.object_geometry
-              instead of env.objects[name].size.
-         #58 (open) — preserve grasp across replans; longer towers
-              fire more replans, so #58 amplifies the wins from #59.
-         #50 (open) — planner perf; (compat_stack) adds O(N²)
-              static facts but those ground once per replan, so
-              the cost should not dominate.
-         FOR LATER size-compat bullet — this issue claims option (i)
-              (symbolic predicate); option (ii) (geometric sampler
-              filter) remains a parallel future option.
-
-
-================================================================================
-#61. SMART CONSOLE FILTER — STRIP STARTUP/SHUTDOWN GARBAGE + ADD THINKING ANIMATIONS
-================================================================================
-Priority: TIER 3 — UX / code-quality polish.  No correctness impact;
-          improves the developer-watching-a-run experience.  User-flagged
-          2026-05-08: "the terminal output is still not smart enough.
-          in the begining and the end there still garbage that no one
-          cares about and it would be cute to have thinking animations
-          or stuff like that so that it really looks like claude."
-Where:    smart_filter.py — _DROP_PATTERNS (~L88-120) covers PyBullet
-          GL/thread banner + a few PDDLStream lines, but startup and
-          shutdown garbage still leaks; SmartConsoleFilter (the line-
-          buffered drop / dedupe / aggregate / transform / pass-through
-          pipeline described in the module docstring L1-26) currently
-          has no time-based "thinking" affordance during long
-          planner.plan() / RRT / stream-sample calls.
-          run_logger.py — RunLogger wires SmartConsoleFilter onto stdout
-          when verbosity='smart' (the default; see L8-14, L44-58, the
-          _LEVEL_MAP / VALID_VERBOSITIES tuple); any spinner / animation
-          channel needs to coexist with the _TeeStream stdout->log split
-          (L63-77) so the log file stays clean and complete.
-          test_full_pipeline.py — emits the run banner / phase markers
-          / timing summaries that smart-mode reformats; surrounding
-          startup imports + atexit shutdown sequence is what currently
-          leaks at the edges of the "Phase 1 ... -> SUCCESS / FAIL"
-          envelope.
-Depends:  None.  Independent of #50 (planner perf — different concern;
-          this is presentation-layer only).  No interaction with #9
-          (eval runner; batch runs would use --log-level normal or
-          quiet anyway).
-Effort:   1-2 days.  Roughly half on extending DROP / aggregation rules
-          for the residual leak categories, half on the spinner /
-          progress affordance + ANSI cursor handling.
-
-What:  smart_filter.py already implements the Claude-Code-style filter
-       pipeline (drop / dedupe / aggregate / transform / pass-through —
-       see module docstring L1-26 and run_logger.py L8-14) and
-       run_logger.py defaults verbosity='smart'.  Two gaps remain that
-       the user flagged:
-
-       (1) STARTUP / SHUTDOWN LEAK.  _DROP_PATTERNS at smart_filter.py
-           L88-120 covers PyBullet's GL banner ("GL_VENDOR", "Direct
-           GLX", "startThreads creating", etc.) and the visible
-           thread-shutdown sequence ("stopping threads", "Thread
-           TERMINATED", "destroy ... semaphore"), but garbage still
-           appears at the run's edges.  Likely culprits not currently
-           in the drop list:
-             - Python-level import warnings (deprecation, futures, etc.)
-               that hit stderr before the pipeline banner prints.
-             - PDDLStream / FastDownward subprocess startup chatter
-               that doesn't match the existing "Iteration:" / "Attempt:"
-               aggregation rules.
-             - boxel_env / numpy / PyBullet "starting / loaded /
-               connected" status lines emitted before
-               "--- Phase 1: Environment Setup ---" prints.
-             - atexit / __del__ tear-down output (stray stderr after
-               the SUCCESS / FAIL summary, thread-join tracebacks).
-           Concrete reproduction: run --goal find-and-tray-stack
-           --log-level smart on default scene; capture the lines
-           emitted BEFORE "Phase 1: Environment Setup" and AFTER the
-           timing_summary.json line — those are the leak set.
-
-       (2) NO "THINKING" ANIMATION.  Long blocking calls (planner.plan()
-           — 9-30 s typical per replan per logs/run_2026-05-08_-
-           10-49-01; RRT inside plan_motion; stream sample loops) emit
-           nothing on the console in smart mode (the per-iteration
-           output is correctly aggregated to a single summary by
-           _ITER / _ATTEMPT / _PLAN_NONE / _NO_PLAN at L128-137).
-           From the user's seat the terminal looks frozen.  Claude
-           Code's UX trick is a compact spinner + rotating verb
-           ("Thinking…", "Planning…", "Sensing…") so the user knows
-           work is happening; smart_filter has the metadata (it sees
-           the dropped per-iteration lines internally before
-           aggregating) but doesn't render an affordance.
-
-What's already done (don't redo):
-       - Drop / dedupe / aggregate / transform / pass-through pipeline
-         with ANSI styling (smart_filter._Style L58-79).
-       - PyBullet GL/thread banner drop (_DROP_PATTERNS L88-120).
-       - Per-iteration / per-attempt PDDLStream rollup
-         (_ITER / _ATTEMPT / _PLAN_NONE / _NO_PLAN, L128-137).
-       - Action narrative reformat (_EXECUTING / _MOVING_TO /
-         _PICKING / _PLACING / _STACKING / _SENSING and matching
-         "***" success markers, L144-159).
-       - Shadow-blocker repetition collapse (_SHADOW_BLOCKERS_HDR /
-         _SHADOW_BLOCKER_ROW, L140-142).
-       - File-log tee preserves raw output for post-mortem
-         (_TeeStream in run_logger.py L63-77) — any presentation-
-         layer change here must NOT touch the log file.
-
-Fix:   ONE OR TWO COMMITS — extend the existing filter, no architectural
-       change.  Suggested split: (a) leak suppression first, (b) spinner
-       affordance second so each lands as a self-contained UX win.
-
-       (a) Leak suppression.
-           - Run --log-level smart on default + scalability scenes;
-             diff console output against the
-             "==..." banner -> "Phase 1 ..." -> "SUCCESS / FAILED"
-             envelope to enumerate the exact leak lines at both edges.
-           - Add the leak set to _DROP_PATTERNS (or a new STARTUP_DROP
-             / SHUTDOWN_DROP regex if the lines are stateful — e.g.
-             "drop everything until first --- Phase line" / "drop
-             everything after the timing_summary.json line").
-           - Suppress python import warnings reaching stderr (warnings
-             module; respect log-level so verbose mode keeps them).
-           - Add a smoke test in tests/ that spawns the pipeline and
-             asserts the first console line matches "^=+$" (banner)
-             and the last matches the SUCCESS / FAIL summary, no
-             trailing tracebacks.
-
-       (b) Thinking-animation affordance.
-           - Extend SmartConsoleFilter with a TimerSpinner that renders
-             "  ⠋ Planning… 12s" on a single line (carriage-return,
-             no newline) when no narrative output has been emitted for
-             > N seconds (default ~1 s) and a long-running phase is
-             active.  Erase + reprint on each tick (\r + ANSI clear
-             EOL); finalise to a static "  ✓ Planned in 13.2s" line on
-             phase exit.
-           - Verb selected from the active phase: "Planning" during
-             planner.plan() (already detected via _PLAN_HEADER /
-             _TIMING at L135-137), "Sensing" during sense_shadow_-
-             raycasting (_SENSING already matched), "Executing"
-             otherwise.
-           - Disable when stdout is non-TTY or NO_COLOR is set
-             (mirror _supports_color L42-55).
-           - Do NOT write spinner frames to the log file — the
-             _TeeStream split (run_logger.py L63-77) has to skip the
-             carriage-return updates; only the final static line
-             ("Planned in 13.2s") goes through to the log.
-
-       Out of scope:
-           - Changing the verbosity default away from 'smart' (it's
-             already the default, see VALID_VERBOSITIES + _LEVEL_MAP
-             at run_logger.py L46-60).
-           - Adding new presentation modes ('pretty', 'json', etc.).
-           - Reformatting timing_summary.json.
-
-Smoke test: --goal holding and --goal find-and-tray-stack on default
-       scene, --log-level smart.  Expect: (i) first console line is
-       the "==..." banner, no PyBullet/PDDLStream prelude; (ii) during
-       each planner.plan() the spinner renders + updates; (iii) last
-       console line is the SUCCESS / FAIL summary, no atexit
-       traceback/teardown noise.  Raw log file under logs/run_<ts>/
-       still contains every byte of stdout for post-mortem (verify
-       byte count against a --log-level normal run on the same seed).
-
-Related: #9   — eval runner; runs in batch (likely --log-level
-              normal or quiet); spinner only fires for interactive
-              smart mode so no impact on batch logs.
-         #50  — planner perf; reduces the time the spinner spends
-              rotating but is independent of the affordance.
-
-
-================================================================================
 #62. REPLAN-WHILE-HOLDING STILL SLOW AFTER #58 — HELD-CUBE REPLAN HOTSPOT
 ================================================================================
 Priority: TIER 2 — Per-replan wall-clock cost on the held branch;
@@ -722,6 +339,24 @@ Fix:   APPROACH (no single commit — measure first):
        (3) Re-run the seed sweep after each fix to confirm success
            rate is unchanged (same gate as #50).
 
+       (4) QUICK-FIX OPTION (no profile gate; user direction
+           2026-05-12):
+           Precompute static geometry classifications as init atoms
+           at _build_init time — pick whichever framing is fastest
+           to compute and most useful to the grounder: (object_fits
+           ?o ?b), (shadow_big ?s), (shadow_small ?s), (compat_place
+           ?o ?b), or similar.  The held-cube geometry and the cell
+           geometry are both stable across replans within a run
+           (grasp transform fixed by audit #58; registry snapshot
+           unchanged between sense-driven mutations).  Emitting the
+           classification once at init lets the planner consume the
+           atoms directly instead of re-running geometry checks on
+           every candidate skeleton.  Lands WITHOUT waiting for the
+           full profiling sweep (which is deferred under #50 per
+           triage 2026-05-12); targets the held-branch redundancy
+           directly.  Backs out cleanly if a future #50 profile
+           shows the dominant cost lives elsewhere.
+
 Care: This is a sub-hotspot of #50 — if the profile shows the held
        branch's dominant cost is also the dominant cost on the
        (handempty) branch, close this as MERGED INTO #50 rather than
@@ -759,9 +394,11 @@ Where:    README.md (project root, currently 29 lines — quick-start
           and_Streams, Scene_Environment, Spatial_Reasoning.
 Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
           results drive Known_Issues_and_Roadmap + Design_Decisions
-          + the README story.  Any other open issue (#50, #57, #59,
-          #61, #62) that lands between now and submission extends
-          the diff this sweep has to absorb.
+          + the README story.  Any other open issue (#62, #69, #71,
+          #72, #73) that lands between now and submission extends
+          the diff this sweep has to absorb.  Gate list refreshed
+          2026-05-12 triage: dropped #50/#57/#59/#61/#65 (deferred)
+          and #66 (relocated to TAMPURA_PLAN.md).
 Effort:   1-2 days (one focused pass per page).
 
 What:  CODEBASE POLICY (L823-828) already requires per-change wiki
@@ -838,471 +475,17 @@ Related: All other open issues at landing time — this is the
 
 
 ================================================================================
-#65. RENAME: BOXEL -> HANIXEL — TERMINOLOGY OVERHAUL (mechanical, large-diff)
-================================================================================
-Priority: TIER 3 — Code/doc cosmetic.  No correctness, performance,
-          or behavioural impact.  Sweep of one identifier; touches
-          most source files but every change is a literal word
-          substitution.
-Where:    Sweeping rename across:
-          - Source: ~150 occurrences of `boxel`/`Boxel`/`BoxelData`
-            etc. in *.py (boxel_data.py, boxel_env.py, boxel_types.py,
-            pddlstream_planner.py, streams.py, visualization.py,
-            execution.py, uniform_grid.py, reboxelize.py,
-            cell_merger.py, free_space.py, shadow_calculator.py,
-            test_full_pipeline.py, eval_runner.py, eval_plotter.py,
-            run_logger.py, plus tests/ and any utility scripts).
-          - File names: boxel_data.py -> hanixel_data.py;
-            boxel_env.py -> hanixel_env.py; boxel_types.py ->
-            hanixel_types.py.
-          - PDDL: predicate `(Boxel ?b)` -> `(Hanixel ?b)`;
-            `(obj_at_boxel ?o ?b)` -> `(obj_at_hanixel ?o ?b)`;
-            `(boxel_fits ?o ?b)` -> `(hanixel_fits ?o ?b)`.
-            Mirror in pddl/domain_pddlstream.pddl + pddl/stream.pddl
-            + pddlstream_planner._build_init() tuple emission +
-            goal-construction code in test_full_pipeline.py.
-          - Docs: README.md, the FORWARD-LOOKING / LIVE issue
-            bodies in CODEBASE_AUDIT.txt (NOT the historical
-            changelog — keep "boxel" wording there as audit trail),
-            THESIS_NOTES.md, wiki (11 pages), in-line docstrings.
-          - Data files: boxel_data.json (artefact written by
-            BoxelRegistry.save_to_json) -> hanixel_data.json;
-            search-and-replace any references in run logs / test
-            fixtures.
-          - Repo name (Semantic_Boxels) — separate decision,
-            optional, can be left as-is.
-          - Thesis title and chapter text — out of scope here;
-            handled on the writing side.
-Depends:  None — purely mechanical.  No code logic changes.
-          However: land AFTER any in-flight branch merges or
-          rebases (audit-64-tampura-binary-grid is currently
-          open) to avoid identifier-collision merge noise across
-          every renamed identifier.
-Effort:   ~1 hour mechanical pass + ~30 min smoke run.  Single-day
-          execution.
-
-What:  "Boxel" originated as a portmanteau of box + (vo)xel —
-       fine etymologically but the team has soured on the word.
-       User raised 2026-05-09 after looking at TAMPURA's voxel-grid
-       code (Curtis et al. 2024) and reflecting on the project
-       vocabulary.
-
-       Replacement chosen 2026-05-09: HANIXEL.
-       - HANI = "Heterogeneous Axis-aligned Named Interval" —
-         each letter is a literal property of the data structure:
-           H = Heterogeneous (the semantic label can be OBJECT /
-               SHADOW / FREE_SPACE — exactly the polymorphic
-               distinguishing feature of the project)
-           A = Axis-aligned (AABB representation, true in every
-               mode: semantic octree, semantic merged, uniform
-               lattice)
-           N = Named (every entry carries a string `id` — the
-               planner's handle, e.g. `red_object`,
-               `shadow_of_red_object`, `free_011`)
-           I = Interval (rigorous geometry term: a 3-D interval
-               = AABB; defines what the thing geometrically is)
-       - XEL = inherited voxel-suffix; same construction as
-         vo(lumetric) + (pi)xel and te(xture) + (pi)xel.
-
-Fix:   ONE BRANCH — `rename-boxel-to-hanixel`, off `main`.
-       (a) Mechanical case-preserved sed: boxel->hanixel,
-           Boxel->Hanixel, BOXEL->HANIXEL across *.py, *.pddl,
-           README.md, and the LIVE issue-body sections of
-           CODEBASE_AUDIT.txt — but EXCLUDING the changelog
-           history block at the top of CODEBASE_AUDIT.txt and
-           ALL of archive/CODEBASE_AUDIT_RESOLVED.txt /
-           archive/CODEBASE_AUDIT_DEFERRED.txt.  Those record
-           historical wording and stay verbatim.
-       (b) File renames: boxel_*.py -> hanixel_*.py; update
-           every import and from-import to match.
-       (c) Data-artefact rename: any place that writes or reads
-           "boxel_data.json" updates to "hanixel_data.json"
-           (run_logger.py, BoxelRegistry.save_to_json caller,
-           any test fixtures).  Old artefacts in logs/ stay
-           with their historical names.
-       (d) py_compile across all touched .py files; smoke run
-           (--scene default --baseline semantic --no-gui --seed 0)
-           to verify nothing broke.
-       (e) Two commits: one mechanical rename + one manual
-           cleanup (e.g. README "Semantic Boxels" -> "Semantic
-           Hanixels" for the public-facing prose; audit body
-           rebrand in TOC banner + SUMMARY block; visualizer
-           class-docstring polish).
-       (f) Audit DONE entry on this issue at landing.
-
-Care: Don't touch the changelog history at the top of this file —
-       every "Added:"/"Updated:"/"Slimmed:"/"Restructured:" entry
-       above mentions "boxel" because that was the term at the
-       time.  Rewriting history would lose the audit trail.  Same
-       for archive/CODEBASE_AUDIT_RESOLVED.txt and
-       archive/CODEBASE_AUDIT_DEFERRED.txt.  Only the
-       FORWARD-LOOKING / LIVE issue bodies and the SUMMARY block
-       get the rename.
-
-       Coordinate with audit-64-tampura-binary-grid: that branch
-       is currently sitting on the GUI uniform_mode flag work plus
-       its own #64 audit body.  Either merge it to main first
-       (preferred — clean main = clean rename diff) or rebase it
-       on top of #65 after #65 lands (every commit on the branch
-       gets a noisy text-rename hit).
-
-Related: #63 (README + wiki final doc sweep) — picks up the
-              hanixel terminology naturally if it lands first.
-              If #63 hasn't started yet at #65 landing time,
-              #63 inherits the rename for free.
-         #64 (open on audit-64-tampura-binary-grid) — see "Care"
-              above; merge order matters for diff cleanliness.
-         Repo name (Semantic_Boxels on disk + both remotes) —
-              separate decision, can stay as-is to avoid breaking
-              upstream URLs.
-         Thesis title ("Semantic Boxels for TAMP" -> "Semantic
-              Hanixels for TAMP") — your call on the writing side.
-
-
-================================================================================
-#66. UNIFORM/TAMPURA BASELINES — PLACE FAILS WHEN OBJECT > CELL (split fix)
-================================================================================
-Status:   Plan A [DONE on main 2026-05-09 (later)] — auto-tune cell
-          size landed in test_full_pipeline.main.  Plan C [PENDING on
-          audit-64-tampura-binary-grid] — continuous-pose placement
-          (the actual TAMPURA-faithful approach).
-Priority: TIER 1 — correctness blocker for the uniform baseline.
-          Without this, --baseline uniform with default cell size
-          0.05 m cannot ground occluder-relocation place actions
-          (default occluders are 5-7 cm wide, 12-16 cm tall; no
-          uniform cell satisfies boxel_fits).  The 2026-05-09
-          stalled run (logs/run_2026-05-09_10-48-13/) was a direct
-          consequence: PDDLStream looped at increasing complexity
-          searching for a plan that cannot exist.
-Where:    Two-branch fix.  Plan A on `main` (the free-space-only-
-          swap baseline), Plan C on `audit-64-tampura-binary-grid`
-          (the TAMPURA-faithful baseline).  ONE shared issue body
-          across both branches: edit on main, merge forward.
-          Plan A:  test_full_pipeline.main (auto-tune cell size).
-          Plan C:  pddl/domain_pddlstream.pddl + pddl/stream.pddl
-                   + streams.py (sample_place_pose) +
-                   pddlstream_planner._build_init + execution.py
-                   place handler.
-Depends:  None — independent of in-flight work.
-
-What:  Under --baseline uniform, free cells are 5 cm cubes
-       (default --uniform-cell-size 0.05).  test_boxel_fits
-       (streams.py:350-371) compares full AABB extents of the
-       OBJECT vs the candidate destination cell.  Default scene
-       occluders are 5-7 cm wide and 12-16 cm tall (boxel_env.py:
-       296-317), so for any 6-7 cm occluder the comparison
-       0.05 >= 0.07 fails on every uniform cell.  Result: zero
-       (boxel_fits occluder ?cell) atoms emit; the PDDL place
-       action's precondition is unsatisfiable; any plan that
-       requires relocating an occluder fails to ground.
-
-       Quantified from the 2026-05-09 stalled run log:
-       - 2480 cells emitted under uniform 0.05 m
-       - 2472 boxel_fits atoms (~25% of 4 visible obj × 2470
-         free cells = ~9880 candidate pairs)
-       - The passing 25% are the 4 cm targets fitting in 5 cm
-         cells; the failing 75% are 6-7 cm occluders
-       - PDDLStream stalled at iter-1 (Cost: inf, Search Time
-         0.010 s) because no skeleton can satisfy place
-
-       Three options were considered:
-         (A) Auto-tune cell size to fit the largest visible AABB
-             (+1 cm headroom for PyBullet contact margin).
-             ~30 LOC patch in test_full_pipeline.main; no domain
-             change; cuts cell count ~8x as a side-effect (also
-             fixes the grounding-cost half of the stall).  Cell
-             size becomes scene-dependent: typical default scene
-             -> ~0.10 m; smaller-target scenes -> ~0.05 m stays.
-             Lands on `main` (the free-space-only-swap baseline).
-         (B) Multi-cell place — symbolic place over a CLUSTER of
-             cells covering the object footprint.  Requires PDDL
-             action change + new "anchor cell" semantics.  RULED
-             OUT 2026-05-09: combinatorial blowup (planner picks
-             a SET of cells); not TAMPURA-faithful; not cheap.
-         (C) Continuous-pose place — replace boxel-indexed place
-             with TAMPURA-style continuous SE(3)-pose placement.
-             Stream samples (x, y, z) within the free volume,
-             returns a Pose certificate; place action takes ?p
-             (Pose) instead of ?b (Boxel).  Major domain rewrite;
-             the actual TAMPURA approach (Curtis et al. 2024 —
-             find_dice/env.py uses continuous poses).  Lands on
-             `audit-64-tampura-binary-grid`.
-
-Fix:   SPLIT ACROSS TWO BRANCHES, ONE SHARED AUDIT BODY (this entry).
-
-       On `main` (the free-space-only-swap baseline)
-       ---------------------------------------------
-       Plan A — auto-tune cell size.  Single commit:
-
-       In test_full_pipeline.main, after env.use_uniform_grid is
-       set, compute auto_cell = max(visible AABB extent across all
-       scene objects) + 0.01 m.  If auto_cell > the user-supplied
-       --uniform-cell-size, call env.set_uniform_cell_size(
-       auto_cell) and log the bump.  Preserves user override
-       (passing --uniform-cell-size 0.20 stays at 0.20 — only the
-       default 0.05 is auto-bumped).  Smoke-run the previously-
-       stuck scene (--scene default --baseline uniform --seed 0)
-       to verify it succeeds.
-
-       On `audit-64-tampura-binary-grid` (the TAMPURA-faithful baseline)
-       -----------------------------------------------------------------
-       Plan C — continuous-pose placement.  Multi-commit, in order:
-       (i)   pddl/domain_pddlstream.pddl: place action takes ?p
-             (Pose) instead of ?b (Boxel); pose-based precondition
-             stream replaces boxel_fits.
-       (ii)  pddl/stream.pddl: new sample-place-pose stream that
-             yields valid free-volume poses per object (uniform
-             rejection sample within table_x_range x table_y_range
-             x table_z, AABB-checked against current OBJECT/SHADOW
-             set).
-       (iii) streams.py: implement sample_place_pose; modify
-             compute_kin_solution to accept a Pose argument for the
-             place case (pose.position + grasp_offset = EE target).
-       (iv)  pddlstream_planner._build_init: drop boxel_fits and
-             obj_at_boxel emission for free cells under uniform
-             mode (free cells become a visualisation aid only;
-             placement is continuous).
-       (v)   execution.py place handler: read ?p (Pose) from the
-             action params instead of ?b (Boxel).
-       (vi)  Audit DONE entries for both A and C at landing.
-
-       Ordering note: A landing on main + C landing on audit-64
-       are independent; either can land first.  When audit-64
-       eventually merges back to main (post-thesis or per
-       supervisor direction), the planner has BOTH placement modes
-       — boxel-indexed for semantic baseline, pose-indexed for
-       tampura baseline.
-
-Care: The ONE-SHARED-AUDIT-BODY constraint means this issue body
-       appears IDENTICALLY on main and audit-64-tampura-binary-grid.
-       Update from main and merge forward to audit-64; avoid
-       divergent edits to the issue body.  The audit changelog at
-       the top of CODEBASE_AUDIT.txt MAY differ between branches —
-       that's history, and main/audit-64 have different DONE tracks
-       for #64 etc.
-
-       Plan A is the smaller of the two and should land first to
-       unblock --baseline uniform smoke runs and the eval matrix.
-       Plan C is the larger commit and the genuine TAMPURA-
-       faithful contribution.
-
-Related: #50 — planner perf investigation.  Plan A's cell-size
-              bump cuts grounding cost ~8x as a side effect; #50
-              loses one of its hotspots after Plan A lands.
-         #62 — replan-while-holding still slow.  Same grounding-
-              cost lineage as #50; Plan A indirectly mitigates.
-         #64 [DONE on audit-64-tampura-binary-grid] — TAMPURA-
-              faithful uniform-baseline GUI framing (visualizer
-              uniform_mode flag).  Plan C is the natural
-              continuation: visualizer change was cosmetic; this
-              is the placement-semantics change.
-         #65 — boxel -> hanixel rename.  Coordinate landing
-              order (per #65 Care): merge audit-64 back to main
-              first, OR rebase audit-64 after the rename, to
-              avoid identifier-collision merge noise.
-
-
-================================================================================
-#68. SCENE RANDOMIZER — VARY THE (OCCLUDER, HIDDEN-TARGET) PAIR COUNT PER RUN
-================================================================================
-Status:   OPEN.  Raised 2026-05-10 (later) by user as "next top
-          prio issue".  No commits yet.
-Priority: TIER 0 — top priority per user direction.  Promotes
-          ahead of the previously-empty TIER 0 slot and ahead of
-          #66 Plan C (TIER 1, audit-64-tampura-binary-grid)
-          because the scene-variability gap blocks the kind of
-          qualitative evidence the user wants to see in single GUI
-          runs ("every run looks meaningfully different") and
-          would also broaden the eval matrix without adding
-          another explicit axis.
-Where:    Primary:
-            boxel_env.py — scalability_scene() and
-              _hidden_xy_positions() / _random_xy_positions()
-              (audit #29 placement helpers).  The randomizer
-              either (a) lives here as a new factory
-              (e.g. random_pairs_scene(min_pairs, max_pairs,
-              seed, ...)), or (b) extends scalability_scene with
-              a "count is itself random" mode toggled by passing
-              None for the explicit counts.
-          CLI surface:
-            run_logger.py::parse_args — new flag(s) to drive the
-              randomizer.  Candidate designs in the Fix section.
-          Eval integration:
-            eval_runner.py::SCALABILITY_MATRIX / DEFAULT_MATRIX —
-              optional new matrix preset that uses the randomizer
-              instead of cartesian-product over fixed counts.
-              MAY be deferred to a follow-up commit; the GUI-run
-              experience is the primary deliverable.
-          Tests:
-            none currently — manual GUI verification per the
-              workflow note in Care.
-Depends:  None.  Independent of in-flight #66 Plan C and #50/#62
-          perf work.  Does NOT depend on #65 (boxel -> hanixel
-          rename) — touches scene-generation surface area that #65
-          will mechanically rename later.
-
-What:  Today's scene-generation surface produces the SAME pair
-       count on every invocation:
-
-         scalability_scene(n_occluders, n_targets, seed, n_hidden)
-
-       takes the counts as required CLI inputs (run_logger.py
-       --n-occluders / --n-targets / --n-hidden), and the
-       eval_runner matrix sweeps those axes DETERMINISTICALLY
-       across cells: cell occ3_tgt4_hid2 always has exactly 3
-       occluders and 4 targets with 2 hidden, regardless of seed.
-       Only the per-object XY positions vary with --seed.
-
-       This means:
-       (a) Two consecutive `run_boxels --scene scalability` GUI
-           runs produce the SAME silhouette count and qualitative
-           difficulty.  Without changing CLI args, the user sees
-           the same scene shape every time — only object
-           positions differ.  This is fine for unit-test-style
-           regression seeds, but undermines any "look at this
-           variety of scenes" demonstration.
-       (b) The eval matrix conflates "scenes vary structurally"
-           with "scenes vary in placement".  The thesis Results
-           plots currently sweep the count axis as a deliberate
-           independent variable, but there is no within-axis
-           randomization at the count level — every n_occluders=3
-           cell is structurally identical to every other
-           n_occluders=3 cell.
-
-       The user wants a randomizer where the COUNT itself is a
-       random variable per run, drawn within a CLI-configurable
-       range, so that every invocation produces a structurally
-       distinct (occluder, hidden-target) pair budget.  "Pair"
-       here means: one occluder casting a shadow that has at
-       least one hidden target inside its frustum (audit #29
-       guarantees this at spawn time via raycast verification).
-
-Fix:   USER DIRECTION 2026-05-10:
-       "Let the AI do the work of writing the scene randomizer
-        and then ask the user to test it out and wait for
-        response."
-
-       Implementation outline (AI proposes, user validates the
-       choice via GUI smoke before any commit lands):
-
-       (1) Decide the API.  Two candidates, AI picks one and
-           justifies inline in the commit message:
-
-           (A) New scene preset.  --scene random-pairs.
-               scalability_scene gets a sibling
-               random_pairs_scene(min_pairs, max_pairs, seed,
-               extra_distractors=0) in boxel_env.py.  CLI gets
-               --n-pairs-range MIN-MAX (default e.g. "1-5").
-               Pros: zero impact on existing scalability matrix;
-               new flag is self-documenting; eval_runner can
-               leave SCALABILITY_MATRIX untouched and add a new
-               RANDOM_MATRIX preset later.
-               Cons: scene plumbing in boxel_env.py grows by
-               another factory; CLI surface widens.
-
-           (B) Extend scalability_scene with optional ranges.
-               --n-occluders / --n-targets / --n-hidden start
-               accepting either a single int (today) or a
-               MIN-MAX range string ("1-5") that is sampled per
-               run from the seeded RNG.  No new --scene preset;
-               no new factory.
-               Pros: reuses existing scene preset; minimal CLI
-               surface delta.
-               Cons: argparse type goes from int to a custom
-               parser; the eval matrix must distinguish "axis
-               value 3" from "axis value 1-5" semantically.
-
-           AI default recommendation: (A) for clean separation of
-           concerns and zero risk to existing eval cells.  User
-           may direct (B) instead.
-
-       (2) Hook the new factory / mode into the existing
-           hidden-target placement guarantee (audit #29
-           raycast verification).  The randomizer must NOT
-           bypass the guarantee: every spawned hidden target
-           must still pass camera-ray occlusion at spawn time.
-           Reuse _hidden_xy_positions() with the sampled count.
-
-       (3) Hook into the audit #67 fix (Phase 4 uses camera-ray
-           occlusion).  Since #67 already removed the AABB-
-           containment dependence, any scene the randomizer
-           produces should round-trip through Phase 4 cleanly.
-           No changes to test_full_pipeline.py expected.
-
-       (4) GUI smoke verification (USER STEP).  Before declaring
-           DONE, AI runs the new flag in a single
-           `run_boxels --scene <new>` invocation, captures the
-           Phase 1/4 logs and the spawn count, and posts the
-           output to the user.  User runs the same command on
-           their end at least 2-3 times, confirms the count
-           varies between runs and that each run completes
-           through to a planner call (no silent aborts).  AI
-           waits for explicit user OK before committing the
-           [DONE 2026-05-XX] entry.
-
-       (5) Optional follow-up: add a new eval_runner matrix
-           preset (e.g. "random") that uses the randomizer
-           instead of fixed counts.  Bundle in same commit if
-           the surface change is small; defer to a follow-up
-           commit otherwise.
-
-Care:  WORKFLOW (per user direction 2026-05-10):
-
-       This issue is explicitly framed as: AI implements, USER
-       tests the output via a real GUI run, AI waits for the
-       user's response before declaring the issue DONE.  Do NOT
-       self-mark this issue [DONE] based on a `--no-gui` smoke
-       run from the AI's side alone — the failure mode is
-       exactly the kind of "looks fine in headless, looks weird
-       in GUI" drift that benefits from human verification.
-
-       Concretely:
-       (i)   AI writes the implementation, runs `python -c
-             "import boxel_env; ..."` import-smoke, and runs ONE
-             headless invocation to confirm Phase 1/4 logs look
-             sensible.
-       (ii)  AI posts the diff summary + the headless-run logs
-             to the user as part of the implementation reply.
-             AI does NOT push or commit yet.
-       (iii) User runs `run_boxels --scene <new-preset>` (or
-             the equivalent new flag) 2-3 times in the GUI,
-             confirms scenes differ structurally between runs.
-       (iv)  User responds with "looks good" / "fix X" / etc.
-       (v)   AI either commits + adds [DONE] entry (on user OK)
-             or iterates (on user feedback).
-
-       This explicit hand-off is preserved in this Care block
-       so future audit slim passes don't lose the workflow
-       expectation.  Other audit issues (e.g. #67 single-commit
-       fix on AI direction) are NOT bound to this workflow —
-       this is a per-issue user request.
-
-Related: #29 [archived] — hidden-target placement raycast
-              verification.  The randomizer must call this
-              guarantee on every sampled count; do not bypass.
-         #67 [DONE 2026-05-10] — Phase 4 camera-ray occlusion
-              fix.  The randomizer benefits from the post-#67
-              clean Phase 4 path and should not need any
-              test_full_pipeline.py change.
-         #9 [DONE 2026-05-08] — eval runner.  Optional follow-up
-              matrix preset using the randomizer; out of scope
-              for the primary commit.
-         #59 — scaled-up find-and-stack with N hidden targets
-              (very low priority).  The randomizer is a
-              prerequisite for any "random N targets, all
-              hidden" find-and-tray-stack scaling demo, but
-              implementing #59 itself stays deferred.
-
-
-================================================================================
 #69. PYBULLET rayTestBatch — PASS numThreads ON THE 5 EXISTING CALL SITES
 ================================================================================
 Status:   OPEN.  Raised 2026-05-10 (later) after web search for
           PyBullet parallelism support (logs in chat history).
-Priority: TIER 3 — low priority, low effort, measurable win.
-          Promoted from the FOR LATER "Parallel FastDownward"
-          bullet to a numbered issue because (unlike the
-          speculative FD/GPU angle) this is just an unused
+Priority: TIER 0 — top priority per user direction 2026-05-12
+          (promoted from TIER 3).  Free CPU-side wall-clock win;
+          1-kwarg patch on 5 existing call sites; biggest single
+          batch (147-ray sense action) on the planner hot path.
+          Originally promoted from the FOR LATER "Parallel
+          FastDownward" bullet to a numbered issue because (unlike
+          the speculative FD/GPU angle) this is just an unused
           PyBullet feature with a 1-kwarg patch.
 Where:    Five rayTestBatch call sites, all currently single-
           threaded:
@@ -1563,180 +746,6 @@ FOR LATER
   Cross-references: #50/#62 (Python-side perf hunt — same goal,
   different layer); #69 (rayTestBatch numThreads — the realistic
   spinoff).
-
-
-================================================================================
-#70. RANDOM-PAIRS SCENE — UNREACHABLE PLACEMENTS HANG OBJECTS IN AIR
-================================================================================
-Status:   OPEN.  Raised 2026-05-12 by user after GUI run on a
-          random-pairs scene where an occluder/target spawned far
-          from the Panda base.  The arm stretched to a borderline-
-          reachable IK solution; on lift, the grasp constraint
-          anchored the cube in mid-air (visible "hung object"
-          artefact in the GUI screenshot the user attached to
-          the request).
-Priority: TIER 0 — top priority per user direction 2026-05-12.
-          Promotes ahead of the previously-empty TIER 0 slot
-          (since #68 [DONE 2026-05-10 (later)]).  Blocks
-          qualitative use of --scene random-pairs in any thesis
-          figure / video demo and silently inflates holding /
-          find-and-tray-stack success on borderline cells (the
-          plan "succeeds" with a hung cube).
-Where:    Root cause:
-            boxel_env.py:271-341 (scalability_scene) returns a
-              SceneConfig with default constrain_to_reach=False
-              (line 336 — no kwarg passed).  Compare stack_scene
-              (boxel_env.py:263-268) which explicitly sets
-              constrain_to_reach=True.
-            boxel_env.py:344-380 (random_pairs_scene) inherits
-              this by delegating to scalability_scene unchanged.
-          Placement layer:
-            boxel_env.py:818-885 (_random_xy_positions) samples
-              from _TABLE_PLACE_X_RANGE = (-0.20, 0.60) and
-              _TABLE_PLACE_Y_RANGE = (-0.50, 0.50) when
-              constrain_to_reach=False (lines 847-848).  The
-              reach-disk filter at line 868 is dead code on this
-              path.
-            boxel_env.py:967+ (_hidden_xy_positions) anchors
-              hidden targets to occluder XYs and inherits the
-              same wide bounds via lines 1032-1033.  If the
-              occluder lands far, the hidden target lands far
-              too.
-          Constants involved:
-            _PANDA_REACH_RADIUS = 0.65          (line 794)
-            _SAFE_TABLE_X_RANGE = (-0.1, 0.70)  (line 800)
-            _SAFE_TABLE_Y_RANGE = (-0.40, 0.40) (line 801)
-            _TABLE_PLACE_X_RANGE = (-0.20, 0.60) (line 815)
-            _TABLE_PLACE_Y_RANGE = (-0.50, 0.50) (line 816)
-            Geometry: with base at (-0.4, 0.0) and reach 0.65 m,
-            the reachable x ceiling is -0.4 + sqrt(0.65^2 - y^2)
-            = 0.25 at y=0, 0.18 at y=±0.2, 0.11 at y=±0.4.
-            The placement window's x range goes to 0.50 (line
-            815) — i.e. ~half the window is outside the reach
-            disk for typical y.  This is not a corner-case
-            defect: every multi-object spawn is expected to
-            land at least one cube outside reach, and user
-            GUI runs confirm "almost all" of a 5-cube scene
-            land outside reach in practice.
-Depends:  None.  Independent of #50/#62 (planner perf), #66 Plan C
-          (TAMPURA-style placement), and #65 (boxel -> hanixel
-          rename).  Lands directly on main.
-
-What:  The random-pairs randomizer (#68 [DONE 2026-05-10 (later)])
-       can spawn occluders, visible targets, and (transitively)
-       hidden targets outside the Panda's reach disk.  Concretely:
-
-       (1) scalability_scene constructs its SceneConfig without
-           constrain_to_reach=True.  random_pairs_scene reuses
-           that config unchanged.
-       (2) _create_objects -> _random_xy_positions samples in
-           the WIDE _TABLE_PLACE_* bounds, not the SAFE_TABLE_*
-           + reach-disk path.
-       (3) Pick IK on the spawned object still finds a stretched
-           solution because the robot has a few extra cm of
-           reach beyond _PANDA_REACH_RADIUS (the constant is a
-           comfortable-reach disk, not a hard kinematic limit).
-       (4) execute_pick succeeds, the grasp constraint binds,
-           but the post-pick lift cannot satisfy both "keep the
-           cube at grasp pose" and "respect joint limits" — the
-           constraint takes priority, leaving the cube floating
-           where the end-effector last reached and the arm in
-           an awkward fully-extended stance.  In the GUI this
-           reads as "object hung in the air."
-
-       This is functionally identical in spirit to audit #36
-       (post-action lift workaround for shotty motion planning,
-       supervisor: "not cheating, a workaround"), but the
-       failure mode here is upstream: the scene generator
-       shouldn't be producing borderline-reachable spawns in
-       the first place.  #36 is the safety net; #70 closes the
-       hole.
-
-Fix:   Plumb constrain_to_reach into random-pairs at scene
-       construction time so every spawned object sits inside
-       _SAFE_TABLE_* AND inside the 0.65 m reach disk.
-
-       Two implementation options (AI picks one and justifies
-       inline in the commit message; user may direct otherwise):
-
-       (A) Targeted fix — flip random_pairs_scene only.
-           random_pairs_scene wraps the SceneConfig returned
-           by scalability_scene and overrides
-           constrain_to_reach=True (one-line dataclasses.replace
-           or in-place mutation).  No change to scalability_scene
-           itself.
-           Pros: zero risk to existing scalability matrix cells
-                 (eval_runner currently invokes scalability_scene
-                 directly via --scene scalability with explicit
-                 counts — those cells have been validated as
-                 reachable empirically for occ<=4 / tgt<=5).
-                 Tightest scope.
-           Cons: scalability_scene continues to silently allow
-                 the same regression if called with larger counts;
-                 the scalability matrix could hit this in the
-                 future when n_occluders or n_targets scales.
-
-       (B) Wider fix — make scalability_scene reach-bound by
-           default.
-           scalability_scene gets constrain_to_reach=True hard-
-           wired into its SceneConfig return; random_pairs_scene
-           inherits via the existing delegation.
-           Pros: closes the latent #70 in the scalability matrix
-                 too.  Removes the silent-fail mode entirely.
-           Cons: re-runs the existing SCALABILITY_MATRIX cells
-                 under tighter bounds — could shift placements
-                 enough to invalidate already-recorded seeds.
-                 Needs a sweep regression check before merging.
-
-       AI default recommendation: (A).  The eval matrix has
-       been measured under the current wide bounds; the
-       qualitative defect is only observed with random-pairs;
-       the targeted fix isolates the regression from the
-       existing evaluation surface.  If the user prefers (B),
-       bundle a fresh SCALABILITY_MATRIX smoke regression in
-       the same commit.
-
-       Hardening (cheap, on either path):
-       (i)  After spawn, in _create_objects / _create_targets,
-            assert max(|xy - robot_base|) <= _PANDA_REACH_RADIUS
-            for every pickable.  Raise a clear placement error
-            rather than letting it surface as a hung-cube in
-            the GUI.  Keep the existing 400-attempt rejection
-            budget; on exhaustion, raise so the retry layer in
-            test_full_pipeline.main() re-seeds (mirrors the
-            audit #29 hidden-target post-spawn check).
-       (ii) Optional: tighten _TABLE_PLACE_*_RANGE to match
-            _SAFE_TABLE_*_RANGE for the random-pairs path.
-            Skip if the assert in (i) is enough.
-
-Care:  Verification protocol:
-       (i)   AI implements either (A) or (B), runs ONE headless
-             `--scene random-pairs --seed 0/1/2` to confirm no
-             spawn exceeds reach.
-       (ii)  AI captures spawn XY logs + max-reach delta and
-             posts to user.
-       (iii) User runs `run_boxels --scene random-pairs` 2-3
-             times in GUI, confirms no object hangs in air
-             after pick, no arm-stretch artefact.
-       (iv)  Commit + [DONE 2026-05-XX] on user OK.
-
-       This issue inherits the AI-implements-USER-verifies
-       workflow from #68 (per-issue user request, not a global
-       policy).
-
-Related: #68 [DONE 2026-05-10 (later)] — random-pairs scene
-              generator.  This is the post-merge defect report
-              against that feature.
-         #29 [archived] — hidden-target raycast verification.
-              Provides the model for the post-spawn assert in
-              hardening (i).
-         #36 — post-action lift workaround.  Downstream safety
-              net for the same class of "borderline IK +
-              constraint" defect; #70 closes the upstream hole.
-         #49 [archived] — tray entity (find-and-tray-stack).
-              The find-and-tray-stack goal mode exposes this
-              defect more often because both the source cube
-              and the tray must be reachable.
 
 
 ================================================================================
@@ -2135,8 +1144,14 @@ Status:   OPEN.  Raised 2026-05-12 (later) by user during eval
           introduction,approach,evaluation}.tex) and cross-
           checking against current eval_plotter.py + aggregated
           CSV columns + per-cell timing_summary.json.
-Priority: TIER 1 — gates eval chapter writeup.  Each plot maps
-          directly to one of the three thesis pillars:
+Priority: TIER 1 — high prio per user direction 2026-05-12,
+          but lands AFTER #71 (refresh OBJECT AABBs on sense) and
+          #72 (shadow lateral overhang) so the figures reflect
+          post-fix instrumentation — otherwise plots 1-3 / 11
+          (compactness, init-state facts, boxel volume) bake stale
+          geometry counts into the thesis chapter.  Gates eval
+          chapter writeup.  Each plot maps directly to one of the
+          three thesis pillars:
             (1) compactness         — plots 1, 2, 3, 11
             (2) knowledge-grounded  — plots 4, 5, 6
             (3) tractability        — plots 7, 8, 9
@@ -2405,161 +1420,109 @@ Related: #50 — planner perf investigation.  Plot 2 (init-state
 SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-12 (later))
 ================================================================================
 
-Aligns with the ROADMAP banner above (pre-eval → eval prerequisites → eval).
-Issue numbers are chronological (audit discovery order), NOT priority order —
+Aligns with the ROADMAP banner above (pre-eval -> eval prerequisites -> eval).
+Issue numbers are chronological (audit discovery order), NOT priority order -
 follow the tier / roadmap ordering, not the lowest open number.
 Each issue is ideally one commit; parallelise where dependencies allow.
 
 The pre-evaluation correctness chain ended 2026-05-08 with #60 [DONE].
-Eval (#9, #10) was the user's critical path to the thesis Results
-chapter and was promoted from TIER 3 to TIER 1 in the 2026-05-08 (later)
-restructure; both landed 2026-05-08.  #67 [DONE 2026-05-10] closed
-the silent-abort failure mode that was inflating eval no_summary
-counts.  TIER 0 repopulates with #68 (scene randomizer) per user
-direction 2026-05-10 (later).  #70 (random-pairs unreachable
-placements) added 2026-05-12 as a TIER 0 post-merge defect
-report against #68 — placement-bound regression that hangs
-picked cubes in mid-air; closes ahead of the #68 polish item.
+Eval (#9, #10) landed 2026-05-08; #67 [DONE 2026-05-10] closed the
+silent-abort no_summary failure mode.  #68 (scene randomizer) landed
+2026-05-10 (later) via commit 63b1c64 + follow-ups (audit-state
+correction 2026-05-12).  #70 (random-pairs unreachable placements)
+fixed and user-verified 2026-05-12.  Triage pass 2026-05-12 (later)
+per user direction: deferred #50/#57/#59/#61/#65; relocated #66
+(uniform/TAMPURA baseline place) to TAMPURA_PLAN.md as the seed of
+a dedicated TAMPURA workstream (collect first, plan later); promoted
+#69 (rayTestBatch numThreads) to TIER 0 (top prio).
 
 TIER 0 — TOP PRIORITY:
-  #70  Random-pairs scene — unreachable placements hang objects
-       in air.  scalability_scene returns SceneConfig with
-       constrain_to_reach=False (no kwarg passed at line 336),
-       so random_pairs_scene inherits the wide _TABLE_PLACE_*
-       sampling window with no reach-disk filter.  Robot base
-       at (-0.4, 0.0), reach 0.65 m, placement-window x ceiling
-       0.50 — roughly HALF the window is unreachable; user GUI
-       runs report "almost all" of a 5-cube scene land outside
-       reach.  Pick IK still solves on the slack, grasp
-       constraint binds, post-pick lift wedges the cube in
-       mid-air with the arm fully extended.  AI implements
-       (option A or B in the body); user verifies in GUI;
-       AI waits for OK before [DONE].
-  #68  Scene randomizer — vary the (occluder, hidden-target) pair
-       count per run (within a CLI-configurable range), not just
-       per-object placement.  Today scalability_scene takes fixed
-       --n-occluders / --n-targets / --n-hidden counts so two
-       consecutive GUI runs produce structurally identical scenes
-       (only XY positions differ).  AI implements; user runs in
-       GUI 2-3 times for verification; AI waits for user OK
-       before committing [DONE].  Workflow expectation captured
-       in the Care block.
+  #69  PyBullet rayTestBatch — pass numThreads on the 5 existing
+       call sites (boxel_env.py x2, shadow_calculator.py,
+       execution.py x2 - 147 rays per sense action is the largest
+       single batch).  Unused upstream PyBullet feature; 1-kwarg
+       patch.  Promoted to TIER 0 per user direction 2026-05-12
+       (top prio - free CPU-side wall-clock win).
 
-TIER 1 — UNIFORM/TAMPURA BASELINE PLACEMENT (correctness blocker):
-  #66  Place fails when object > cell.  Default uniform 5 cm
-       cells can't fit 6-7 cm occluders -> boxel_fits empty ->
-       PDDLStream stalls.  Split fix: Plan A [DONE on main
-       2026-05-09 (later)] (auto-tune cell size); Plan C
-       [PENDING on audit-64-tampura-binary-grid] (continuous-
-       pose place, real TAMPURA).  Single shared issue body
-       across both branches.
+TIER 1 — CORRECTNESS / HIGH-PRIO:
   #71  Refresh OBJECT boxel AABBs on every sense.  Currently
        written once at spawn (or at discovery for nontarget
        bodies); cubes that shift between actions drift away
-       from the stored AABB and the planner reasons over
-       stale geometry.  User direction: refresh BB only, not
-       the shadow region behind it (out of scope).  ~0.1 ms
-       overhead per sense.  Promotable to TIER 0 if false-
-       success cases multiply.
+       from the stored AABB and the planner reasons over stale
+       geometry.  User direction: refresh BB only, not the
+       shadow region behind it.  ~0.1 ms overhead per sense.
+       High prio per user 2026-05-12.
   #72  Shadow AABB carved only along dominant axis -> lateral
-       overhang beside the occluder.  full_min/full_max
-       encloses object AABB ∪ ray hit points; only the
-       dominant-axis face is trimmed back to the object.
-       Perpendicular axes keep the wide hit-point bounds all
-       the way back to the cube, so 7-10 cm of camera-visible
-       table beside each occluder is incorrectly classified
-       as shadow.  Free-space + boxel_fits then carve cells
-       the camera can see.  Fix C (two-slab carve) recommended;
-       one extra SHADOW boxel per occluder, no PDDL stream
-       refactor.  Repro seed 779694423 stored in body.
-  #73  Eval-chapter figures backlog — 11 plots + logging
-       prerequisite.  Current eval covers planning time,
-       success rate, plan count.  Missing: boxel-count
-       breakdown (compactness pillar), init-state fact count
-       (tractability pillar), boxel volume histogram, sense
-       count, replan distribution, failure-mode breakdown,
-       per-call timing, wall-clock-vs-planning scatter,
-       TAMPURA comparison bar, perception-density sweep,
-       boxel evolution across replans.  Most blocked on a
-       5-10 LOC logging change in run_logger.py +
-       pddlstream_planner.py.  Each plot lands as its own
-       commit; step-by-step plan in body.
+       overhang beside the occluder.  full_min/full_max encloses
+       object AABB U ray hit points; only the dominant-axis face
+       is trimmed back to the object.  Perpendicular axes keep
+       the wide hit-point bounds back to the cube, so 7-10 cm
+       of camera-visible table beside each occluder is
+       incorrectly classified as shadow.  Fix C (two-slab carve)
+       recommended.  Repro seed 779694423 stored in body.
+  #73  Eval-chapter figures backlog - 11 plots + logging
+       prerequisite.  Lands AFTER #71/#72 fixes so plots reflect
+       post-fix instrumentation (user direction 2026-05-12 -
+       "high prio but after fixes").
 
 TIER 2 — PERF (planner wall-clock):
-  #50  Planner perf investigation — profile, cache static init, kill
-       redundancies (user-flagged "planner is too slow")
-  #62  Replan-while-holding still slow after #58 — sub-hotspot of #50
-       on the held-cube path (user-flagged 2026-05-08; profile first,
-       merge into #50 if dominant cost is branch-agnostic)
+  #62  Replan-while-holding still slow after #58 - held-cube
+       replan hotspot.  Plus QUICK-FIX OPTION (user direction
+       2026-05-12): precompute static geometry classifications
+       (e.g. object_fits / shadow_big / shadow_small / compat_place
+       atoms) at _build_init time so the planner does not recompute
+       per replan/skeleton.  Lands without waiting for the broader
+       profile (which is deferred under #50).
 
-TIER 3 — CODE QUALITY / LOW-PRIO:
-  #57  Registry should own cube geometry (audit #55 follow-up;
-       replace PyBullet AABB fallback in compute_stack_kin_solution)
-  #59  Scaled-up find-and-stack — N hidden targets + size-compat
-       PDDL predicate (very low priority per user 2026-05-08).
-       #68 (scene randomizer) is a prerequisite for any "random N
-       hidden targets" find-and-tray-stack demo.
-  #61  Smart console filter — strip residual startup/shutdown garbage
-       and add Claude-Code-style thinking-animation affordance during
-       long planner.plan() / RRT / stream-sample calls
-       (UX polish; user-flagged 2026-05-08)
-  #63  README + wiki final doc sweep — gated on remaining open issues
-       (now: #50, #57, #59, #61, #62, #65, #66 Plan C, #68).
-       Explicitly the last commit before thesis submission per user
-       2026-05-08.  Periodic refresh sweep landed 2026-05-10
-       (commits 56d6001 README + de218bb / 169800b wiki); #63 itself
-       remains open as the final pre-submission pass.
-  #65  Rename: boxel -> hanixel.  HANI = Heterogeneous Axis-aligned
-       Named Interval; XEL inherited from voxel.  User decision
-       2026-05-09.  Mechanical case-preserved sweep on its own
-       branch (rename-boxel-to-hanixel).  Land after audit-64-
-       tampura-binary-grid merges/rebases to avoid rename noise.
-  #69  PyBullet rayTestBatch — pass numThreads on the 5 existing
-       call sites (boxel_env.py x2, shadow_calculator.py,
-       execution.py x2 — 147 rays per sense action is the
-       largest single batch).  Unused upstream PyBullet feature;
-       1-kwarg patch.  Spinoff from the FOR LATER "Parallel
-       FastDownward" bullet — captures the realistic CPU-side
-       win that doesn't require simulator/planner swap.
+TIER 3 — CODE QUALITY / DOC SWEEP:
+  #63  README + wiki final doc sweep - gated on remaining open
+       issues (now: #62, #69, #71, #72, #73).  Explicitly the
+       last commit before thesis submission per user 2026-05-08.
 
-Total open: 14 items (#50, #57, #59, #61, #62, #63, #65, #66 Plan C, #68, #69, #70, #71, #72, #73).
+Total open: 6 items (#62, #63, #69, #71, #72, #73).
+
+Relocated 2026-05-12:
+  #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
+       (auto-tune uniform cell size); Plan C [PENDING on
+       audit-64-tampura-binary-grid] (continuous-pose place,
+       real TAMPURA approach).  Body moved to TAMPURA_PLAN.md
+       as the seed of a dedicated TAMPURA workstream; future
+       TAMPURA-related issues collect there before the next
+       plan refresh.
 
 Closed since previous summary:
-  #67  [DONE 2026-05-10] — Phase 4 hidden-target criterion swap
-       (commit 4c9e4d5).  Single-commit resolution: dropped the
-       audit body's two-commit plan in favour of just the Phase 4
-       swap, after user pushback — making Phase 4 use camera-ray
-       occlusion (matching Phase 1 / oracle_detect_objects)
-       eliminates the disagreement at its source.  Eval no_summary
-       cells drop to zero (modulo unrelated #21 / #47 cascading-
-       occlusion give-ups now surfaced).
-  #10  [DONE 2026-05-08 (later)] — uniform voxelization baseline
-       (commit afdaadd).  Free-space-only swap: UniformGridGenerator
-       (uniform_grid.py) replaces FreeSpaceGenerator under
-       --baseline uniform; OBJECT + SHADOW boxels untouched; PDDL
-       domain unchanged (TAMPURA-style Python-side label maintenance
-       via the existing _build_init re-emit).  SCALABILITY_MATRIX
-       gains the baseline axis (90 -> 180 cells, semantic + uniform).
-       eval_plotter.py --baseline-csv hook already consumes the
-       comparison input.
+  #68  [DONE 2026-05-10] - scene randomizer (commit 63b1c64);
+       follow-ups: 4c65f0e (n-occluders flag), 060561d (headless
+       probe), 2bfc1cd (eval-runner --seed-retry), c7e3243
+       (cubes-only scalability).  Doc-state correction 2026-05-12.
+  #70  [DONE 2026-05-12] - random-pairs unreachable placements;
+       user-verified in GUI.
+  #67  [DONE 2026-05-10] - Phase 4 hidden-target criterion swap
+       (commit 4c9e4d5).
+  #10  [DONE 2026-05-08 (later)] - uniform voxelization baseline
+       (commit afdaadd).
+  #9   [DONE 2026-05-08 (later)] - eval runner + scalability
+       matrix + plots (commit e8237b6).
 
-Deferred   → archive/CODEBASE_AUDIT_DEFERRED.txt:
-             #2, #14, #42 (logged collisions do not trigger replan — accepted;
-                  supervisor reconfirmed 2026-05-06: "no need to track
-                  knocked-down objects"),
-             #47 (DEFERRED OUT OF SCOPE 2026-05-06 — archived in 2026-05-06 slim),
-             #51 (DEFERRED 2026-05-07 — archived in 2026-05-07 slim; fix preserved
-                  on branch audit-51-shadow-blocker-fix on both remotes).
+Deferred 2026-05-12 (later) -> archive/CODEBASE_AUDIT_DEFERRED.txt:
+  #50  Planner perf investigation - DEFERRED per user 2026-05-12.
+       AUDIT_50_SWEEP.md investigation deliverable stays as
+       scaffolding for any future revisit; #62 quick-fix path
+       proceeds without the broader profile sweep.
+  #57  Registry should own cube geometry - DEFERRED.
+       Architectural cleanup; no correctness bug; current
+       fallback works.
+  #59  Scaled-up find-and-stack - DEFERRED.  User direction
+       2026-05-08: "very very low prio."
+  #61  Smart console filter UX polish - DEFERRED.  Cosmetic;
+       eval batch runs use --log-level normal.
+  #65  Rename boxel -> hanixel - DEFERRED.  Cosmetic
+       terminology overhaul; revisit post-thesis if still wanted.
 
-Resolved/subsumed → archive/CODEBASE_AUDIT_RESOLVED.txt:
-             #1, #3, #4 (accepted shadow AABB remainder), #5, #7, #8, #11
-             [WONTFIX], #12 [MERGED INTO #9], #13 [WONTFIX], #15–#20,
-             #21 (log-only band-aid 2026-05-05; real fix #47 deferred
-             2026-05-06), #22–#29, #30 [WONTFIX], #31 [DONE 2026-05-07],
-             #32 [MERGED INTO #31], #33, #34 [WONTFIX], #35, #36 [DONE
-             2026-05-07], #37, #38, #39, #40 [DONE 2026-05-05], #41
-             [DONE 2026-05-07], #43, #44, #45, #46, #48 [DONE 2026-05-07],
-             #49 [DONE 2026-05-07], #53 [DONE 2026-05-07],
-             #54 [DONE 2026-05-07], #55 [DONE 2026-05-08],
-             #56 [DONE 2026-05-08], #58 [DONE 2026-05-08],
-             #60 [DONE 2026-05-08].
+Deferred (earlier) -> archive/CODEBASE_AUDIT_DEFERRED.txt:
+             #2, #14, #42, #47, #51.
+
+Resolved/subsumed -> archive/CODEBASE_AUDIT_RESOLVED.txt:
+             #1, #3, #4, #5, #7, #8, #9, #10, #11, #12, #13, #15-#22,
+             #23-#36, #37-#41, #43-#46, #48-#49, #53-#56, #58, #60,
+             #67, #68, #70.
