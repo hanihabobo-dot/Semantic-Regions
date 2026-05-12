@@ -1505,6 +1505,8 @@ def main(gui=True, run_logger=None, scene_config=None,
         physics_failures=physics_failures,
         run_config=run_config,
         run_logger=run_logger,
+        registry=registry,
+        last_init=planner.last_init,
     )
 
     # Keep the GUI visible briefly so the user can inspect the final
