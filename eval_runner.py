@@ -107,21 +107,37 @@ DEFAULT_MATRIX = [
     ]
 ]
 
-# Random-pairs sweep (audit #68): same scene and CLI shape as
-# random_pairs_scene + the updated --n-occluders knob.  Fixed
-# n_occluders ∈ {2, 3, 4}, hidden count is drawn per seed inside the
-# scene builder ([1, n_occluders]), so each seed lands at a different
-# (n_hidden, n_targets) within a cell.  3 seeds × 3 occluder counts ×
-# 2 goals × 2 baselines = 36 cells.
-RANDOM_PAIRS_MATRIX = {
-    "n_occluders": [2, 3, 4],
-    "seed":        [0, 1, 2],
-    "goal":        ["holding", "find-and-tray-stack"],
-    "baseline":    ["semantic", "uniform"],
-    "unit_costs":  [False],
-    "scene":       ["random-pairs"],
-    "_n_hidden_strategy": "none",
-}
+# Random-pairs sweep (audit #68 + #73 step 1(d) re-run).  Mixed-scene
+# list so all 3 goals are covered: random-pairs sub-tier carries the
+# 2 occluder-driven goals (holding, find-and-tray-stack) at
+# n_occluders ∈ {3, 4}; stack sub-tier carries the 3rd goal (stack),
+# which random-pairs hard-rejects at parse time (run_logger.py:531).
+# stack_scene ignores --n-occluders / --n-targets (no occluders;
+# n_objects defaults to 3 — boxel_env.stack_scene); those values are
+# tag-only for the stack sub-tier.  Cells: random-pairs
+# (2 occluders × 2 goals × 5 seeds × 2 baselines = 40) +
+# stack       (5 seeds × 2 baselines = 10) = 50.
+RANDOM_PAIRS_MATRIX = [
+    {
+        "n_occluders": [3, 4],
+        "seed":        [0, 1, 2, 3, 4],
+        "goal":        ["holding", "find-and-tray-stack"],
+        "baseline":    ["semantic", "uniform"],
+        "unit_costs":  [False],
+        "scene":       ["random-pairs"],
+        "_n_hidden_strategy": "none",
+    },
+    {
+        "n_occluders": [3],
+        "n_targets":   [3],
+        "seed":        [0, 1, 2, 3, 4],
+        "goal":        ["stack"],
+        "baseline":    ["semantic", "uniform"],
+        "unit_costs":  [False],
+        "scene":       ["stack"],
+        "_n_hidden_strategy": "none",
+    },
+]
 
 MATRIX_PRESETS = {
     "scalability":  SCALABILITY_MATRIX,
