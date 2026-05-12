@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #70, #71, #72, #73, #75                                  #
+#  OPEN ISSUES — #63, #70, #71, #72, #73, #75, #76                             #
 #                                                                              #
 ################################################################################
 
@@ -437,13 +437,15 @@ Where:    README.md (project root, currently 29 lines — quick-start
 Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
           results drive Known_Issues_and_Roadmap + Design_Decisions
           + the README story.  Any other open issue (#70, #71, #72,
-          #73) that lands between now and submission extends the
-          diff this sweep has to absorb.  Gate list refreshed
-          2026-05-12 triage: dropped #50/#57/#59/#61/#65 (deferred)
-          and #66 (relocated to TAMPURA_PLAN.md).  #62/#69 closed
-          2026-05-12 so they no longer extend this sweep; #70
-          REOPENED 2026-05-12 (later) — original [DONE] was a doc-
-          state error and #70 is back on the gate list.
+          #73, #75, #76) that lands between now and submission
+          extends the diff this sweep has to absorb.  Gate list
+          refreshed 2026-05-12 triage: dropped #50/#57/#59/#61/#65
+          (deferred) and #66 (relocated to TAMPURA_PLAN.md).
+          #62/#69 closed 2026-05-12 so they no longer extend this
+          sweep; #70 REOPENED 2026-05-12 (later) — original [DONE]
+          was a doc-state error and #70 is back on the gate list.
+          #75 + #76 added 2026-05-12 (later) — drop verification
+          gap + planner-no-plan investigation.
 Effort:   1-2 days (one focused pass per page).
 
 What:  CODEBASE POLICY (L823-828) already requires per-change wiki
@@ -1925,6 +1927,197 @@ Related:
 
 
 ================================================================================
+#76. PLANNER RETURNS NO PLAN FOR SOME REACH-CONSTRAINED RANDOM-PAIRS SCENES
+================================================================================
+Status:   OPEN.  Raised 2026-05-12 (later) by user as Follow-up B
+          during #70 reach-fix verification (commits 8d9b7ad +
+          ca6746b + b48c667 + a2b37d9).  Side-finding on unseeded
+          random-pairs find-and-tray-stack run (seed=1905790753):
+          scene built reach-clean (3 occluders + 2 targets + tray,
+          31 boxels in registry, no #70 assert), but planner
+          returned solved=False / "ERROR: No plan found!" at
+          complexity 3 after 4 iterations and 0.847 s.  Final
+          iteration's "Stream plan (inf, 0, inf): False" + "Action
+          plan (inf, inf): False" indicate PDDLStream concluded NO
+          plan exists at complexity 3 (vs earlier iterations'
+          "None" = no result yet).  Whether this is (a) a genuine
+          plan-doesn't-exist verdict for this seed under the
+          post-#70 tighter _SAFE_TABLE_* window, or (b) the
+          adaptive search giving up early before escalating to
+          complexity 4+, is the open question.  Flagged for
+          investigation; not blocking any other issue.
+Priority: TIER 2 — correctness drift / eval surface area.
+          Doesn't crash the run (logs as exit_reason=planner_-
+          failed; eval cell counts as non-success).  Promotable to
+          TIER 1 if the failure rate climbs above ~5-10% of random-
+          pairs eval cells post-#70 hardening (iii) — at which
+          point the eval matrix's headline success-rate plot
+          becomes misleading because a non-trivial fraction of
+          cells fail at planning rather than at execution.
+          Promotable to TIER 0 if it correlates with specific
+          occluder-density / hidden-count configurations the
+          thesis claims to handle.
+Where:    Pipeline entry point:
+            test_full_pipeline.py main() — planner.plan() returns
+              ('No plan found', 0, ...) when adaptive search
+              concludes no plan exists at the explored complexity.
+              Handler logs "ERROR: No plan found!" and exits.
+          Adaptive search:
+            pddlstream_lib (vendored) — incremental.py / adaptive.py.
+              Complexity escalation driven by max_complexity /
+              max_skeletons; FastDownward returns the False verdict
+              per skeleton.
+          Planner-side (Boxel project):
+            pddlstream_planner.py _build_init — emits init facts
+              from the registry snapshot.  Worth checking whether
+              (boxel_fits ?o ?b) is emitted for the (hidden_target,
+              shadow_*) pair on this seed.
+            streams.py — sample-grasp / compute-kin / compute-
+              stack-kin all need to ground for the find-and-tray-
+              stack skeleton.
+          Repro:
+            run_boxels --scene random-pairs --goal find-and-tray-
+                stack --seed 1905790753
+            Log: logs/run_2026-05-12_20-45-47/run_2026-05-12_20-
+                45-47.log (lines 86-92 are the failing iteration +
+                summary).
+Depends:  #70 (REOPENED) — the post-#70 tighter _SAFE_TABLE_*
+          window is the new variable; this issue may be the
+          inevitable cost of the reach constraint (some seeds that
+          previously found a plan in the wide window now don't fit).
+          Disambiguation step (Fix step 1b below) is the first
+          investigation move.
+Effort:   1-2 days for the diagnostic; fix scope unknown until
+          investigation lands.
+
+What:  PDDLStream's adaptive search escalates complexity (0, 1, 2,
+       3, ...) until either (a) a plan is found or (b) the search
+       budget is exhausted.  Each iteration's "Stream plan: None"
+       means the search exhausted its sample budget at this
+       complexity without finding a complete stream chain;
+       "Stream plan: False" means it concluded no chain CAN exist
+       at this complexity (i.e., some stream's domain or some
+       PDDL predicate is unsatisfied).  For seed 1905790753:
+
+         Iteration 1 (complexity 0): 0 results, Stream plan None.
+         Iteration 2 (complexity 1): 7 results, Stream plan None.
+         Iteration 3 (complexity 2): 229 results, Stream plan None.
+         Iteration 4 (complexity 3): 237 results, Stream plan
+             FALSE -> "No plan found", exit.
+
+       The transition from None -> False at iteration 4 is the
+       concrete signal: PDDLStream's grounder concluded that with
+       all stream-evaluated atoms generated up to complexity 3, no
+       satisficing plan exists.
+
+       Two diagnostic angles:
+
+       (a) DOES THE GOAL HAVE A PLAN AT ALL FOR THIS SEED?
+           Inspect the registry snapshot at planning time:
+           - Are the 4 shadow boxels each viable as sense
+             destinations?  (audit #62 commit ed1789e gates sense
+             on test_target_can_hide_in_shadow + boxel_fits.)
+           - Is there at least one free-space boxel reachable from
+             home that the held cube can be placed on en route to
+             the tray?
+           - Does the visible target have a pickable IK solution
+             from home AND a place IK solution on the tray?
+             Find-and-tray-stack needs both.
+           If any of these is False at the registry level, the
+           plan genuinely doesn't exist.
+
+       (b) IS THE ADAPTIVE SEARCH GIVING UP TOO EARLY?
+           PDDLStream's max_complexity defaults to a finite value
+           (need to confirm — could be 8 or 16).  For find-and-
+           tray-stack with 1 hidden + 1 visible target, complexity
+           3 produced 237 stream results, so the search did try.
+           But "Stream plan: False" at this complexity could be a
+           stale verdict if certain stream samples haven't been
+           produced yet at this complexity tier.  Check:
+           - max_complexity setting (run_logger / pddlstream_-
+             planner call site).
+           - Whether pushing to complexity 4-5 produces a plan
+             (manual verbose run with higher max_complexity).
+
+Fix:   ONE INVESTIGATION COMMIT, then a fix commit.
+
+       Step 1 — Reproduce + diagnose.
+       (1a) Re-run --seed 1905790753 with --log-level verbose.
+            Capture the full registry snapshot at PLAN #1 entry
+            (boxel_data.json + the init.pddl exported to
+            problem_initial.pddl) and the per-skeleton failure
+            verdict from FastDownward.
+       (1b) Re-run with the pre-#70 code (commit before 8d9b7ad)
+            on the same seed to disambiguate Depends — if the
+            pre-#70 run plans OK, #70 caused this; if it also
+            fails, the issue is independent.
+
+       Step 2 — Decision tree based on (1):
+       (2a) If goal genuinely doesn't exist for this seed under
+            the current _SAFE_TABLE_* window: this is the
+            inevitable cost of the reach constraint.  Add to the
+            eval-runner's seed-retry layer: treat planner_failed
+            exit as retryable for find-and-tray-stack random-
+            pairs cells (currently only placement failures retry).
+            Bump the seed-retry budget if needed.  Goal stays
+            unchanged.
+       (2b) If max_complexity is the culprit: bump the planner's
+            max_complexity in the call site (pddlstream_planner.
+            py) and verify that complexity 4-5 finds a plan.
+            Trade-off: higher max_complexity inflates plan time
+            for unsolvable seeds; pair with a max_time gate.
+       (2c) If a specific predicate / stream is unsatisfied for
+            this seed but not for others: instrument _build_init
+            to log which (boxel_fits / valid_grasp / compat_stack)
+            atoms were emitted, cross-check against goal
+            preconditions.  May surface a registry-snapshot bug
+            (e.g., shadow boxel emitted with wrong AABB extent)
+            related to #71 or #72.
+
+Care:  Don't conflate this with #70.  #70 is "scene generator
+       spawns objects outside reach"; #76 is "planner returns no
+       plan for SOME reach-clean scenes."  Different layer
+       entirely.  Both can be open simultaneously.
+
+       Investigation should NOT modify the planner / adaptive
+       search defaults until step 1's diagnostic confirms which
+       branch of the decision tree applies.  Preferable to land a
+       diagnostic-only instrumentation commit first, then the fix
+       as a follow-up.
+
+       Eval implication: if this issue is unfixed AND occurs at
+       >5% of random-pairs cells, the success-rate axis of plot 1
+       (Tier A in #73) becomes misleading; plot 6 (failure-mode
+       breakdown, also #73 Tier B) catches it via the
+       planner_failed exit_reason but the headline success rate
+       under-reports the SEMANTIC baseline's actual capability.
+
+Related:
+       #70 (REOPENED) — the post-#70 tighter _SAFE_TABLE_* window
+            is the immediate suspect.  Need to confirm whether
+            this issue pre-existed #70 (pre-#70 run on same seed)
+            or was caused by #70.
+       #71 — refresh OBJECT boxel AABBs on every sense.  If
+            (boxel_fits ?o ?b) gating uses stale OBJECT AABBs,
+            could mis-emit; relevant if step 2c surfaces a
+            predicate-grounding bug.
+       #72 — shadow AABB lateral overhang.  If the over-emitted
+            SHADOW boxels include the over-extended region, the
+            (boxel_fits) check for the hidden target's place /
+            sense pair may be too restrictive (object_size > shadow
+            "actual" but <= shadow "AABB-with-overhang"); relevant
+            if step 2c surfaces a shadow-shape mismatch.
+       #62 [DONE 2026-05-12] — _build_init emits (boxel_fits) for
+            FREE_SPACE U SHADOW.  The grounding gate that #62
+            added is a candidate root cause if it's now too
+            restrictive under reach-bound placement.
+       #73 — eval-chapter figures backlog.  Plot 6 (failure-mode
+            breakdown) is the visualisation that flags this issue
+            in eval data.
+       #74 — placeholder forward-reference in #73; still unfiled.
+
+
+================================================================================
 SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-12 (later))
 ================================================================================
 
@@ -1990,12 +2183,27 @@ TIER 1 — CORRECTNESS / HIGH-PRIO:
        _release_and_verify_drop, call from execute_place and
        execute_stack in place of the open-then-remove pair.
 
+TIER 2 — INVESTIGATION:
+  #76  Planner returns no plan for some reach-constrained random-
+       pairs scenes.  Side-finding 2026-05-12 (later) during #70
+       reach-fix verification: seed=1905790753 scene built clean
+       (no #70 assert) but planner returned solved=False at
+       complexity 3 after 4 iterations / 0.847 s.  Whether genuine
+       "no plan exists" under the tighter _SAFE_TABLE_* window or
+       adaptive search giving up early is the open question.
+       Diagnostic step 1: re-run with verbose logging + pre-#70
+       code on same seed to disambiguate.  Doesn't crash the run
+       (logs as exit_reason=planner_failed); promotable to TIER 1
+       if failure rate climbs above ~5-10% of random-pairs eval
+       cells.
+
 TIER 3 — CODE QUALITY / DOC SWEEP:
   #63  README + wiki final doc sweep - gated on remaining open
-       issues (now: #70, #71, #72, #73, #75).  Explicitly the
-       last commit before thesis submission per user 2026-05-08.
+       issues (now: #70, #71, #72, #73, #75, #76).  Explicitly
+       the last commit before thesis submission per user
+       2026-05-08.
 
-Total open: 6 items (#63, #70, #71, #72, #73, #75).
+Total open: 7 items (#63, #70, #71, #72, #73, #75, #76).
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
