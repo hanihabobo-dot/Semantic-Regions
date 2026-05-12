@@ -38,11 +38,15 @@ import os
 import random
 import shutil
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from smart_filter import SmartConsoleFilter
+
+if TYPE_CHECKING:
+    from boxel_data import BoxelRegistry
 
 QUIET = logging.WARNING
 NORMAL = logging.INFO
@@ -223,6 +227,8 @@ def report_run_outcome(
     physics_failures: list,
     run_config: Optional[dict],
     run_logger: Optional["RunLogger"],
+    registry: Optional["BoxelRegistry"] = None,
+    last_init: Optional[list] = None,
 ):
     """Print success/failure classification, planning timing summary,
     and write timing_summary.json into the run logger's run directory.
@@ -304,6 +310,26 @@ def report_run_outcome(
     # don't require parsing the prose log.
     if run_logger is not None:
         summary_path = run_logger.run_dir / "timing_summary.json"
+        # Audit #73 step 1(a): end-of-run boxel counts by type drive
+        # the compactness plots (Tier A, plots 1/3/11).
+        boxel_counts: dict = {}
+        if registry is not None:
+            try:
+                boxel_counts = {
+                    "n_object_boxels": len(registry.get_object_boxels()),
+                    "n_shadow_boxels": len(registry.get_shadow_boxels()),
+                    "n_free_space_boxels": len(registry.get_free_space_boxels()),
+                }
+            except Exception as e:
+                print(f"  WARNING: could not snapshot boxel counts: {e}")
+        # Audit #73 step 1(b): init-fact totals (last plan() call) +
+        # per-predicate breakdown for plot 2's "which atoms blow up"
+        # stratification.
+        init_facts: dict = {}
+        if last_init:
+            init_facts["n_init_state_facts"] = len(last_init)
+            init_facts["n_facts_by_predicate"] = dict(
+                Counter(fact[0] for fact in last_init if fact))
         try:
             summary_path.write_text(json.dumps({
                 "run_config": run_config or {},
@@ -316,6 +342,8 @@ def report_run_outcome(
                 # so eval tooling (#9) can filter false-positive successes.
                 "physical_failures_per_action": physical_failures,
                 "physical_failures_at_goal": physics_failures,
+                **boxel_counts,
+                **init_facts,
             }, indent=2))
             print(f"  Timing summary written to {summary_path}")
         except Exception as e:

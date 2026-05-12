@@ -100,7 +100,13 @@ class PDDLStreamPlanner:
         # Load PDDL files (use PDDLStream-compatible untyped domain)
         self.domain_pddl = read_pddl_file('domain_pddlstream.pddl')
         self.stream_pddl = read_pddl_file('stream.pddl')
-    
+
+        # Audit #73 step 1(b): cache the most recent _build_init output
+        # so the run logger can dump n_init_state_facts + per-predicate
+        # counts at end-of-run.  Updated by create_problem (and
+        # export_problem_pddl) on every call.
+        self.last_init: Optional[List[Tuple]] = None
+
     def _get_stream_map(self) -> Dict[str, Any]:
         """
         Create the stream map connecting stream names to BoxelStreams generators.
@@ -170,7 +176,8 @@ class PDDLStreamPlanner:
                                 on_relations,
                                 stackable_objects,
                                 held_obj)
-        
+        self.last_init = init
+
         constant_map = {}
         stream_map = self._get_stream_map()
         

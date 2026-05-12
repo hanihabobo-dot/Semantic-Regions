@@ -362,11 +362,14 @@ PRIMARY_COLUMNS = [
 
 # Fields that are list-valued (per-call timings, per-action failures);
 # don't fit a flat CSV so we drop them from the aggregated CSV but keep
-# them in aggregated.jsonl for downstream tooling.
+# them in aggregated.jsonl for downstream tooling.  Despite the name,
+# also covers dict-valued keys (e.g. audit #73's n_facts_by_predicate)
+# — anything non-scalar that would stringify badly in a CSV cell.
 LIST_VALUED = {
     "per_call_planning_time_s",
     "physical_failures_per_action",
     "physical_failures_at_goal",
+    "n_facts_by_predicate",
 }
 
 
