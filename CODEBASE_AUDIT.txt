@@ -1180,8 +1180,14 @@ Added:        2026-05-12 — #70 (random-pairs scene — unreachable
               its SceneConfig without constrain_to_reach=True
               (unlike stack_scene); _random_xy_positions samples
               in the wide _TABLE_PLACE_* window with no reach-
-              disk filter, so corners reach ~0.75 m vs the
-              0.65 m Panda reach.  Pick IK still succeeds via
+              disk filter.  Robot base sits at (-0.4, 0.0),
+              reach radius 0.65 m -> reachable x ceiling drops
+              from 0.25 (at y=0) to 0.11 (at y=±0.4); the
+              placement window goes out to x=0.5.  Roughly
+              half the placement window lies outside the reach
+              disk, so the majority of multi-object spawns
+              produce at least one unreachable cube.  Pick IK
+              still succeeds via
               the small slack beyond the comfort-reach disk,
               the grasp constraint binds, post-pick lift then
               wedges the cube in mid-air with the arm fully
@@ -2788,8 +2794,16 @@ Where:    Root cause:
             _SAFE_TABLE_Y_RANGE = (-0.40, 0.40) (line 801)
             _TABLE_PLACE_X_RANGE = (-0.20, 0.60) (line 815)
             _TABLE_PLACE_Y_RANGE = (-0.50, 0.50) (line 816)
-            Corner sample |xy - robot_base| can reach ~0.75 m,
-            i.e. ~10 cm beyond _PANDA_REACH_RADIUS.
+            Geometry: with base at (-0.4, 0.0) and reach 0.65 m,
+            the reachable x ceiling is -0.4 + sqrt(0.65^2 - y^2)
+            = 0.25 at y=0, 0.18 at y=±0.2, 0.11 at y=±0.4.
+            The placement window's x range goes to 0.50 (line
+            815) — i.e. ~half the window is outside the reach
+            disk for typical y.  This is not a corner-case
+            defect: every multi-object spawn is expected to
+            land at least one cube outside reach, and user
+            GUI runs confirm "almost all" of a 5-cube scene
+            land outside reach in practice.
 Depends:  None.  Independent of #50/#62 (planner perf), #66 Plan C
           (TAMPURA-style placement), and #65 (boxel -> hanixel
           rename).  Lands directly on main.
@@ -2936,13 +2950,15 @@ TIER 0 — TOP PRIORITY:
        in air.  scalability_scene returns SceneConfig with
        constrain_to_reach=False (no kwarg passed at line 336),
        so random_pairs_scene inherits the wide _TABLE_PLACE_*
-       sampling window with no reach-disk filter.  Corner
-       spawns reach ~0.75 m vs _PANDA_REACH_RADIUS = 0.65 m;
-       pick IK still solves on the slack, the grasp constraint
-       binds, and post-pick lift leaves the cube floating with
-       the arm fully extended.  AI implements (option A or B
-       in the body); user verifies in GUI; AI waits for OK
-       before [DONE].
+       sampling window with no reach-disk filter.  Robot base
+       at (-0.4, 0.0), reach 0.65 m, placement-window x ceiling
+       0.50 — roughly HALF the window is unreachable; user GUI
+       runs report "almost all" of a 5-cube scene land outside
+       reach.  Pick IK still solves on the slack, grasp
+       constraint binds, post-pick lift wedges the cube in
+       mid-air with the arm fully extended.  AI implements
+       (option A or B in the body); user verifies in GUI;
+       AI waits for OK before [DONE].
   #68  Scene randomizer — vary the (occluder, hidden-target) pair
        count per run (within a CLI-configurable range), not just
        per-object placement.  Today scalability_scene takes fixed
