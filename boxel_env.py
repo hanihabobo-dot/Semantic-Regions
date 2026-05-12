@@ -1387,12 +1387,19 @@ class BoxelTestEnv:
             if shadow_parts:
                 obj_boxel.is_occluder = True
 
-            for sp in shadow_parts:
+            for idx, sp in enumerate(shadow_parts):
                 # ShadowCalculator leaves ID empty; assign a stable
                 # "shadow_of_<parent>" name and link parent ↔ shadow IDs
                 # so downstream consumers (planner, visualizer) can
-                # rely on the relationship.
-                sp.id = f"shadow_of_{obj_boxel.id}"
+                # rely on the relationship.  Audit #72: shadow_parts is
+                # 2+ slabs per occluder (option C two-slab carve, plus
+                # any obstacle-subtraction fragments).  Suffix the ID
+                # with __NN when more than one slab exists so the
+                # registry's id-keyed dict doesn't overwrite earlier
+                # slabs.  Single-slab case keeps the bare name for
+                # backward compat.
+                suffix = f"__{idx:02d}" if len(shadow_parts) > 1 else ""
+                sp.id = f"shadow_of_{obj_boxel.id}{suffix}"
                 sp.created_by_boxel_id = obj_boxel.id
                 sp.on_surface = (
                     "table"
