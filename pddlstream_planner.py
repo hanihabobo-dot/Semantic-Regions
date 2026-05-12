@@ -493,12 +493,18 @@ class PDDLStreamPlanner:
         for obj in target_objects:
             if obj not in obj_ids:
                 obj_ids.append(obj)
-        free_ids = [
+        # Containment candidates (audit #62): boxel_fits now gates BOTH
+        # :action place (free-space destination) and :action sense
+        # (shadow region that could hide ?o).  Same predicate, both
+        # preconditions.  OBJECT boxels are excluded — not valid
+        # place destinations (is_free_space false) and not valid sense
+        # regions (view_clear only derives over shadows).
+        fit_dest_ids = [
             b.id for b in self.registry.boxels.values()
-            if b.boxel_type == BoxelType.FREE_SPACE
+            if b.boxel_type in (BoxelType.FREE_SPACE, BoxelType.SHADOW)
         ]
         for o in obj_ids:
-            for bid in free_ids:
+            for bid in fit_dest_ids:
                 if self.streams.test_boxel_fits(o, bid):
                     init.append(('boxel_fits', o, bid))
 
