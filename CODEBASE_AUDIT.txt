@@ -849,12 +849,21 @@ Status:   [REOPENED 2026-05-12 (later)] — original [DONE 2026-05-12]
           scalability_scene is unchanged so the existing eval
           matrix (--scene scalability) stays on the wide _TABLE_-
           PLACE_* window per Option (A)'s rationale.
+          Refinement commit ca6746b widens the seed-retry guard
+          at test_full_pipeline.py:1644-1646 to recognize the new
+          'audit #70' error string from _assert_xys_in_reach.
+          The pre-fix guard only matched 'Could not place' so the
+          new assert propagated and aborted the run; user repro:
+          fresh seed=340693204, target[0] at (0.183, 0.312) =
+          0.661 m from robot base, just 1.1 cm beyond the 0.65 m
+          reach disk.  Post-refinement: seed_auto's 10-retry
+          budget covers the assert as a retryable error.
           Awaiting user GUI verification per Care (iii) — re-run
-          on --seed 505998003 should now either pass cleanly or
-          fail loud at the post-spawn assert (in which case we
-          plumb constrain_to_reach into _hidden_xy_positions as a
-          follow-up).  Will mark [DONE 2026-05-12 (later, again)]
-          on user OK.
+          on --seed 505998003 should now pass cleanly; unseeded
+          random-pairs runs may print '[retry N/10] placement
+          failed (audit #70: ...)' a small number of times before
+          settling on a clean seed.  Will mark [DONE 2026-05-12
+          (later, again)] on user OK.
 Priority: TIER 0 — top priority per user direction 2026-05-12.
           Promoted (originally) ahead of the previously-empty TIER 0
           slot (since #68 [DONE 2026-05-10 (later)]).  Blocks
