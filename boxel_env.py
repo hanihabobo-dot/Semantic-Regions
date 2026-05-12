@@ -1122,7 +1122,10 @@ class BoxelTestEnv:
                                 ty + sy * (hy - EPS),
                                 cz + sz * (hz - EPS),
                             ])
-                hits = p.rayTestBatch([cam] * 8, corners)
+                # rayTestBatch numThreads=0: let Bullet pick max threads
+                # (audit #69). Safe — no concurrent stepSimulation on this
+                # client during target placement.
+                hits = p.rayTestBatch([cam] * 8, corners, numThreads=0)
                 all_occluded = True
                 for h in hits:
                     hit_uid = h[0]
@@ -1534,8 +1537,11 @@ class BoxelTestEnv:
                             ray_targets.append([x, y, z])
 
                 cam = self.camera_position.tolist()
+                # rayTestBatch numThreads=0: let Bullet pick max threads
+                # (audit #69). Safe — Phase 1/4 calls are sequential w.r.t.
+                # stepSimulation on this client.
                 results = p.rayTestBatch(
-                    [cam] * len(ray_targets), ray_targets
+                    [cam] * len(ray_targets), ray_targets, numThreads=0,
                 )
                 is_visible = any(
                     r[0] == obj_info.object_id for r in results

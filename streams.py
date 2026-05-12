@@ -502,9 +502,12 @@ class BoxelStreams:
 
         cam = (camera_pos.tolist() if isinstance(camera_pos, np.ndarray)
                else list(camera_pos))
+        # rayTestBatch numThreads=0: let Bullet pick max threads (audit #69).
+        # Safe — plan_client is DIRECT mode, no concurrent stepSimulation.
         results = p.rayTestBatch(
             [cam] * len(corners), corners,
             physicsClientId=self.physics_client,
+            numThreads=0,
         )
         occluded = [r[0] != -1 and r[2] < 0.999 for r in results]
         return any(all(occluded[s:s + 8]) for s in starts)

@@ -110,7 +110,10 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
                 ray_froms.append(ray_origin.tolist())
                 ray_tos.append([float(xi), float(yi), float(z_target)])
 
-    results = p.rayTestBatch(ray_froms, ray_tos)
+    # rayTestBatch numThreads=0: let Bullet pick max threads (audit #69).
+    # Largest single batch on the planner hot path (147 rays per sense).
+    # Safe — sense action is sequential w.r.t. stepSimulation.
+    results = p.rayTestBatch(ray_froms, ray_tos, numThreads=0)
     occluder_hits = 0
     robot_hits = 0
     detected_bodies: Set[int] = set()
@@ -209,7 +212,9 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
                 ray_froms.append(ray_origin)
                 ray_tos.append([float(xi), float(yi), float(z_mid)])
 
-        results = p.rayTestBatch(ray_froms, ray_tos)
+        # rayTestBatch numThreads=0: let Bullet pick max threads (audit #69).
+        # Safe — registry rebuild is sequential w.r.t. stepSimulation.
+        results = p.rayTestBatch(ray_froms, ray_tos, numThreads=0)
         for hit_id, _link, _frac, _pos, _normal in results:
             if hit_id in pybullet_to_boxel:
                 blocker_set.add(pybullet_to_boxel[hit_id])

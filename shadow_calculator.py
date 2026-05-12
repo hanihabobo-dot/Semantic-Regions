@@ -108,7 +108,9 @@ class ShadowCalculator:
             ray_ends.append(ray_target)
             
         # Batch Ray Test
-        results = p.rayTestBatch(corners, ray_ends)
+        # rayTestBatch numThreads=0: let Bullet pick max threads (audit #69).
+        # Safe — shadow construction is sequential w.r.t. stepSimulation.
+        results = p.rayTestBatch(corners, ray_ends, numThreads=0)
         
         table_z = self.table_surface_height
         
