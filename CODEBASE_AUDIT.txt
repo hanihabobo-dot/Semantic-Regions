@@ -1193,6 +1193,20 @@ Added:        2026-05-12 — #70 (random-pairs scene — unreachable
               wedges the cube in mid-air with the arm fully
               extended ("object hung in air" artefact reported
               by user GUI run).  Open count: 10 -> 11.
+Added:        2026-05-12 (later) — #71 (refresh OBJECT boxel
+              AABBs on every sense — shadow regions untouched).
+              Currently the registry's OBJECT AABBs are written
+              once at scene creation (or once at discovery for
+              non-target objects found via sense_contains_
+              nontarget) and never refreshed.  Cubes that shift
+              between actions (settle, get bumped, jiggle on a
+              stack) drift away from the registry's stored
+              AABB; the planner then reasons over stale
+              geometry and may emit false-free or stale-on
+              facts.  User direction: refresh BB only, not the
+              shadow region behind it (shadow recomputation is
+              expensive and out of scope for this fix).
+              Open count: 11 -> 12.
 
 Resolved issues:     archive/CODEBASE_AUDIT_RESOLVED.txt
 Deferred/background: archive/CODEBASE_AUDIT_DEFERRED.txt
@@ -2926,7 +2940,147 @@ Related: #68 [DONE 2026-05-10 (later)] — random-pairs scene
 
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-12)
+#71. REFRESH OBJECT BOXEL AABBs ON EVERY SENSE — SHADOW REGIONS UNTOUCHED
+================================================================================
+Status:   OPEN.  Raised 2026-05-12 (later) by user.  Symptom not
+          yet captured in a single GUI screenshot, but the failure
+          mode is implied by the find-and-tray-stack runs that
+          show cubes drifting from their initial spawn pose
+          across multi-action plans (settle, bump from arm
+          swing, jiggle on a stack) while the registry's OBJECT
+          AABB stays frozen at the spawn-time value.
+Priority: TIER 1 — correctness drift.  Promotable to TIER 0 if
+          user-observed false-success cases multiply (planner
+          uses stale OBJECT AABB to certify a place / stack at
+          a pose that physics no longer admits).  Not promoted
+          today because #70 (placement reachability) and #66
+          Plan C (TAMPURA placement) sit above it on the
+          critical path.
+Where:    execution.py:handle_sense_action (around line 880-1000
+          for the sense_shadow dispatch; the refresh hook lands
+          at the end of every outcome branch, BEFORE returning
+          ActionResult).  Concretely:
+            - sense_outcome == "found_target": refresh, return
+            - sense_outcome == "clear_but_empty": refresh, return
+            - sense_outcome == "contains_nontarget": the
+              existing per-discovery getAABB at line 962 stays;
+              after the discovery loop ends, do a full-registry
+              refresh so existing OBJECTs that did NOT trigger
+              the discovery path also get a fresh AABB.
+          Registry walk:
+            boxel_data.py:101+ (BoxelRegistry) — use
+              get_boxels_by_type(BoxelType.OBJECT) to iterate.
+          Object body lookup:
+            env.objects[obj_name].object_id supplies the
+              PyBullet body id for p.getAABB.
+Depends:  None.  Independent of #70 (placement reachability),
+          #66 Plan C (TAMPURA), and #50/#62 (planner perf).
+          Lands directly on main.
+
+What:  OBJECT boxel AABBs are written at exactly two points in
+       the current pipeline:
+         (1) Scene creation — _create_objects / _create_targets
+             populate registry with p.getAABB(body_id) once,
+             immediately after spawn.
+         (2) sense_contains_nontarget — when a non-target body
+             is discovered inside a shadow, execution.py:962
+             pulls a fresh AABB for THAT body only, before
+             creating the new OBJECT entry.
+       There is no third update.  In particular:
+         - After place / stack / pick: the held cube's pose
+           changes, but the registry's OBJECT AABB for that
+           cube is left at its pre-action value (audit #36's
+           hardcoded post-action lift mitigates the visible
+           gap, but doesn't refresh the registry).
+         - After sense for any other body: a near-miss arm
+           swing can nudge a neighbouring cube; physics
+           updates the body, the registry does not.
+         - After a stack settles: gravity drops the top cube
+           a few mm onto its support; the registry's OBJECT
+           AABB still claims the cube is at its handoff pose.
+       Net effect: the planner emits free / on / clear /
+       boxel_fits facts grounded in stale geometry.  The
+       physical-failure verifier (#40 [DONE]) catches the
+       worst false-success at goal time, but every replan
+       between sense actions is reasoning over potentially-
+       stale OBJECT boxels.
+
+       USER DIRECTION (explicit): refresh ONLY the OBJECT
+       boxel's AABB.  Do NOT recompute the shadow region
+       cast by that object.  Shadow recomputation is the
+       expensive path (shadow_calculator.py traces camera
+       rays through every revised AABB) and is out of scope
+       for this fix.  Document the resulting inconsistency
+       in the commit message: OBJECT AABB will be fresh,
+       SHADOW boxel keyed to that object may now be slightly
+       mis-aligned with the live silhouette.  Acceptable
+       trade per user.
+
+Fix:   Add a helper in boxel_env.py or execution.py:
+
+         def refresh_object_aabbs(env, registry, viz=None):
+             """Refresh every OBJECT boxel's AABB from live
+             PyBullet.  Shadow boxels are NOT recomputed
+             (audit #71 — user-explicit scope cut)."""
+             for obj_boxel in registry.get_boxels_by_type(
+                     BoxelType.OBJECT):
+                 obj_info = env.objects.get(obj_boxel.id)
+                 if obj_info is None:
+                     continue
+                 bid = obj_info.object_id
+                 aabb_min, aabb_max = p.getAABB(bid)
+                 obj_boxel.aabb_min = np.array(aabb_min)
+                 obj_boxel.aabb_max = np.array(aabb_max)
+                 if viz is not None:
+                     viz.refresh_object_viz(obj_boxel.id)
+
+       Call it at the end of every sense_outcome branch in
+       handle_sense_action, right before the return.
+
+       Optional follow-up (defer to a separate commit unless
+       trivially small):
+       (i)  Same helper called at the end of execute_place /
+            execute_stack.  Out of scope for the primary
+            commit per user-explicit "on every sense" scope.
+       (ii) A second commit closes the SHADOW-staleness gap
+            by re-running shadow_calculator on the refreshed
+            AABBs.  Separately tracked because it doubles
+            the sense-action cost; promote only if eval shows
+            stale-shadow drift hurting success rates.
+
+Care:  Verification:
+       (i)   Smoke test: log OBJECT boxel AABB deltas before/
+             after each sense.  Confirm deltas appear for
+             cubes near the active arm path and are zero
+             for cubes the arm did not touch.
+       (ii)  Regression: run the existing eval matrix with the
+             refresh enabled.  Success rates should not
+             regress; if they improve on holding / find-and-
+             tray-stack, that's the audit #40 false-success
+             tail closing.
+       (iii) Performance: p.getAABB is cheap (~10 us each);
+             a 10-object scene adds ~0.1 ms per sense.  Not
+             expected to register on planner perf budget.
+
+Related: #29 [archived] — hidden-target placement raycast
+              verification.  Spawn-time AABB capture is the
+              "once" channel that #71 extends to "every
+              sense".
+         #36 — post-action lift workaround.  Mitigates the
+              visible drift but does not refresh registry.
+         #40 [DONE 2026-05-05] — physical-failure verifier
+              on (on a b) writes and at goal.  Catches the
+              worst false-successes #71 would otherwise let
+              through; #71 reduces how often the verifier
+              has to fire.
+         #57 — registry should own cube geometry (replace
+              PyBullet AABB fallback).  Long-term direction;
+              #71 is the short-term refresh inside the
+              current "registry mirrors PyBullet" model.
+
+
+================================================================================
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-12 (later))
 ================================================================================
 
 Aligns with the ROADMAP banner above (pre-eval → eval prerequisites → eval).
@@ -2977,6 +3131,14 @@ TIER 1 — UNIFORM/TAMPURA BASELINE PLACEMENT (correctness blocker):
        [PENDING on audit-64-tampura-binary-grid] (continuous-
        pose place, real TAMPURA).  Single shared issue body
        across both branches.
+  #71  Refresh OBJECT boxel AABBs on every sense.  Currently
+       written once at spawn (or at discovery for nontarget
+       bodies); cubes that shift between actions drift away
+       from the stored AABB and the planner reasons over
+       stale geometry.  User direction: refresh BB only, not
+       the shadow region behind it (out of scope).  ~0.1 ms
+       overhead per sense.  Promotable to TIER 0 if false-
+       success cases multiply.
 
 TIER 2 — PERF (planner wall-clock):
   #50  Planner perf investigation — profile, cache static init, kill
@@ -3015,7 +3177,7 @@ TIER 3 — CODE QUALITY / LOW-PRIO:
        FastDownward" bullet — captures the realistic CPU-side
        win that doesn't require simulator/planner swap.
 
-Total open: 11 items (#50, #57, #59, #61, #62, #63, #65, #66 Plan C, #68, #69, #70).
+Total open: 12 items (#50, #57, #59, #61, #62, #63, #65, #66 Plan C, #68, #69, #70, #71).
 
 Closed since previous summary:
   #67  [DONE 2026-05-10] — Phase 4 hidden-target criterion swap
