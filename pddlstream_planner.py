@@ -496,16 +496,33 @@ class PDDLStreamPlanner:
         # Containment candidates (audit #62): boxel_fits now gates BOTH
         # :action place (free-space destination) and :action sense
         # (shadow region that could hide ?o).  Same predicate, both
-        # preconditions.  OBJECT boxels are excluded — not valid
-        # place destinations (is_free_space false) and not valid sense
-        # regions (view_clear only derives over shadows).
-        fit_dest_ids = [
+        # preconditions.  OBJECT boxels are excluded — not valid place
+        # destinations (is_free_space false) and not valid sense regions
+        # (view_clear only derives over shadows).
+        #
+        # SHADOW branch (audit #62 refinement): the AABB extent check
+        # would over-emit because shadow_calculator subtracts the
+        # occluder only along the dominant axis (audit #72 lateral
+        # overhang).  test_target_can_hide_in_shadow adds a camera-ray
+        # visibility check + stable-resting-pose check on top of the
+        # extent test — only emit if a target placement exists where
+        # all 8 of its AABB corners are actually occluded from the
+        # camera AND the target rests stably on the table.
+        free_ids = [
             b.id for b in self.registry.boxels.values()
-            if b.boxel_type in (BoxelType.FREE_SPACE, BoxelType.SHADOW)
+            if b.boxel_type == BoxelType.FREE_SPACE
+        ]
+        shadow_ids = [
+            b.id for b in self.registry.boxels.values()
+            if b.boxel_type == BoxelType.SHADOW
         ]
         for o in obj_ids:
-            for bid in fit_dest_ids:
+            for bid in free_ids:
                 if self.streams.test_boxel_fits(o, bid):
+                    init.append(('boxel_fits', o, bid))
+            for bid in shadow_ids:
+                if self.streams.test_target_can_hide_in_shadow(
+                        o, bid, self.camera_pos):
                     init.append(('boxel_fits', o, bid))
 
         init.append(('Config', current_config))

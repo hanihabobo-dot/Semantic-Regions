@@ -389,6 +389,127 @@ class BoxelStreams:
         return bool(np.all(dest_extents >= obj_extents))
 
     # =========================================================================
+    # Shadow hideability (sense precondition refinement) — audit #62
+    # =========================================================================
+    # Two-stage filter on top of test_boxel_fits.  The AABB extent check
+    # over-emits because shadow_calculator subtracts the occluder only along
+    # the dominant axis (audit #72 lateral overhang): the shadow's AABB
+    # extends into camera-visible space.  This adds a camera-ray visibility
+    # check — only emit (boxel_fits ?o ?shadow) for sense if a target
+    # placement exists where all 8 of its AABB corners are occluded.
+    #
+    # Stability: target must rest on the table (the only horizontal support
+    # in our scenes).  Lifted shadow fragments produced by _subtract_aabb's
+    # "top of obstacle" cut are rejected.  table_z is recovered from the
+    # registry via min over SHADOW boxel z_min values (shadow_calculator
+    # clamps every shadow to table_z).
+
+    def test_target_can_hide_in_shadow(self, obj_id: str, shadow_id: str,
+                                       camera_pos: 'Optional[np.ndarray]' = None,
+                                       n_grid: int = 3) -> bool:
+        """
+        Whether a target can be physically hidden, fully occluded, inside a
+        shadow region (audit #62 refinement).
+
+        Two-stage filter:
+          1. AABB extent (test_boxel_fits) — cheap pre-screen.
+          2. Visibility raycast — cast camera rays to the 8 corners of the
+             target's AABB at a small grid of candidate placements; return
+             True iff at least one placement has all 8 corners occluded.
+
+        Stability: target is pinned to rest on the table.  Lifted shadow
+        fragments (z_min noticeably above table_z) are rejected — a cube
+        has exactly one stable axis-aligned resting orientation.
+
+        With camera_pos=None, stage 2 is skipped (AABB-only fallback —
+        preserves the behaviour of plain test_boxel_fits).
+
+        Args:
+            obj_id: target object / boxel ID
+            shadow_id: shadow boxel ID to test as hiding region
+            camera_pos: fixed-scene camera position; if None, skip raycast
+            n_grid: per-axis grid resolution for candidate placements
+                (default 3 → up to 9 candidates × 8 corners = 72 rays per
+                pair)
+
+        Returns:
+            True iff target physically fits, stably and fully occluded,
+            somewhere inside the shadow.
+        """
+        if not self.test_boxel_fits(obj_id, shadow_id):
+            return False
+        if camera_pos is None:
+            return True
+
+        shadow = self.registry.get_boxel(shadow_id)
+        if shadow is None:
+            return False
+
+        obj_boxel = self.registry.get_boxel(obj_id)
+        if obj_boxel is not None:
+            obj_extent = (obj_boxel.max_corner - obj_boxel.min_corner) / 2.0
+        else:
+            body_id = self._resolve_body_id(obj_id)
+            if body_id is None:
+                return False
+            try:
+                mn, mx = p.getAABB(body_id, physicsClientId=self.physics_client)
+            except Exception:
+                return False
+            obj_extent = (np.array(mx) - np.array(mn)) / 2.0
+        hx, hy, hz = float(obj_extent[0]), float(obj_extent[1]), float(obj_extent[2])
+
+        # Stable resting pose: target must rest on the table (the only
+        # horizontal support in our scenes), not float inside a shadow
+        # fragment lifted above an obstacle by shadow_calculator's
+        # _subtract_aabb "top of obstacle" cut.  shadow_calculator clamps
+        # every shadow's z_min to table_z, so the min over registered
+        # SHADOW boxels recovers table_z without plumbing it through the
+        # API.  Lifted fragments are rejected.
+        table_z = min(
+            (float(b.min_corner[2]) for b in self.registry.boxels.values()
+             if b.boxel_type == BoxelType.SHADOW),
+            default=float(shadow.min_corner[2]),
+        )
+        if float(shadow.min_corner[2]) > table_z + 1e-3:
+            return False
+
+        cx_min = float(shadow.min_corner[0]) + hx
+        cx_max = float(shadow.max_corner[0]) - hx
+        cy_min = float(shadow.min_corner[1]) + hy
+        cy_max = float(shadow.max_corner[1]) - hy
+        if cx_min > cx_max or cy_min > cy_max:
+            return False
+
+        cz = table_z + hz
+
+        xs = (np.linspace(cx_min, cx_max, n_grid)
+              if cx_max > cx_min else np.array([cx_min]))
+        ys = (np.linspace(cy_min, cy_max, n_grid)
+              if cy_max > cy_min else np.array([cy_min]))
+
+        corners: list = []
+        starts: list = []
+        for cx in xs:
+            for cy in ys:
+                starts.append(len(corners))
+                for sx in (-1, 1):
+                    for sy in (-1, 1):
+                        for sz in (-1, 1):
+                            corners.append([cx + sx * hx,
+                                            cy + sy * hy,
+                                            cz + sz * hz])
+
+        cam = (camera_pos.tolist() if isinstance(camera_pos, np.ndarray)
+               else list(camera_pos))
+        results = p.rayTestBatch(
+            [cam] * len(corners), corners,
+            physicsClientId=self.physics_client,
+        )
+        occluded = [r[0] != -1 and r[2] < 0.999 for r in results]
+        return any(all(occluded[s:s + 8]) for s in starts)
+
+    # =========================================================================
     # STREAM 1: Sample Grasp
     # =========================================================================
     # Called first during planning: "how can I grab this object?"
