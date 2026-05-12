@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #69, #71, #72, #73                                        #
+#  OPEN ISSUES — #63, #71, #72, #73                                            #
 #                                                                              #
 ################################################################################
 
@@ -231,6 +231,18 @@ Closed / relocated since last summary:
        check + stable-resting-pose gate (rejects lifted shadow
        fragments).  Addresses audit #72 lateral overhang directly.
        Profile-first path (1-3) remains gated on #50 (deferred).
+  #69 [DONE 2026-05-12] — commit 1b63c46: pass numThreads=0 to all
+       6 rayTestBatch call sites (boxel_env._create_targets,
+       boxel_env.oracle_detect_objects, execution.sense_shadow_-
+       raycasting, execution.compute_shadow_blockers,
+       shadow_calculator back-corner rays, streams.test_target_-
+       can_hide_in_shadow).  Audit body said 5 sites; current code
+       has 6 (streams.py site landed in #62 commit ed1789e).
+       Largest wins: 147-ray sense batch (execution.py:116) and
+       72-ray test_target_can_hide_in_shadow batch fired every
+       replan via _build_init (streams.py:507).  Thread-safety
+       comment added at each site so a future refactor can't
+       introduce a concurrent stepSimulation.
 
 ================================================================================
 #62. REPLAN-WHILE-HOLDING STILL SLOW AFTER #58 — HELD-CUBE REPLAN HOTSPOT  [DONE 2026-05-12]
@@ -424,11 +436,12 @@ Where:    README.md (project root, currently 29 lines — quick-start
           and_Streams, Scene_Environment, Spatial_Reasoning.
 Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
           results drive Known_Issues_and_Roadmap + Design_Decisions
-          + the README story.  Any other open issue (#62, #69, #71,
-          #72, #73) that lands between now and submission extends
-          the diff this sweep has to absorb.  Gate list refreshed
-          2026-05-12 triage: dropped #50/#57/#59/#61/#65 (deferred)
-          and #66 (relocated to TAMPURA_PLAN.md).
+          + the README story.  Any other open issue (#71, #72, #73)
+          that lands between now and submission extends the diff
+          this sweep has to absorb.  Gate list refreshed 2026-05-12
+          triage: dropped #50/#57/#59/#61/#65 (deferred) and #66
+          (relocated to TAMPURA_PLAN.md).  #62/#69 closed 2026-05-12
+          so they no longer extend this sweep.
 Effort:   1-2 days (one focused pass per page).
 
 What:  CODEBASE POLICY (L823-828) already requires per-change wiki
@@ -505,32 +518,55 @@ Related: All other open issues at landing time — this is the
 
 
 ================================================================================
-#69. PYBULLET rayTestBatch — PASS numThreads ON THE 5 EXISTING CALL SITES
+#69. PYBULLET rayTestBatch — PASS numThreads ON THE 6 EXISTING CALL SITES  [DONE 2026-05-12]
 ================================================================================
-Status:   OPEN.  Raised 2026-05-10 (later) after web search for
-          PyBullet parallelism support (logs in chat history).
+Status:   [DONE 2026-05-12] — commit 1b63c46 added numThreads=0 to all
+          6 current call sites (audit body originally listed 5; the
+          streams.py site landed earlier the same day in audit #62
+          commit ed1789e and was not yet captured here).  Each call
+          site carries a short comment recording the thread-safety
+          constraint (rayTestBatch cannot run concurrently with
+          stepSimulation on the same client) so a future refactor
+          can't introduce one.  Result-ordering preserved by Bullet's
+          API contract regardless of numThreads, so the two index-
+          sensitive consumers (shadow_calculator's enumerate loop,
+          streams' 8-corner slice) stay correct.  Optional follow-ups
+          from the original Fix block (CLI knob for 1-vs-N matrix
+          comparison; THESIS_NOTES write-up) NOT landed — wait until
+          #9 eval cells produce a measurable wall-clock delta worth
+          framing as a thesis point.
 Priority: TIER 0 — top priority per user direction 2026-05-12
           (promoted from TIER 3).  Free CPU-side wall-clock win;
-          1-kwarg patch on 5 existing call sites; biggest single
+          1-kwarg patch on 6 existing call sites; biggest single
           batch (147-ray sense action) on the planner hot path.
           Originally promoted from the FOR LATER "Parallel
           FastDownward" bullet to a numbered issue because (unlike
           the speculative FD/GPU angle) this is just an unused
           PyBullet feature with a 1-kwarg patch.
-Where:    Five rayTestBatch call sites, all currently single-
-          threaded:
-            boxel_env.py:1074  oracle_detect_objects
+Where:    Six rayTestBatch call sites (post-fix all carry
+          numThreads=0):
+            boxel_env.py:1128  _create_targets
+                               — 8 rays (camera→target-AABB corners)
+                               per candidate hidden-target placement
+                               (scene setup only)
+            boxel_env.py:1543  oracle_detect_objects
                                — 8 rays (camera→AABB corners)
                                × N visible objects per scene
-            boxel_env.py:1475  compute_shadow_blockers
-                               — 5×5 ray grid per shadow
-            shadow_calculator.py:111  ShadowCalculator
-                               — back-corner rays per occluder
-            execution.py:113   sense_shadow_raycasting
+            execution.py:116   sense_shadow_raycasting
                                — 7×7 grid × 3 Z levels
                                = 147 rays per sense action
-            execution.py:212   sense_shadow_raycasting
-                               (second batch in same handler)
+                               (largest batch on the hot path)
+            execution.py:217   compute_shadow_blockers
+                               — 5×5 ray grid × N shadows
+                               (registry rebuild)
+            shadow_calculator.py:113  ShadowCalculator
+                               — back-corner rays per occluder
+                               (scene setup + post-place refresh)
+            streams.py:507     test_target_can_hide_in_shadow
+                               — 8 corners × 3×3 candidate grid
+                               = up to 72 rays per (target, shadow)
+                               pair, fires every replan via
+                               _build_init (audit #62 commit ed1789e)
 Depends:  None.  Independent of #50/#62 perf hunts (different
           layer — those are Python-side stream/init redundancy).
 
@@ -538,8 +574,8 @@ What:  PyBullet's rayTestBatch accepts a numThreads kwarg
        (added upstream in bullet3 PR #1760).  Rays are dispatched
        across threads from a shared work queue (greedy schedule —
        per-ray cost varies a lot, so pre-distribution is worse).
-       None of the 5 call sites in this codebase pass it, so we
-       single-thread every raycast.
+       None of the 6 call sites in this codebase passed it, so we
+       single-threaded every raycast.  Commit 1b63c46 changed that.
 
        Raycasting is on the planner-call hot path:
          - oracle_detect_objects fires once per Phase 1 visibility
@@ -557,10 +593,11 @@ What:  PyBullet's rayTestBatch accepts a numThreads kwarg
 
 Fix:   ONE-LINE PATCH PER CALL SITE.
 
-       (1) Add numThreads kwarg to all 5 rayTestBatch invocations.
-           Default to 0 (= "Bullet picks max available threads",
-           per upstream docs) so behavior auto-scales with the
-           host's core count.  Allow override via a single
+       (1) [DONE 2026-05-12, commit 1b63c46] Add numThreads kwarg
+           to all 6 rayTestBatch invocations.  Default to 0 (=
+           "Bullet picks max available threads", per upstream docs)
+           so behavior auto-scales with the host's core count.
+           Allow override via a single
            SetPhysicsEngineParameter-style runtime knob if the
            eval matrix wants to compare 1-thread vs N-thread
            cells (worth doing; it doubles the matrix axis cost
@@ -758,7 +795,7 @@ FOR LATER
       MuJoCo MJX (JAX); Genesis.  All require a full simulator
       swap — out of thesis scope.
     - Within PyBullet itself, the realistic CPU-parallelism win
-      is rayTestBatch numThreads — see #69 for the 5-call-site
+      is rayTestBatch numThreads — see #69 for the 6-call-site
       one-line patch.
 
   WHY THIS STAYS FOR LATER (not promoted to a numbered issue):
