@@ -3,9 +3,14 @@
 Plot Results-chapter figures from an eval_runner sweep (audit #9).
 
 Reads aggregated.csv produced by eval_runner.py and writes:
-  - planning_time_vs_n_occluders.png
-  - success_rate_vs_n_occluders.png
-  - plan_count_vs_n_occluders.png
+  - planning_time_vs_n_occluders[__<goal>].png
+  - success_rate_vs_n_occluders[__<goal>].png
+  - plan_count_vs_n_occluders[__<goal>].png
+
+For random-pairs sweeps, the per-goal suffix is added so each goal
+(e.g. find-and-tray-stack, holding) gets its own figure.  Non-random-
+pairs sweeps emit the plain filenames (single figure with n_targets
+as the series).
 
 If matplotlib is not installed, prints summary tables to stdout so the
 sweep still produces a usable artifact on a fresh checkout.
@@ -396,57 +401,71 @@ def main(argv=None) -> int:
                   f"uniform={len(baseline_rows)} rows")
 
     # random-pairs draws (n_hidden, n_targets) per seed, so n_targets is
-    # not a meaningful series axis here.  Use goal as the series so the
-    # line plot becomes one line per goal (with baseline as the dashed
-    # overlay if both are present).
+    # not a meaningful series axis here.  Plot one figure PER goal so
+    # find-and-tray-stack and holding do not share axes (user direction
+    # 2026-05-12 — both-on-one plot was unreadable).  Non-random-pairs
+    # sweeps keep the single-figure layout (n_targets as the series).
     if _is_random_pairs_matrix(rows + (baseline_rows or [])):
         series_key = "goal"
         series_label = "goal"
+        all_goals = sorted({r.get("goal") for r in rows + (baseline_rows or [])
+                            if r.get("goal")})
+        goal_buckets = [
+            (g,
+             [r for r in rows if r.get("goal") == g],
+             ([r for r in baseline_rows if r.get("goal") == g]
+              if baseline_rows else None))
+            for g in all_goals
+        ]
     else:
         series_key = "n_targets"
         series_label = "n_targets"
+        goal_buckets = [(None, rows, baseline_rows)]
 
-    plot_metric(
-        group_metric(rows, series=series_key,
-                     metric="total_planning_time_s",
-                     success_only=True),
-        title="Planning time vs scene size (success-only)",
-        ylabel="mean total planning time (s)",
-        out_path=out_dir / "planning_time_vs_n_occluders.png",
-        baseline_grouped=(group_metric(baseline_rows, series=series_key,
-                                       metric="total_planning_time_s",
-                                       success_only=True)
-                          if baseline_rows else None),
-        series_label=series_label,
-        main_label_suffix=main_label_suffix,
-        baseline_label_suffix=baseline_label_suffix,
-    )
-    plot_metric(
-        group_success_rate(rows, series=series_key),
-        title="Success rate vs scene size",
-        ylabel="success rate (over seeds)",
-        out_path=out_dir / "success_rate_vs_n_occluders.png",
-        ylim=(0.0, 1.05),
-        baseline_grouped=(group_success_rate(baseline_rows, series=series_key)
-                          if baseline_rows else None),
-        series_label=series_label,
-        main_label_suffix=main_label_suffix,
-        baseline_label_suffix=baseline_label_suffix,
-    )
-    plot_metric(
-        group_metric(rows, series=series_key,
-                     metric="plan_count", success_only=True),
-        title="Plan count (replans) vs scene size (success-only)",
-        ylabel="mean plan_count",
-        out_path=out_dir / "plan_count_vs_n_occluders.png",
-        baseline_grouped=(group_metric(baseline_rows, series=series_key,
-                                       metric="plan_count",
-                                       success_only=True)
-                          if baseline_rows else None),
-        series_label=series_label,
-        main_label_suffix=main_label_suffix,
-        baseline_label_suffix=baseline_label_suffix,
-    )
+    for goal, g_rows, g_baseline in goal_buckets:
+        suffix = f"__{goal}" if goal else ""
+        title_suffix = f" — {goal}" if goal else ""
+        plot_metric(
+            group_metric(g_rows, series=series_key,
+                         metric="total_planning_time_s",
+                         success_only=True),
+            title=f"Planning time vs scene size (success-only){title_suffix}",
+            ylabel="mean total planning time (s)",
+            out_path=out_dir / f"planning_time_vs_n_occluders{suffix}.png",
+            baseline_grouped=(group_metric(g_baseline, series=series_key,
+                                           metric="total_planning_time_s",
+                                           success_only=True)
+                              if g_baseline else None),
+            series_label=series_label,
+            main_label_suffix=main_label_suffix,
+            baseline_label_suffix=baseline_label_suffix,
+        )
+        plot_metric(
+            group_success_rate(g_rows, series=series_key),
+            title=f"Success rate vs scene size{title_suffix}",
+            ylabel="success rate (over seeds)",
+            out_path=out_dir / f"success_rate_vs_n_occluders{suffix}.png",
+            ylim=(0.0, 1.05),
+            baseline_grouped=(group_success_rate(g_baseline, series=series_key)
+                              if g_baseline else None),
+            series_label=series_label,
+            main_label_suffix=main_label_suffix,
+            baseline_label_suffix=baseline_label_suffix,
+        )
+        plot_metric(
+            group_metric(g_rows, series=series_key,
+                         metric="plan_count", success_only=True),
+            title=f"Plan count (replans) vs scene size (success-only){title_suffix}",
+            ylabel="mean plan_count",
+            out_path=out_dir / f"plan_count_vs_n_occluders{suffix}.png",
+            baseline_grouped=(group_metric(g_baseline, series=series_key,
+                                           metric="plan_count",
+                                           success_only=True)
+                              if g_baseline else None),
+            series_label=series_label,
+            main_label_suffix=main_label_suffix,
+            baseline_label_suffix=baseline_label_suffix,
+        )
     return 0
 
 
