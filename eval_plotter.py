@@ -375,7 +375,7 @@ def plot_boxel_count_breakdown(
             bottoms = [b + m for b, m in zip(bottoms, means)]
 
     ax.set_xlabel("n_occluders")
-    ax.set_ylabel("boxel count (mean over seeds, success-only)")
+    ax.set_ylabel("boxel count (mean over seeds)")
     ax.set_title(title)
     ax.set_xticks(xs_all)
     ax.grid(True, axis="y", alpha=0.3)
