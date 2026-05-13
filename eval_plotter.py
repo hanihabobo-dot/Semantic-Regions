@@ -374,10 +374,16 @@ def plot_boxel_count_breakdown(
                    edgecolor="black", linewidth=0.5)
             bottoms = [b + m for b, m in zip(bottoms, means)]
 
-    ax.set_xlabel("n_occluders")
     ax.set_ylabel("boxel count (mean over seeds)")
     ax.set_title(title)
-    ax.set_xticks(xs_all)
+    if len(xs_all) > 1:
+        ax.set_xlabel("n_occluders")
+        ax.set_xticks(xs_all)
+    else:
+        # Single-X (stack subtier): n_occluders=0 tick is meaningless;
+        # the scene context is already in the title.
+        ax.set_xticks([])
+        ax.set_xlabel("")
     ax.grid(True, axis="y", alpha=0.3)
     from matplotlib.patches import Patch
     handles = [Patch(facecolor=type_colors[tk], label=type_labels[tk])
@@ -486,6 +492,79 @@ def _print_text_table(grouped, title: str) -> None:
                   f"std={sd:.3f} n={len(samples)}")
 
 
+def _plot_single_x_summary(grouped, baseline_grouped, title, ylabel, out_path,
+                           main_label_suffix, baseline_label_suffix):
+    """Side-by-side bar comparison when a metric has only ONE X value.
+
+    Replaces a degenerate 1-point line plot with annotated bars (one bar
+    per series, plus the baseline overlay if present).  Used implicitly
+    by the stack-subtier of mixed-scene RANDOM_PAIRS_MATRIX (stack_scene
+    has no occluders so X collapses to one value).  Each bar shows
+    mean +/- 1 std (lower whisker clipped at 0) with the sample count
+    annotated above.
+    """
+    if not HAVE_MPL:
+        print(f"\n=== {title} (single-X bar) ===")
+        for tag, grp in (("(main)" + main_label_suffix, grouped),
+                         ("(baseline)" + baseline_label_suffix, baseline_grouped)):
+            if not grp:
+                continue
+            for s_val, xy in sorted(grp.items(), key=lambda kv: str(kv[0])):
+                for samples in xy.values():
+                    if samples:
+                        m = mean(samples)
+                        sd = pstdev(samples) if len(samples) > 1 else 0.0
+                        print(f"  {s_val} {tag}: mean={m:.3g} "
+                              f"std={sd:.3g} n={len(samples)}")
+        return None
+
+    bars = []  # (label, mean, std, n)
+    for s_val, xy in sorted(grouped.items(), key=lambda kv: str(kv[0])):
+        for samples in xy.values():
+            if samples:
+                bars.append((f"{s_val}{main_label_suffix}",
+                             mean(samples),
+                             pstdev(samples) if len(samples) > 1 else 0.0,
+                             len(samples)))
+                break
+    if baseline_grouped:
+        for s_val, xy in sorted(baseline_grouped.items(),
+                                 key=lambda kv: str(kv[0])):
+            for samples in xy.values():
+                if samples:
+                    bars.append((f"{s_val}{baseline_label_suffix}",
+                                 mean(samples),
+                                 pstdev(samples) if len(samples) > 1 else 0.0,
+                                 len(samples)))
+                    break
+
+    if not bars:
+        print(f"[plotter] no data for {title}")
+        return None
+
+    fig, ax = plt.subplots(figsize=(max(5, 1.5 * len(bars)), 5))
+    xs = list(range(len(bars)))
+    means = [b[1] for b in bars]
+    stds  = [b[2] for b in bars]
+    yerr_lo = [min(sd, m) for m, sd in zip(means, stds)]  # clip at 0
+    ax.bar(xs, means, 0.6, yerr=[yerr_lo, stds], capsize=4,
+           edgecolor="black", linewidth=0.5)
+    for x, (lab, m, sd, n) in zip(xs, bars):
+        ax.text(x, m + (sd or 0), f"{m:.3g}\n(n={n})",
+                ha="center", va="bottom", fontsize=9)
+    ax.set_xticks(xs)
+    ax.set_xticklabels([b[0] for b in bars])
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    ax.set_ylim(bottom=0)
+    ax.grid(True, axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
+
+
 def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
                 title: str,
                 ylabel: str,
@@ -496,6 +575,18 @@ def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
                 baseline_grouped: Optional[Dict] = None,
                 main_label_suffix: str = "",
                 baseline_label_suffix: str = " (baseline)") -> Optional[Path]:
+    # Detect single-X — a line plot 'vs <axis>' with one X value reads
+    # as a stray dot, not a graph.  Render as side-by-side bars instead.
+    # Stack-subtier of mixed-scene RANDOM_PAIRS_MATRIX hits this (X=0
+    # because cell_to_argv skips --n-occluders for stack scenes).
+    xs_all = {x for sxy in grouped.values() for x in sxy.keys()}
+    if baseline_grouped:
+        xs_all |= {x for sxy in baseline_grouped.values() for x in sxy.keys()}
+    if len(xs_all) <= 1:
+        return _plot_single_x_summary(
+            grouped, baseline_grouped, title, ylabel, out_path,
+            main_label_suffix, baseline_label_suffix)
+
     if not HAVE_MPL:
         _print_text_table(grouped, title + main_label_suffix)
         if baseline_grouped is not None:
@@ -506,13 +597,24 @@ def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
     fig, ax = plt.subplots(figsize=(7, 5))
 
     def _plot(grp, suffix, linestyle):
+        # Shaded +/-1 std band instead of errorbar whiskers — the
+        # whiskers-and-caps form was so dense it read as a mesh of
+        # intersecting lines.  Band is clipped to the metric's ylim if
+        # given (success_rate stays in [0, 1]; time/count don't dip
+        # below 0).
         for s_val, xy in sorted(grp.items(), key=lambda kv: str(kv[0])):
             xs = sorted(xy.keys())
             means = [mean(xy[x]) for x in xs]
             stds = [pstdev(xy[x]) if len(xy[x]) > 1 else 0.0 for x in xs]
-            ax.errorbar(xs, means, yerr=stds, marker="o", capsize=3,
-                        linestyle=linestyle,
-                        label=f"{series_label}={s_val}{suffix}")
+            line = ax.plot(xs, means, marker="o", linestyle=linestyle,
+                           label=f"{series_label}={s_val}{suffix}")[0]
+            lo_clip = ylim[0] if ylim else 0.0
+            hi_clip = ylim[1] if ylim else None
+            lo = [max(lo_clip, m - s) for m, s in zip(means, stds)]
+            hi = [(min(hi_clip, m + s) if hi_clip is not None else m + s)
+                  for m, s in zip(means, stds)]
+            ax.fill_between(xs, lo, hi, alpha=0.18,
+                            color=line.get_color())
 
     _plot(grouped, main_label_suffix, "-")
     if baseline_grouped is not None:
