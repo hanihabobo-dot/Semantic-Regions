@@ -392,6 +392,82 @@ def plot_boxel_count_breakdown(
     return out_path
 
 
+def group_failure_modes(rows: List[dict]
+                        ) -> Dict[tuple, Dict[str, int]]:
+    """``{(goal, baseline): {exit_reason: count}}``.
+
+    Audit #73 TIER B plot 6 data prep.  Counts ALL cells (successful
+    runs go into the "success" bucket).  Bar height per (goal, baseline)
+    thus equals total cells in that group — gives the reader an implicit
+    failure-rate reference.
+    """
+    out: Dict = defaultdict(lambda: defaultdict(int))
+    for r in rows:
+        goal = r.get("goal")
+        baseline = r.get("baseline") or "semantic"
+        if r.get("success"):
+            key = "success"
+        else:
+            key = r.get("exit_reason") or "unknown"
+        out[(goal, baseline)][key] += 1
+    return out
+
+
+def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
+                       title: str,
+                       out_path: Path) -> Optional[Path]:
+    """Stacked bar per (goal, baseline) with exit_reason categories.
+
+    Audit #73 TIER B plot 6 — failure-mode breakdown.  Counts include
+    "success" so bar height = total cells per group (lets the reader
+    see failure rate visually).  Each failure mode gets its own colour;
+    "success" is pinned to the bottom layer in green so the eye reads
+    "tall green = good".
+    """
+    if not HAVE_MPL:
+        print(f"\n=== {title} (matplotlib not available) ===")
+        for key in sorted(grouped):
+            parts = grouped[key]
+            summary = ", ".join(f"{k}={v}" for k, v in sorted(parts.items()))
+            print(f"  {key}: {summary}")
+        return None
+
+    keys = sorted(grouped.keys())  # (goal, baseline) tuples
+    all_reasons = sorted({r for v in grouped.values() for r in v.keys()})
+    # Pin 'success' to the bottom layer so it forms the visual base of
+    # the bar and failures stack above it.
+    if "success" in all_reasons:
+        all_reasons.remove("success")
+        all_reasons = ["success"] + all_reasons
+
+    labels = [f"{g}\n{b}" for g, b in keys]
+    xs = list(range(len(keys)))
+
+    fig, ax = plt.subplots(figsize=(max(7, 1.6 * len(keys)), 5))
+    cmap = plt.get_cmap("tab10")
+    bottoms = [0.0] * len(keys)
+    for ri, reason in enumerate(all_reasons):
+        counts = [grouped[k].get(reason, 0) for k in keys]
+        color = "#2ca02c" if reason == "success" else cmap(ri % 10)
+        ax.bar(xs, counts, 0.7, bottom=bottoms,
+               color=color, edgecolor="black", linewidth=0.5,
+               label=reason)
+        bottoms = [b + c for b, c in zip(bottoms, counts)]
+
+    ax.set_xticks(xs)
+    ax.set_xticklabels(labels, fontsize=9)
+    ax.set_xlabel("(goal, baseline)")
+    ax.set_ylabel("cell count")
+    ax.set_title(title)
+    ax.grid(True, axis="y", alpha=0.3)
+    ax.legend(loc="upper right", fontsize=8, title="exit_reason")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
+
+
 def _print_text_table(grouped, title: str) -> None:
     print(f"\n=== {title} (matplotlib not available) ===")
     for s_val, xy in sorted(grouped.items(), key=lambda kv: str(kv[0])):
@@ -471,6 +547,11 @@ def main(argv=None) -> int:
         print(f"[plotter] no rows in {args.csv_path}", file=sys.stderr)
         return 1
 
+    # Audit #73 TIER B plot 6: capture the full row set before any
+    # auto-split mutates `rows` below — failure-mode breakdown is
+    # sweep-level and needs every cell, success and failure.
+    all_rows = list(rows)
+
     out_dir = args.csv_path.parent
 
     # Dispatch on matrix shape.  Default-style matrix (constant
@@ -500,6 +581,11 @@ def main(argv=None) -> int:
             title="Mean plan count per (scene, goal) (success-only)",
             ylabel="mean plan_count",
             out_path=out_dir / "plan_count_per_scene_goal.png",
+        )
+        plot_failure_modes(
+            group_failure_modes(all_rows),
+            title="Failure-mode breakdown by (goal, baseline)",
+            out_path=out_dir / "failure_modes.png",
         )
         return 0
 
@@ -619,6 +705,14 @@ def main(argv=None) -> int:
             main_label_suffix=main_label_suffix,
             baseline_label_suffix=baseline_label_suffix,
         )
+    # Audit #73 TIER B plot 6: failure-mode breakdown (sweep-level
+    # stacked bar per (goal, baseline)).  Counts all cells including
+    # successes so bar height = total cells per group.
+    plot_failure_modes(
+        group_failure_modes(all_rows),
+        title="Failure-mode breakdown by (goal, baseline)",
+        out_path=out_dir / "failure_modes.png",
+    )
     return 0
 
 
