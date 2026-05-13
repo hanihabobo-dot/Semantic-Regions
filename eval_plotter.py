@@ -597,6 +597,28 @@ def main(argv=None) -> int:
             title=f"Boxel count breakdown vs n_occluders{title_suffix}",
             out_path=out_dir / f"boxel_count_breakdown{suffix}.png",
         )
+        # Audit #73 TIER A plot 2: PDDL init-state fact count vs
+        # n_occluders.  Same X-axis as plot 1 but in the planner's
+        # units; THESIS_NOTES §14 cites "init facts dominate planning
+        # cost" — this plot quantifies the dependence.  Per-predicate
+        # stratification (n_facts_by_predicate, jsonl-only) is the
+        # follow-on bonus pass; this MVP just plots the total.
+        plot_metric(
+            group_metric(g_rows, series=series_key,
+                         metric="n_init_state_facts",
+                         success_only=True),
+            title=f"Init-state fact count vs n_occluders "
+                  f"(success-only){title_suffix}",
+            ylabel="mean n_init_state_facts",
+            out_path=out_dir / f"init_state_facts_vs_n_occluders{suffix}.png",
+            baseline_grouped=(group_metric(g_baseline, series=series_key,
+                                           metric="n_init_state_facts",
+                                           success_only=True)
+                              if g_baseline else None),
+            series_label=series_label,
+            main_label_suffix=main_label_suffix,
+            baseline_label_suffix=baseline_label_suffix,
+        )
     return 0
 
 
