@@ -996,8 +996,19 @@ Status:   OPEN.  Raised 2026-05-12 (later) by user during eval
           goal loop alongside the existing 3 line plots; pre-
           9918047 CSVs trigger the no-data branch cleanly.
           _is_random_pairs_matrix loosened to accept the mixed-
-          scene (random-pairs + stack) CSV.  Will render real
-          bars after step 1(d) re-run completes.
+          scene (random-pairs + stack) CSV.
+          Step 1(d) re-run completed 2026-05-12 (later): sweep
+          eval_results/sweep_2026-05-12_22-31-58_random-pairs/
+          (70 cells, 35 semantic + 35 uniform); aggregated.csv
+          carries the new schema fields (smoke-check (e) passes
+          implicitly — plot 1 rendered real bars).
+          Step 2(b) plot 2 (init-state fact count vs n_occluders
+          line plot) landed 2026-05-13 in commit b7f7406; per-
+          predicate stratification deferred as follow-on bonus.
+          Step 3(b) plot 6 (failure-mode breakdown stacked bar
+          per (goal, baseline)) landed 2026-05-13 in commit
+          1308c3d; wired into both default-matrix and line-plot
+          dispatch branches.
 Priority: TIER 1 — high prio per user direction 2026-05-12,
           but lands AFTER #71 (refresh OBJECT AABBs on sense) and
           #72 (shadow lateral overhang) so the figures reflect
@@ -1174,7 +1185,11 @@ Fix:   Implementation order (each step is its own commit,
              commits eef4bd7 + 47a9cf3 — 70 cells, ~20 min
              wall-clock) to populate the new columns.
              `run_eval --matrix random-pairs` writes to
-             eval_results/sweep_<ts>_random-pairs/.
+             eval_results/sweep_<ts>_random-pairs/.  [DONE
+             2026-05-12 (later); sweep
+             eval_results/sweep_2026-05-12_22-31-58_random-
+             pairs/ landed with 35 semantic + 35 uniform
+             rows; new schema fields populate correctly.]
          (e) Smoke check: confirm boxel counts differ between
              baselines on the same scene (semantic should be
              2-5× smaller than uniform on default scenes per
@@ -1191,7 +1206,9 @@ Fix:   Implementation order (each step is its own commit,
              after step 1(d) re-run.]
          (b) plot 2 (init-state facts).  Strong companion to
              plot 1.  Stratification by predicate is optional
-             but informative.
+             but informative.  [DONE 2026-05-13; commit b7f7406.
+             Simple line plot via plot_metric;
+             n_facts_by_predicate stratification deferred.]
          (c) plot 3 (volume histogram).
          (d) plot 11 (boxel evolution across replans).  Needs
              per-replan logging (extends step 1's end-of-run
@@ -1200,6 +1217,9 @@ Fix:   Implementation order (each step is its own commit,
        Step 3 — TIER B plots (knowledge-grounded pillar).
          (a) plot 5 (replan distribution).  No new data.
          (b) plot 6 (failure-mode stacked bar).  No new data.
+             [DONE 2026-05-13; commit 1308c3d.
+             group_failure_modes + plot_failure_modes;
+             sweep-level, fires in both dispatch branches.]
          (c) plot 4 (sense-action count).  Needs sense counter
              in execution.py OR log-parsing aggregator.
 
