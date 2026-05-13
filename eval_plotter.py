@@ -492,6 +492,163 @@ def _print_text_table(grouped, title: str) -> None:
                   f"std={sd:.3f} n={len(samples)}")
 
 
+def write_summary_table(rows: List[dict], out_dir: Path) -> None:
+    """Write success-rate + key-metric summary to <sweep>/summary_table.md
+    plus two CSVs (aggregate + per-occluder breakdown).
+
+    Audit #73 — supplementary tabular view of the eval data.  Markdown
+    is viewable in any editor with preview; CSVs open in any spreadsheet.
+    Also echoed to stdout so the table shows up in the runner log.
+    """
+    import csv as _csv
+    from collections import defaultdict
+
+    def _mean_or_none(group, col, success_only=False):
+        vals = []
+        for r in group:
+            if success_only and not r.get("success"):
+                continue
+            v = r.get(col)
+            if v in (None, ""):
+                continue
+            try:
+                vals.append(float(v))
+            except (TypeError, ValueError):
+                continue
+        return mean(vals) if vals else None
+
+    def _stats(group):
+        n_total = len(group)
+        n_success = sum(1 for r in group if r.get("success"))
+        mean_obj = _mean_or_none(group, "n_object_boxels")
+        mean_shd = _mean_or_none(group, "n_shadow_boxels")
+        mean_fs  = _mean_or_none(group, "n_free_space_boxels")
+        if any(x is None for x in (mean_obj, mean_shd, mean_fs)):
+            mean_total_boxels = None
+        else:
+            mean_total_boxels = mean_obj + mean_shd + mean_fs
+        return {
+            "n_cells":           n_total,
+            "n_success":         n_success,
+            "success_rate":      n_success / n_total if n_total else 0.0,
+            "mean_plan_time_s":  _mean_or_none(group, "total_planning_time_s",
+                                               success_only=True),
+            "mean_plan_count":   _mean_or_none(group, "plan_count",
+                                               success_only=True),
+            "mean_init_facts":   _mean_or_none(group, "n_init_state_facts"),
+            "mean_total_boxels": mean_total_boxels,
+        }
+
+    def _fmt(v, spec=".2f"):
+        if v is None:
+            return "—"
+        return format(v, spec) if isinstance(v, float) else str(v)
+
+    by_gb: Dict[tuple, List[dict]] = defaultdict(list)
+    for r in rows:
+        by_gb[(r.get("goal") or "?",
+               r.get("baseline") or "semantic")].append(r)
+
+    by_gbo: Dict[tuple, List[dict]] = defaultdict(list)
+    for r in rows:
+        try:
+            occ = int(r.get("n_occluders"))
+        except (TypeError, ValueError):
+            occ = None
+        by_gbo[(r.get("goal") or "?",
+                r.get("baseline") or "semantic", occ)].append(r)
+
+    md = [
+        f"# Summary table — {out_dir.name}",
+        "",
+        "## Aggregate by (goal, baseline)",
+        "",
+        "| goal | baseline | n_cells | success | success_rate "
+        "| mean plan_time (s) | mean plan_count "
+        "| mean init_facts | mean total_boxels |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    csv_overview = [["goal", "baseline", "n_cells", "n_success",
+                     "success_rate", "mean_plan_time_s", "mean_plan_count",
+                     "mean_init_facts", "mean_total_boxels"]]
+    for key in sorted(by_gb.keys()):
+        s = _stats(by_gb[key])
+        goal, baseline = key
+        md.append(
+            f"| {goal} | {baseline} | {s['n_cells']} | {s['n_success']} | "
+            f"{s['success_rate']*100:.1f}% | "
+            f"{_fmt(s['mean_plan_time_s'])} | "
+            f"{_fmt(s['mean_plan_count'])} | "
+            f"{_fmt(s['mean_init_facts'], '.0f')} | "
+            f"{_fmt(s['mean_total_boxels'], '.1f')} |"
+        )
+        csv_overview.append([
+            goal, baseline, s["n_cells"], s["n_success"],
+            f"{s['success_rate']:.4f}",
+            "" if s["mean_plan_time_s"] is None else f"{s['mean_plan_time_s']:.4f}",
+            "" if s["mean_plan_count"] is None else f"{s['mean_plan_count']:.4f}",
+            "" if s["mean_init_facts"] is None else f"{s['mean_init_facts']:.2f}",
+            "" if s["mean_total_boxels"] is None else f"{s['mean_total_boxels']:.4f}",
+        ])
+
+    md += [
+        "",
+        "## Per-occluder breakdown",
+        "",
+        "Note: stack-scene cells log `n_occluders=0` because stack_scene "
+        "has no occluders by construction (the matrix-axis value is tag-"
+        "only and is not passed through to the pipeline).",
+        "",
+        "| goal | baseline | n_occluders | n_cells | success | success_rate "
+        "| mean plan_time (s) | mean plan_count "
+        "| mean init_facts | mean total_boxels |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    csv_detail = [["goal", "baseline", "n_occluders", "n_cells", "n_success",
+                   "success_rate", "mean_plan_time_s", "mean_plan_count",
+                   "mean_init_facts", "mean_total_boxels"]]
+    for key in sorted(by_gbo.keys(),
+                      key=lambda k: (k[0], k[1],
+                                     -1 if k[2] is None else k[2])):
+        s = _stats(by_gbo[key])
+        goal, baseline, occ = key
+        occ_str = "—" if occ is None else str(occ)
+        md.append(
+            f"| {goal} | {baseline} | {occ_str} | {s['n_cells']} | "
+            f"{s['n_success']} | {s['success_rate']*100:.1f}% | "
+            f"{_fmt(s['mean_plan_time_s'])} | "
+            f"{_fmt(s['mean_plan_count'])} | "
+            f"{_fmt(s['mean_init_facts'], '.0f')} | "
+            f"{_fmt(s['mean_total_boxels'], '.1f')} |"
+        )
+        csv_detail.append([
+            goal, baseline, "" if occ is None else occ,
+            s["n_cells"], s["n_success"],
+            f"{s['success_rate']:.4f}",
+            "" if s["mean_plan_time_s"] is None else f"{s['mean_plan_time_s']:.4f}",
+            "" if s["mean_plan_count"] is None else f"{s['mean_plan_count']:.4f}",
+            "" if s["mean_init_facts"] is None else f"{s['mean_init_facts']:.2f}",
+            "" if s["mean_total_boxels"] is None else f"{s['mean_total_boxels']:.4f}",
+        ])
+
+    md_text = "\n".join(md) + "\n"
+    (out_dir / "summary_table.md").write_text(md_text, encoding="utf-8")
+    print(f"[plotter] wrote {out_dir / 'summary_table.md'}")
+
+    with (out_dir / "summary_table_aggregate.csv").open(
+            "w", newline="", encoding="utf-8") as f:
+        _csv.writer(f).writerows(csv_overview)
+    print(f"[plotter] wrote {out_dir / 'summary_table_aggregate.csv'}")
+    with (out_dir / "summary_table_per_occluders.csv").open(
+            "w", newline="", encoding="utf-8") as f:
+        _csv.writer(f).writerows(csv_detail)
+    print(f"[plotter] wrote {out_dir / 'summary_table_per_occluders.csv'}")
+
+    # Echo to stdout so the runner log carries the table verbatim.
+    print()
+    print(md_text)
+
+
 def _plot_single_x_summary(grouped, baseline_grouped, title, ylabel, out_path,
                            main_label_suffix, baseline_label_suffix):
     """Side-by-side bar comparison when a metric has only ONE X value.
@@ -694,6 +851,7 @@ def main(argv=None) -> int:
             title="Failure-mode breakdown by (goal, baseline)",
             out_path=out_dir / "failure_modes.png",
         )
+        write_summary_table(all_rows, out_dir)
         return 0
 
     # Audit #50/#66 follow-up — when --baseline-csv is not given but the
@@ -824,6 +982,9 @@ def main(argv=None) -> int:
         title="Failure-mode breakdown by (goal, baseline)",
         out_path=out_dir / "failure_modes.png",
     )
+    # Audit #73 — tabular summary alongside the plots (markdown +
+    # 2 CSVs).  Aggregate by (goal, baseline) + per-occluder breakdown.
+    write_summary_table(all_rows, out_dir)
     return 0
 
 
