@@ -285,9 +285,16 @@ def group_boxel_counts(rows: List[dict],
                        ) -> Dict[str, Dict[int, Dict[str, List[int]]]]:
     """``{baseline: {n_occluders: {type_key: [samples]}}}``.
 
-    Audit #73 TIER A plot 1 data prep.  Successful runs only — stale-
-    registry geometry on failed runs would skew the compactness story.
-    ``type_key`` ∈ {"object", "shadow", "free_space"}.
+    Audit #73 TIER A plot 1 data prep.  ``type_key`` ∈ {"object",
+    "shadow", "free_space"}.
+
+    Includes failed runs — boxel counts are end-of-run registry snapshots,
+    valid regardless of whether the plan succeeded.  Filtering on success
+    would hide compactness data for baselines that fail more often (e.g.
+    uniform's 0/15 success on find-and-tray-stack in the 2026-05-12 sweep),
+    which is exactly the comparison the plot is meant to surface.  Cells
+    that crashed before report_run_outcome (no_summary / timeout stubs)
+    are skipped naturally — they have no boxel-count columns.
     """
     out: Dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     type_cols = {
@@ -297,8 +304,6 @@ def group_boxel_counts(rows: List[dict],
     }
     for r in rows:
         if goal is not None and r.get("goal") != goal:
-            continue
-        if not r.get("success"):
             continue
         try:
             x = int(r["n_occluders"])
@@ -689,17 +694,21 @@ def main(argv=None) -> int:
         # cost" — this plot quantifies the dependence.  Per-predicate
         # stratification (n_facts_by_predicate, jsonl-only) is the
         # follow-on bonus pass; this MVP just plots the total.
+        # Includes failed runs — n_init_state_facts is the grounding-
+        # cost number from the planner's last call regardless of plan
+        # outcome.  Filtering on success hid uniform completely on
+        # find-and-tray-stack (0/15 success), which is exactly the
+        # comparison the plot is meant to surface.
         plot_metric(
             group_metric(g_rows, series=series_key,
                          metric="n_init_state_facts",
-                         success_only=True),
-            title=f"Init-state fact count vs n_occluders "
-                  f"(success-only){title_suffix}",
+                         success_only=False),
+            title=f"Init-state fact count vs n_occluders{title_suffix}",
             ylabel="mean n_init_state_facts",
             out_path=out_dir / f"init_state_facts_vs_n_occluders{suffix}.png",
             baseline_grouped=(group_metric(g_baseline, series=series_key,
                                            metric="n_init_state_facts",
-                                           success_only=True)
+                                           success_only=False)
                               if g_baseline else None),
             series_label=series_label,
             main_label_suffix=main_label_suffix,
