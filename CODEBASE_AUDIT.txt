@@ -1018,6 +1018,17 @@ Status:   OPEN.  Raised 2026-05-12 (later) by user during eval
           compactness comparison should be most persuasive.
           After the fix the find-and-tray-stack comparison
           shows ~6-10x boxel ratio and ~5-10x init-fact ratio.
+          Plot style cleanup 2026-05-13 in commit f45f366:
+          plot_metric now uses shaded +/-1 std bands instead of
+          errorbar whiskers (the whiskers-and-caps read as a
+          mesh of intersecting lines, not a graph).  Single-X
+          data (stack subtier hits X=0 because cell_to_argv
+          skips --n-occluders for stack scenes) auto-routes to
+          new _plot_single_x_summary helper: side-by-side bars
+          with mean+std+n annotation.  Bands clipped to ylim so
+          success_rate stays in [0, 1] and time/count metrics
+          don't dip below 0.  plot_boxel_count_breakdown hides
+          the meaningless 0 tick when single-X.
 Priority: TIER 1 — high prio per user direction 2026-05-12,
           but lands AFTER #71 (refresh OBJECT AABBs on sense) and
           #72 (shadow lateral overhang) so the figures reflect
