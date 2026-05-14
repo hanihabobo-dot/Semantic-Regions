@@ -534,6 +534,117 @@ def plot_boxel_volume_histogram(
     return out_path
 
 
+def group_boxel_evolution_per_replan(
+    rows: List[dict],
+    goal: Optional[str] = None,
+) -> Dict[str, List[List[dict]]]:
+    """``{baseline: [per_cell_trajectory, ...]}`` where each trajectory is
+    a list of ``{plan_index, n_object_boxels, n_shadow_boxels,
+    n_free_space_boxels}`` dicts (one per planner.plan() call).
+
+    Audit #73 TIER A plot 11 data prep.  Reads jsonl rows only — the
+    boxel_counts_per_replan column is LIST_VALUED.
+    """
+    out: Dict = defaultdict(list)
+    for r in rows:
+        if goal is not None and r.get("goal") != goal:
+            continue
+        traj = r.get("boxel_counts_per_replan")
+        if not traj:
+            continue
+        baseline = r.get("baseline") or "semantic"
+        out[baseline].append(traj)
+    return out
+
+
+def plot_boxel_evolution_per_replan(
+    grouped: Dict[str, List[List[dict]]],
+    title: str,
+    out_path: Path,
+) -> Optional[Path]:
+    """One panel per baseline: per-replan boxel count means with shaded
+    +/-1 std bands, one line per type (OBJECT / SHADOW / FREE_SPACE).
+
+    Audit #73 TIER A plot 11 — adaptive-partition evolution.  Visualises
+    whether the partition actually mutates as occluders move and shadows
+    resolve across replans (semantic should drift; uniform should be
+    approximately flat).
+    """
+    if not HAVE_MPL:
+        print(f"\n=== {title} (matplotlib not available) ===")
+        for baseline in sorted(grouped):
+            cells = grouped[baseline]
+            indices = sorted({s["plan_index"] for c in cells for s in c})
+            for pi in indices:
+                obj = [s["n_object_boxels"] for c in cells for s in c
+                       if s["plan_index"] == pi]
+                shd = [s["n_shadow_boxels"] for c in cells for s in c
+                       if s["plan_index"] == pi]
+                fs = [s["n_free_space_boxels"] for c in cells for s in c
+                      if s["plan_index"] == pi]
+                if obj:
+                    print(f"  {baseline}/plan#{pi}: "
+                          f"obj_mean={mean(obj):.1f} "
+                          f"shd_mean={mean(shd):.1f} "
+                          f"fs_mean={mean(fs):.1f} n={len(obj)}")
+        return None
+
+    baselines = sorted(grouped.keys())
+    if not baselines or not any(grouped[b] for b in baselines):
+        print(f"[plotter] no data for {title}")
+        return None
+
+    type_cols = {"object": "n_object_boxels",
+                 "shadow": "n_shadow_boxels",
+                 "free_space": "n_free_space_boxels"}
+    type_colors = {"object": "#1f77b4",
+                   "shadow": "#ff7f0e",
+                   "free_space": "#2ca02c"}
+    type_labels = {"object": "OBJECT",
+                   "shadow": "SHADOW",
+                   "free_space": "FREE_SPACE"}
+
+    fig, axes = plt.subplots(
+        1, len(baselines),
+        figsize=(5 * len(baselines), 4),
+        sharey=True, squeeze=False,
+    )
+    axes = axes[0]
+    for ax, baseline in zip(axes, baselines):
+        cells = grouped[baseline]
+        indices = sorted({s["plan_index"] for c in cells for s in c})
+        if not indices:
+            ax.set_title(f"{baseline} (no data)")
+            continue
+        for tk, col in type_cols.items():
+            means = []
+            stds = []
+            for pi in indices:
+                samples = [s[col] for c in cells for s in c
+                           if s["plan_index"] == pi]
+                means.append(mean(samples) if samples else 0.0)
+                stds.append(pstdev(samples) if len(samples) > 1 else 0.0)
+            lower = [m - sd for m, sd in zip(means, stds)]
+            upper = [m + sd for m, sd in zip(means, stds)]
+            ax.plot(indices, means, color=type_colors[tk],
+                    label=type_labels[tk], marker="o", markersize=4)
+            ax.fill_between(indices, lower, upper,
+                            color=type_colors[tk], alpha=0.2)
+        ax.set_title(baseline)
+        ax.set_xlabel("plan index (replan)")
+        ax.set_xticks(indices)
+        ax.grid(True, axis="y", alpha=0.3)
+        ax.legend(loc="best", fontsize=8)
+
+    axes[0].set_ylabel("boxel count (mean +/-1 std across cells)")
+    fig.suptitle(title)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
+
+
 def group_failure_modes(rows: List[dict]
                         ) -> Dict[tuple, Dict[str, int]]:
     """``{(goal, baseline): {exit_reason: count}}``.
@@ -1216,6 +1327,14 @@ def main(argv=None) -> int:
             group_boxel_volumes(jsonl_rows, goal=goal),
             title=f"Boxel volume histogram{title_suffix}",
             out_path=out_dir / f"boxel_volume_histogram{suffix}.png",
+        )
+        # Audit #73 TIER A plot 11: boxel-count evolution across replans.
+        # Reads aggregated.jsonl (boxel_counts_per_replan is LIST_VALUED);
+        # no-op on pre-#73-step-2(d) sweeps.
+        plot_boxel_evolution_per_replan(
+            group_boxel_evolution_per_replan(jsonl_rows, goal=goal),
+            title=f"Boxel evolution across replans{title_suffix}",
+            out_path=out_dir / f"boxel_evolution_per_replan{suffix}.png",
         )
     # Audit #73 TIER B plot 6: failure-mode breakdown (sweep-level
     # stacked bar per (goal, baseline)).  Counts all cells including

@@ -857,6 +857,10 @@ def main(gui=True, run_logger=None, scene_config=None,
     # (audit #9) for scalability plots.
     total_plan_time = 0.0
     plan_times = []
+    # Audit #73 step 2(d) plot 11: per-replan boxel count snapshots.
+    # Captured after reboxelize_free_space so each entry reflects what
+    # THIS planner.plan() call actually sees.
+    boxel_counts_per_replan: list = []
     # --- Reactive replanning loop ---
     # Design: the PDDL sense action is OPTIMISTIC — it assumes the
     # target will be found.  When execution reveals otherwise (empty or
@@ -953,6 +957,18 @@ def main(gui=True, run_logger=None, scene_config=None,
         # this is a no-op — avoiding the double octree+merge cost.
         if registry.dirty:
             reboxelize_free_space(registry, env, boxel_centers, viz, show_free)
+        # Audit #73 step 2(d) plot 11: snapshot boxel counts post-
+        # reboxelize so each entry reflects what THIS planner.plan() will
+        # see (not the stale pre-reboxelize partition).
+        try:
+            boxel_counts_per_replan.append({
+                "plan_index": plan_count,
+                "n_object_boxels": len(registry.get_object_boxels()),
+                "n_shadow_boxels": len(registry.get_shadow_boxels()),
+                "n_free_space_boxels": len(registry.get_free_space_boxels()),
+            })
+        except Exception as e:
+            print(f"  WARNING: could not snapshot per-replan boxel counts: {e}")
 
         # Audit #46: mirror the live GUI scene into the plan client and let
         # planner.plan() run unwrapped.  All IK/RRT/collision-check calls
@@ -1507,6 +1523,7 @@ def main(gui=True, run_logger=None, scene_config=None,
         run_logger=run_logger,
         registry=registry,
         last_init=planner.last_init,
+        boxel_counts_per_replan=boxel_counts_per_replan,
     )
 
     # Keep the GUI visible briefly so the user can inspect the final

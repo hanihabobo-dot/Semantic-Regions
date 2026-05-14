@@ -229,6 +229,7 @@ def report_run_outcome(
     run_logger: Optional["RunLogger"],
     registry: Optional["BoxelRegistry"] = None,
     last_init: Optional[list] = None,
+    boxel_counts_per_replan: Optional[list] = None,  # audit #73 step 2(d) plot 11
 ):
     """Print success/failure classification, planning timing summary,
     and write timing_summary.json into the run logger's run directory.
@@ -353,6 +354,11 @@ def report_run_outcome(
                 # so eval tooling (#9) can filter false-positive successes.
                 "physical_failures_per_action": physical_failures,
                 "physical_failures_at_goal": physics_failures,
+                # Audit #73 step 2(d) plot 11: per-replan boxel count
+                # snapshots (one dict per planner.plan() iteration) for the
+                # adaptive-partition evolution plot.  LIST_VALUED keeps the
+                # column in aggregated.jsonl only.
+                "boxel_counts_per_replan": boxel_counts_per_replan or [],
                 **boxel_counts,
                 **init_facts,
             }, indent=2))

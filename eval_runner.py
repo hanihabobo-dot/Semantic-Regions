@@ -391,6 +391,9 @@ LIST_VALUED = {
     "boxel_volumes_object",
     "boxel_volumes_shadow",
     "boxel_volumes_free_space",
+    # Audit #73 step 2(d): per-replan boxel count snapshots for plot 11
+    # (boxel evolution across replans).  List-of-dicts, jsonl-only.
+    "boxel_counts_per_replan",
 }
 
 
