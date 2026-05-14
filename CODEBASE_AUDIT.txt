@@ -1140,6 +1140,33 @@ Status:   OPEN.  Raised 2026-05-12 (later) by user during eval
           that wall-clock is dominated by sim/execution (~9.5s),
           whereas uniform's planning (~20s) dominates wall-clock
           (~35s).  Closes TIER C plot 8.
+          Step 4(c) plot 9 (TAMPURA wall-clock comparison bar)
+          landed 2026-05-14 in commit 8275549.  plot_tampura_-
+          wallclock_comparison in eval_plotter.py; three bars:
+          Ours/semantic, Ours/uniform (if any successful cells),
+          TAMPURA Partial Observability.  Hardcoded constants
+          (TAMPURA_MEAN=57.0, TAMPURA_STD=38.0, TAMPURA_N=20)
+          inline-commented for citation updates; sourced from
+          arXiv:2403.10454 Table II via THESIS_NOTES §21.2.
+          Ours uses median + IQR (robust to plot-8 long-tail
+          outliers); TAMPURA uses mean ± std (paper-reported).
+          statistics.median + statistics.quantiles added to
+          imports.  Hardware-parity caveat (TAMPURA 20-core
+          Xeon vs ours 8-core consumer CPU) in figure caption
+          per THESIS_NOTES §21.1.  Wired sweep-level in BOTH
+          default-matrix and random-pairs dispatch paths
+          (mirrors plot 5/6 wiring).  No-op when no successful
+          find-and-tray-stack cells.  Visual inspection on the
+          2026-05-12 sweep: Ours/semantic 18.2s (n=6) vs
+          TAMPURA 57.0s (n=20) — ~3x faster, headline number
+          for the thesis tractability claim.  Ours/uniform
+          absent because 0/15 success on find-and-tray-stack.
+          Cosmetic nit: TAMPURA "(n=20)" label sits close to
+          title (no ylim_top headroom); readable, deferred as
+          polish.  Closes TIER C plot 9 — TIER C complete.
+          Remaining: Step 5 / plot 10 (perception density),
+          gated on the audit-14-dense-lattice-attempt branch
+          merge; out of scope for this turn.
 Priority: TIER 1 — high prio per user direction 2026-05-12,
           but lands AFTER #71 (refresh OBJECT AABBs on sense) and
           #72 (shadow lateral overhang) so the figures reflect
@@ -1405,8 +1432,18 @@ Fix:   Implementation order (each step is its own commit,
              reference diagonal.  Both columns scalar in
              aggregated.csv — no schema change.  Wired right
              after plot 7 in random-pairs per-goal dispatch.]
-         (c) plot 9 (TAMPURA comparison bar).  Hardcoded
-             TAMPURA numbers from THESIS_NOTES §21.2.
+         (c) plot 9 (TAMPURA comparison bar).  [DONE 2026-05-14;
+             commit 8275549.  plot_tampura_wallclock_comparison
+             in eval_plotter.py; three bars (Ours/semantic,
+             Ours/uniform, TAMPURA Partial Obs.) for find-and-
+             tray-stack only.  Constants TAMPURA_MEAN=57.0 /
+             TAMPURA_STD=38.0 / TAMPURA_N=20 from arXiv:2403.-
+             10454 Table II (THESIS_NOTES §21.2); flagged in
+             code for citation updates.  Ours = median + IQR,
+             TAMPURA = mean ± std (mixed stats documented in
+             caption + docstring).  Hardware caveat in caption
+             per §21.1.  Wired sweep-level in both default-
+             matrix and random-pairs paths.]
 
        Step 5 — TIER D plot (perception density).  Largest
        item.  Defer if time-constrained.
