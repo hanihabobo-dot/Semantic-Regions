@@ -386,6 +386,11 @@ LIST_VALUED = {
     "physical_failures_per_action",
     "physical_failures_at_goal",
     "n_facts_by_predicate",
+    # Audit #73 step 2(c): per-boxel volume lists for plot 3
+    # (heterogeneity histogram).  Variable-length, jsonl-only.
+    "boxel_volumes_object",
+    "boxel_volumes_shadow",
+    "boxel_volumes_free_space",
 }
 
 
