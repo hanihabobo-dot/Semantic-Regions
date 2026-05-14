@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #75, #76, #77                                            #
+#  OPEN ISSUES — #63, #76, #77                                                 #
 #                                                                              #
 ################################################################################
 
@@ -309,9 +309,9 @@ Where:    README.md (project root, currently 29 lines — quick-start
           and_Streams, Scene_Environment, Spatial_Reasoning.
 Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
           results drive Known_Issues_and_Roadmap + Design_Decisions
-          + the README story.  Any other open issue (#75, #76,
-          #77) that lands between now and submission extends the
-          diff this sweep has to absorb.  Gate list refreshed
+          + the README story.  Any other open issue (#76, #77)
+          that lands between now and submission extends the diff
+          this sweep has to absorb.  Gate list refreshed
           2026-05-12 triage: dropped #50/#57/#59/#61/#65
           (deferred) and #66 (relocated to TAMPURA_PLAN.md).
           #62/#69/#70/#71/#72 closed 2026-05-12 so they no longer
@@ -569,16 +569,28 @@ FOR LATER
 ================================================================================
 #75. EXECUTE_PLACE / EXECUTE_STACK — NO POST-RELEASE VERIFICATION; GRIPPER-SNAG LEAVES OBJECT ATTACHED
 ================================================================================
-Status:   OPEN.  Raised 2026-05-12 (later) by user after observing
-          the symptom in a recent --scene random-pairs --goal find-
-          and-tray-stack run: "gripper is still some times not
-          opening when it should.  so objects don't actually drop.
-          instead of trying again the robot continues and adds a new
-          object that just flows in the air."  The audit grep
-          confirmed this is not currently tracked anywhere — the
-          existing "hung object" / "floating cube" references all
-          point to #70 (a different upstream cause, spawn-time
-          unreachability, not mid-execution release failure).
+Status:   [DONE 2026-05-14] — _release_and_verify_drop helper
+          extracted in execution.py; wired into execute_place and
+          execute_stack (base_settle_steps=60 preserved for stack's
+          post-stack AABB read).  release_held_object_in_place keeps
+          its outer signature and delegates the inner verify-retry
+          to the helper.  Verify thresholds (>=8 cm COM, <0.02 m/s
+          speed) reused unchanged from audit #58.  On verification
+          failure the action returns None and the dispatcher replans
+          from (holding ?o); flagged consistency risk (stale
+          grasp_constraint_id on rare rapid-replan path) deferred
+          unless it surfaces in eval logs.
+          Original report: Raised 2026-05-12 (later) by user after
+          observing the symptom in a recent --scene random-pairs
+          --goal find-and-tray-stack run: "gripper is still some
+          times not opening when it should.  so objects don't
+          actually drop.  instead of trying again the robot
+          continues and adds a new object that just flows in the
+          air."  The audit grep confirmed this is not currently
+          tracked anywhere — the existing "hung object" /
+          "floating cube" references all point to #70 (a different
+          upstream cause, spawn-time unreachability, not mid-
+          execution release failure).
 Priority: TIER 1 — correctness drift.  Silently produces invalid
           scenes (cubes "stacked" without actually contacting; cubes
           "placed" still attached to the EE and dragged across the
@@ -1223,22 +1235,12 @@ TIER 1 — CORRECTNESS / HIGH-PRIO:
        2026-05-14 by user during #73 plot review;
        promotable to TIER 0 if it becomes a headline
        thesis figure.
-  #75  execute_place / execute_stack — no post-release
-       verification; gripper-snag leaves the object attached to
-       the EE and the next action drags it across the scene
-       ("objects flowing in the air", user-reported 2026-05-12
-       (later)).  Verify-and-retry helper exists in
-       release_held_object_in_place (audit #58) but was only
-       wired to the replan-break safety net.  Fix: extract
-       _release_and_verify_drop, call from execute_place and
-       execute_stack in place of the open-then-remove pair.
-
 TIER 3 — CODE QUALITY / DOC SWEEP:
   #63  README + wiki final doc sweep - gated on remaining open
-       issues (now: #75, #76, #77).  Explicitly the last commit
+       issues (now: #76, #77).  Explicitly the last commit
        before thesis submission per user 2026-05-08.
 
-Total open: 4 items (#63, #75, #76, #77) per the OPEN ISSUES
+Total open: 3 items (#63, #76, #77) per the OPEN ISSUES
 header at top (the source of truth).
 
 Relocated 2026-05-12:
@@ -1251,6 +1253,19 @@ Relocated 2026-05-12:
        plan refresh.
 
 Closed since previous summary:
+  #75  [DONE 2026-05-14] - execute_place / execute_stack post-
+       release verification gap.  _release_and_verify_drop helper
+       extracted in execution.py and wired to both action paths
+       (base_settle_steps=60 preserved for stack's post-stack AABB
+       read).  release_held_object_in_place's signature unchanged;
+       its inner verify-retry block now delegates to the helper.
+       Verify thresholds (>=8 cm COM, <0.02 m/s speed) reused from
+       audit #58.  On failure the action returns None and the
+       dispatcher replans from (holding ?o) via audit #58 plumbing.
+       Consistency caveat: rare path where the planner finds a plan
+       from (holding ?o) after a drop-verify failure would hit a
+       stale grasp_constraint_id — deferred unless it surfaces in
+       eval logs.
   #73  [DONE 2026-05-14] - eval-chapter figures backlog (10 plots
        across TIER A/B/C delivered: plots 1, 2, 3, 11 compactness;
        4, 5, 6 knowledge-grounded; 7, 8, 9 tractability + TAMPURA).
