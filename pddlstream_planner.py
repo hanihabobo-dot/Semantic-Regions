@@ -646,20 +646,88 @@ class PDDLStreamPlanner:
         # Tagged [#76-diag] so the smart_filter passes it through
         # unchanged (matches the existing #60-diag convention).
         init_by_pred: Dict[str, int] = {}
+        boxel_fits_by_obj: Dict[str, int] = {}
+        view_clear_shadows: List[str] = []
+        unknown_shadows: List[str] = []
         for fact in problem.init:
             if isinstance(fact, tuple) and fact:
                 pred = str(fact[0])
+                if pred == 'boxel_fits' and len(fact) >= 2:
+                    boxel_fits_by_obj[str(fact[1])] = \
+                        boxel_fits_by_obj.get(str(fact[1]), 0) + 1
             elif isinstance(fact, str):
                 pred = fact
             else:
                 pred = '<unknown>'
             init_by_pred[pred] = init_by_pred.get(pred, 0) + 1
+        # Per-shadow view-clear count: how many of the unknown shadows
+        # currently have at least one object blocking them?  A shadow with
+        # zero blockers is immediately sense-able; one with many requires
+        # relocating blockers first.
+        shadow_ids = [str(f[1]) for f in problem.init
+                       if isinstance(f, tuple) and len(f) == 2
+                       and f[0] == 'is_shadow']
+        known_KIF_pairs = {(str(f[1]), str(f[2])) for f in problem.init
+                           if isinstance(f, tuple) and len(f) == 3
+                           and f[0] == 'obj_at_boxel_KIF'}
+        blocked_by_count: Dict[str, int] = {}
+        for f in problem.init:
+            if isinstance(f, tuple) and len(f) == 4 and f[0] == 'blocks_view_at':
+                obj_id, b_id, region = str(f[1]), str(f[2]), str(f[3])
+                # Only count if obj is currently AT b_id (i.e. the
+                # blocks_view_at would actually fire as blocks_view).
+                if (obj_id, b_id) in {(str(f2[1]), str(f2[2]))
+                                       for f2 in problem.init
+                                       if isinstance(f2, tuple)
+                                       and len(f2) == 3
+                                       and f2[0] == 'obj_at_boxel'}:
+                    blocked_by_count[region] = blocked_by_count.get(region, 0) + 1
+        for sid in shadow_ids:
+            n_blockers = blocked_by_count.get(sid, 0)
+            if n_blockers == 0:
+                view_clear_shadows.append(sid)
+            unknown_shadows.append(f"{sid}(blockers={n_blockers})")
         ordered = dict(sorted(init_by_pred.items(), key=lambda x: -x[1]))
         print(f"  [#76-diag] init facts: {sum(init_by_pred.values())} total, "
               f"by predicate: {ordered}")
         print(f"  [#76-diag] goal: {goal}")
         print(f"  [#76-diag] held_obj={held_obj}, max_time={max_time}s, "
               f"verbose={verbose}")
+        print(f"  [#76-diag] boxel_fits per obj: "
+              f"{dict(sorted(boxel_fits_by_obj.items()))}")
+        print(f"  [#76-diag] shadows ({len(shadow_ids)} total, "
+              f"{len(view_clear_shadows)} view-clear NOW): "
+              f"{unknown_shadows}")
+        # Per target, count how many view-clear unknown shadows accept it
+        # (boxel_fits AND view_clear AND NOT obj_at_boxel_KIF).  If 0, the
+        # planner can't ground a sense for that target → infeasibility.
+        kif_set = {(str(f[1]), str(f[2])) for f in problem.init
+                   if isinstance(f, tuple) and len(f) == 3
+                   and f[0] == 'obj_at_boxel_KIF'}
+        boxel_fits_pairs = {(str(f[1]), str(f[2])) for f in problem.init
+                            if isinstance(f, tuple) and len(f) == 3
+                            and f[0] == 'boxel_fits'}
+        obj_ids_in_init = sorted({str(f[1]) for f in problem.init
+                                   if isinstance(f, tuple) and len(f) == 2
+                                   and f[0] == 'Obj'})
+        sense_options_per_obj: Dict[str, List[str]] = {}
+        obj_at_boxel_per_obj: Dict[str, List[str]] = {}
+        for obj in obj_ids_in_init:
+            sense_options_per_obj[obj] = [
+                s for s in shadow_ids
+                if (obj, s) in boxel_fits_pairs
+                and s in view_clear_shadows
+                and (obj, s) not in kif_set
+            ]
+            obj_at_boxel_per_obj[obj] = [
+                str(f[2]) for f in problem.init
+                if isinstance(f, tuple) and len(f) == 3
+                and f[0] == 'obj_at_boxel'
+                and str(f[1]) == obj
+            ]
+        print(f"  [#76-diag] sense_options per obj (view-clear AND fits AND "
+              f"not-KIF): {sense_options_per_obj}")
+        print(f"  [#76-diag] obj_at_boxel per obj: {obj_at_boxel_per_obj}")
         _plan_start_t = time.perf_counter()
 
         # Call PDDLStream solver
