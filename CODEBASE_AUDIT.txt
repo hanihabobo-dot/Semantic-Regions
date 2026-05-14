@@ -1041,6 +1041,19 @@ Status:   OPEN.  Raised 2026-05-12 (later) by user during eval
           tray-stack semantic 40% / uniform 0%; holding
           semantic 80% / uniform 87%; stack semantic 100% /
           uniform 100% with semantic 38x fewer init facts.
+          Step 2(c) plot 3 (boxel-volume histogram, semantic vs
+          uniform) landed 2026-05-14 in commit c8ca69f.
+          run_logger.timing_summary.json gains boxel_volumes_-
+          {object,shadow,free_space} (end-of-run registry snapshot);
+          eval_runner.LIST_VALUED extended so the lists are jsonl-
+          only.  eval_plotter gains load_jsonl_rows + group_boxel_-
+          volumes + plot_boxel_volume_histogram (side-by-side
+          semantic | uniform panels, log-x bins, overlaid
+          OBJECT/SHADOW/FREE_SPACE).  Wired into the random-pairs
+          per-goal dispatch right after the init-state-facts plot.
+          No-op on pre-existing sweeps; renders against the next
+          sweep that re-runs with this code (step 2(c) re-run
+          pending).
 Priority: TIER 1 — high prio per user direction 2026-05-12,
           but lands AFTER #71 (refresh OBJECT AABBs on sense) and
           #72 (shadow lateral overhang) so the figures reflect
@@ -1241,7 +1254,14 @@ Fix:   Implementation order (each step is its own commit,
              but informative.  [DONE 2026-05-13; commit b7f7406.
              Simple line plot via plot_metric;
              n_facts_by_predicate stratification deferred.]
-         (c) plot 3 (volume histogram).
+         (c) plot 3 (volume histogram).  [DONE 2026-05-14;
+             commit c8ca69f.  run_logger dumps per-boxel volumes;
+             eval_runner.LIST_VALUED gates them to aggregated.jsonl
+             only; eval_plotter.load_jsonl_rows + group_boxel_-
+             volumes + plot_boxel_volume_histogram render side-by-
+             side semantic | uniform log-x panels with overlaid
+             OBJECT / SHADOW / FREE_SPACE.  Re-run pending to
+             populate the new schema fields.]
          (d) plot 11 (boxel evolution across replans).  Needs
              per-replan logging (extends step 1's end-of-run
              logging).
