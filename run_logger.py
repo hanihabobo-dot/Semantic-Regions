@@ -501,6 +501,15 @@ def parse_pipeline_args(argv=None):
              'count quadratically, larger cells overconstrain '
              '(boxel_fits) for cube placement.',
     )
+    parser.add_argument(
+        '--max-plan-time',
+        type=float,
+        default=1800.0,
+        help='Per-call PDDLStream max_time in seconds (audit #76 — '
+             'plumbed end-to-end to planner.plan() at both the primary '
+             'and safety-net call sites). Default 1800.0 keeps pre-#76 '
+             'behaviour; lower values fail fast for diagnostic runs.',
+    )
     args = parser.parse_args(argv)
 
     # Audit #29: --n-hidden only makes sense on the scalability scene

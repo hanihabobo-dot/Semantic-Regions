@@ -15,6 +15,7 @@ PDDLStream path is added to sys.path via the hardcoded PDDLSTREAM_PATH constant 
 
 import sys
 import os
+import time
 
 # Add pddlstream to path (for WSL)
 PDDLSTREAM_PATH = os.environ.get(
@@ -640,6 +641,27 @@ class PDDLStreamPlanner:
             print(f"Max time: {max_time}s")
             print(f"Unit costs: {unit_costs}")
 
+        # Audit #76 diagnostic — summarise init facts by predicate so we
+        # can see at a glance which atoms PDDLStream has to work with.
+        # Tagged [#76-diag] so the smart_filter passes it through
+        # unchanged (matches the existing #60-diag convention).
+        init_by_pred: Dict[str, int] = {}
+        for fact in problem.init:
+            if isinstance(fact, tuple) and fact:
+                pred = str(fact[0])
+            elif isinstance(fact, str):
+                pred = fact
+            else:
+                pred = '<unknown>'
+            init_by_pred[pred] = init_by_pred.get(pred, 0) + 1
+        ordered = dict(sorted(init_by_pred.items(), key=lambda x: -x[1]))
+        print(f"  [#76-diag] init facts: {sum(init_by_pred.values())} total, "
+              f"by predicate: {ordered}")
+        print(f"  [#76-diag] goal: {goal}")
+        print(f"  [#76-diag] held_obj={held_obj}, max_time={max_time}s, "
+              f"verbose={verbose}")
+        _plan_start_t = time.perf_counter()
+
         # Call PDDLStream solver
         solution = solve(
             problem,
@@ -648,9 +670,14 @@ class PDDLStreamPlanner:
             unit_costs=unit_costs,
             verbose=verbose
         )
-        
+
         plan, cost, certificate = solution
-        
+        _plan_elapsed = time.perf_counter() - _plan_start_t
+        _plan_outcome = 'plan_found' if plan is not None else 'no_plan'
+        print(f"  [#76-diag] outcome={_plan_outcome}, "
+              f"elapsed={_plan_elapsed:.3f}s, "
+              f"plan_len={len(plan) if plan else 0}, cost={cost}")
+
         if verbose:
             print_solution(solution)
         
