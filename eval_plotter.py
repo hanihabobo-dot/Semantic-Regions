@@ -745,6 +745,106 @@ def plot_per_call_planning_time(
     return out_path
 
 
+def group_wallclock_vs_planning(
+    rows: List[dict],
+    goal: Optional[str] = None,
+) -> Dict[str, List[tuple]]:
+    """``{baseline: [(planning_time_s, wall_clock_s), ...]}``.
+
+    Audit #73 TIER C plot 8 data prep.  Pairs total_planning_time_s
+    with wall_clock_s per cell — both are scalar CSV columns, no jsonl
+    read needed.  Includes failed runs: the failure profile surfaces
+    naturally as points clustered low on the X axis (no_summary cells
+    have no planning time at all; planner_failed cells have small X +
+    medium Y; success cells trend along the diagonal at higher X).
+    """
+    out: Dict = defaultdict(list)
+    for r in rows:
+        if goal is not None and r.get("goal") != goal:
+            continue
+        pt = r.get("total_planning_time_s")
+        wc = r.get("wall_clock_s")
+        if pt in (None, "") or wc in (None, ""):
+            continue
+        try:
+            out[r.get("baseline") or "semantic"].append(
+                (float(pt), float(wc)))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def plot_wallclock_vs_planning(
+    grouped: Dict[str, List[tuple]],
+    title: str,
+    out_path: Path,
+) -> Optional[Path]:
+    """Scatter: X = total_planning_time_s, Y = wall_clock_s, color by
+    baseline.  Diagonal y=x marks "pure planning" — wall_clock <
+    planning_time is impossible, so points sit on or above the line.
+
+    Audit #73 TIER C plot 8 — wall-clock vs planning decomposition.
+    Quantifies "what fraction of wall-clock is planning vs sim /
+    execution".  Points well above y=x: long PyBullet step / perception
+    / replan-orchestration tail.  Points near y=x: the planner
+    dominated wall-clock (the case where #50's planner-perf
+    investigation pays off).
+    """
+    if not HAVE_MPL:
+        print(f"\n=== {title} (matplotlib not available) ===")
+        for baseline in sorted(grouped):
+            pairs = grouped[baseline]
+            if not pairs:
+                continue
+            pts = [p for p, _ in pairs]
+            wcs = [w for _, w in pairs]
+            ratios = [p / w for p, w in pairs if w > 0]
+            print(f"  {baseline}: n={len(pairs)}, "
+                  f"mean_planning_s={mean(pts):.3f}, "
+                  f"mean_wall_clock_s={mean(wcs):.3f}, "
+                  f"mean_planning_ratio="
+                  f"{mean(ratios) if ratios else 0:.3f}")
+        return None
+
+    baselines = sorted(grouped.keys())
+    if not baselines or not any(grouped[b] for b in baselines):
+        print(f"[plotter] no data for {title}")
+        return None
+
+    baseline_colors = {"semantic": "#1f77b4", "uniform": "#ff7f0e"}
+    fig, ax = plt.subplots(figsize=(7, 5.5))
+    all_max = 0.0
+    for baseline in baselines:
+        pairs = grouped[baseline]
+        if not pairs:
+            continue
+        xs = [p for p, _ in pairs]
+        ys = [w for _, w in pairs]
+        ax.scatter(xs, ys, s=36, alpha=0.65,
+                   c=baseline_colors.get(baseline),
+                   edgecolors="black", linewidths=0.4,
+                   label=f"{baseline} (n={len(pairs)})")
+        all_max = max(all_max, max(xs), max(ys))
+
+    if all_max > 0:
+        diag = [0, all_max]
+        ax.plot(diag, diag, linestyle="--", color="gray",
+                linewidth=1.0, alpha=0.7, label="y = x (pure planning)")
+
+    ax.set_xlabel("total planning time (s)")
+    ax.set_ylabel("wall clock (s)")
+    ax.set_title(title)
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=0)
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
+
+
 def group_failure_modes(rows: List[dict]
                         ) -> Dict[tuple, Dict[str, int]]:
     """``{(goal, baseline): {exit_reason: count}}``.
@@ -1466,6 +1566,17 @@ def main(argv=None) -> int:
             group_per_call_planning_time(jsonl_rows, goal=goal),
             title=f"Per-call planning time vs replan index{title_suffix}",
             out_path=out_dir / f"per_call_planning_time{suffix}.png",
+        )
+        # Audit #73 TIER C plot 8: wall-clock vs total_planning_time
+        # scatter, color by baseline, with y=x reference.  Both columns
+        # are scalar in aggregated.csv (PRIMARY_COLUMNS); no schema
+        # change.  Includes failed runs so the no_summary/planner_failed
+        # clusters near X=0 are visible.
+        plot_wallclock_vs_planning(
+            group_wallclock_vs_planning(g_rows + (g_baseline or []),
+                                         goal=goal),
+            title=f"Wall-clock vs planning time{title_suffix}",
+            out_path=out_dir / f"wallclock_vs_planning{suffix}.png",
         )
     # Audit #73 TIER B plot 6: failure-mode breakdown (sweep-level
     # stacked bar per (goal, baseline)).  Counts all cells including
