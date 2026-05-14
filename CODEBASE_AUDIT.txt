@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #73, #75, #76                                            #
+#  OPEN ISSUES — #63, #73, #75, #76, #77                                       #
 #                                                                              #
 ################################################################################
 
@@ -1721,7 +1721,170 @@ Related:
 
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-12 (later))
+#77. ANYTIME COMPACTNESS SWEEP — SUCCESS RATE VS TIME BUDGET (SEMANTIC GAINS FROM FINER BOXELS)
+================================================================================
+Status:   OPEN.  Raised 2026-05-14 by user during eval-chapter
+          analysis: "interesting is to plot success rate in
+          semantic when using smaller boxels.  To keep this
+          experiment runnable, I chose a minimum boxel size that
+          is the same in both baselines to make this more
+          comparable when it came to waiting times.  But if we
+          keep the time constant we can then look what was more
+          successful.  Then we can plot a graph where x is time
+          in seconds and y the number of problem instances
+          solved."
+Priority: TIER 1 — promotable to TIER 0 if the curve becomes a
+          headline thesis figure.  Strengthens the eval-chapter
+          comparison from "same resolution, faster" to "same
+          time budget, more instances solved with finer
+          resolution."  This is the IPC-style anytime curve
+          readers of planning papers expect.
+Where:    eval_runner.py — new SCALABILITY_VS_TIME matrix
+          preset OR new `--min-boxel-size` axis on
+          RANDOM_PAIRS_MATRIX (single sweep at the largest
+          time budget; post-process for shorter budgets).
+          eval_plotter.py — new plot_solved_vs_time helper:
+          step-function cumulative-solved vs wall_clock_s,
+          one line per (baseline, min_boxel_size).
+          test_full_pipeline.py / pddlstream_planner.py —
+          verify PDDLStream's `max_time` kwarg is honoured;
+          if not, plumb --time-budget end-to-end.
+          boxel_env.py — semantic min-boxel-size knob (today
+          set by `[audit-66/67] Effective minimum boxel size`
+          gate at scene init).  Expose as --min-boxel-size.
+Depends:  #73 (eval-figures infrastructure) — re-uses
+          aggregated.csv shape, per-goal dispatch, summary
+          table writer.  Lands AFTER #73's TIER A/B plots
+          stabilise so the new plot fits the existing
+          plotter dispatch.
+Effort:   1-2 days for the matrix + plotter once #73 stabilises.
+          +1 day if planner-side time-budget plumbing is missing.
+          Largest cost is sweep wall-clock (anytime curves need
+          long per-cell budgets to surface late-solving cells).
+
+What:  The current eval pegs semantic's minimum boxel size at
+       5 cm to match uniform's cell size, so per-call planning
+       times are roughly comparable.  Fair-comparison decision,
+       but it throws away semantic's key advantage: adaptive
+       partitioning lets semantic use finer FREE_SPACE boxels
+       (1-2 cm) without the atom-count explosion uniform would
+       suffer at the same resolution.  Current eval supports
+       "semantic is faster at equal resolution"; the proposed
+       experiment supports the stronger "semantic is more
+       capable at equal time budget" claim.
+
+       Proposed experiment: fix a generous per-cell wall-clock
+       budget (e.g., 300 s), sweep the semantic min-boxel knob
+       (e.g., {5 cm, 3 cm, 2 cm, 1 cm}) at the largest budget,
+       run uniform at its forced 5 cm only.  Plot cumulative
+       solved instances as a step function over wall_clock_s.
+       Each (baseline, min_boxel) is a separate line.  X axis:
+       wall-clock seconds.  Y axis: # instances solved.  At a
+       60-s budget mark the reader can read off "semantic-2cm
+       solves 12 / uniform-5cm solves 3"; at 300 s the lines
+       plateau.
+
+       This is the standard IPC cumulative-solved curve — its
+       presence is one of the things a planning paper is
+       expected to show.
+
+Fix:   ONE FEATURE BRANCH, multi-commit:
+
+       Step 1 — planner-side time-budget knob.  Confirm
+       PDDLStream's `max_time` reaches planner.plan(); if
+       not, plumb --time-budget through test_full_pipeline /
+       pddlstream_planner / pddlstream call.  Smoke-check
+       that exceeding the budget aborts the current iteration
+       and report_run_outcome still writes timing_summary.json
+       (otherwise no_summary explodes per the existing #76 /
+       Step 1's failure-mode gap).
+
+       Step 2 — semantic min-boxel-size knob.  Expose
+       --min-boxel-size on the CLI; thread to
+       FreeSpaceGenerator (and CellMerger if it caps merge
+       size).  Default 5 cm so existing runs unchanged.
+
+       Step 3 — new matrix preset.  Start narrow:
+         min_boxel_size  in {0.05, 0.03, 0.02, 0.01}  (semantic only)
+         baseline       in {semantic, uniform}      (uniform fixed at 5cm)
+         seed           in [0..4]                   (5 seeds)
+         goal           in [holding, find-and-tray-stack, stack]
+         n_occluders    in [2, 3, 4]                (random-pairs);
+                                                    stack subtier ignored
+         time_budget    : single large value (e.g., 300 s)
+       Cell count: 4 sizes x 5 seeds x 3 goals x 3 n_occ x
+       2 baselines = 360 cells, ~2-4 h wall-clock at the
+       current 17 s/cell average (likely longer at 1-cm min
+       boxels).  Single-budget run; cumulative-solved curves
+       at shorter budgets are post-processed from
+       wall_clock_s.
+
+       Step 4 — plot_solved_vs_time helper.  Reads
+       aggregated.csv, groups by (baseline, min_boxel_size),
+       sorts by wall_clock_s, emits step-function lines.
+       Per-goal panels (mirrors plot 1's layout).
+
+       Step 5 — eval-chapter writeup pairing with plot 1 /
+       plot 2: "semantic uses fewer boxels at coarse
+       resolution AND can leverage finer resolution within a
+       fixed time budget."  This is the closing argument for
+       the compactness pillar.
+
+Care:
+       (1) min_boxel_size only affects FREE_SPACE granularity
+           in semantic; OBJECT and SHADOW boxels are still
+           per-object.  Document in the plot caption so
+           reviewers don't conflate this with overall
+           grid resolution.
+       (2) Uniform CAN go finer than 5 cm in principle
+           (just change cell_size), but #66 surfaced
+           place-fits failures when uniform_cell_size <
+           occluder_size.  Optionally include uniform-3cm /
+           uniform-2cm to show the atom-count explosion and
+           the #66 failure mode together — strengthens the
+           "uniform doesn't scale to fine resolution" point.
+       (3) Per-cell wall-clock budget enforcement matters
+           for the curve quality.  If PDDLStream's
+           max_time is honoured but the surrounding
+           pipeline (PyBullet init, scene build, execution)
+           runs unbounded, the plot's X axis becomes
+           dominated by sim setup.  Smoke-check Step 1.
+       (4) Re-running the matrix at different time
+           budgets is expensive.  Better: run ONCE at the
+           largest budget, record wall_clock_s per cell,
+           plot cumulative-solved at any X threshold by
+           post-processing.  No re-runs needed for the
+           anytime curve.
+       (5) Compactness pillar story upgrade: pair the
+           anytime curve with the existing boxel-count
+           breakdown + init-state-facts plots so the
+           reader sees both the resource argument
+           (compactness) and the outcome argument
+           (capability under budget).
+
+Related:
+       #73 — eval-chapter figures backlog.  This is a new
+            TIER A plot (compactness pillar's capability
+            corollary) that #73 didn't enumerate;
+            conceptually "plot 12."
+       #74 — placeholder (unfiled): uniform 0/15 success
+            on find-and-tray-stack.  This issue's curve
+            directly visualises that gap on a time-budget
+            axis (at any budget, uniform-5cm stays at 0
+            while semantic-finer climbs).
+       #76 — planner returns no plan; the time-budget
+            sweep would disambiguate "ran out of time"
+            from "concluded no plan exists" by separating
+            wall_clock_s from max_complexity.
+       #66 — relocated to TAMPURA_PLAN.md.  Auto-tune
+            uniform cell-size to largest visible AABB +
+            1 cm.  If uniform is included at fine
+            resolution, #66's place-fits failure mode
+            appears in the curve.
+
+
+================================================================================
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-14)
 ================================================================================
 
 Aligns with the ROADMAP banner above (pre-eval -> eval prerequisites -> eval).
@@ -1780,6 +1943,18 @@ TIER 1 — CORRECTNESS / HIGH-PRIO:
        timing_summary.json; LIST_VALUED extended in eval_runner).
        Steps 2-5 (plots) pending user schema review then
        per-plot commits.
+  #77  Anytime compactness sweep — success rate vs time
+       budget with smaller semantic boxels.  Currently
+       semantic min boxel = uniform cell = 5 cm for time-
+       comparable runs; fixing TIME instead lets semantic
+       run at 1-3 cm and solve more instances than uniform
+       at the same budget.  Plot: cumulative solved vs
+       wall_clock_s (IPC-style anytime curve), one line
+       per (baseline, min_boxel_size).  Headline strength
+       upgrade for the compactness pillar.  Raised
+       2026-05-14 by user during #73 plot review;
+       promotable to TIER 0 if it becomes a headline
+       thesis figure.
   #75  execute_place / execute_stack — no post-release
        verification; gripper-snag leaves the object attached to
        the EE and the next action drags it across the scene
@@ -1795,7 +1970,12 @@ TIER 3 — CODE QUALITY / DOC SWEEP:
        issues (now: #71, #72, #73, #75, #76).  Explicitly the
        last commit before thesis submission per user 2026-05-08.
 
-Total open: 6 items (#63, #71, #72, #73, #75, #76).
+Total open: 5 items (#63, #73, #75, #76, #77) per the OPEN
+ISSUES header at top (the source of truth).  Note: this
+SUMMARY block previously listed #71/#72 as open; they are
+[DONE] per the body's Closed/relocated list and the OPEN
+ISSUES header — staleness retained here pending the next
+slim.
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
