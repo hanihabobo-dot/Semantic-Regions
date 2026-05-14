@@ -1071,6 +1071,24 @@ Status:   OPEN.  Raised 2026-05-12 (later) by user during eval
           for context.  Optional follow-up: color-segment success
           vs failure or annotate per-panel success_rate; not in
           this commit per audit spec.
+          Step 2(d) plot 11 (boxel-count evolution across replans)
+          landed 2026-05-14 in commit 6434762.  group_boxel_-
+          evolution_per_replan + plot_boxel_evolution_per_replan
+          in eval_plotter.py; per-replan capture in test_full_-
+          pipeline.py loop post-reboxelize_free_space (so each
+          entry reflects what THIS planner.plan() will see);
+          report_run_outcome gains boxel_counts_per_replan kwarg;
+          run_logger dumps the list under same key in timing_-
+          summary.json; eval_runner.LIST_VALUED gates the list-of-
+          dicts to aggregated.jsonl only.  Plot: one panel per
+          baseline (semantic, uniform); X plan_index; Y mean
+          boxel count with shaded +/-1 std bands per type
+          (OBJECT / SHADOW / FREE_SPACE).  Wired into the random-
+          pairs per-goal dispatch right after plot_boxel_volume_-
+          histogram; no-op on pre-#73-step-2(d) sweeps (helper
+          returns when boxel_counts_per_replan absent from rows).
+          Re-run pending to populate the new schema field.
+          Closes TIER A plot backlog.
 Priority: TIER 1 — high prio per user direction 2026-05-12,
           but lands AFTER #71 (refresh OBJECT AABBs on sense) and
           #72 (shadow lateral overhang) so the figures reflect
@@ -1279,9 +1297,15 @@ Fix:   Implementation order (each step is its own commit,
              side semantic | uniform log-x panels with overlaid
              OBJECT / SHADOW / FREE_SPACE.  Re-run pending to
              populate the new schema fields.]
-         (d) plot 11 (boxel evolution across replans).  Needs
-             per-replan logging (extends step 1's end-of-run
-             logging).
+         (d) plot 11 (boxel evolution across replans).  [DONE
+             2026-05-14; commit 6434762.  Per-replan capture in
+             test_full_pipeline.py post-reboxelize; boxel_counts_-
+             per_replan plumbed through report_run_outcome ->
+             timing_summary.json; LIST_VALUED gate keeps it in
+             aggregated.jsonl only.  group_boxel_evolution_per_-
+             replan + plot_boxel_evolution_per_replan in eval_-
+             plotter.py; one panel per baseline with shaded +/-1
+             std bands per type.  Re-run pending.]
 
        Step 3 — TIER B plots (knowledge-grounded pillar).
          (a) plot 5 (replan distribution).  No new data.
