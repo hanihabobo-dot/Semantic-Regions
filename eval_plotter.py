@@ -45,7 +45,7 @@ def load_rows(csv_path: Path) -> List[dict]:
         reader = csv.DictReader(f)
         for r in reader:
             for k in ("n_occluders", "n_targets", "n_hidden", "seed",
-                      "plan_count",
+                      "plan_count", "n_sense_actions",
                       "n_object_boxels", "n_shadow_boxels",
                       "n_free_space_boxels", "n_init_state_facts"):
                 v = r.get(k)
@@ -1311,6 +1311,28 @@ def main(argv=None) -> int:
             out_path=out_dir / f"init_state_facts_vs_n_occluders{suffix}.png",
             baseline_grouped=(group_metric(g_baseline, series=series_key,
                                            metric="n_init_state_facts",
+                                           success_only=False)
+                              if g_baseline else None),
+            series_label=series_label,
+            main_label_suffix=main_label_suffix,
+            baseline_label_suffix=baseline_label_suffix,
+        )
+        # Audit #73 TIER B plot 4: sense-action count vs n_occluders.
+        # Counts every sense executed (any outcome) across all
+        # replans, so include failed runs — they may still have done
+        # many senses before exiting (the audit body explicitly notes
+        # uniform vs semantic should show ~equal counts if the shadow
+        # set is identical; a divergence is itself a finding).  No-op
+        # on pre-#73-step-3(c) sweeps (n_sense_actions column absent).
+        plot_metric(
+            group_metric(g_rows, series=series_key,
+                         metric="n_sense_actions",
+                         success_only=False),
+            title=f"Sense-action count vs scene size{title_suffix}",
+            ylabel="mean n_sense_actions",
+            out_path=out_dir / f"sense_action_count_vs_n_occluders{suffix}.png",
+            baseline_grouped=(group_metric(g_baseline, series=series_key,
+                                           metric="n_sense_actions",
                                            success_only=False)
                               if g_baseline else None),
             series_label=series_label,

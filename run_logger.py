@@ -218,6 +218,7 @@ def report_run_outcome(
     on_relations: dict,
     belief,
     plan_count: int,
+    sense_count: int = 0,  # audit #73 step 3(c) plot 4
     shadows: list,
     blocked_giveup_shadows: set,
     max_replans: int,
@@ -348,6 +349,9 @@ def report_run_outcome(
                 "success": bool(success),
                 "exit_reason": exit_reason,
                 "plan_count": plan_count,
+                # Audit #73 step 3(c) plot 4: total sense actions
+                # executed across all replans (any outcome).
+                "n_sense_actions": sense_count,
                 "total_planning_time_s": round(total_plan_time, 3),
                 "per_call_planning_time_s": [round(t, 3) for t in plan_times],
                 # Audit #40: structured physics-vs-symbolic failure log
