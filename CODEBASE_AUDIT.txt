@@ -1122,6 +1122,24 @@ Status:   OPEN.  Raised 2026-05-12 (later) by user during eval
           table.md mean_plan_time_s); find-and-tray-stack/
           semantic shows the messy failure-tail thinning expected
           from a 40% success rate.  Closes TIER C plot 7.
+          Step 4(b) plot 8 (wall-clock vs total_planning_time
+          scatter) landed 2026-05-14 in commit 7ef62f3.  group_-
+          wallclock_vs_planning + plot_wallclock_vs_planning in
+          eval_plotter.py; both columns are scalar in
+          aggregated.csv (PRIMARY_COLUMNS — no schema change).
+          Color by baseline (semantic=C0, uniform=C1), y=x
+          diagonal as the "pure planning" upper bound (wall_-
+          clock ≥ planning_time always).  Wired right after
+          plot 7 in the random-pairs per-goal dispatch.
+          Includes failed runs — no_summary cells skip naturally
+          (no planning_time field).  Visual inspection on the
+          2026-05-12 sweep confirmed all points sit on/above the
+          diagonal; holding shows the (240, 250) outlier
+          consistent with plot 7's uniform/plan#2 = 190s spike;
+          stack reveals semantic's planning is so cheap (~1.2s)
+          that wall-clock is dominated by sim/execution (~9.5s),
+          whereas uniform's planning (~20s) dominates wall-clock
+          (~35s).  Closes TIER C plot 8.
 Priority: TIER 1 — high prio per user direction 2026-05-12,
           but lands AFTER #71 (refresh OBJECT AABBs on sense) and
           #72 (shadow lateral overhang) so the figures reflect
@@ -1379,8 +1397,14 @@ Fix:   Implementation order (each step is its own commit,
              loop; semantic + uniform overlaid as lines with
              +/-1 std bands.  success_only=False per the
              plot 4 precedent.]
-         (b) plot 8 (wall-clock vs planning scatter).  No new
-             data.
+         (b) plot 8 (wall-clock vs planning scatter).  [DONE
+             2026-05-14; commit 7ef62f3.  group_wallclock_vs_-
+             planning + plot_wallclock_vs_planning in eval_-
+             plotter.py.  Scatter of (total_planning_time_s,
+             wall_clock_s) per cell, color by baseline, y=x
+             reference diagonal.  Both columns scalar in
+             aggregated.csv — no schema change.  Wired right
+             after plot 7 in random-pairs per-goal dispatch.]
          (c) plot 9 (TAMPURA comparison bar).  Hardcoded
              TAMPURA numbers from THESIS_NOTES §21.2.
 
