@@ -1089,6 +1089,21 @@ Status:   OPEN.  Raised 2026-05-12 (later) by user during eval
           returns when boxel_counts_per_replan absent from rows).
           Re-run pending to populate the new schema field.
           Closes TIER A plot backlog.
+          Step 3(c) plot 4 (sense-action count) landed 2026-05-14
+          in commit 5829b94.  Counter sense_count plumbed through
+          test_full_pipeline.py (mirrors plan_count: init at 0,
+          increment on every entry into the 'sense' dispatch
+          branch, pass to report_run_outcome); run_logger gains
+          sense_count kwarg + dumps "n_sense_actions" scalar to
+          timing_summary.json.  eval_plotter: load_rows int-casts
+          the new column; plot_metric line added in the random-
+          pairs per-goal dispatch right after plot 2 (init-state
+          facts) with success_only=False (audit body explicitly
+          notes failed runs may still execute many senses; uniform
+          vs semantic equality is the diagnostic).  No-op on pre-
+          #73-step-3(c) CSVs (group_metric skips rows missing the
+          column → empty grouped → _plot_single_x_summary "no
+          data" branch).  Closes TIER B plot 4.  Re-run pending.
 Priority: TIER 1 — high prio per user direction 2026-05-12,
           but lands AFTER #71 (refresh OBJECT AABBs on sense) and
           #72 (shadow lateral overhang) so the figures reflect
@@ -1323,8 +1338,15 @@ Fix:   Implementation order (each step is its own commit,
              [DONE 2026-05-13; commit 1308c3d.
              group_failure_modes + plot_failure_modes;
              sweep-level, fires in both dispatch branches.]
-         (c) plot 4 (sense-action count).  Needs sense counter
-             in execution.py OR log-parsing aggregator.
+         (c) plot 4 (sense-action count).  [DONE 2026-05-14;
+             commit 5829b94.  sense_count counter in test_full_-
+             pipeline.py dispatch loop (increment on every 'sense'
+             branch entry, any outcome) → report_run_outcome
+             sense_count kwarg → "n_sense_actions" scalar in
+             timing_summary.json → aggregated.csv auto-flow.
+             plot_metric line in random-pairs per-goal dispatch,
+             success_only=False per audit body.  Chose the counter
+             path over log-parsing for cleanliness.]
 
        Step 4 — TIER C plots (tractability + TAMPURA).
          (a) plot 7 (per-call planning time vs replan index).
