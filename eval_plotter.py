@@ -610,6 +610,93 @@ def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
     return out_path
 
 
+def group_plan_count_distribution(rows: List[dict]
+                                  ) -> Dict[tuple, List[int]]:
+    """``{(goal, baseline): [plan_count, ...]}``.
+
+    Audit #73 TIER B plot 5 data prep.  All cells included; failed
+    runs typically sit at max_replans and pile at the right edge of
+    the histogram, which is the intended diagnostic (the failure
+    tail surfaces alongside the convergence distribution).
+    """
+    out: Dict = defaultdict(list)
+    for r in rows:
+        goal = r.get("goal")
+        baseline = r.get("baseline") or "semantic"
+        pc = r.get("plan_count")
+        if pc in (None, ""):
+            continue
+        try:
+            out[(goal, baseline)].append(int(pc))
+        except (ValueError, TypeError):
+            continue
+    return out
+
+
+def plot_plan_count_distribution(grouped: Dict[tuple, List[int]],
+                                 title: str,
+                                 out_path: Path) -> Optional[Path]:
+    """Histogram of plan_count per (goal, baseline) — one panel per
+    cell of the goal x baseline grid.
+
+    Audit #73 TIER B plot 5 — replan-count distribution.  Tests
+    whether semantic's partition converges in fewer replans than
+    uniform on the same scenes.  All cells included so the failure
+    pile (typically at max_replans) is visible at the right edge.
+    """
+    if not HAVE_MPL:
+        print(f"\n=== {title} (matplotlib not available) ===")
+        for key, vs in sorted(grouped.items(), key=lambda kv: str(kv[0])):
+            if not vs:
+                continue
+            print(f"  {key}: n={len(vs)}, "
+                  f"min={min(vs)}, max={max(vs)}, "
+                  f"mean={sum(vs) / len(vs):.2f}")
+        return None
+
+    keys = sorted(grouped.keys())
+    if not keys:
+        print(f"[plotter] no data for {title}")
+        return None
+    all_counts = [c for vs in grouped.values() for c in vs]
+    if not all_counts:
+        print(f"[plotter] no plan_count data for {title}")
+        return None
+    max_pc = max(all_counts)
+    bins = list(range(0, max_pc + 2))  # integer bins [0, 1, ..., max+1]
+
+    goals = sorted({g for g, _ in keys})
+    baselines = sorted({b for _, b in keys})
+    fig, axes = plt.subplots(
+        len(goals), len(baselines),
+        figsize=(4 * len(baselines), 3 * len(goals)),
+        sharey=True, sharex=True, squeeze=False,
+    )
+    cmap = plt.get_cmap("tab10")
+    for gi, goal in enumerate(goals):
+        for bi, baseline in enumerate(baselines):
+            ax = axes[gi][bi]
+            vs = grouped.get((goal, baseline), [])
+            if vs:
+                ax.hist(vs, bins=bins, color=cmap(bi % 10),
+                        alpha=0.75, edgecolor="black", linewidth=0.4,
+                        label=f"n={len(vs)}, "
+                              f"mean={sum(vs) / len(vs):.1f}")
+                ax.legend(loc="upper right", fontsize=8)
+            ax.set_title(f"{goal} / {baseline}")
+            ax.grid(True, axis="y", alpha=0.3)
+            if gi == len(goals) - 1:
+                ax.set_xlabel("plan_count")
+            if bi == 0:
+                ax.set_ylabel("cell count")
+    fig.suptitle(title)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
+
+
 def _print_text_table(grouped, title: str) -> None:
     print(f"\n=== {title} (matplotlib not available) ===")
     for s_val, xy in sorted(grouped.items(), key=lambda kv: str(kv[0])):
@@ -987,6 +1074,15 @@ def main(argv=None) -> int:
             title="Failure-mode breakdown by (goal, baseline)",
             out_path=out_dir / "failure_modes.png",
         )
+        # Audit #73 TIER B plot 5: replan-count distribution per
+        # (goal, baseline).  Sweep-level histogram; all cells included
+        # so the failure pile at max_replans is visible.  Reads
+        # plan_count from aggregated.csv — no schema change.
+        plot_plan_count_distribution(
+            group_plan_count_distribution(all_rows),
+            title="Replan-count distribution by (goal, baseline)",
+            out_path=out_dir / "plan_count_distribution.png",
+        )
         write_summary_table(all_rows, out_dir)
         return 0
 
@@ -1128,6 +1224,15 @@ def main(argv=None) -> int:
         group_failure_modes(all_rows),
         title="Failure-mode breakdown by (goal, baseline)",
         out_path=out_dir / "failure_modes.png",
+    )
+    # Audit #73 TIER B plot 5: replan-count distribution per
+    # (goal, baseline).  Sweep-level histogram; all cells included
+    # so the failure pile at max_replans is visible.  Reads
+    # plan_count from aggregated.csv — no schema change.
+    plot_plan_count_distribution(
+        group_plan_count_distribution(all_rows),
+        title="Replan-count distribution by (goal, baseline)",
+        out_path=out_dir / "plan_count_distribution.png",
     )
     # Audit #73 — tabular summary alongside the plots (markdown +
     # 2 CSVs).  Aggregate by (goal, baseline) + per-occluder breakdown.
