@@ -315,10 +315,21 @@ def report_run_outcome(
         boxel_counts: dict = {}
         if registry is not None:
             try:
+                obj_boxels = registry.get_object_boxels()
+                shadow_boxels = registry.get_shadow_boxels()
+                free_boxels = registry.get_free_space_boxels()
                 boxel_counts = {
-                    "n_object_boxels": len(registry.get_object_boxels()),
-                    "n_shadow_boxels": len(registry.get_shadow_boxels()),
-                    "n_free_space_boxels": len(registry.get_free_space_boxels()),
+                    "n_object_boxels": len(obj_boxels),
+                    "n_shadow_boxels": len(shadow_boxels),
+                    "n_free_space_boxels": len(free_boxels),
+                    # Audit #73 step 2(c) plot 3: per-boxel volumes by
+                    # type for the heterogeneity histogram.  Same end-
+                    # of-run snapshot as the counts above; eval_runner's
+                    # LIST_VALUED gate keeps these lists out of the
+                    # flat CSV.
+                    "boxel_volumes_object":     [round(b.volume, 6) for b in obj_boxels],
+                    "boxel_volumes_shadow":     [round(b.volume, 6) for b in shadow_boxels],
+                    "boxel_volumes_free_space": [round(b.volume, 6) for b in free_boxels],
                 }
             except Exception as e:
                 print(f"  WARNING: could not snapshot boxel counts: {e}")

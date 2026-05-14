@@ -1,0 +1,128 @@
+Boxel Test Environment initialized successfully!
+Camera position: [ 0.1 -0.8  0.7]
+Camera target: [0.1 0.  0.5]
+Occluders: 0 ()
+Targets:   3 (box, box, box)
+Objects in scene: ['plane', 'table', 'robot', 'red_object', 'green_object', 'orange_object']
+============================================================
+FULL PIPELINE: PDDLStream + Replanning
+============================================================
+
+--- Run configuration ---
+  scene              = stack
+  n_occluders        = 0
+  n_targets          = 3
+  n_hidden           = 0
+  n_extra_distractors = 0
+  n_objects          = 3
+  seed               = 2
+  goal               = stack
+  stack_height       = 2
+  unit_costs         = False
+  baseline           = uniform
+  uniform_cell_size  = 0.05
+  gui                = False
+  boxel_viz          = True
+  show_free          = False
+  log_level          = quiet
+
+--- Phase 1: Environment Setup ---
+Boxel Test Environment initialized successfully!
+Camera position: [ 0.1 -0.8  0.7]
+Camera target: [0.1 0.  0.5]
+Occluders: 0 ()
+Targets:   3 (box, box, box)
+Objects in scene: ['plane', 'table', 'robot', 'red_object', 'green_object', 'orange_object']
+  [audit-66/67] Effective minimum boxel size: 0.060 m (largest object AABB 0.050 m + 0.01 m headroom).
+Robot ID: 2
+
+--- Phase 2: Calculating Boxels ---
+  Calculated 1340 boxels
+
+--- Phase 3: Creating BoxelRegistry ---
+Saved 1340 boxels to boxel_data.json
+  1340 boxels, 7 shadows, 3 occluders
+
+--- Phase 4: Hidden Object Scenario ---
+  Stack goal: ('and', ('on', 'green_object', 'orange_object'), ('on_table', 'orange_object'))
+  Stackable cubes: ['red_object', 'green_object', 'orange_object']
+  Shadow blockers (audit #78):
+    shadow_of_green_object__00 blocked by: ['green_object']
+    shadow_of_green_object__01 blocked by: ['green_object']
+    shadow_of_orange_object__00 blocked by: ['orange_object']
+    shadow_of_orange_object__01 blocked by: ['orange_object']
+    shadow_of_red_object__00 blocked by: ['red_object']
+    shadow_of_red_object__01 blocked by: ['green_object']
+    shadow_of_red_object__02 blocked by: ['red_object']
+  Boxel->PyBullet mapping: 3 objects
+
+--- Phase 5: Planning with Replanning ---
+  Exported initial problem to /mnt/c/Users/HaniAlassiriAlhabbou/git/Semantic_Boxels/pddl/problem_debug.pddl
+
+=== PLAN #1 ===
+Stack progress: {} (goal ('and', ('on', 'green_object', 'orange_object'), ('on_table', 'orange_object')))
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 11273 | Eager Calls: 0 | Cost: inf | Search Time: 0.008 | Sample Time: 0.000 | Total Time: 0.008
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 0.579
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 11273 | Eager Calls: 0 | Cost: inf | Search Time: 0.598 | Sample Time: 0.000 | Total Time: 0.598
+Attempt: 1 | Results: 4 | Depth: 0 | Success: False | Time: 0.734
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 11273 | Eager Calls: 0 | Cost: inf | Search Time: 1.343 | Sample Time: 0.000 | Total Time: 1.343
+Attempt: 1 | Results: 4033 | Depth: 0 | Success: False | Time: 2.234
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 11273 | Eager Calls: 0 | Cost: inf | Search Time: 3.590 | Sample Time: 0.000 | Total Time: 3.590
+Attempt: 1 | Results: 4041 | Depth: 1 | Success: False | Time: 5.759
+Attempt: 2 | Results: 4081 | Depth: 1 | Success: False | Time: 12.220
+Attempt: 3 | Results: 4081 | Depth: 0 | Success: True | Time: 18.905
+Stream plan (5, 5, 0.001): [sample-grasp:(green_object)->(#g0), compute-kin:(green_object, green_object, #g0)->(#q0), compute-stack-kin:(green_object, orange_object, #g0)->(#q3), plan-motion:(q_home, #q0)->(#t1), plan-motion:(#q0, #q3)->(#t3)]
+Action plan (4, 5.000): [move(q_home, #q0, green_object, #t1), pick(green_object, green_object, #g0, #q0), move(#q0, #q3, orange_object, #t3), stack(green_object, orange_object, #g0, #q3)]
+Summary: {complexity: 3, cost: 5.000, evaluations: 11285, iterations: 4, length: 2, run_time: 22.513, sample_time: 0.009, search_time: 22.503, skeletons: 1, solutions: 1, solved: True, timeout: False}
+  [timing] planner.plan() #1: 26.463s (cumulative 26.463s)
+Plan: 4 actions
+  1. move
+  2. pick
+  3. move
+  4. stack
+
+  Executing: move
+    Moving to green_object (10 waypoints)...
+    -> Arrived at green_object
+
+  Executing: pick
+    Picking green_object from green_object...
+    *** green_object PICKED UP! ***
+
+  Executing: move
+    Moving to orange_object (10 waypoints)...
+    -> Arrived at orange_object
+
+  Executing: stack
+    Stacking green_object on orange_object...
+    *** green_object STACKED on orange_object! ***
+
+============================================================
+SUCCESS!
+  Stack goal: ('and', ('on', 'green_object', 'orange_object'), ('on_table', 'orange_object'))
+  Final on-relations: {'green_object': 'orange_object'}
+  Plans executed: 1
+
+--- Planning timing summary ---
+  Total plan() calls       : 1
+  Cumulative planning time : 26.463s
+  Average per call         : 26.463s
+  Per-call (s)             : [26.463]
+  Timing summary written to logs/run_2026-05-12_23-13-47/timing_summary.json
+============================================================
+
+--- STDERR ---
+pybullet build time: Jan 29 2025 23:16:28
