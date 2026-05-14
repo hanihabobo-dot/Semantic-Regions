@@ -1054,6 +1054,23 @@ Status:   OPEN.  Raised 2026-05-12 (later) by user during eval
           No-op on pre-existing sweeps; renders against the next
           sweep that re-runs with this code (step 2(c) re-run
           pending).
+          Step 3(a) plot 5 (replan-count distribution histogram)
+          landed 2026-05-14 in commit 8fd5aa2.  group_plan_count_-
+          distribution + plot_plan_count_distribution in
+          eval_plotter.py; sweep-level dispatch in both default
+          and random-pairs branches (between plot_failure_modes
+          and write_summary_table).  Reads plan_count from
+          aggregated.csv — no schema change; pre-existing sweeps
+          replot cleanly.  Visual check on sweep_2026-05-12_-
+          22-31-58_random-pairs PNG matches text fallback counts
+          exactly.  Caveat: find-and-tray-stack/uniform reads as
+          fast convergence (mean=1.1) but all 11 cells are
+          planner_failed (0/15 success); the histogram correctly
+          encodes the mechanical plan_count, not the success/fail
+          dimension — readers must pair with failure_modes.png
+          for context.  Optional follow-up: color-segment success
+          vs failure or annotate per-panel success_rate; not in
+          this commit per audit spec.
 Priority: TIER 1 — high prio per user direction 2026-05-12,
           but lands AFTER #71 (refresh OBJECT AABBs on sense) and
           #72 (shadow lateral overhang) so the figures reflect
@@ -1268,6 +1285,16 @@ Fix:   Implementation order (each step is its own commit,
 
        Step 3 — TIER B plots (knowledge-grounded pillar).
          (a) plot 5 (replan distribution).  No new data.
+             [DONE 2026-05-14; commit 8fd5aa2.
+             group_plan_count_distribution + plot_plan_count_-
+             distribution; sweep-level, fires in both dispatch
+             branches.  All cells included so the failure pile
+             at max_replans is visible.  Caveat in commit
+             message: find-and-tray-stack/uniform reads as fast
+             convergence (mean=1.1) but all 11 cells are
+             planner_failed — histogram reports mechanical
+             plan_count, not success; pair with failure_modes.
+             png for context.]
          (b) plot 6 (failure-mode stacked bar).  No new data.
              [DONE 2026-05-13; commit 1308c3d.
              group_failure_modes + plot_failure_modes;
