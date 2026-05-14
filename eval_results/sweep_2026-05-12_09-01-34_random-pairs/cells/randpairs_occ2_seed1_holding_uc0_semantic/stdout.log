@@ -1,0 +1,317 @@
+Boxel Test Environment initialized successfully!
+Camera position: [ 0.1 -0.8  0.7]
+Camera target: [0.1 0.  0.5]
+Occluders: 2 (box, box)
+Targets:   1 (box)
+Objects in scene: ['plane', 'table', 'robot', 'red_object', 'green_object', 'orange_object']
+============================================================
+FULL PIPELINE: PDDLStream + Replanning
+============================================================
+
+--- Run configuration ---
+  scene              = random-pairs
+  n_occluders        = 2
+  n_targets          = 1
+  n_hidden           = 1
+  n_extra_distractors = 0
+  n_objects          = 3
+  seed               = 577090037
+  goal               = holding
+  stack_height       = 2
+  unit_costs         = False
+  baseline           = semantic
+  uniform_cell_size  = 0.05
+  gui                = False
+  boxel_viz          = True
+  show_free          = False
+  log_level          = quiet
+
+--- Phase 1: Environment Setup ---
+Boxel Test Environment initialized successfully!
+Camera position: [ 0.1 -0.8  0.7]
+Camera target: [0.1 0.  0.5]
+Occluders: 2 (box, box)
+Targets:   1 (box)
+Objects in scene: ['plane', 'table', 'robot', 'red_object', 'green_object', 'orange_object']
+  [audit-66/67] Effective minimum boxel size: 0.095 m (largest object AABB 0.085 m + 0.01 m headroom).
+  Hidden-target guarantee OK: 1/1 hidden (requested >= 1, seed=577090037).
+Robot ID: 2
+
+--- Phase 2: Calculating Boxels ---
+  Merge iteration 1: 108 merges, 109 boxels remaining
+  Merge iteration 2: 52 merges, 57 boxels remaining
+  Merge iteration 3: 24 merges, 33 boxels remaining
+  Merge iteration 4: 9 merges, 24 boxels remaining
+  Merge iteration 5: 4 merges, 20 boxels remaining
+  Merge iteration 6: 2 merges, 18 boxels remaining
+  Merging complete: 217 -> 18 boxels
+  Calculated 22 boxels
+
+--- Phase 3: Creating BoxelRegistry ---
+Saved 22 boxels to boxel_data.json
+  22 boxels, 2 shadows, 2 occluders
+
+--- Phase 4: Hidden Object Scenario ---
+  Target: orange_object
+  ORACLE: Actually hidden in shadow_of_red_object (camera-ray occlusion; shadow AABB also contains its centre)
+  Robot must search to find it!
+  Shadow blockers (audit #78):
+    shadow_of_green_object blocked by: ['green_object']
+    shadow_of_red_object blocked by: ['red_object']
+  Boxel->PyBullet mapping: 2 objects
+
+--- Phase 5: Planning with Replanning ---
+  Exported initial problem to /mnt/c/Users/HaniAlassiriAlhabbou/git/Semantic_Boxels/pddl/problem_debug.pddl
+
+=== PLAN #1 ===
+Unknown shadows remaining: 2
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 145 | Eager Calls: 0 | Cost: inf | Search Time: 0.000 | Sample Time: 0.000 | Total Time: 0.000
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 0.080
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 145 | Eager Calls: 0 | Cost: inf | Search Time: 0.082 | Sample Time: 0.000 | Total Time: 0.082
+Attempt: 1 | Results: 4 | Depth: 0 | Success: False | Time: 0.033
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 145 | Eager Calls: 0 | Cost: inf | Search Time: 0.117 | Sample Time: 0.000 | Total Time: 0.117
+Attempt: 1 | Results: 79 | Depth: 0 | Success: False | Time: 0.137
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 145 | Eager Calls: 0 | Cost: inf | Search Time: 0.256 | Sample Time: 0.000 | Total Time: 0.256
+Attempt: 1 | Results: 87 | Depth: 1 | Success: False | Time: 0.217
+Attempt: 2 | Results: 114 | Depth: 1 | Success: False | Time: 0.487
+Attempt: 3 | Results: 159 | Depth: 1 | Success: False | Time: 0.842
+Attempt: 4 | Results: 159 | Depth: 0 | Success: True | Time: 1.216
+Stream plan (8, 8, 0.001): [sample-grasp:(green_object)->(#g0), sample-grasp:(orange_object)->(#g1), compute-kin:(green_object, free_004, #g0)->(#q1), compute-kin:(orange_object, shadow_of_green_object, #g1)->(#q2), compute-kin:(green_object, green_object, #g0)->(#q0), plan-motion:(q_home, #q0)->(#t0), plan-motion:(#q1, #q2)->(#t5), plan-motion:(#q0, #q1)->(#t6)]
+Action plan (7, 7.000): [move(q_home, #q0, green_object, #t0), pick(green_object, green_object, #g0, #q0), move(#q0, #q1, free_004, #t6), place(green_object, free_004, #g0, #q1), move(#q1, #q2, shadow_of_green_object, #t5), sense(orange_object, shadow_of_green_object), pick(orange_object, shadow_of_green_object, #g1, #q2)]
+Summary: {complexity: 3, cost: 7.000, evaluations: 164, iterations: 4, length: 2, run_time: 1.491, sample_time: 0.015, search_time: 1.476, skeletons: 1, solutions: 1, solved: True, timeout: False}
+  [timing] planner.plan() #1: 1.533s (cumulative 1.533s)
+Plan: 7 actions
+  1. move
+  2. pick
+  3. move
+  4. place
+  5. move
+  6. sense
+  7. pick
+
+  Executing: move
+    Moving to green_object (10 waypoints)...
+    -> Arrived at green_object
+
+  Executing: pick
+    Picking green_object from green_object...
+    *** green_object PICKED UP! ***
+
+  Executing: move
+    Moving to free_004 (10 waypoints)...
+    -> Arrived at free_004
+
+  Executing: place
+    Placing green_object at free_004...
+  Shadow blockers (audit #78):
+    shadow_of_green_object blocked by: ['green_object']
+    shadow_of_red_object blocked by: ['green_object', 'red_object']
+    *** green_object PLACED at free_004! ***
+
+  Executing: move
+    Moving to shadow_of_green_object (10 waypoints)...
+    -> Arrived at shadow_of_green_object
+
+  Executing: sense
+    Sensing shadow_of_green_object (fixed camera)...
+    NOTE: 4/147 rays blocked by robot arm (not occluder)
+    View to shadow_of_green_object still blocked (3% rays hit occluder). [attempt 1]
+    -> REPLANNING without marking shadow empty...
+
+=== PLAN #2 ===
+Unknown shadows remaining: 2
+  Merge iteration 1: 97 merges, 98 boxels remaining
+  Merge iteration 2: 47 merges, 51 boxels remaining
+  Merge iteration 3: 21 merges, 30 boxels remaining
+  Merge iteration 4: 9 merges, 21 boxels remaining
+  Merge iteration 5: 4 merges, 17 boxels remaining
+  Merge iteration 6: 1 merges, 16 boxels remaining
+  Merging complete: 195 -> 16 boxels
+    Re-boxelize: 7 removed, 6 new, 10 unchanged (16 free total)
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 139 | Eager Calls: 0 | Cost: inf | Search Time: 0.000 | Sample Time: 0.000 | Total Time: 0.000
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 0.034
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 139 | Eager Calls: 0 | Cost: inf | Search Time: 0.037 | Sample Time: 0.000 | Total Time: 0.037
+Attempt: 1 | Results: 4 | Depth: 0 | Success: False | Time: 0.051
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 139 | Eager Calls: 0 | Cost: inf | Search Time: 0.092 | Sample Time: 0.000 | Total Time: 0.092
+Attempt: 1 | Results: 76 | Depth: 0 | Success: False | Time: 0.189
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 139 | Eager Calls: 0 | Cost: inf | Search Time: 0.282 | Sample Time: 0.000 | Total Time: 0.282
+Attempt: 1 | Results: 84 | Depth: 1 | Success: False | Time: 0.223
+Attempt: 2 | Results: 100 | Depth: 0 | Success: True | Time: 0.540
+Stream plan (3, 3, 0.000): [sample-grasp:(orange_object)->(#g3), compute-kin:(orange_object, shadow_of_green_object, #g3)->(#q6), plan-motion:(q_kin_orange_object_2, #q6)->(#t7)]
+Action plan (3, 3.000): [move(q_kin_orange_object_2, #q6, shadow_of_green_object, #t7), sense(orange_object, shadow_of_green_object), pick(orange_object, shadow_of_green_object, #g3, #q6)]
+Summary: {complexity: 3, cost: 3.000, evaluations: 146, iterations: 4, length: 2, run_time: 0.832, sample_time: 0.006, search_time: 0.826, skeletons: 1, solutions: 1, solved: True, timeout: False}
+  [timing] planner.plan() #2: 0.889s (cumulative 2.422s)
+Plan: 3 actions
+  1. move
+  2. sense
+  3. pick
+
+  Executing: move
+    Moving to shadow_of_green_object (10 waypoints)...
+    -> Arrived at shadow_of_green_object
+
+  Executing: sense
+    Sensing shadow_of_green_object (fixed camera)...
+    NOTE: 2/147 rays blocked by robot arm (not occluder)
+    View to shadow_of_green_object still blocked (1% rays hit occluder). [attempt 2]
+    -> REPLANNING without marking shadow empty...
+
+=== PLAN #3 ===
+Unknown shadows remaining: 2
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 139 | Eager Calls: 0 | Cost: inf | Search Time: 0.000 | Sample Time: 0.000 | Total Time: 0.000
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 0.041
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 139 | Eager Calls: 0 | Cost: inf | Search Time: 0.045 | Sample Time: 0.000 | Total Time: 0.045
+Attempt: 1 | Results: 4 | Depth: 0 | Success: False | Time: 0.057
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 139 | Eager Calls: 0 | Cost: inf | Search Time: 0.105 | Sample Time: 0.000 | Total Time: 0.105
+Attempt: 1 | Results: 76 | Depth: 0 | Success: False | Time: 0.185
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 139 | Eager Calls: 0 | Cost: inf | Search Time: 0.293 | Sample Time: 0.000 | Total Time: 0.293
+Attempt: 1 | Results: 84 | Depth: 1 | Success: False | Time: 0.276
+Attempt: 2 | Results: 100 | Depth: 0 | Success: True | Time: 0.615
+Stream plan (3, 3, 0.000): [sample-grasp:(orange_object)->(#g5), compute-kin:(orange_object, shadow_of_green_object, #g5)->(#q8), plan-motion:(q_kin_orange_object_4, #q8)->(#t8)]
+Action plan (3, 3.000): [move(q_kin_orange_object_4, #q8, shadow_of_green_object, #t8), sense(orange_object, shadow_of_green_object), pick(orange_object, shadow_of_green_object, #g5, #q8)]
+Summary: {complexity: 3, cost: 3.000, evaluations: 146, iterations: 4, length: 2, run_time: 0.919, sample_time: 0.006, search_time: 0.913, skeletons: 1, solutions: 1, solved: True, timeout: False}
+  [timing] planner.plan() #3: 0.972s (cumulative 3.394s)
+Plan: 3 actions
+  1. move
+  2. sense
+  3. pick
+
+  Executing: move
+    Moving to shadow_of_green_object (10 waypoints)...
+    -> Arrived at shadow_of_green_object
+
+  Executing: sense
+    Sensing shadow_of_green_object (fixed camera)...
+    NOTE: 2/147 rays blocked by robot arm (not occluder)
+    View to shadow_of_green_object still blocked (1% rays hit occluder). [attempt 3]
+    ERROR: shadow_of_green_object blocked 3 times — giving up (audit #21).  Shadow is NOT observed empty; marking not_here so the planner stops re-attempting it.  Real remedy: re-ground blocker atoms after repeated failure — audit #47 (deferred out of scope 2026-05-06).
+
+=== PLAN #4 ===
+Unknown shadows remaining: 1
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 140 | Eager Calls: 0 | Cost: inf | Search Time: 0.000 | Sample Time: 0.000 | Total Time: 0.000
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 0.030
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 140 | Eager Calls: 0 | Cost: inf | Search Time: 0.032 | Sample Time: 0.000 | Total Time: 0.032
+Attempt: 1 | Results: 4 | Depth: 0 | Success: False | Time: 0.036
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 140 | Eager Calls: 0 | Cost: inf | Search Time: 0.071 | Sample Time: 0.000 | Total Time: 0.071
+Attempt: 1 | Results: 76 | Depth: 0 | Success: False | Time: 0.181
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 140 | Eager Calls: 0 | Cost: inf | Search Time: 0.254 | Sample Time: 0.000 | Total Time: 0.254
+Attempt: 1 | Results: 84 | Depth: 1 | Success: False | Time: 0.280
+Attempt: 2 | Results: 124 | Depth: 1 | Success: False | Time: 0.642
+Attempt: 3 | Results: 124 | Depth: 0 | Success: True | Time: 0.961
+Stream plan (8, 8, 0.001): [sample-grasp:(red_object)->(#g7), sample-grasp:(orange_object)->(#g8), compute-kin:(red_object, red_object, #g7)->(#q10), compute-kin:(red_object, free_006, #g7)->(#q11), compute-kin:(orange_object, shadow_of_red_object, #g8)->(#q12), plan-motion:(q_kin_orange_object_5, #q10)->(#t9), plan-motion:(#q11, #q12)->(#t12), plan-motion:(#q10, #q11)->(#t13)]
+Action plan (7, 7.000): [move(q_kin_orange_object_5, #q10, red_object, #t9), pick(red_object, red_object, #g7, #q10), move(#q10, #q11, free_006, #t13), place(red_object, free_006, #g7, #q11), move(#q11, #q12, shadow_of_red_object, #t12), sense(orange_object, shadow_of_red_object), pick(orange_object, shadow_of_red_object, #g8, #q12)]
+Summary: {complexity: 3, cost: 7.000, evaluations: 159, iterations: 4, length: 2, run_time: 1.232, sample_time: 0.012, search_time: 1.220, skeletons: 1, solutions: 1, solved: True, timeout: False}
+  [timing] planner.plan() #4: 1.276s (cumulative 4.670s)
+Plan: 7 actions
+  1. move
+  2. pick
+  3. move
+  4. place
+  5. move
+  6. sense
+  7. pick
+
+  Executing: move
+    Moving to red_object (10 waypoints)...
+    -> Arrived at red_object
+
+  Executing: pick
+    Picking red_object from red_object...
+    *** red_object PICKED UP! ***
+
+  Executing: move
+    Moving to free_006 (10 waypoints)...
+    *** COLLISION [move to free_006]: red_object (held) <-> green_object ***
+    *** COLLISION [move to free_006]: red_object (held) <-> green_object ***
+[WARNING] execution collisions [move to free_006]: ['red_object (held) <-> green_object', 'red_object (held) <-> green_object']
+    -> Arrived at free_006
+
+  Executing: place
+    Placing red_object at free_006...
+  Shadow blockers (audit #78):
+    shadow_of_green_object blocked by: ['red_object']
+    shadow_of_red_object blocked by: ['red_object']
+    *** red_object PLACED at free_006! ***
+
+  Executing: move
+    Moving to shadow_of_red_object (10 waypoints)...
+    -> Arrived at shadow_of_red_object
+
+  Executing: sense
+    Sensing shadow_of_red_object (fixed camera)...
+    *** TARGET FOUND in shadow_of_red_object! (ray-cast) ***
+
+  Executing: pick
+    Picking orange_object from shadow_of_red_object...
+    *** orange_object PICKED UP! ***
+
+============================================================
+SUCCESS!
+  Target: orange_object
+  Found in: picked
+  Plans executed: 4
+  Shadows searched: 2
+
+--- Planning timing summary ---
+  Total plan() calls       : 4
+  Cumulative planning time : 4.670s
+  Average per call         : 1.167s
+  Per-call (s)             : [1.533, 0.889, 0.972, 1.276]
+  Timing summary written to logs/run_2026-05-12_09-06-38/timing_summary.json
+============================================================
+
+--- STDERR ---
+pybullet build time: Jan 29 2025 23:16:28
+[retry 1/10] placement failed (Could not place 2 hidden targets with 2 occluders at seed=1. Try --n-occluders higher, --n-hidden lower, or a different --seed.); rerolling to seed=577090037

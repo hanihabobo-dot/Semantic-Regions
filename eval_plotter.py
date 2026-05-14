@@ -22,6 +22,8 @@ Usage:
 
 import argparse
 import csv
+import json
+import math
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -61,6 +63,27 @@ def load_rows(csv_path: Path) -> List[dict]:
                         pass
             r["success"] = (str(r.get("success")).strip().lower() == "true")
             rows.append(r)
+    return rows
+
+
+def load_jsonl_rows(jsonl_path: Path) -> List[dict]:
+    """Load aggregated.jsonl which preserves list/dict-valued columns
+    that aggregated.csv drops via the LIST_VALUED gate in
+    eval_runner.py (per-call timings, per-boxel volumes,
+    n_facts_by_predicate).
+    """
+    rows: List[dict] = []
+    if not jsonl_path.exists():
+        return rows
+    with jsonl_path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
     return rows
 
 
@@ -396,6 +419,114 @@ def plot_boxel_count_breakdown(
                   alpha=0.55, label="uniform (faded)"),
         ]
     ax.legend(handles=handles, loc="best")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
+
+
+def group_boxel_volumes(rows: List[dict],
+                        goal: Optional[str] = None
+                        ) -> Dict[str, Dict[str, List[float]]]:
+    """``{baseline: {type_key: [all volumes pooled across cells]}}``.
+
+    Audit #73 TIER A plot 3 data prep.  Pools volumes across cells
+    within a (baseline, goal) bucket — the histogram shows the
+    DISTRIBUTION of boxel sizes the planner sees, regardless of
+    which cell produced any particular sample.  ``type_key`` ∈
+    {"object", "shadow", "free_space"}.
+    """
+    out: Dict = defaultdict(lambda: defaultdict(list))
+    vol_cols = {
+        "object":     "boxel_volumes_object",
+        "shadow":     "boxel_volumes_shadow",
+        "free_space": "boxel_volumes_free_space",
+    }
+    for r in rows:
+        if goal is not None and r.get("goal") != goal:
+            continue
+        baseline = r.get("baseline") or "semantic"
+        for k, col in vol_cols.items():
+            vs = r.get(col)
+            if not vs:
+                continue
+            try:
+                out[baseline][k].extend(float(v) for v in vs)
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def plot_boxel_volume_histogram(
+    grouped: Dict[str, Dict[str, List[float]]],
+    title: str,
+    out_path: Path,
+) -> Optional[Path]:
+    """Side-by-side histograms (semantic | uniform) of boxel
+    volumes, overlaid by type.  Log-x because volumes span 3-4
+    decades (OBJECT ~1e-5 m³ vs FREE_SPACE ~1e-2 m³).
+
+    Audit #73 TIER A plot 3 — heterogeneity proof.  Semantic should
+    show a wide spread (a few big FREE_SPACE + many small OBJECT/
+    SHADOW); uniform by construction shows a narrow spike at
+    cell_size³.
+    """
+    if not HAVE_MPL:
+        print(f"\n=== {title} (matplotlib not available) ===")
+        for baseline in sorted(grouped):
+            for tk, vs in grouped[baseline].items():
+                if not vs:
+                    continue
+                print(f"  {baseline}/{tk}: n={len(vs)}, "
+                      f"min={min(vs):.6f}, max={max(vs):.6f}, "
+                      f"mean={mean(vs):.6f}")
+        return None
+
+    baselines = sorted(grouped.keys())
+    if not baselines:
+        print(f"[plotter] no data for {title}")
+        return None
+
+    type_keys = ["object", "shadow", "free_space"]
+    type_colors = {"object": "#1f77b4",
+                   "shadow": "#ff7f0e",
+                   "free_space": "#2ca02c"}
+    type_labels = {"object": "OBJECT",
+                   "shadow": "SHADOW",
+                   "free_space": "FREE_SPACE"}
+
+    all_vols = [v for b in baselines for tk in type_keys
+                for v in grouped[b].get(tk, []) if v > 0]
+    if not all_vols:
+        print(f"[plotter] no positive volumes for {title}")
+        return None
+    lo = math.log10(max(min(all_vols), 1e-8))
+    hi = math.log10(max(all_vols))
+    if hi <= lo:
+        hi = lo + 1.0
+    bins = [10 ** (lo + (hi - lo) * i / 30) for i in range(31)]
+
+    fig, axes = plt.subplots(1, len(baselines),
+                             figsize=(5 * len(baselines), 4.5),
+                             sharey=True, sharex=True)
+    if len(baselines) == 1:
+        axes = [axes]
+    for ax, baseline in zip(axes, baselines):
+        for tk in type_keys:
+            vs = [v for v in grouped[baseline].get(tk, []) if v > 0]
+            if not vs:
+                continue
+            ax.hist(vs, bins=bins, color=type_colors[tk],
+                    alpha=0.55, edgecolor="black", linewidth=0.3,
+                    label=f"{type_labels[tk]} (n={len(vs)})")
+        ax.set_xscale("log")
+        ax.set_xlabel("boxel volume (m³)")
+        ax.set_title(baseline)
+        ax.grid(True, axis="y", alpha=0.3)
+        ax.legend(loc="upper right", fontsize=8)
+    axes[0].set_ylabel("count")
+    fig.suptitle(title)
     fig.tight_layout()
     fig.savefig(out_path, dpi=120)
     plt.close(fig)
@@ -817,6 +948,11 @@ def main(argv=None) -> int:
     all_rows = list(rows)
 
     out_dir = args.csv_path.parent
+    # Audit #73 plot 3: per-boxel volumes are LIST_VALUED, so they
+    # live in aggregated.jsonl rather than the flat CSV.  Empty list
+    # on pre-#73-step-2(c) sweeps; the histogram helper renders a
+    # "no data" stub cleanly.
+    jsonl_rows = load_jsonl_rows(out_dir / "aggregated.jsonl")
 
     # Dispatch on matrix shape.  Default-style matrix (constant
     # n_occluders, multiple (scene, goal) pairs) doesn't fit the
@@ -973,6 +1109,17 @@ def main(argv=None) -> int:
             series_label=series_label,
             main_label_suffix=main_label_suffix,
             baseline_label_suffix=baseline_label_suffix,
+        )
+        # Audit #73 TIER A plot 3: boxel-volume histogram (semantic
+        # vs uniform).  Heterogeneity proof — semantic shows a wide
+        # spread, uniform a narrow spike near cell_size³.  Reads
+        # aggregated.jsonl (per-boxel volume lists are LIST_VALUED,
+        # dropped from the flat CSV); no-op on pre-#73-step-2(c)
+        # sweeps.
+        plot_boxel_volume_histogram(
+            group_boxel_volumes(jsonl_rows, goal=goal),
+            title=f"Boxel volume histogram{title_suffix}",
+            out_path=out_dir / f"boxel_volume_histogram{suffix}.png",
         )
     # Audit #73 TIER B plot 6: failure-mode breakdown (sweep-level
     # stacked bar per (goal, baseline)).  Counts all cells including
