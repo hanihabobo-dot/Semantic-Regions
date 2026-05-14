@@ -645,6 +645,106 @@ def plot_boxel_evolution_per_replan(
     return out_path
 
 
+def group_per_call_planning_time(
+    rows: List[dict],
+    goal: Optional[str] = None,
+) -> Dict[str, List[List[float]]]:
+    """``{baseline: [per_cell_list, ...]}`` where each per_cell_list is one
+    cell's ``per_call_planning_time_s`` — one entry per planner.plan()
+    call.
+
+    Audit #73 TIER C plot 7 data prep.  Reads jsonl rows only — the
+    per_call_planning_time_s column is LIST_VALUED in eval_runner.py.
+    Includes failed runs: every plan call gets timed regardless of
+    overall outcome, and a failure-correlated slowdown is itself a
+    finding.
+    """
+    out: Dict = defaultdict(list)
+    for r in rows:
+        if goal is not None and r.get("goal") != goal:
+            continue
+        seq = r.get("per_call_planning_time_s")
+        if not seq:
+            continue
+        baseline = r.get("baseline") or "semantic"
+        try:
+            out[baseline].append([float(t) for t in seq])
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def plot_per_call_planning_time(
+    grouped: Dict[str, List[List[float]]],
+    title: str,
+    out_path: Path,
+) -> Optional[Path]:
+    """One line per baseline; X = plan index (0 = first plan, 1 = first
+    replan, ...); Y = mean per-call planning time with +/-1 std band.
+
+    Audit #73 TIER C plot 7 — per-call planning time vs replan index.
+    Quantifies THESIS_NOTES §21.3's framing that PDDLStream "pays
+    geometry-sampling cost per plan call" — replans cheaper would
+    indicate caching warm-up; flat = no caching benefit; worse = state
+    growth pathology.  Sample count thins toward higher plan_index as
+    cells terminate at smaller plan_count; legend reports n_cells so
+    readers can weight the right-edge means.
+    """
+    if not HAVE_MPL:
+        print(f"\n=== {title} (matplotlib not available) ===")
+        for baseline in sorted(grouped):
+            seqs = grouped[baseline]
+            if not seqs:
+                continue
+            max_len = max(len(s) for s in seqs)
+            for pi in range(max_len):
+                samples = [s[pi] for s in seqs if len(s) > pi]
+                if samples:
+                    sd = pstdev(samples) if len(samples) > 1 else 0.0
+                    print(f"  {baseline}/plan#{pi}: "
+                          f"mean={mean(samples):.3f} "
+                          f"std={sd:.3f} n={len(samples)}")
+        return None
+
+    baselines = sorted(grouped.keys())
+    if not baselines or not any(grouped[b] for b in baselines):
+        print(f"[plotter] no data for {title}")
+        return None
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    for baseline in baselines:
+        seqs = grouped[baseline]
+        if not seqs:
+            continue
+        max_len = max(len(s) for s in seqs)
+        if max_len == 0:
+            continue
+        xs = list(range(max_len))
+        means, stds = [], []
+        for pi in xs:
+            samples = [s[pi] for s in seqs if len(s) > pi]
+            means.append(mean(samples) if samples else 0.0)
+            stds.append(pstdev(samples) if len(samples) > 1 else 0.0)
+        line = ax.plot(xs, means, marker="o",
+                       label=f"{baseline} (n_cells={len(seqs)})")[0]
+        lower = [max(0.0, m - sd) for m, sd in zip(means, stds)]
+        upper = [m + sd for m, sd in zip(means, stds)]
+        ax.fill_between(xs, lower, upper, alpha=0.2,
+                        color=line.get_color())
+
+    ax.set_xlabel("plan index (0 = first plan, 1 = first replan, ...)")
+    ax.set_ylabel("mean per-call planning time (s)")
+    ax.set_title(title)
+    ax.set_ylim(bottom=0)
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
+
+
 def group_failure_modes(rows: List[dict]
                         ) -> Dict[tuple, Dict[str, int]]:
     """``{(goal, baseline): {exit_reason: count}}``.
@@ -1357,6 +1457,15 @@ def main(argv=None) -> int:
             group_boxel_evolution_per_replan(jsonl_rows, goal=goal),
             title=f"Boxel evolution across replans{title_suffix}",
             out_path=out_dir / f"boxel_evolution_per_replan{suffix}.png",
+        )
+        # Audit #73 TIER C plot 7: per-call planning time vs replan
+        # index.  One line per baseline (semantic, uniform); reads
+        # aggregated.jsonl (per_call_planning_time_s is LIST_VALUED).
+        # No new data — run_logger already writes the list each run.
+        plot_per_call_planning_time(
+            group_per_call_planning_time(jsonl_rows, goal=goal),
+            title=f"Per-call planning time vs replan index{title_suffix}",
+            out_path=out_dir / f"per_call_planning_time{suffix}.png",
         )
     # Audit #73 TIER B plot 6: failure-mode breakdown (sweep-level
     # stacked bar per (goal, baseline)).  Counts all cells including
