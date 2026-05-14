@@ -308,14 +308,16 @@ def _release_and_verify_drop(
         lin_vel, _ = p.getBaseVelocity(held_body_id)
         speed = float(np.linalg.norm(lin_vel))
 
-        # Heuristics:
-        # • If the object COM sits >= 8 cm from the EE, fingers can't
-        #   still be pinching it (Panda finger length ~5.4 cm).
-        # • If it's closer but at rest, it may have landed directly under
-        #   the gripper — that's still a successful drop.
+        # Heuristics — EITHER condition is sufficient (audit #75 refine):
+        # • COM >= 8 cm from EE: fingers can't still be pinching (Panda
+        #   finger length ~5.4 cm).
+        # • Closer but at rest: the cube landed directly under the
+        #   gripper (typical for execute_stack onto a low support like
+        #   the tray — EE hovers ~7.5 cm above the stacked cube) —
+        #   still a clean drop.
         far_enough = ee_to_obj_dist >= 0.08
         at_rest = speed < 0.02
-        if far_enough and at_rest:
+        if far_enough or at_rest:
             print(f"    -> Released {dropped_name} "
                   f"(EE→obj {ee_to_obj_dist*100:.1f} cm, speed "
                   f"{speed*100:.1f} cm/s)")
