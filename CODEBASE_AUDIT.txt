@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #73, #75, #76, #77                                       #
+#  OPEN ISSUES — #63, #75, #76, #77                                            #
 #                                                                              #
 ################################################################################
 
@@ -265,6 +265,29 @@ Closed / relocated since last summary:
        past occluders on the camera-facing side.  GUI verification
        on the same seed deferred to user; smart_filter regex
        (shadow_of_\w+) still matches the suffixed IDs.
+  #73 [DONE 2026-05-14] — eval-chapter figures backlog.  TIER A
+       (plots 1, 2, 3, 11 — compactness pillar), TIER B (plots 4,
+       5, 6 — knowledge-grounded pillar), TIER C (plots 7, 8, 9 —
+       tractability + TAMPURA) complete across 14 commits.  Step
+       1 logging in 9918047 (boxel counts + init-state facts +
+       per-predicate breakdown into timing_summary.json); plot
+       commits ce8d6e5 (1) / b7f7406 (2) / c8ca69f (3) / 5829b94
+       (4) / 8fd5aa2 (5) / 1308c3d (6) / cd9a1e5 (7) / 7ef62f3
+       (8) / 8275549 (9) / 6434762 (11); polish 1627daf (drop
+       success-only filter for end-of-run snapshots) + f45f366
+       (shaded std bands, single-X bar fallback) + b1007f1
+       (summary_table.md + 2 CSVs).  eval_plotter.py gained 10
+       (group_*, plot_*) helper pairs + a write_summary_table
+       writer; run_logger / eval_runner schemas extended with
+       boxel counts, init-state fact totals, n_facts_by_-
+       predicate, per-boxel volume lists, per-replan boxel
+       snapshots, sense counter.  Headline finding: ~3x wall-
+       clock lead over TAMPURA Partial Observability on find-
+       and-tray-stack (Ours 18.2s vs 57.0s).  TIER D plot 10
+       (perception density sweep) deferred to FOR LATER backlog
+       — gated on audit-14-dense-lattice-attempt branch merge
+       and a sweep on a new --visibility-grid-n axis; out of
+       thesis scope per user 2026-05-14.
 
 ================================================================================
 #63. README + WIKI FINAL DOC SWEEP — POST-EVAL FREEZE-AND-WRITE
@@ -286,8 +309,8 @@ Where:    README.md (project root, currently 29 lines — quick-start
           and_Streams, Scene_Environment, Spatial_Reasoning.
 Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
           results drive Known_Issues_and_Roadmap + Design_Decisions
-          + the README story.  Any other open issue (#73, #75,
-          #76) that lands between now and submission extends the
+          + the README story.  Any other open issue (#75, #76,
+          #77) that lands between now and submission extends the
           diff this sweep has to absorb.  Gate list refreshed
           2026-05-12 triage: dropped #50/#57/#59/#61/#65
           (deferred) and #66 (relocated to TAMPURA_PLAN.md).
@@ -296,7 +319,9 @@ Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
           same day on user verification; see #70 body; #71 closed
           2026-05-12 (later) — handle_sense_action refresh hook
           landed; #72 closed 2026-05-12 (later) — two-slab carve
-          + ID disambiguation landed).
+          + ID disambiguation landed).  #73 closed 2026-05-14 —
+          eval-chapter figures landed (10 plots delivered; plot 10
+          deferred to FOR LATER).
           #75 + #76 added 2026-05-12 (later) — drop verification
           gap + planner-no-plan investigation (promoted to TIER 1
           on 2-of-2 recurrence).
@@ -399,6 +424,14 @@ FOR LATER
 
 - Dense camera→AABB visibility lattice (64-ray variant): deferred #14 — branch
   audit-14-dense-lattice-attempt; precision vs planner grounding cost.
+
+- Perception-density sweep plot (former #73 TIER D / plot 10).  X: VISIBILITY_-
+  GRID_N in {2, 3, 4, 5}; Y: success rate, planning time, # discovered
+  occluders, # init facts (4 sub-plots, per baseline).  Gated on the
+  audit-14-dense-lattice-attempt flag merge above and a new --visibility-
+  grid-n axis on the eval matrix.  Out of thesis scope per user 2026-05-14;
+  THESIS_NOTES §14 cites this as the missing-experiment slot if a future
+  pass revives it.
 
 - Multi-boxel `place` (old open #6): removed from scope 2026-05-03 — not pursued.
 
@@ -741,9 +774,12 @@ Repro:    Exact run that surfaced the defect (preserve for
           visible: shadow_of_{green, orange, purple}_object.
           Original run log:
             logs/run_2026-05-12_14-02-30/run_2026-05-12_14-02-30.log
-          (the run also surfaced #73 — plan_motion stuck on
-          stale held=[9] for 385 s before the user killed it;
-          unrelated bug, same scene.)
+          (the run also surfaced an unfiled held-set bug —
+          plan_motion stuck on stale held=[9] for 385 s before
+          the user killed it; unrelated bug, same scene.  The
+          "#73" originally cited here was the held-set
+          placeholder; the current #73 [DONE 2026-05-14] is the
+          eval-chapter figures backlog, a different issue.)
 Priority: TIER 1 — correctness drift.  Same tier as #71 because
           the consequences are similar: planner reasons over
           geometry that does not match physics.  In this case
@@ -751,8 +787,8 @@ Priority: TIER 1 — correctness drift.  Same tier as #71 because
           actually visible, so free-space generator + boxel_fits
           carve out non-shadow cells.  Downstream effect: place /
           motion plans avoid passable regions, contributing to
-          the kind of long sampling stalls seen in the #73
-          held-set bug.
+          the kind of long sampling stalls seen in the unfiled
+          held-set bug noted above.
 Where:    shadow_calculator.py:147-178 (calculate_shadow_boxel,
           AABB-construction + subtract-object block).  Concretely:
             - Lines 147-156: full_min/full_max enclose both the
@@ -951,562 +987,14 @@ Related: #4  [archived, accepted] — post-action re-
               SHADOW boxel count is a real cost — flag this
               fix as a candidate for #50's cost-budget
               consideration before landing.
-         #73 — plan_motion stream evaluated with stale
-              held=[purple] after stack(purple, tray).
-              Surfaced in the same seed-779694423 run; the
-              overhang-shadow free-space carve-out makes
+         Unfiled held-set bug — plan_motion stream evaluated
+              with stale held=[purple] after stack(purple,
+              tray).  Surfaced in the same seed-779694423 run;
+              the overhang-shadow free-space carve-out makes
               the held-set bug bite harder by removing
               passable cells the motion sampler would
-              otherwise have used.
-
-
-================================================================================
-#73. EVAL-CHAPTER FIGURES BACKLOG — 11 PLOTS + LOGGING PREREQ
-================================================================================
-Status:   OPEN.  Raised 2026-05-12 (later) by user during eval
-          chapter prep, after the per-goal line-plot split landed
-          (commit b87e28b).  Backlog identified by walking the
-          thesis proposal (proposal-template/sections/{abstract,
-          introduction,approach,evaluation}.tex) and cross-
-          checking against current eval_plotter.py + aggregated
-          CSV columns + per-cell timing_summary.json.
-          Step 1 (logging change) landed 2026-05-12 (later) in
-          commit 9918047 — timing_summary.json now carries
-          n_object_boxels, n_shadow_boxels, n_free_space_boxels
-          (end-of-run from registry), n_init_state_facts (last
-          plan() call's _build_init length), and n_facts_by_-
-          predicate (Counter over fact[0]).  eval_runner.LIST_-
-          VALUED extended so the dict-valued breakdown lands in
-          aggregated.jsonl only, not the flat CSV.  User to
-          review the extended schema (Care block) before any
-          plot lands.  Steps 2-5 (plots) still pending.
-          Matrix widened 2026-05-12 (later) in commits eef4bd7 +
-          47a9cf3 per user direction: RANDOM_PAIRS_MATRIX is now
-          a mixed-scene list — random-pairs sub-tier (2 goals ×
-          n_occluders ∈ {2, 3, 4} × 5 seeds × 2 baselines = 60
-          cells) + stack sub-tier (stack goal on stack_scene × 5
-          seeds × 2 baselines = 10 cells) = 70 cells total.
-          Covers all 3 goals (random-pairs scene hard-rejects
-          --goal stack at run_logger.py:531).  Re-run still
-          pending (step 1(d)).
-          Step 2(a) plot 1 (boxel-count breakdown stacked bars,
-          OBJECT/SHADOW/FREE_SPACE by n_occluders, semantic vs
-          uniform side-by-side) landed 2026-05-12 (later) in
-          commit ce8d6e5.  Emits one PNG per goal in the per-
-          goal loop alongside the existing 3 line plots; pre-
-          9918047 CSVs trigger the no-data branch cleanly.
-          _is_random_pairs_matrix loosened to accept the mixed-
-          scene (random-pairs + stack) CSV.
-          Step 1(d) re-run completed 2026-05-12 (later): sweep
-          eval_results/sweep_2026-05-12_22-31-58_random-pairs/
-          (70 cells, 35 semantic + 35 uniform); aggregated.csv
-          carries the new schema fields (smoke-check (e) passes
-          implicitly — plot 1 rendered real bars).
-          Step 2(b) plot 2 (init-state fact count vs n_occluders
-          line plot) landed 2026-05-13 in commit b7f7406; per-
-          predicate stratification deferred as follow-on bonus.
-          Step 3(b) plot 6 (failure-mode breakdown stacked bar
-          per (goal, baseline)) landed 2026-05-13 in commit
-          1308c3d; wired into both default-matrix and line-plot
-          dispatch branches.
-          Plot 1 / plot 2 success-only filter dropped 2026-05-13
-          in commit 1627daf (+ y-label cleanup in the follow-up):
-          boxel counts and n_init_state_facts are end-of-run
-          snapshots valid regardless of plan outcome, so filtering
-          on success was hiding uniform completely on find-and-
-          tray-stack (0/15 success) — the goal where the
-          compactness comparison should be most persuasive.
-          After the fix the find-and-tray-stack comparison
-          shows ~6-10x boxel ratio and ~5-10x init-fact ratio.
-          Plot style cleanup 2026-05-13 in commit f45f366:
-          plot_metric now uses shaded +/-1 std bands instead of
-          errorbar whiskers (the whiskers-and-caps read as a
-          mesh of intersecting lines, not a graph).  Single-X
-          data (stack subtier hits X=0 because cell_to_argv
-          skips --n-occluders for stack scenes) auto-routes to
-          new _plot_single_x_summary helper: side-by-side bars
-          with mean+std+n annotation.  Bands clipped to ylim so
-          success_rate stays in [0, 1] and time/count metrics
-          don't dip below 0.  plot_boxel_count_breakdown hides
-          the meaningless 0 tick when single-X.
-          Summary table writer 2026-05-13 in commit b1007f1:
-          write_summary_table emits summary_table.md (markdown,
-          viewable in any editor) plus summary_table_aggregate.
-          csv and summary_table_per_occluders.csv (spreadsheet-
-          friendly).  Columns: n_cells, success, success_rate,
-          mean plan_time (success-only), mean plan_count, mean
-          init_facts, mean total_boxels.  Echoes markdown to
-          stdout so the runner log carries the table verbatim.
-          Headline numbers from the 2026-05-12 sweep: find-and-
-          tray-stack semantic 40% / uniform 0%; holding
-          semantic 80% / uniform 87%; stack semantic 100% /
-          uniform 100% with semantic 38x fewer init facts.
-          Step 2(c) plot 3 (boxel-volume histogram, semantic vs
-          uniform) landed 2026-05-14 in commit c8ca69f.
-          run_logger.timing_summary.json gains boxel_volumes_-
-          {object,shadow,free_space} (end-of-run registry snapshot);
-          eval_runner.LIST_VALUED extended so the lists are jsonl-
-          only.  eval_plotter gains load_jsonl_rows + group_boxel_-
-          volumes + plot_boxel_volume_histogram (side-by-side
-          semantic | uniform panels, log-x bins, overlaid
-          OBJECT/SHADOW/FREE_SPACE).  Wired into the random-pairs
-          per-goal dispatch right after the init-state-facts plot.
-          No-op on pre-existing sweeps; renders against the next
-          sweep that re-runs with this code (step 2(c) re-run
-          pending).
-          Step 3(a) plot 5 (replan-count distribution histogram)
-          landed 2026-05-14 in commit 8fd5aa2.  group_plan_count_-
-          distribution + plot_plan_count_distribution in
-          eval_plotter.py; sweep-level dispatch in both default
-          and random-pairs branches (between plot_failure_modes
-          and write_summary_table).  Reads plan_count from
-          aggregated.csv — no schema change; pre-existing sweeps
-          replot cleanly.  Visual check on sweep_2026-05-12_-
-          22-31-58_random-pairs PNG matches text fallback counts
-          exactly.  Caveat: find-and-tray-stack/uniform reads as
-          fast convergence (mean=1.1) but all 11 cells are
-          planner_failed (0/15 success); the histogram correctly
-          encodes the mechanical plan_count, not the success/fail
-          dimension — readers must pair with failure_modes.png
-          for context.  Optional follow-up: color-segment success
-          vs failure or annotate per-panel success_rate; not in
-          this commit per audit spec.
-          Step 2(d) plot 11 (boxel-count evolution across replans)
-          landed 2026-05-14 in commit 6434762.  group_boxel_-
-          evolution_per_replan + plot_boxel_evolution_per_replan
-          in eval_plotter.py; per-replan capture in test_full_-
-          pipeline.py loop post-reboxelize_free_space (so each
-          entry reflects what THIS planner.plan() will see);
-          report_run_outcome gains boxel_counts_per_replan kwarg;
-          run_logger dumps the list under same key in timing_-
-          summary.json; eval_runner.LIST_VALUED gates the list-of-
-          dicts to aggregated.jsonl only.  Plot: one panel per
-          baseline (semantic, uniform); X plan_index; Y mean
-          boxel count with shaded +/-1 std bands per type
-          (OBJECT / SHADOW / FREE_SPACE).  Wired into the random-
-          pairs per-goal dispatch right after plot_boxel_volume_-
-          histogram; no-op on pre-#73-step-2(d) sweeps (helper
-          returns when boxel_counts_per_replan absent from rows).
-          Re-run pending to populate the new schema field.
-          Closes TIER A plot backlog.
-          Step 3(c) plot 4 (sense-action count) landed 2026-05-14
-          in commit 5829b94.  Counter sense_count plumbed through
-          test_full_pipeline.py (mirrors plan_count: init at 0,
-          increment on every entry into the 'sense' dispatch
-          branch, pass to report_run_outcome); run_logger gains
-          sense_count kwarg + dumps "n_sense_actions" scalar to
-          timing_summary.json.  eval_plotter: load_rows int-casts
-          the new column; plot_metric line added in the random-
-          pairs per-goal dispatch right after plot 2 (init-state
-          facts) with success_only=False (audit body explicitly
-          notes failed runs may still execute many senses; uniform
-          vs semantic equality is the diagnostic).  No-op on pre-
-          #73-step-3(c) CSVs (group_metric skips rows missing the
-          column → empty grouped → _plot_single_x_summary "no
-          data" branch).  Closes TIER B plot 4.  Re-run pending.
-          Step 4(a) plot 7 (per-call planning time vs replan
-          index) landed 2026-05-14 in commit cd9a1e5.  group_per_-
-          call_planning_time + plot_per_call_planning_time in
-          eval_plotter.py; reads per_call_planning_time_s from
-          aggregated.jsonl (LIST_VALUED — no logging change).
-          Wired into the random-pairs per-goal dispatch right
-          after plot 11; one figure per goal with semantic +
-          uniform overlaid as lines + shaded +/-1 std bands.
-          Includes failed runs (per-call timings valid regardless
-          of overall outcome — uniform/holding's n=1 cell at
-          plan#2 (190s) and the find-and-tray-stack failure tails
-          surface naturally).  Visual inspection on the
-          2026-05-12 sweep confirmed: holding/semantic ~1-3s flat
-          across replans vs uniform ~14-190s; stack/semantic
-          ~1.2s vs uniform ~22s (~18x ratio matching summary_-
-          table.md mean_plan_time_s); find-and-tray-stack/
-          semantic shows the messy failure-tail thinning expected
-          from a 40% success rate.  Closes TIER C plot 7.
-          Step 4(b) plot 8 (wall-clock vs total_planning_time
-          scatter) landed 2026-05-14 in commit 7ef62f3.  group_-
-          wallclock_vs_planning + plot_wallclock_vs_planning in
-          eval_plotter.py; both columns are scalar in
-          aggregated.csv (PRIMARY_COLUMNS — no schema change).
-          Color by baseline (semantic=C0, uniform=C1), y=x
-          diagonal as the "pure planning" upper bound (wall_-
-          clock ≥ planning_time always).  Wired right after
-          plot 7 in the random-pairs per-goal dispatch.
-          Includes failed runs — no_summary cells skip naturally
-          (no planning_time field).  Visual inspection on the
-          2026-05-12 sweep confirmed all points sit on/above the
-          diagonal; holding shows the (240, 250) outlier
-          consistent with plot 7's uniform/plan#2 = 190s spike;
-          stack reveals semantic's planning is so cheap (~1.2s)
-          that wall-clock is dominated by sim/execution (~9.5s),
-          whereas uniform's planning (~20s) dominates wall-clock
-          (~35s).  Closes TIER C plot 8.
-          Step 4(c) plot 9 (TAMPURA wall-clock comparison bar)
-          landed 2026-05-14 in commit 8275549.  plot_tampura_-
-          wallclock_comparison in eval_plotter.py; three bars:
-          Ours/semantic, Ours/uniform (if any successful cells),
-          TAMPURA Partial Observability.  Hardcoded constants
-          (TAMPURA_MEAN=57.0, TAMPURA_STD=38.0, TAMPURA_N=20)
-          inline-commented for citation updates; sourced from
-          arXiv:2403.10454 Table II via THESIS_NOTES §21.2.
-          Ours uses median + IQR (robust to plot-8 long-tail
-          outliers); TAMPURA uses mean ± std (paper-reported).
-          statistics.median + statistics.quantiles added to
-          imports.  Hardware-parity caveat (TAMPURA 20-core
-          Xeon vs ours 8-core consumer CPU) in figure caption
-          per THESIS_NOTES §21.1.  Wired sweep-level in BOTH
-          default-matrix and random-pairs dispatch paths
-          (mirrors plot 5/6 wiring).  No-op when no successful
-          find-and-tray-stack cells.  Visual inspection on the
-          2026-05-12 sweep: Ours/semantic 18.2s (n=6) vs
-          TAMPURA 57.0s (n=20) — ~3x faster, headline number
-          for the thesis tractability claim.  Ours/uniform
-          absent because 0/15 success on find-and-tray-stack.
-          Cosmetic nit: TAMPURA "(n=20)" label sits close to
-          title (no ylim_top headroom); readable, deferred as
-          polish.  Closes TIER C plot 9 — TIER C complete.
-          Remaining: Step 5 / plot 10 (perception density),
-          gated on the audit-14-dense-lattice-attempt branch
-          merge; out of scope for this turn.
-Priority: TIER 1 — high prio per user direction 2026-05-12,
-          but lands AFTER #71 (refresh OBJECT AABBs on sense) and
-          #72 (shadow lateral overhang) so the figures reflect
-          post-fix instrumentation — otherwise plots 1-3 / 11
-          (compactness, init-state facts, boxel volume) bake stale
-          geometry counts into the thesis chapter.  Gates eval
-          chapter writeup.  Each plot maps directly to one of the
-          three thesis pillars:
-            (1) compactness         — plots 1, 2, 3, 11
-            (2) knowledge-grounded  — plots 4, 5, 6
-            (3) tractability        — plots 7, 8, 9
-            (cross-cutting)         — plot 10 (perception density)
-          Without these, the eval chapter asserts the thesis
-          claims but cannot quantitatively defend them.  The
-          existing planning-time / success-rate / plan-count
-          line plots are necessary but not sufficient.
-Where:    eval_plotter.py — new plotter calls per plot listed
-            in the Fix block.  Most use existing aggregated.csv
-            columns; plots 1/2/3/11 need the logging change
-            described below.
-          run_logger.py — `compute_run_summary` (~line 220),
-            extend the timing_summary.json schema with:
-              n_object_boxels, n_shadow_boxels, n_free_space_boxels
-              n_init_state_facts
-            (~10 LOC; pull from registry.get_boxels_by_type and
-            len(initial_atoms) at end-of-run).
-          pddlstream_planner.py — `_build_init` (around the
-            atoms accumulator), return the atom list alongside
-            its current return value, so run_logger can count
-            atoms by predicate.  Optional: stratify by predicate
-            name for plot 2's "which atoms blow up" breakdown.
-          aggregated.csv — eval_runner.py emits one row per
-            cell from timing_summary.json; the new fields land
-            automatically once timing_summary.json carries them.
-Depends:  None functional.  Plots 4 (sense count) and 6 (failure
-          modes) read existing aggregated.csv columns; the rest
-          are gated on the logging change.  Order in the Fix
-          block reflects this dependency.
-
-What:  Current eval output (per random-pairs sweep): three
-       per-goal line plots × 2 goals = 6 PNGs (planning_time,
-       success_rate, plan_count vs n_occluders).  For
-       default-style sweeps: three grouped-bar plots
-       (_per_scene_goal).  Total: 9 unique plot variants
-       across the two matrix shapes.
-
-       Missing — ranked by "would most strengthen the thesis":
-
-       TIER A (proves compactness — pillar 1):
-         (1) Boxel-count breakdown.  X: n_occluders.  Y: total
-             boxel count, stacked by type (OBJECT / SHADOW /
-             FREE_SPACE).  Semantic vs uniform side-by-side.
-             This is the smoking-gun plot for "adaptive
-             partitioning is smaller."  Uniform blows up as
-             n_occluders × workspace_vol / cell_size^3; semantic
-             grows linearly with n_occluders + n_shadows.
-             Data: NEEDS LOGGING (timing_summary.json extension).
-         (2) PDDL init-state fact count vs n_occluders.  Same
-             shape as plot 1 but in the planner's units.
-             THESIS_NOTES §14 cites "init facts dominate
-             planning cost" as a recurring theme; this plot
-             proves the n_atoms x n_occluders dependence.
-             Bonus: stratify by predicate (obj_at_boxel_KIF,
-             blocks_view_at, boxel_fits) so reviewers can see
-             which atoms blow up under uniform.
-             Data: NEEDS LOGGING + atom stratification hook.
-         (3) Boxel-volume histogram, semantic vs uniform.
-             Visual proof that semantic boxels are
-             HETEROGENEOUS (a few big FREE_SPACE cells + many
-             small OBJECT/SHADOW cells) while uniform is by
-             construction homogeneous.  One histogram per
-             baseline; overlay.
-             Data: NEEDS LOGGING (per-boxel volumes dumped to
-             a per-run JSON; aggregator computes histogram).
-        (11) Boxel-count evolution across replans.  X: replan
-             index.  Y: # boxels by type, one line per
-             scene/baseline.  Shows the ADAPTIVE claim — the
-             partition mutates when occluders move.
-             Data: NEEDS LOGGING (extend plot 1's logging to
-             per-replan, not just end-of-run).
-
-       TIER B (proves knowledge-grounded — pillar 2):
-         (4) Sense-action count vs n_hidden, semantic vs
-             uniform.  "Task-relevant partitioning means fewer
-             sense actions."  Uniform has no SHADOW boxels
-             (correction: uniform DOES have SHADOW boxels —
-             same as semantic per #10's "OBJECT + SHADOW
-             untouched" framing; the difference is in FREE_SPACE
-             only).  So #4 needs reframing: sense-action count
-             should be approximately equal between baselines if
-             the shadow set is identical.  If it differs in
-             practice, that itself is a finding worth noting
-             (e.g. semantic's finer FREE-SPACE granularity
-             changes the planner's preference for which shadow
-             to sense first).
-             Data: aggregate from run.log (count "sense_..."
-             actions per plan trace) OR add a sense counter to
-             execution.py and dump to timing_summary.json.
-         (5) Replan-count distribution per (goal, baseline).
-             Histogram.  Tests whether the partition makes
-             the planner converge faster.
-             Data: ALREADY IN aggregated.csv (plan_count).
-             Just needs a new plotter call.
-         (6) Failure-mode breakdown.  Stacked bar of
-             exit_reason per (baseline, goal): all_searched /
-             planner_failed / drop_failed / physics_mismatch /
-             replan_limit / timeout / no_summary.  Honest
-             reporting — shows where each baseline breaks.
-             Already revealed semantic's 3 planner_failed vs
-             uniform's 1 in random-pairs find-and-tray-stack
-             (see #74 — the investigation issue).
-             Data: ALREADY IN aggregated.csv (exit_reason).
-             Just needs a new plotter call.
-
-       TIER C (proves tractability — pillar 3 + TAMPURA bridge):
-         (7) Per-call planning time vs replan index.  One
-             line per (goal, baseline).  Shows whether replans
-             get cheaper, flat, or worse.  THESIS_NOTES §21
-             frames PDDLStream as "pays geometry-sampling cost
-             per plan call" — this plot quantifies it.
-             Data: ALREADY IN timing_summary.json
-             (per_call_planning_time_s is a list).  Needs new
-             aggregator (the current eval_runner collapses
-             this list into a sum for aggregated.csv).
-         (8) Wall-clock vs total_planning_time scatter.  Each
-             point = one run.  Color by baseline.  One panel
-             per goal.  Tells reviewers "the planner is X % of
-             wall-clock; the rest is PyBullet sim / execution."
-             Data: ALREADY IN aggregated.csv
-             (wall_clock_s, total_planning_time_s).  Just a
-             new scatter call in plotter.
-         (9) TAMPURA wall-clock comparison bar chart.  Our
-             find-and-tray-stack (median + IQR over seeds) vs
-             TAMPURA's "Partial Observability" task (57 ± 38 s
-             from arXiv:2403.10454 Table II).  Hardware-parity
-             caveat from THESIS_NOTES §21.1 in the caption.
-             Data: OUR numbers in aggregated.csv; TAMPURA
-             numbers hardcoded from the paper.  ~20 LOC
-             matplotlib.
-
-       TIER D (cross-cutting):
-        (10) Perception-density sweep.  THESIS_NOTES §14
-             explicitly cites this as a missing experiment that
-             the project HAS DATA FOR on branch audit-14-
-             dense-lattice-attempt (commit 92b37fc) but never
-             ran the full sweep.  X: VISIBILITY_GRID_N in
-             {2, 3, 4, 5}.  Y: success rate, planning time,
-             # discovered occluders, # init facts (4 sub-plots).
-             Per baseline.
-             Data: NEEDS A SWEEP RUN on the dense-lattice
-             branch + merging the flag onto main + a new
-             eval_runner matrix preset.  Largest "new work"
-             item in this issue.
-
-Fix:   Implementation order (each step is its own commit,
-       gated on the prior step landing):
-
-       Step 1 — Logging change (~10 LOC).
-         (a) run_logger.compute_run_summary: pull boxel counts
-             from registry.get_boxels_by_type(BoxelType.OBJECT)
-             / SHADOW / FREE_SPACE at end-of-run.  Dump to
-             timing_summary.json under keys n_object_boxels,
-             n_shadow_boxels, n_free_space_boxels.
-         (b) pddlstream_planner._build_init: return the atom
-             list (or its length, or its by-predicate counts)
-             alongside the current return.  run_logger picks
-             this up and dumps n_init_state_facts (and
-             optionally n_facts_by_predicate dict).
-         (c) eval_runner.py: extend the aggregated.csv row
-             schema with the new columns.  No change to the
-             cell driver — timing_summary.json keys flow
-             through automatically.
-         (d) Re-run random-pairs sweep (now mixed-scene per
-             commits eef4bd7 + 47a9cf3 — 70 cells, ~20 min
-             wall-clock) to populate the new columns.
-             `run_eval --matrix random-pairs` writes to
-             eval_results/sweep_<ts>_random-pairs/.  [DONE
-             2026-05-12 (later); sweep
-             eval_results/sweep_2026-05-12_22-31-58_random-
-             pairs/ landed with 35 semantic + 35 uniform
-             rows; new schema fields populate correctly.]
-         (e) Smoke check: confirm boxel counts differ between
-             baselines on the same scene (semantic should be
-             2-5× smaller than uniform on default scenes per
-             THESIS_NOTES §14 prediction).
-
-       Step 2 — TIER A plots (compactness pillar).
-         (a) plot 1 (boxel count breakdown, stacked bar per
-             baseline).  Single most persuasive figure for
-             the eval chapter — without it the scalability
-             claim is asserted, not shown.  [DONE 2026-05-12
-             (later); commit ce8d6e5.  group_boxel_counts +
-             plot_boxel_count_breakdown in eval_plotter.py;
-             wired into per-goal loop.  Renders real bars
-             after step 1(d) re-run.]
-         (b) plot 2 (init-state facts).  Strong companion to
-             plot 1.  Stratification by predicate is optional
-             but informative.  [DONE 2026-05-13; commit b7f7406.
-             Simple line plot via plot_metric;
-             n_facts_by_predicate stratification deferred.]
-         (c) plot 3 (volume histogram).  [DONE 2026-05-14;
-             commit c8ca69f.  run_logger dumps per-boxel volumes;
-             eval_runner.LIST_VALUED gates them to aggregated.jsonl
-             only; eval_plotter.load_jsonl_rows + group_boxel_-
-             volumes + plot_boxel_volume_histogram render side-by-
-             side semantic | uniform log-x panels with overlaid
-             OBJECT / SHADOW / FREE_SPACE.  Re-run pending to
-             populate the new schema fields.]
-         (d) plot 11 (boxel evolution across replans).  [DONE
-             2026-05-14; commit 6434762.  Per-replan capture in
-             test_full_pipeline.py post-reboxelize; boxel_counts_-
-             per_replan plumbed through report_run_outcome ->
-             timing_summary.json; LIST_VALUED gate keeps it in
-             aggregated.jsonl only.  group_boxel_evolution_per_-
-             replan + plot_boxel_evolution_per_replan in eval_-
-             plotter.py; one panel per baseline with shaded +/-1
-             std bands per type.  Re-run pending.]
-
-       Step 3 — TIER B plots (knowledge-grounded pillar).
-         (a) plot 5 (replan distribution).  No new data.
-             [DONE 2026-05-14; commit 8fd5aa2.
-             group_plan_count_distribution + plot_plan_count_-
-             distribution; sweep-level, fires in both dispatch
-             branches.  All cells included so the failure pile
-             at max_replans is visible.  Caveat in commit
-             message: find-and-tray-stack/uniform reads as fast
-             convergence (mean=1.1) but all 11 cells are
-             planner_failed — histogram reports mechanical
-             plan_count, not success; pair with failure_modes.
-             png for context.]
-         (b) plot 6 (failure-mode stacked bar).  No new data.
-             [DONE 2026-05-13; commit 1308c3d.
-             group_failure_modes + plot_failure_modes;
-             sweep-level, fires in both dispatch branches.]
-         (c) plot 4 (sense-action count).  [DONE 2026-05-14;
-             commit 5829b94.  sense_count counter in test_full_-
-             pipeline.py dispatch loop (increment on every 'sense'
-             branch entry, any outcome) → report_run_outcome
-             sense_count kwarg → "n_sense_actions" scalar in
-             timing_summary.json → aggregated.csv auto-flow.
-             plot_metric line in random-pairs per-goal dispatch,
-             success_only=False per audit body.  Chose the counter
-             path over log-parsing for cleanliness.]
-
-       Step 4 — TIER C plots (tractability + TAMPURA).
-         (a) plot 7 (per-call planning time vs replan index).
-             [DONE 2026-05-14; commit cd9a1e5.  group_per_call_-
-             planning_time + plot_per_call_planning_time in
-             eval_plotter.py; reads per_call_planning_time_s
-             from aggregated.jsonl (LIST_VALUED — no logging
-             change needed; the audit body's "list-of-floats
-             column in aggregated.csv" framing predates the
-             LIST_VALUED gate, jsonl is the equivalent home).
-             One figure per goal in the random-pairs per-goal
-             loop; semantic + uniform overlaid as lines with
-             +/-1 std bands.  success_only=False per the
-             plot 4 precedent.]
-         (b) plot 8 (wall-clock vs planning scatter).  [DONE
-             2026-05-14; commit 7ef62f3.  group_wallclock_vs_-
-             planning + plot_wallclock_vs_planning in eval_-
-             plotter.py.  Scatter of (total_planning_time_s,
-             wall_clock_s) per cell, color by baseline, y=x
-             reference diagonal.  Both columns scalar in
-             aggregated.csv — no schema change.  Wired right
-             after plot 7 in random-pairs per-goal dispatch.]
-         (c) plot 9 (TAMPURA comparison bar).  [DONE 2026-05-14;
-             commit 8275549.  plot_tampura_wallclock_comparison
-             in eval_plotter.py; three bars (Ours/semantic,
-             Ours/uniform, TAMPURA Partial Obs.) for find-and-
-             tray-stack only.  Constants TAMPURA_MEAN=57.0 /
-             TAMPURA_STD=38.0 / TAMPURA_N=20 from arXiv:2403.-
-             10454 Table II (THESIS_NOTES §21.2); flagged in
-             code for citation updates.  Ours = median + IQR,
-             TAMPURA = mean ± std (mixed stats documented in
-             caption + docstring).  Hardware caveat in caption
-             per §21.1.  Wired sweep-level in both default-
-             matrix and random-pairs paths.]
-
-       Step 5 — TIER D plot (perception density).  Largest
-       item.  Defer if time-constrained.
-
-Care:  Per-issue user direction expected per plot (this issue
-       is a backlog header; each plot lands as its own commit
-       with its own user review):
-         - After step 1 logging change, user reviews the
-           extended timing_summary.json schema before any plot
-           is written (catches schema drift early).
-         - Each plot's output filename goes to <sweep>/plots/
-           per the latest plotter change (b87e28b — to be
-           landed in a follow-up commit per the user's "new
-           plots in a new directory" directive 2026-05-12).
-         - Each TIER A/B plot lands on main directly (single-
-           commit, no branch).  TIER C plot 9 (TAMPURA)
-           includes hardcoded constants; flag in commit message
-           for citation update if TAMPURA paper revises.
-         - TIER D plot 10 (perception density) needs the
-           dense-lattice flag merged from branch audit-14-
-           dense-lattice-attempt onto main first — separate
-           branch / PR / land on its own.
-
-       Eval matrix preset.  The current SCALABILITY_MATRIX
-       and DEFAULT_MATRIX in eval_runner.py work for plots
-       1-9.  Plot 10 (perception density) needs a new
-       PERCEPTION_DENSITY_MATRIX or a new --visibility-grid-n
-       sweep axis on the existing matrices.
-
-Related: #50 — planner perf investigation.  Plot 2 (init-state
-              fact count) is exactly the cost story #50 is
-              chasing; landing #50's measurement harness AND
-              this plot would close the perf-vs-correctness
-              feedback loop.
-         #74 — investigate semantic-uniform success-rate gap
-              on random-pairs find-and-tray-stack.  Plots 6
-              (failure modes) and 7 (per-call timing) are the
-              first two diagnostic figures the investigation
-              should consult.
-         #72 — shadow AABB lateral overhang.  Plot 1's
-              SHADOW boxel count (and plot 3's volume
-              histogram) directly visualise the inflated
-              shadow problem.  Re-run after #72 lands to
-              quantify the fix's compactness gain.
-         #71 — refresh OBJECT boxel AABBs on every sense.
-              Plot 11 (boxel evolution) becomes more
-              meaningful once OBJECT AABBs actually update;
-              today the OBJECT boxels are static after spawn.
-         #10 [DONE] — uniform-vs-semantic baseline.  This
-              issue extends #10's eval output with the
-              compactness / tractability dimensions that #10's
-              implementation enables but didn't plot.
-         #11 [WONTFIX] — fixed semantic regions baseline.
-              Killed per supervisor; the tray entity in #49
-              "exemplifies fixed labelled region" was accepted
-              as a substitute.  No plots needed.
-         THESIS_NOTES §14 — perception density vs planning
-              cost.  Plot 10 (perception density sweep) is
-              the experiment this section explicitly requests
-              but the project has not run.
-         THESIS_NOTES §21 — TAMPURA hardware / planning times.
-              Plot 9 (TAMPURA comparison bar) uses the
-              numerical context from §21.1 and §21.2.
+              otherwise have used.  Not the current #73
+              (eval-figures, [DONE 2026-05-14]).
 
 
 ================================================================================
@@ -1693,11 +1181,13 @@ Related:
             in the GUI is similar.  Both produce floating cubes;
             this issue closes the post-pick / mid-execution
             channel, #70 closes the spawn-time channel.
-       #74 — placeholder forward-reference in #73 (investigate
-            semantic-uniform success-rate gap on random-pairs
-            find-and-tray-stack); not yet filed as its own body.
-            This issue is filed as #75 to avoid renumbering the
-            placeholder reference.
+       #74 — placeholder forward-reference originally in #73's
+            body (investigate semantic-uniform success-rate gap
+            on random-pairs find-and-tray-stack); not yet filed
+            as its own body.  This issue is filed as #75 to
+            avoid renumbering the placeholder reference.
+            (#73 itself [DONE 2026-05-14] — placeholder
+            survives in git history.)
 
 
 ================================================================================
@@ -1870,10 +1360,11 @@ Care:  Don't conflate this with #70.  #70 is "scene generator
 
        Eval implication: if this issue is unfixed AND occurs at
        >5% of random-pairs cells, the success-rate axis of plot 1
-       (Tier A in #73) becomes misleading; plot 6 (failure-mode
-       breakdown, also #73 Tier B) catches it via the
-       planner_failed exit_reason but the headline success rate
-       under-reports the SEMANTIC baseline's actual capability.
+       (Tier A in #73 [DONE 2026-05-14]) becomes misleading;
+       plot 6 (failure-mode breakdown, also #73 Tier B [DONE])
+       catches it via the planner_failed exit_reason but the
+       headline success rate under-reports the SEMANTIC
+       baseline's actual capability.
 
 Related:
        #70 (REOPENED) — the post-#70 tighter _SAFE_TABLE_* window
@@ -1894,10 +1385,11 @@ Related:
             FREE_SPACE U SHADOW.  The grounding gate that #62
             added is a candidate root cause if it's now too
             restrictive under reach-bound placement.
-       #73 — eval-chapter figures backlog.  Plot 6 (failure-mode
-            breakdown) is the visualisation that flags this issue
-            in eval data.
-       #74 — placeholder forward-reference in #73; still unfiled.
+       #73 [DONE 2026-05-14] — eval-chapter figures backlog.
+            Plot 6 (failure-mode breakdown) is the visualisation
+            that flags this issue in eval data.
+       #74 — placeholder forward-reference originally filed in
+            #73; still unfiled.
 
 
 ================================================================================
@@ -1943,13 +1435,13 @@ Where:    eval_runner.py — new SCALABILITY_VS_TIME matrix
           boxel_env.py — semantic min-boxel-size knob (today
           set by `[audit-66/67] Effective minimum boxel size`
           gate at scene init).  Expose as --min-boxel-size.
-Depends:  #73 (eval-figures infrastructure) — re-uses
-          aggregated.csv shape, per-goal dispatch, summary
-          table writer.  Lands AFTER #73's TIER A/B plots
-          stabilise so the new plot fits the existing
-          plotter dispatch.
+Depends:  #73 [DONE 2026-05-14] (eval-figures infrastructure)
+          — re-uses aggregated.csv shape, per-goal dispatch,
+          summary table writer.  #73's TIER A/B/C plots
+          stabilised the plotter dispatch this issue extends.
 Effort:   2-3 days for corpus collection + matrix + plotter
-          once #73 stabilises.  +1 day if planner-side time-
+          on top of #73's now-stable plotter infrastructure.
+          +1 day if planner-side time-
           budget plumbing is missing.  Largest cost is sweep
           wall-clock — at 100 fixed seeds (vs the original 5)
           the matrix is 20x larger; budget several days of
@@ -2086,9 +1578,9 @@ Care:
            collapses.
 
 Related:
-       #73 — eval-chapter figures backlog.  This is a new
-            TIER A plot (compactness pillar's capability
-            corollary) that #73 didn't enumerate;
+       #73 [DONE 2026-05-14] — eval-chapter figures backlog.
+            This is a new TIER A plot (compactness pillar's
+            capability corollary) that #73 didn't enumerate;
             conceptually "plot 12."
        #74 — placeholder (unfiled): uniform 0/15 success
             on find-and-tray-stack.  This issue's curve
@@ -2131,7 +1623,15 @@ user re-reported the symptom — the original [DONE] was a doc-state
 error (no code commit had applied the fix; commit 8d9b7ad now does).
 #75 added 2026-05-12 (later) — execute_place / execute_stack don't
 verify the gripper actually opened; the audit #58 verify-and-retry
-helper exists but was never wired to the action path.
+helper exists but was never wired to the action path.  #71 [DONE
+2026-05-12 (later)] (refresh OBJECT AABBs on sense) and #72 [DONE
+2026-05-12 (later)] (shadow lateral overhang two-slab carve) cleared
+the pre-#73 geometry-instrumentation gates.  #73 [DONE 2026-05-14] —
+eval-chapter figures backlog: 10 plots delivered (TIER A/B/C
+complete); plot 10 (perception density, TIER D) deferred to FOR
+LATER backlog.  #77 raised 2026-05-14 during #73 plot review —
+anytime compactness sweep, headline strength upgrade for the
+compactness pillar.
 
 TIER 1 — CORRECTNESS / HIGH-PRIO:
   #76  Planner returns no plan for some reach-constrained random-
@@ -2142,30 +1642,6 @@ TIER 1 — CORRECTNESS / HIGH-PRIO:
        success-rate plot is misleading.  Diagnostic step 1:
        re-run with verbose logging + pre-#70 code on the same
        seeds to disambiguate.
-  #71  Refresh OBJECT boxel AABBs on every sense.  Currently
-       written once at spawn (or at discovery for nontarget
-       bodies); cubes that shift between actions drift away
-       from the stored AABB and the planner reasons over stale
-       geometry.  User direction: refresh BB only, not the
-       shadow region behind it.  ~0.1 ms overhead per sense.
-       High prio per user 2026-05-12.
-  #72  Shadow AABB carved only along dominant axis -> lateral
-       overhang beside the occluder.  full_min/full_max encloses
-       object AABB U ray hit points; only the dominant-axis face
-       is trimmed back to the object.  Perpendicular axes keep
-       the wide hit-point bounds back to the cube, so 7-10 cm
-       of camera-visible table beside each occluder is
-       incorrectly classified as shadow.  Fix C (two-slab carve)
-       recommended.  Repro seed 779694423 stored in body.
-  #73  Eval-chapter figures backlog - 11 plots + logging
-       prerequisite.  Lands AFTER #71/#72 fixes so plots reflect
-       post-fix instrumentation (user direction 2026-05-12 -
-       "high prio but after fixes").  Step 1 logging landed
-       2026-05-12 (later) in commit 9918047 (boxel counts +
-       n_init_state_facts + per-predicate breakdown in
-       timing_summary.json; LIST_VALUED extended in eval_runner).
-       Steps 2-5 (plots) pending user schema review then
-       per-plot commits.
   #77  Anytime compactness sweep — success rate vs time
        budget with smaller semantic boxels.  Currently
        semantic min boxel = uniform cell = 5 cm for time-
@@ -2190,15 +1666,11 @@ TIER 1 — CORRECTNESS / HIGH-PRIO:
 
 TIER 3 — CODE QUALITY / DOC SWEEP:
   #63  README + wiki final doc sweep - gated on remaining open
-       issues (now: #71, #72, #73, #75, #76).  Explicitly the
-       last commit before thesis submission per user 2026-05-08.
+       issues (now: #75, #76, #77).  Explicitly the last commit
+       before thesis submission per user 2026-05-08.
 
-Total open: 5 items (#63, #73, #75, #76, #77) per the OPEN
-ISSUES header at top (the source of truth).  Note: this
-SUMMARY block previously listed #71/#72 as open; they are
-[DONE] per the body's Closed/relocated list and the OPEN
-ISSUES header — staleness retained here pending the next
-slim.
+Total open: 4 items (#63, #75, #76, #77) per the OPEN ISSUES
+header at top (the source of truth).
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
@@ -2210,6 +1682,32 @@ Relocated 2026-05-12:
        plan refresh.
 
 Closed since previous summary:
+  #73  [DONE 2026-05-14] - eval-chapter figures backlog (10 plots
+       across TIER A/B/C delivered: plots 1, 2, 3, 11 compactness;
+       4, 5, 6 knowledge-grounded; 7, 8, 9 tractability + TAMPURA).
+       14 commits: logging 9918047; plots ce8d6e5 (1) / b7f7406 (2)
+       / c8ca69f (3) / 5829b94 (4) / 8fd5aa2 (5) / 1308c3d (6) /
+       cd9a1e5 (7) / 7ef62f3 (8) / 8275549 (9) / 6434762 (11);
+       polish 1627daf + f45f366 + b1007f1.  TIER D plot 10
+       (perception density) deferred to FOR LATER backlog — gated
+       on audit-14-dense-lattice-attempt branch merge; out of
+       thesis scope per user 2026-05-14.  Headline finding:
+       Ours/semantic 18.2s vs TAMPURA 57.0s on find-and-tray-
+       stack (~3x wall-clock lead).
+  #71  [DONE 2026-05-12 (later)] - refresh OBJECT boxel AABBs on
+       every sense (commit 0e885d5).  refresh_object_aabbs helper
+       in execution.py rewrites OBJECT boxel min_corner / max_-
+       corner from p.getAABB on each handle_sense_action outcome;
+       SHADOW recomputation deliberately skipped (accepted thesis
+       gap per user scope cut).
+  #72  [DONE 2026-05-12 (later)] - shadow AABB lateral overhang
+       (commit 6e3e8dd).  Option C two-slab carve in shadow_-
+       calculator.calculate_shadow_boxel: each shadow splits along
+       dom_axis at midpoint into a near slab clamped to occluder
+       footprint and a far slab with full hit-point range.
+       boxel_env.generate_boxels suffixes shadow IDs with __NN for
+       multi-slab disambiguation.  Closes seed-779694423 visible
+       defect (~7-10 cm of camera-visible table mis-classified).
   #62  [DONE 2026-05-12] - replan-while-holding QUICK-FIX OPTION
        (commits 0816037 + ed1789e + audit amendments).  Reused
        (boxel_fits ?o ?b) to gate :action sense; AABB fallback in
