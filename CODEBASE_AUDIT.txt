@@ -1104,6 +1104,24 @@ Status:   OPEN.  Raised 2026-05-12 (later) by user during eval
           #73-step-3(c) CSVs (group_metric skips rows missing the
           column → empty grouped → _plot_single_x_summary "no
           data" branch).  Closes TIER B plot 4.  Re-run pending.
+          Step 4(a) plot 7 (per-call planning time vs replan
+          index) landed 2026-05-14 in commit cd9a1e5.  group_per_-
+          call_planning_time + plot_per_call_planning_time in
+          eval_plotter.py; reads per_call_planning_time_s from
+          aggregated.jsonl (LIST_VALUED — no logging change).
+          Wired into the random-pairs per-goal dispatch right
+          after plot 11; one figure per goal with semantic +
+          uniform overlaid as lines + shaded +/-1 std bands.
+          Includes failed runs (per-call timings valid regardless
+          of overall outcome — uniform/holding's n=1 cell at
+          plan#2 (190s) and the find-and-tray-stack failure tails
+          surface naturally).  Visual inspection on the
+          2026-05-12 sweep confirmed: holding/semantic ~1-3s flat
+          across replans vs uniform ~14-190s; stack/semantic
+          ~1.2s vs uniform ~22s (~18x ratio matching summary_-
+          table.md mean_plan_time_s); find-and-tray-stack/
+          semantic shows the messy failure-tail thinning expected
+          from a 40% success rate.  Closes TIER C plot 7.
 Priority: TIER 1 — high prio per user direction 2026-05-12,
           but lands AFTER #71 (refresh OBJECT AABBs on sense) and
           #72 (shadow lateral overhang) so the figures reflect
@@ -1350,9 +1368,17 @@ Fix:   Implementation order (each step is its own commit,
 
        Step 4 — TIER C plots (tractability + TAMPURA).
          (a) plot 7 (per-call planning time vs replan index).
-             Needs the per_call_planning_time_s list to flow
-             into aggregated.csv as a list-of-floats column,
-             not a sum.
+             [DONE 2026-05-14; commit cd9a1e5.  group_per_call_-
+             planning_time + plot_per_call_planning_time in
+             eval_plotter.py; reads per_call_planning_time_s
+             from aggregated.jsonl (LIST_VALUED — no logging
+             change needed; the audit body's "list-of-floats
+             column in aggregated.csv" framing predates the
+             LIST_VALUED gate, jsonl is the equivalent home).
+             One figure per goal in the random-pairs per-goal
+             loop; semantic + uniform overlaid as lines with
+             +/-1 std bands.  success_only=False per the
+             plot 4 precedent.]
          (b) plot 8 (wall-clock vs planning scatter).  No new
              data.
          (c) plot 9 (TAMPURA comparison bar).  Hardcoded
