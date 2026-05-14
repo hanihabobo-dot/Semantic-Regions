@@ -1753,6 +1753,17 @@ Status:   OPEN.  Raised 2026-05-14 by user during eval-chapter
           successful.  Then we can plot a graph where x is time
           in seconds and y the number of problem instances
           solved."
+          Supervisor methodology constraint added 2026-05-14
+          (user-relayed): valid inter-algorithm comparisons
+          require a FIXED CORPUS of pre-vetted test scenes
+          (target N = 100), each verified to build and load
+          cleanly, then run with deterministic seeds across
+          every algorithm / configuration.  Independent per-
+          cell seed randomization (the current eval style)
+          breaks the comparison guarantee.  Reshapes Fix
+          Step 3 — seeds become a fixed corpus, not an
+          inline [0..4] range — and adds a Step 0 corpus-
+          collection precondition.
 Priority: TIER 1 — promotable to TIER 0 if the curve becomes a
           headline thesis figure.  Strengthens the eval-chapter
           comparison from "same resolution, faster" to "same
@@ -1777,10 +1788,13 @@ Depends:  #73 (eval-figures infrastructure) — re-uses
           table writer.  Lands AFTER #73's TIER A/B plots
           stabilise so the new plot fits the existing
           plotter dispatch.
-Effort:   1-2 days for the matrix + plotter once #73 stabilises.
-          +1 day if planner-side time-budget plumbing is missing.
-          Largest cost is sweep wall-clock (anytime curves need
-          long per-cell budgets to surface late-solving cells).
+Effort:   2-3 days for corpus collection + matrix + plotter
+          once #73 stabilises.  +1 day if planner-side time-
+          budget plumbing is missing.  Largest cost is sweep
+          wall-clock — at 100 fixed seeds (vs the original 5)
+          the matrix is 20x larger; budget several days of
+          headless runtime, or trim axes (start with 2 sizes
+          and 1 goal, expand after first pass lands).
 
 What:  The current eval pegs semantic's minimum boxel size at
        5 cm to match uniform's cell size, so per-call planning
@@ -1810,6 +1824,19 @@ What:  The current eval pegs semantic's minimum boxel size at
 
 Fix:   ONE FEATURE BRANCH, multi-commit:
 
+       Step 0 — eval corpus (supervisor methodology constraint,
+       2026-05-14).  Build a FIXED pre-vetted seed corpus shared
+       by every subsequent comparison run.  Script (e.g.,
+       collect_eval_corpus.py): iterate candidate seeds, headless-
+       probe each scene with the pre-flight checks (no #70
+       unreach, no _is_target_blocked spawn failure, scene loads
+       cleanly to end-of-init), keep first 100 that pass.
+       Persist as eval_corpus_100.json committed to the repo so
+       re-runs are bit-identical and reviewers can audit which
+       scenes were evaluated.  GATES Steps 3-5 — without a
+       shared corpus, cross-algorithm comparisons are invalid
+       per supervisor direction.
+
        Step 1 — planner-side time-budget knob.  Confirm
        PDDLStream's `max_time` reaches planner.plan(); if
        not, plumb --time-budget through test_full_pipeline /
@@ -1824,20 +1851,25 @@ Fix:   ONE FEATURE BRANCH, multi-commit:
        FreeSpaceGenerator (and CellMerger if it caps merge
        size).  Default 5 cm so existing runs unchanged.
 
-       Step 3 — new matrix preset.  Start narrow:
+       Step 3 — new matrix preset.  REVISED 2026-05-14 per
+       Step 0: seeds come from eval_corpus_100.json (100 pre-
+       vetted scenes), NOT an inline [0..4] range.  Start
+       narrow on the remaining axes:
          min_boxel_size  in {0.05, 0.03, 0.02, 0.01}  (semantic only)
          baseline       in {semantic, uniform}      (uniform fixed at 5cm)
-         seed           in [0..4]                   (5 seeds)
-         goal           in [holding, find-and-tray-stack, stack]
-         n_occluders    in [2, 3, 4]                (random-pairs);
+         seed           : 100 seeds from eval_corpus_100.json
+         goal           in {holding, find-and-tray-stack, stack}
+         n_occluders    in {2, 3, 4}                (random-pairs);
                                                     stack subtier ignored
          time_budget    : single large value (e.g., 300 s)
-       Cell count: 4 sizes x 5 seeds x 3 goals x 3 n_occ x
-       2 baselines = 360 cells, ~2-4 h wall-clock at the
-       current 17 s/cell average (likely longer at 1-cm min
-       boxels).  Single-budget run; cumulative-solved curves
-       at shorter budgets are post-processed from
-       wall_clock_s.
+       Cell count: 4 sizes x 100 seeds x 3 goals x 3 n_occ x
+       2 baselines = 7200 cells (was 360 at 5 seeds).  At the
+       current 17 s/cell average that's ~34 h wall-clock;
+       budget headless multi-day runtime and/or trim the size
+       axis (e.g., start with {0.05, 0.02} only, expand after
+       the first pass is in hand).  Single-budget run;
+       cumulative-solved curves at shorter budgets are post-
+       processed from wall_clock_s.
 
        Step 4 — plot_solved_vs_time helper.  Reads
        aggregated.csv, groups by (baseline, min_boxel_size),
@@ -1881,6 +1913,17 @@ Care:
            reader sees both the resource argument
            (compactness) and the outcome argument
            (capability under budget).
+       (6) Supervisor methodology (2026-05-14, user-relayed):
+           cross-algorithm comparisons are only valid against a
+           fixed pre-vetted scene corpus, not independently-
+           randomized per-cell seeds.  Step 0 is the corpus
+           collection precondition; commit eval_corpus_100.json
+           as the canonical seed list for THIS issue AND any
+           future inter-algorithm comparison (TAMPURA, LW1,
+           POMDP baselines).  Without a shared corpus the
+           anytime curve compares algorithms on different
+           problem distributions and the comparison claim
+           collapses.
 
 Related:
        #73 — eval-chapter figures backlog.  This is a new
