@@ -240,6 +240,93 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
     return blockers
 
 
+def _release_and_verify_drop(
+    env,
+    robot_id,
+    gui,
+    grasp_constraint_id,
+    held_body_id,
+    dropped_name,
+    max_attempts: int = 3,
+    base_settle_steps: int = 30,
+) -> bool:
+    """
+    Open the gripper, remove the grasp constraint, and verify the held
+    object actually fell free of the end-effector.  Retries with longer
+    settle steps on failure.
+
+    Shared inner block of release_held_object_in_place (replan-break
+    safety net, audit #58) and execute_place / execute_stack (action
+    paths, audit #75).
+
+    A drop is successful when, after settling:
+      • Object COM is >= 8 cm from the EE (no longer pinched), or
+      • Object COM is closer but linear speed is near zero (came to rest
+        directly under the gripper — still a clean drop).
+
+    Failure modes covered:
+      • removeConstraint raises (already removed, invalid id).
+      • Fingers re-close on the object due to position-control overshoot.
+      • Object snags on a finger pad and stays at gripper height.
+
+    Returns True on a verified drop; False after exhausting max_attempts.
+    """
+    if dropped_name is None or dropped_name not in env.objects:
+        # Without a name we can't read the object's pose to verify — but
+        # the caller still wants the constraint gone.
+        try:
+            if grasp_constraint_id is not None:
+                p.removeConstraint(grasp_constraint_id)
+        except Exception:
+            pass
+        return True
+
+    constraint_removed = False
+    for attempt in range(1, max_attempts + 1):
+        # Remove the constraint exactly once; subsequent attempts only
+        # retry the gripper-open + settle cycle.
+        if not constraint_removed and grasp_constraint_id is not None:
+            try:
+                p.removeConstraint(grasp_constraint_id)
+                constraint_removed = True
+            except Exception as exc:
+                print(f"    WARNING: removeConstraint failed: {exc}")
+                # Treat as "already gone" so subsequent retries can proceed.
+                constraint_removed = True
+
+        open_gripper(robot_id, gui)
+        # Longer settle on retries so a snagged object has more time to
+        # slip free under gravity.
+        for _ in range(base_settle_steps + 30 * (attempt - 1)):
+            env.step_simulation()
+        env.update_object_positions()
+
+        ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
+        ee_pos = np.array(ee_state[0])
+        obj_pos = np.array(env.objects[dropped_name].position)
+        ee_to_obj_dist = float(np.linalg.norm(ee_pos - obj_pos))
+        lin_vel, _ = p.getBaseVelocity(held_body_id)
+        speed = float(np.linalg.norm(lin_vel))
+
+        # Heuristics:
+        # • If the object COM sits >= 8 cm from the EE, fingers can't
+        #   still be pinching it (Panda finger length ~5.4 cm).
+        # • If it's closer but at rest, it may have landed directly under
+        #   the gripper — that's still a successful drop.
+        far_enough = ee_to_obj_dist >= 0.08
+        at_rest = speed < 0.02
+        if far_enough and at_rest:
+            print(f"    -> Released {dropped_name} "
+                  f"(EE→obj {ee_to_obj_dist*100:.1f} cm, speed "
+                  f"{speed*100:.1f} cm/s)")
+            return True
+        print(f"    Drop verification failed for {dropped_name}: "
+              f"EE→obj {ee_to_obj_dist*100:.1f} cm, speed "
+              f"{speed*100:.1f} cm/s — retry {attempt}/{max_attempts}.")
+
+    return False
+
+
 def release_held_object_in_place(
     env,
     robot_id,
@@ -293,66 +380,15 @@ def release_held_object_in_place(
     }
 
     dropped_name = body_id_to_name.get(held_body_id)
-    if dropped_name is None or dropped_name not in env.objects:
-        # Without a name we can't refresh the registry — but the caller
-        # still wants the constraint gone.
-        try:
-            if grasp_constraint_id is not None:
-                p.removeConstraint(grasp_constraint_id)
-        except Exception:
-            pass
-        return True, state_updates
-
-    constraint_removed = False
-    drop_ok = False
-
-    for attempt in range(1, max_attempts + 1):
-        print(f"  Replanning while holding {dropped_name} — release "
-              f"attempt {attempt}/{max_attempts}.")
-
-        # Remove the constraint exactly once; subsequent attempts only
-        # retry the gripper-open + settle cycle.
-        if not constraint_removed and grasp_constraint_id is not None:
-            try:
-                p.removeConstraint(grasp_constraint_id)
-                constraint_removed = True
-            except Exception as exc:
-                print(f"    WARNING: removeConstraint failed: {exc}")
-                # Treat as "already gone" so subsequent retries can proceed.
-                constraint_removed = True
-
-        open_gripper(robot_id, gui)
-        # Longer settle on retries so a snagged object has more time to
-        # slip free under gravity.
-        for _ in range(30 + 30 * (attempt - 1)):
-            env.step_simulation()
-        env.update_object_positions()
-
-        ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
-        ee_pos = np.array(ee_state[0])
-        obj_pos = np.array(env.objects[dropped_name].position)
-        ee_to_obj_dist = float(np.linalg.norm(ee_pos - obj_pos))
-        lin_vel, _ = p.getBaseVelocity(held_body_id)
-        speed = float(np.linalg.norm(lin_vel))
-
-        # Heuristics:
-        # • If the object COM sits >= 8 cm from the EE, fingers can't
-        #   still be pinching it (Panda finger length ~5.4 cm).
-        # • If it's closer but at rest, it may have landed directly under
-        #   the gripper — that's still a successful drop.
-        far_enough = ee_to_obj_dist >= 0.08
-        at_rest = speed < 0.02
-        if far_enough and at_rest:
-            drop_ok = True
-            print(f"    -> Released {dropped_name} "
-                  f"(EE→obj {ee_to_obj_dist*100:.1f} cm, speed "
-                  f"{speed*100:.1f} cm/s)")
-            break
-        print(f"    Drop verification failed: EE→obj {ee_to_obj_dist*100:.1f} cm, "
-              f"speed {speed*100:.1f} cm/s — retrying.")
-
-    if not drop_ok:
+    print(f"  Replanning while holding {dropped_name or '?'} — releasing.")
+    if not _release_and_verify_drop(env, robot_id, gui,
+                                     grasp_constraint_id, held_body_id,
+                                     dropped_name,
+                                     max_attempts=max_attempts):
         return False, state_updates
+    if dropped_name is None or dropped_name not in env.objects:
+        # Helper succeeded via best-effort path; nothing to refresh.
+        return True, state_updates
 
     aabb_min, aabb_max = p.getAABB(held_body_id)
     aabb_min = np.array(aabb_min)
@@ -636,17 +672,26 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
 
     move_robot_smooth(robot_id, contact_joints, gui)
 
-    open_gripper(robot_id, gui)
-
-    # Remove the fixed constraint so the object responds to gravity
-    # and rests on the table surface.
+    # Verify the cube actually falls free of the gripper — finger-pad
+    # snags / position-control overshoot can leave it attached visually
+    # even after removeConstraint (audit #75).  Helper opens the gripper,
+    # removes the constraint, settles, and retries on failure.  On a
+    # verified drop the caller's post-place lift + plan-client sync run
+    # normally; on failure return None and let the dispatcher replan.
     if grasp_constraint_id is not None:
-        p.removeConstraint(grasp_constraint_id)
-
-    # 30 steps ≈ 0.125 s — let the placed object settle before retreating
-    # so it reaches a stable resting pose and doesn't tip over.
-    for _ in range(30):
-        p.stepSimulation()
+        if not _release_and_verify_drop(env, robot_id, gui,
+                                         grasp_constraint_id,
+                                         held_body_id, obj_name):
+            print(f"    ERROR: drop verification failed for {obj_name} "
+                  f"after place — aborting (audit #75)")
+            return None
+    else:
+        # Defensive fallback: place called without a held object (not
+        # reachable from a planner-scheduled action, but the surface
+        # API tolerates it).
+        open_gripper(robot_id, gui)
+        for _ in range(30):
+            p.stepSimulation()
 
     # Hardcoded post-place lift (audit #36, THESIS_NOTES §19): give the
     # next plan_motion ~10 cm of safe headroom over the just-placed cube.
@@ -767,16 +812,19 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
 
     move_robot_smooth(robot_id, contact_joints, gui)
 
-    open_gripper(robot_id, gui)
-
-    p.removeConstraint(grasp_constraint_id)
-
-    # 60 settle steps (vs 30 for place): a stacked cube on a flat support
-    # face needs a touch more time to find equilibrium before we read its
-    # final pose into the registry.  Picked empirically — long enough to
-    # damp visible micro-bouncing, short enough to keep the run snappy.
-    for _ in range(60):
-        p.stepSimulation()
+    # Verify the cube actually falls free of the gripper — finger-pad
+    # snags / position-control overshoot can leave it attached visually
+    # even after removeConstraint (audit #75).  Helper opens the gripper,
+    # removes the constraint, settles 60 steps (matching the prior in-
+    # line settle so the post-stack AABB read into the registry doesn't
+    # see a micro-bouncing cube), and retries on failure.
+    if not _release_and_verify_drop(env, robot_id, gui,
+                                     grasp_constraint_id,
+                                     held_body_id, obj_name,
+                                     base_settle_steps=60):
+        print(f"    ERROR: drop verification failed for {obj_name} on "
+              f"{on_obj_name} — aborting (audit #75)")
+        return None
 
     # Hardcoded post-stack lift (audit #36, THESIS_NOTES §19): the EE
     # currently sits on top of the freshly stacked column; lift ~10 cm
