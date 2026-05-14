@@ -27,7 +27,7 @@ import math
 import sys
 from collections import defaultdict
 from pathlib import Path
-from statistics import mean, pstdev
+from statistics import mean, median, pstdev, quantiles
 from typing import Dict, List, Optional
 
 try:
@@ -845,6 +845,101 @@ def plot_wallclock_vs_planning(
     return out_path
 
 
+def plot_tampura_wallclock_comparison(
+    rows: List[dict],
+    title: str,
+    out_path: Path,
+) -> Optional[Path]:
+    """Bar chart: our find-and-tray-stack wall_clock_s (median + IQR
+    over seeds, success-only) vs TAMPURA Partial Observability
+    (57 ± 38 from arXiv:2403.10454 Table II).
+
+    Audit #73 TIER C plot 9.  Three bars: semantic boxels, uniform
+    baseline, TAMPURA Partial Observability.  Our numbers use
+    median + IQR (robust to long-tail outliers visible in plot 8);
+    TAMPURA reports mean ± std.  Hardware-parity caveat from
+    THESIS_NOTES §21.1 lives in the figure caption.
+    """
+    # TAMPURA Partial Observability — arXiv:2403.10454 Table II,
+    # 20 trials, mean ± std.  Hardcoded constants per audit spec;
+    # update if the paper revises.
+    TAMPURA_MEAN = 57.0
+    TAMPURA_STD = 38.0
+    TAMPURA_N = 20
+
+    our_data: Dict[str, List[float]] = defaultdict(list)
+    for r in rows:
+        if r.get("goal") != "find-and-tray-stack":
+            continue
+        if not r.get("success"):
+            continue
+        wc = r.get("wall_clock_s")
+        if wc in (None, ""):
+            continue
+        try:
+            our_data[r.get("baseline") or "semantic"].append(float(wc))
+        except (TypeError, ValueError):
+            continue
+
+    if not any(our_data.values()):
+        print(f"[plotter] no successful find-and-tray-stack cells "
+              f"for {title}")
+        return None
+
+    bars = []  # (label, central, lo_err, hi_err, n)
+    for baseline in sorted(our_data.keys()):
+        vs = sorted(our_data[baseline])
+        n = len(vs)
+        if n == 0:
+            continue
+        med = median(vs)
+        if n >= 4:
+            q1, _, q3 = quantiles(vs, n=4)
+        else:
+            # n < 4: not enough data for quartiles; fall back to
+            # min/max range so the bar still gives a magnitude clue.
+            q1, q3 = vs[0], vs[-1]
+        bars.append((f"Ours\n{baseline}", med, med - q1, q3 - med, n))
+    bars.append(("TAMPURA\nPartial Obs.",
+                 TAMPURA_MEAN, TAMPURA_STD, TAMPURA_STD, TAMPURA_N))
+
+    if not HAVE_MPL:
+        print(f"\n=== {title} (matplotlib not available) ===")
+        for lab, c, lo, hi, n in bars:
+            print(f"  {lab.replace(chr(10), ' ')}: "
+                  f"{c:.1f} (-{lo:.1f}/+{hi:.1f}) n={n}")
+        return None
+
+    fig, ax = plt.subplots(figsize=(6.5, 5))
+    xs = list(range(len(bars)))
+    colors = ["#1f77b4", "#ff7f0e", "#d62728"]
+    centrals = [b[1] for b in bars]
+    yerr_lo = [b[2] for b in bars]
+    yerr_hi = [b[3] for b in bars]
+    ax.bar(xs, centrals, 0.6, yerr=[yerr_lo, yerr_hi], capsize=5,
+           color=colors[:len(bars)], edgecolor="black", linewidth=0.5)
+    for x, (_, c, _, hi, n) in zip(xs, bars):
+        ax.text(x, c + hi, f"{c:.1f}s\n(n={n})",
+                ha="center", va="bottom", fontsize=9)
+    ax.set_xticks(xs)
+    ax.set_xticklabels([b[0] for b in bars])
+    ax.set_ylabel("wall clock per episode (s)")
+    ax.set_title(title)
+    ax.set_ylim(bottom=0)
+    ax.grid(True, axis="y", alpha=0.3)
+    fig.text(0.5, 0.02,
+             "Ours: median + IQR over seeds, success-only.  "
+             "TAMPURA: mean ± std (Table II, 20 trials).\n"
+             "Hardware caveat: TAMPURA 20-core Xeon Gold 6248; "
+             "ours 8-core consumer CPU (THESIS_NOTES §21.1).",
+             ha="center", fontsize=8, style="italic")
+    fig.tight_layout(rect=[0, 0.10, 1, 1])
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
+
+
 def group_failure_modes(rows: List[dict]
                         ) -> Dict[tuple, Dict[str, int]]:
     """``{(goal, baseline): {exit_reason: count}}``.
@@ -1394,6 +1489,14 @@ def main(argv=None) -> int:
             title="Replan-count distribution by (goal, baseline)",
             out_path=out_dir / "plan_count_distribution.png",
         )
+        # Audit #73 TIER C plot 9: TAMPURA wall-clock comparison
+        # for find-and-tray-stack.  Sweep-level; no-op if the sweep
+        # has no successful find-and-tray-stack cells.
+        plot_tampura_wallclock_comparison(
+            all_rows,
+            title="TAMPURA wall-clock comparison (find-and-tray-stack)",
+            out_path=out_dir / "tampura_wallclock_comparison.png",
+        )
         write_summary_table(all_rows, out_dir)
         return 0
 
@@ -1594,6 +1697,14 @@ def main(argv=None) -> int:
         group_plan_count_distribution(all_rows),
         title="Replan-count distribution by (goal, baseline)",
         out_path=out_dir / "plan_count_distribution.png",
+    )
+    # Audit #73 TIER C plot 9: TAMPURA wall-clock comparison
+    # for find-and-tray-stack.  Sweep-level; no-op if the sweep
+    # has no successful find-and-tray-stack cells.
+    plot_tampura_wallclock_comparison(
+        all_rows,
+        title="TAMPURA wall-clock comparison (find-and-tray-stack)",
+        out_path=out_dir / "tampura_wallclock_comparison.png",
     )
     # Audit #73 — tabular summary alongside the plots (markdown +
     # 2 CSVs).  Aggregate by (goal, baseline) + per-occluder breakdown.
