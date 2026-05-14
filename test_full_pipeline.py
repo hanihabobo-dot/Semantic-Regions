@@ -852,6 +852,11 @@ def main(gui=True, run_logger=None, scene_config=None,
     boxel_centers = {b.id: b.center for b in registry.boxels.values()}
 
     plan_count = 0
+    # Audit #73 step 3(c) plot 4: count of executed sense actions
+    # (one increment per entry into the 'sense' dispatch branch,
+    # regardless of outcome).  Mirrors plan_count plumbing through
+    # to report_run_outcome → timing_summary.json.
+    sense_count = 0
     # Per-call planner.plan() durations.  Captured originally for
     # audit #30 baseline timing; now consumed by the eval runner
     # (audit #9) for scalability plots.
@@ -1177,6 +1182,10 @@ def main(gui=True, run_logger=None, scene_config=None,
                 print(f"    -> Arrived at {dest_boxel_id}")
 
             elif action_name == 'sense':
+                # Audit #73 step 3(c) plot 4: count every attempted
+                # sense action (any outcome — found_target, empty,
+                # contains_nontarget, still_blocked, missing_shadow).
+                sense_count += 1
                 # See pipeline_actions.handle_sense_action for the full
                 # body.  When result.continue_ is False the dispatch
                 # loop breaks → outer replan loop drops any held object
@@ -1512,6 +1521,7 @@ def main(gui=True, run_logger=None, scene_config=None,
         on_relations=on_relations,
         belief=belief,
         plan_count=plan_count,
+        sense_count=sense_count,
         shadows=shadows,
         blocked_giveup_shadows=blocked_giveup_shadows,
         max_replans=max_replans,
