@@ -259,10 +259,13 @@ def _release_and_verify_drop(
     safety net, audit #58) and execute_place / execute_stack (action
     paths, audit #75).
 
-    A drop is successful when, after settling:
-      • Object COM is >= 8 cm from the EE (no longer pinched), or
-      • Object COM is closer but linear speed is near zero (came to rest
-        directly under the gripper — still a clean drop).
+    Drop verification queries PyBullet contact points: a released cube
+    rests on at least one non-robot body (table, tray, another cube).
+    A finger-pad snag shows only robot-link contacts — the cube is
+    still held by friction even after the constraint is gone.  The
+    earlier distance-and-speed heuristic could not distinguish a tight
+    stack (EE 1-2 cm above the cube, speed 0) from a snag (cube pinned
+    at the EE, speed 0) — both looked identical.
 
     Failure modes covered:
       • removeConstraint raises (already removed, invalid id).
@@ -301,30 +304,22 @@ def _release_and_verify_drop(
             env.step_simulation()
         env.update_object_positions()
 
-        ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
-        ee_pos = np.array(ee_state[0])
-        obj_pos = np.array(env.objects[dropped_name].position)
-        ee_to_obj_dist = float(np.linalg.norm(ee_pos - obj_pos))
-        lin_vel, _ = p.getBaseVelocity(held_body_id)
-        speed = float(np.linalg.norm(lin_vel))
-
-        # Heuristics — EITHER condition is sufficient (audit #75 refine):
-        # • COM >= 8 cm from EE: fingers can't still be pinching (Panda
-        #   finger length ~5.4 cm).
-        # • Closer but at rest: the cube landed directly under the
-        #   gripper (typical for execute_stack onto a low support like
-        #   the tray — EE hovers ~7.5 cm above the stacked cube) —
-        #   still a clean drop.
-        far_enough = ee_to_obj_dist >= 0.08
-        at_rest = speed < 0.02
-        if far_enough or at_rest:
+        # Verify via PyBullet contacts: a released cube touches a
+        # non-robot body (table, tray, another cube).  A finger-pad
+        # snag shows only robot contacts — the EE→obj-distance / speed
+        # heuristic (run #4 seed 999, blue_object) couldn't tell those
+        # apart because a snagged cube sits at the contact pose with
+        # near-zero speed, identical to a tight stack.
+        contacts = p.getContactPoints(bodyA=held_body_id)
+        contact_bodies = {c[2] for c in contacts}
+        non_robot = contact_bodies - {robot_id, -1}
+        if non_robot:
             print(f"    -> Released {dropped_name} "
-                  f"(EE→obj {ee_to_obj_dist*100:.1f} cm, speed "
-                  f"{speed*100:.1f} cm/s)")
+                  f"(resting on bodies {sorted(non_robot)})")
             return True
         print(f"    Drop verification failed for {dropped_name}: "
-              f"EE→obj {ee_to_obj_dist*100:.1f} cm, speed "
-              f"{speed*100:.1f} cm/s — retry {attempt}/{max_attempts}.")
+              f"only contacts are {sorted(contact_bodies) or 'none'} "
+              f"(robot id={robot_id}) — retry {attempt}/{max_attempts}.")
 
     return False
 
