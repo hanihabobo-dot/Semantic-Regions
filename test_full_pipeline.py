@@ -990,12 +990,13 @@ def main(gui=True, run_logger=None, scene_config=None,
             current_config=current_config,
             known_empty_shadows=known_empty,
             moved_occluders=dict(belief.occluders_moved),
-            max_time=1800.0,  # audit #54 follow-up — bumped from 120 s; the
-                              # find-and-tray-stack 1-cube hidden run gave up at
-                              # 45 s on adaptive-search exhaustion under the
-                              # 120 s cap, so more rope lets the sampler retry
-                              # more skeletons / stream samples.
-            verbose=False,
+            max_time=args.max_plan_time,  # audit #76 — CLI plumb (default
+                              # 1800.0, the audit #54 follow-up bump from
+                              # 120 s).  Lower values fail fast for
+                              # diagnostic runs; the default keeps the
+                              # 30-min budget that lets the sampler retry
+                              # many skeletons / stream samples.
+            verbose=(args.log_level == 'verbose'),  # audit #76 plumb
             visible_target_locations=visible_target_locations,
             # on/clear facts only emitted into init when stackable
             # objects is supplied — holding-goal runs pay nothing.
@@ -1058,8 +1059,8 @@ def main(gui=True, run_logger=None, scene_config=None,
                 current_config=current_config,
                 known_empty_shadows=known_empty,
                 moved_occluders=dict(belief.occluders_moved),
-                max_time=1800.0,
-                verbose=False,
+                max_time=args.max_plan_time,  # audit #76 plumb
+                verbose=(args.log_level == 'verbose'),  # audit #76 plumb
                 visible_target_locations=visible_target_locations,
                 on_relations=(on_relations
                               if goal_kind in ('stack', 'find-and-tray-stack')
