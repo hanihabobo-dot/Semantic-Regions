@@ -560,23 +560,35 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
         attachment, and a RobotConfig representing the robot's actual
         final joint configuration (contact position with object held).
     """
-    # --- Contact height from object geometry, not the planning offset --------
-    # grasp.position[2] is 0.10 m (the planner reaches that approach
-    # height via `move`; execution lowers to contact via solve_ik
-    # seeded from `config` so the contact pose stays in the same IK
-    # branch — audit #37/#38).  10 cm clearance also keeps the wrist
-    # out of the camera→shadow ray paths so a subsequent sense action
-    # is not blocked by the arm itself.
-    # For execution we need the grasptarget at the object, not above it.
+    # --- Contact height from cube TOP, not cube centre (audit #81 refine) ---
+    # panda_grasptarget (link 11) sits at the centre of the finger-
+    # pad closing area; pads extend ~3.5 cm below the grasptarget.
+    # Pre-refine we used obj_pos[2] (cube centre) clamped to
+    # table_z + 0.035 — for 4 cm cubes this happened to land 5 mm
+    # below the cube top (good wrap-around), but for larger cubes
+    # the grasptarget sat at the cube CENTRE, leaving pads to wrap
+    # only the lower half so the cube could rotate forward out of
+    # the grip.  Now we measure cube top from getAABB and offset
+    # down by a fixed 5 mm so the % grip height is invariant in
+    # cube size — small cubes match the previous "clamped to
+    # table_z + 0.035" behaviour, large cubes get a proportionally
+    # higher grasp.  cube_hw (smaller of XY half-widths) is reused
+    # for the close_gripper target below.
     #
-    # panda_grasptarget (link 11) sits at the center of the finger-pad
-    # closing area.  Finger pads extend ~3.5 cm below the grasptarget.
-    # Ideal contact: grasptarget at the object center so fingers wrap
-    # symmetrically.  Floor: finger tips must stay above the table.
+    # User direction 2026-05-15: "when the gripper is targeting a
+    # big object, the centre it's targeting should be higher.  make
+    # it as high percentage wise as it is when the object is small."
+    obj_id = env.objects[obj_name].object_id
+    aabb_min, aabb_max = p.getAABB(obj_id)
+    cube_top_z = float(aabb_max[2])
+    cube_hw = min(aabb_max[0] - aabb_min[0],
+                   aabb_max[1] - aabb_min[1]) / 2.0
+
+    _GRASP_MARGIN_FROM_TOP = 0.005  # 5 mm below cube top
     _FINGER_TIP_DEPTH = 0.035
     table_z = env.table_surface_height
     min_contact_z = table_z + _FINGER_TIP_DEPTH
-    contact_z = max(obj_pos[2], min_contact_z)
+    contact_z = max(cube_top_z - _GRASP_MARGIN_FROM_TOP, min_contact_z)
 
     contact_ee = np.array([
         obj_pos[0] + grasp.position[0],
@@ -609,7 +621,16 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # pick/place/stack change it.  No drift channel for this safety net
     # to defend against; the dispatcher already refuses pick-on-pick.
     move_robot_smooth(robot_id, contact_joints, gui)
-    close_gripper(robot_id, gui)
+
+    # Close target = cube half-width along the finger-closing axis
+    # (use the smaller of XY half-widths as a conservative bound
+    # since the grasp orientation may yaw the gripper).  Fingers
+    # settle at the cube surface under the gentle 10 N motor budget
+    # — no smashing, no objects floating in the gripper above the
+    # cube top.  Floor at 5 mm so a degenerate cube_hw can't drive
+    # the controller to zero or negative.
+    close_gripper(robot_id, gui,
+                  target_finger_pos=max(0.005, cube_hw))
 
     # Attach the object to the gripper with a fixed constraint.
     # This is a simulation simplification — real grippers use friction,
@@ -619,7 +640,8 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # instant rather than using the planned grasp.position offset — position-
     # control lag means the true EE pose differs slightly, and using the
     # planned offset causes a corrective snap impulse (audit #98).
-    obj_id = env.objects[obj_name].object_id
+    # obj_id already resolved at the top of execute_pick (for the AABB
+    # read that drives contact_z and the close_gripper target).
     ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
     ee_world_pos, ee_world_orn = ee_state[0], ee_state[1]
     obj_world_pos, obj_world_orn = p.getBasePositionAndOrientation(obj_id)
