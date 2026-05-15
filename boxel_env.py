@@ -1143,11 +1143,26 @@ class BoxelTestEnv:
             # back of the reach disk; the per-attempt success rate goes
             # down accordingly, so the budget doubles to keep the
             # exhaustion-rate-per-seed roughly constant for eval sweeps.
+            # Bumped 800 -> 4000 on 2026-05-15 for audit #77: the
+            # n_occluders=2 + n_hidden=2 and n_occluders=3 + n_hidden=3
+            # corners of random_pairs_scene have the tightest feasibility
+            # window (small placer disk behind small occluders intersected
+            # with reach disk, table window, and 0.10 m spacing).
+            # Empirical pass rate on the audit-77 600-candidate corpus
+            # build (commit 1a4ca47): 33.7% — only a marginal gain over
+            # 800 (~30%).  The remaining rejections are structural for
+            # those seeds (some occluder layouts leave no feasible
+            # shadow region behind ANY occluder under the reach +
+            # table + spacing constraints), not budget-bound — further
+            # bumps offer diminishing returns.  4000 is the cheapest
+            # value that empirically helps; geometric tests are
+            # ~25 us/iter so worst-case wall-clock per failing seed is
+            # ~100 ms.
             # On exhaustion we return None and _create_targets raises
             # 'Could not place ...' which the seed-retry layer in
             # test_full_pipeline.main() treats as retryable (audit #68
             # auto-rolls under --seed-retry / seed_auto).
-            for _ in range(800):
+            for _ in range(4000):
                 idx = int(rng.randint(len(occluder_info)))
                 (ox, oy), occ_half = occluder_info[idx]
                 dx = ox - cam_x
