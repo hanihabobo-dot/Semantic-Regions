@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #77, #78, #63 (no TIER 0 open; #82 closed 2026-05-15 later)   #
+#  OPEN ISSUES — #83 (PICK UP NEXT), #84, #77, #78, #63                        #
 #                                                                              #
 ################################################################################
 
@@ -2198,6 +2198,236 @@ Related:
 
 
 ================================================================================
+#83. STALE OBJECT BOXEL AFTER PICK/STACK FAILURE — INFINITE REPLAN LOOP
+================================================================================
+Status:   OPEN.  Raised 2026-05-15 (later) by user after seed-999
+          GUI re-run with the new #82 diagnostics enabled (log
+          run_2026-05-15_19-59-16).  User observation: "the arm
+          is just going back and forth hisrtaricly."
+Priority: TIER 0 — correctness; the dispatcher enters an infinite
+          replan loop after a single stack failure, because the
+          registry never learns that cyan_object's physical pose
+          has changed.  Every subsequent plan re-picks "from the
+          stale boxel location," captures a wrong constraint
+          offset, and re-fails identically.  Run-aborting in
+          practice (seed-999 ran 11+ identical iterations before
+          the user stopped it).
+Where:    test_full_pipeline.py — dispatcher place / stack
+            state-clear branches (~line 1329 / ~line 1455).
+            After grasp_constraint_id = None + held_body_id =
+            None + held_object_boxel_id = None, the OBJECT
+            boxel for the still-existing-but-now-displaced cube
+            is NOT refreshed.
+          execution.py — refresh_object_aabbs (audit #71) already
+            iterates registry OBJECT boxels and writes live AABBs.
+            Currently only invoked from handle_sense_action's
+            outcome branches; a sibling call from the dispatcher
+            state-clear branches would close this gap.
+Repro:    --scene random-pairs --goal find-and-tray-stack --seed 999
+          --gui --boxel-viz.  Log: logs/run_2026-05-15_19-59-16.
+            Plan #1 picks cyan_object from shadow_of_blue_object__00
+              OK (line 215), stacks on purple_object FAILS — cube
+              lands on plane at z=-0.0001 instead of expected
+              z=0.3763 (purple top), all 3 drop-verify retries
+              fail (lines 226-228), dispatcher clears held state
+              (line 230).
+            Plan #2 (line 247) reports obj_at_boxel for cyan_object
+              still as ['cyan_object'] — the OBJECT boxel sits at
+              the original detection location, but the cube is on
+              the floor.
+            Plan #2-N (296, 369, 442, 515, 589, 662, 735, 810,
+              884, 959) all "Pick cyan_object from cyan_object"
+              -> constraint captures stale offset -> stack release
+              puts cube back on floor -> drop-verify fails -> clear
+              state -> replan.  By plan #5+ the new audit_robot_-
+              held_state helper fires "(post-pick:cyan_object):
+              expected only body=8, robot in contact with bodies=[9]"
+              — robot is closing on purple_object (body 9) instead
+              of cyan_object because cyan isn't where the planner
+              thinks it is.
+Depends:  Builds on #82 [DONE 2026-05-15 (later)] (diagnostic that
+          surfaced this).  Independent of #84 (root-cause of WHY
+          the first stack misses purple's top) — #83 only contains
+          the cascade so a single execution failure doesn't lock
+          the whole run.
+Effort:   ~30 LOC.  Single commit.
+
+What:  The dispatcher's audit-#79 state-clear resets (handempty)
+       symbolically but does not refresh the now-displaced cube's
+       OBJECT boxel.  refresh_object_aabbs already exists and does
+       exactly this for handle_sense_action — wire it into the
+       state-clear branches so the next planner.plan() sees the
+       cube's actual location.
+
+Fix:   ONE COMMIT.
+       (a) In test_full_pipeline.py, both place and stack
+           state-clear branches: after grasp_constraint_id = None
+           / held_body_id = None / held_object_boxel_id = None,
+           call refresh_object_aabbs(env, registry, viz=viz).  This
+           rewrites every OBJECT boxel's AABB from live PyBullet,
+           so the displaced cube's boxel center / min_corner /
+           max_corner reflect its actual on-floor pose.
+       (b) Optionally — if the cube's new pose puts it under
+           the table edge / outside table bounds, the planner
+           may still struggle to pick from that boxel.  For now,
+           a stale-boxel-refreshed-to-floor is at least a
+           HONEST stale fact (planner can fail fast on
+           unreachable IK) rather than a SILENT one
+           (planner keeps trying the wrong location).  A
+           cube-fell-off-the-workspace recovery is out of scope
+           for this issue.
+
+Care:  (1) Diagnostic-only follow-up on the FIRST stack
+           failure (Problem A in the log analysis) stays in
+           #84.  This issue ONLY addresses the CASCADE
+           (Problem B — registry staleness causing the
+           infinite loop).
+       (2) refresh_object_aabbs early-returns on per-object
+           AABB-unchanged tolerance, so the cost is near-zero
+           for the common case where state-clear fires but
+           every cube actually stayed put.
+       (3) Per-object filtering already in place — no risk of
+           refreshing trays / table / robot (refresh_object_-
+           aabbs iterates only BoxelType.OBJECT).
+
+Related:
+       #82 [DONE 2026-05-15 (later)] — diagnostic commit that
+            surfaced the cascade (audit_robot_held_state's
+            "expected only body=8, robot in contact with
+            bodies=[9]" anomaly fires because the gripper is
+            closing on purple where it thinks cyan should be).
+       #71 [DONE 2026-05-12 (later)] — refresh_object_aabbs
+            sister hook on handle_sense_action; this issue
+            extends the same idea to pick/stack failure.
+       #79 [DONE 2026-05-15] — dispatcher state-clear branch
+            being extended.
+       #84 (open) — root cause of WHY the first stack misses
+            purple's top.  Orthogonal: #83 is the cascade
+            containment, #84 is the underlying failure.
+
+
+================================================================================
+#84. CUBE-ON-CUBE STACK MIS-LANDING — ROOT CAUSE DIAGNOSTIC
+================================================================================
+Status:   OPEN.  Raised 2026-05-15 (later) alongside #83 from
+          seed-999 GUI re-run log run_2026-05-15_19-59-16.  Same
+          user observation ("back and forth hisrtaricly") — the
+          cascade is #83, the underlying failure that triggers
+          the cascade is here.
+Priority: TIER 0 — correctness.  Without #84 we have a stack
+          action that lands the cube on the plane instead of
+          the support, with no instrumentation telling us why.
+          #83 contains the cascade but does not prevent the
+          underlying failure.  Diagnostic-only commit (mirror
+          of #82 in shape); the actual behavioural fix lands
+          in a separate issue once we know whether the failure
+          is in IK / lower motion / grasp tilt / support pose /
+          something else.
+Where:    execution.py:
+            • execute_stack — instrument the contact_z
+              computation: log support_id, sup_min / sup_max
+              (live AABB), sup_top_z, held_body_id, held_aabb_-
+              min / held_aabb_max (live AABB), held_half_height,
+              ee_state[0] (EE world pos), obj_cur_z (held cube
+              world Z), ee_to_obj_z, target_obj_z, contact_z,
+              contact_ee.  All single-line.
+            • execute_stack — after move_robot_smooth(contact_-
+              joints): log live EE world pos and live held cube
+              world pos + orientation (degrees).  Compare against
+              contact_ee target.  Surfaces motion-control overshoot
+              / undershoot.
+            • _release_and_verify_drop — at function entry: log
+              held cube world pos + orientation + AABB BEFORE the
+              release, so a tilt-at-grip vs tilt-at-release split
+              is visible.
+Repro:    --scene random-pairs --goal find-and-tray-stack --seed 999
+          --gui --boxel-viz.  Log: logs/run_2026-05-15_19-59-16.
+          Plan #1 line 215-230: cyan picked from shadow_of_blue_-
+            object__00 ("PICKED UP"), stacked on purple_object —
+            cube ends at z=-0.0001 (plane) instead of z≈0.3763
+            (purple top).  Drop-verify attempt 1 has
+            lateral_drift=11.79mm and cube_tilt_deg=4.72 — cube
+            is mid-fall.  By attempt 2/3 the cube has settled at
+            z≈0 on the plane.
+          Three hypotheses, none yet ruled out by the existing
+          diag:
+            (H1) IK / motion miscalc — contact_ee was computed
+                 for the wrong support pose (purple_object moved
+                 between contact_z compute and arm arrival).
+            (H2) Pick-time grasp tilt — close_gripper rotated
+                 cyan in the gripper, the live cube AABB at stack
+                 time has the cube hanging asymmetrically, cube
+                 catches on purple's edge instead of seating.
+            (H3) Tray rim interference — the gripper's outer
+                 footprint hits the tray rim while lowering
+                 cyan onto purple_object inside the tray cavity;
+                 cyan tumbles off when fingers open.
+Depends:  Builds on #82 [DONE 2026-05-15 (later)] (per-link
+          contact diag).  Independent of #83 (registry
+          refresh) — #84 can land separately; #83 only fixes
+          the cascade, #84 fixes the underlying physical
+          failure once data is in.
+Effort:   ~1 hour.  Single commit.  Diagnostic-only — NO
+          behavioural change.
+
+What:  The new #82 diag distinguishes "cube welded to robot"
+       (robot_link_contacts populated) from "cube somewhere else"
+       (non_robot_contacts populated).  In seed-999 cyan_object's
+       failed stack reports robot_link_contacts={none} and
+       non_robot_contacts=[0] (plane body) — so the cube cleanly
+       left the gripper and ended up on the floor.  We don't yet
+       have data to tell which hypothesis (H1, H2, H3) is right.
+
+Fix:   ONE DIAGNOSTIC COMMIT.
+
+       Step 1 — execute_stack pre-lower diag.  Add a single
+       "[#84-diag] stack {obj} on {on_obj}:" line listing the
+       computed contact_ee, target_obj_z, sup_top_z, ee_to_obj_z,
+       held_half_height, support AABB (min/max), held cube AABB
+       (min/max), held cube world orientation in degrees.
+
+       Step 2 — execute_stack post-arrival diag.  After
+       move_robot_smooth(contact_joints), log the live EE world
+       pos and live held cube world pos + orientation.  Compare
+       deltas against contact_ee / target_obj_z.  Overshoot >5 mm
+       or tilt drift >5° gets a "[#84-diag] arrival-deviation"
+       prefix so it greps easily.
+
+       Step 3 — _release_and_verify_drop pre-release diag.  At
+       function entry, log held cube pose + AABB.  This brackets
+       the entry-to-loop transition so a pre-release cube already-
+       on-floor anomaly is distinguishable from a release-time
+       fall.
+
+       Step 4 — re-run seed-999 with GUI and share the log.  The
+       new diag triple lets us classify (H1/H2/H3) and file a
+       targeted fix issue.
+
+Care:
+       (1) Diagnostic-only commit.  Behavioural fix lands later.
+       (2) Log noise: ~3 extra lines per stack attempt.
+           execute_stack is rare (one per plan); cost is
+           negligible.
+       (3) Don't bundle with #83.  #83 is a one-shot helper
+           hookup; #84 is instrumentation.  Per audit policy on
+           atomic commits, ship separately so a regression in
+           one doesn't force-revert the other.
+
+Related:
+       #82 [DONE 2026-05-15 (later)] — release-time per-link
+            and tilt diag; #84 mirrors its shape on the stack-
+            entry side.
+       #40 [DONE 2026-05-05; archived] — _verify_cube_on
+            stack physics check; runs AFTER stack returns.  #84
+            instruments the path INTO the stack, between
+            contact_z compute and release.
+       #71 [DONE 2026-05-12 (later)] — refresh_object_aabbs
+            sister hook.
+       #83 (open) — registry-refresh cascade fix; companion to
+            this issue.
+
+
+================================================================================
 SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-15)
 ================================================================================
 
@@ -2238,13 +2468,47 @@ audit-#79 state-clear creates a "robot holding two cubes"
 divergence between PDDL (handempty) and physics; #82 was the
 diagnostic gate, landed 2026-05-15 (later) in commit 6f042b1
 (per-link contact + cube tilt + held-state anomaly helper, no
-behavioural change).  The behavioural fix awaits a follow-up
-issue once seed-999 is re-run on the new instrumentation.
+behavioural change).  Seed-999 re-run on the new
+instrumentation (log run_2026-05-15_19-59-16) DID NOT surface
+the #82 stuck-on-release symptom this time — robot_link_-
+contacts={none} on every failure — but it DID surface two new
+TIER 0 problems: #83 (registry never refreshes the displaced
+cube's AABB after a stack failure, so the dispatcher enters
+an infinite replan loop; user reported as "arm just going
+back and forth hisrtaricly") and #84 (the underlying first-
+stack failure puts cyan_object on the plane at z≈0 instead
+of purple_object's top at z≈0.3763; three hypotheses unranked
+without further diag).  #83 is the cascade containment fix
+and is marked PICK UP NEXT; #84 is the root-cause diagnostic
+sibling.
 
 TIER 0 — TOP PRIORITY (correctness / sim integrity):
-  (none open — #82 closed 2026-05-15 (later); see Closed since
-   previous summary below.  Next pick-up: #77 / #78 / #63 per
-   TIER order.)
+  #83  STALE OBJECT BOXEL AFTER PICK/STACK FAILURE — PICK UP NEXT.
+       Seed-999 GUI re-run with the #82 diagnostics enabled
+       (log run_2026-05-15_19-59-16) showed the dispatcher
+       enters an infinite replan loop after a single stack
+       failure: cyan_object falls to the floor on first stack
+       attempt, but the OBJECT boxel never refreshes from the
+       new AABB, so every subsequent plan re-picks "from the
+       stale boxel location."  ~30 LOC: call refresh_object_-
+       aabbs from the place / stack state-clear branches in
+       test_full_pipeline.py, mirroring the existing hook in
+       handle_sense_action.  Single commit.  Cascade contain-
+       ment only; root cause of WHY the first stack misses
+       purple's top stays in #84.
+  #84  CUBE-ON-CUBE STACK MIS-LANDING DIAGNOSTIC.  In the
+       same seed-999 log, cyan_object's first stack on
+       purple_object lands the cube on the plane (z≈0) instead
+       of purple's top (z≈0.3763), with robot_link_contacts=
+       {none} and non_robot_contacts=[0] (plane body) — so the
+       cube cleanly left the gripper and missed its support.
+       Three hypotheses (support pose drift / pick-time grasp
+       tilt / tray rim interference); none ruled out by the
+       existing #82 diag.  Diagnostic-only commit mirroring
+       #82's shape: pre-lower + post-arrival + pre-release
+       state dumps in execute_stack and _release_and_verify_-
+       drop.  Behavioural fix lands as a follow-up once data
+       classifies the hypothesis.
 
 TIER 1 — CORRECTNESS / HIGH-PRIO:
   #77  Anytime compactness sweep — success rate vs time
@@ -2277,15 +2541,16 @@ TIER 3 — CODE QUALITY / DOC SWEEP:
        issues (now: #77, #78).  Explicitly the last commit
        before thesis submission per user 2026-05-08.
 
-Total open: 3 items (#77, #78, #63) per the OPEN ISSUES header at
-top (the source of truth).  Listed in TIER order for clarity —
-chronological numbers in the header are NOT priority-ordered (see
-the "ISSUE NUMBERING" banner near the top of this file).  No TIER 0
-open as of 2026-05-15 (later): #82 closed; the diagnostic data it
-adds (per-link contact + cube tilt + held-state anomaly) lands as a
-no-behaviour-change commit, and the actual welding-link fix awaits
-the next GUI re-run on seed-999 — that will surface as a new
-audit issue when the data identifies the welding link.
+Total open: 5 items (#83, #84, #77, #78, #63) per the OPEN ISSUES
+header at top (the source of truth).  Listed in TIER order for
+clarity — chronological numbers in the header are NOT priority-
+ordered (see the "ISSUE NUMBERING" banner near the top of this
+file).  TIER 0 has TWO items as of 2026-05-15 (later): #83
+(cascade containment — PICK UP NEXT) and #84 (root-cause
+diagnostic).  Both fall out of the seed-999 re-run of #82's
+diagnostic; #83 fixes the infinite replan loop in ~30 LOC, #84
+mirrors #82's diagnostic-only shape so the underlying stack mis-
+landing failure becomes targetable in a subsequent commit.
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
