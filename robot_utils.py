@@ -508,22 +508,36 @@ def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
 
 
 def open_gripper(robot_id: int, gui: bool = False):
-    """Open the Panda gripper (finger width ~0.08 m).
+    """Open the Panda gripper to URDF max (0.04 m per finger).
 
-    Audit #79 follow-up 2026-05-15: force bumped 50 -> 200 N and steps
-    30 -> 80 so the fingers reliably reach the URDF max (0.04 m per
-    finger = 0.08 m total) even when a cube is friction-pinched between
-    the pads.  The earlier 50 N / 30-step budget was tuned for unloaded
-    fingers ("force=50 N is well above the ~20 N needed to open unloaded
-    fingers"); under load it let cubes snag, audit #75's drop-verify
-    helper then failed 3x and the place / stack action aborted.  Higher
-    force is safe — the URDF position limit clips finger travel at 0.04
-    regardless; we just want the position controller to win against
-    finger-pad friction reaction during the open transient.  80 steps
-    at 240 Hz is ~0.33 s wall-clock, an extra ~0.2 s per release that
-    is negligible against typical 2-4 s arm motion.
+    Audit #81 2026-05-15: switched from POSITION_CONTROL to
+    resetJointState.  Audit #79's 200 N / 80 steps still lost the
+    fight against cube-pad friction at grasping width — fingers
+    stalled before reaching 0.04 and the pads kept grazing the cube
+    during retraction, dragging it laterally with the arm (seed-999
+    log run_2026-05-15_18-57-21 lines 188-190, 277-279:
+    constraint_gone=True robot_contacts=[2] AFTER open_gripper).
+    resetJointState teleports the fingers to URDF max instantly,
+    bypassing the motor controller's force ceiling AND eliminating
+    the sliding-pad retraction transient.  Sim-only behaviour but
+    acceptable for a thesis-grade release primitive per audit body
+    Step 2 mode (b) ("resetJointState directly to 0.04 ... bypasses
+    motor controller entirely — sim-only acceptable").
+
+    User direction 2026-05-15: "make sure addconstraint is actually
+    removed and that we dont sample a letting go grasp but really
+    just open up as maximally as we can."
+
+    A short POSITION_CONTROL hold (80 steps @ 240 Hz ~ 0.33 s) keeps
+    the fingers pinned at 0.04 while the cube falls under gravity and
+    settles; without the hold, transient pad-cube reaction forces
+    during the fall could drift the joint back inward.  Caller adds
+    further settle time via base_settle_steps in
+    _release_and_verify_drop.
     """
     import time
+    p.resetJointState(robot_id, FINGER_JOINTS[0], 0.04)
+    p.resetJointState(robot_id, FINGER_JOINTS[1], 0.04)
     for _ in range(80):
         p.setJointMotorControl2(robot_id, FINGER_JOINTS[0],
                                 p.POSITION_CONTROL,

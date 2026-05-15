@@ -37,8 +37,8 @@ import pybullet as p
 from boxel_data import BoxelData, BoxelType
 from reboxelize import reboxelize_free_space
 from streams import RobotConfig
-from robot_utils import (END_EFFECTOR_LINK, solve_ik, move_robot_smooth,
-                         open_gripper, close_gripper)
+from robot_utils import (END_EFFECTOR_LINK, FINGER_JOINTS, solve_ik,
+                         move_robot_smooth, open_gripper, close_gripper)
 
 
 def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
@@ -364,11 +364,17 @@ def _release_and_verify_drop(
             if expected_support_z is not None
             else f"bottom_z={cube_bottom_z:.4f} (no_expected)"
         )
+        # Audit #81 instrumentation: confirm fingers actually reached
+        # URDF max (0.04 per finger).  Pre-#81 with POSITION_CONTROL
+        # they could stall short under cube-pad friction.
+        finger_pos = [p.getJointState(robot_id, fj)[0]
+                       for fj in FINGER_JOINTS]
         diag = (f"constraint_gone={constraint_gone} "
                 f"robot_contacts={sorted(robot_contacts) or 'none'} "
                 f"non_robot_contacts={sorted(non_robot) or 'none'} "
                 f"{height_str} "
-                f"lateral_drift={lateral_drift * 1000:.2f}mm")
+                f"lateral_drift={lateral_drift * 1000:.2f}mm "
+                f"finger_pos=[{finger_pos[0]:.4f},{finger_pos[1]:.4f}]")
 
         ok = (constraint_gone
               and not robot_contacts
