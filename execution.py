@@ -850,6 +850,29 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
 
     move_robot_smooth(robot_id, contact_joints, gui)
 
+    # Audit #85: pre-release EE lift by 15 mm.  At place geometry the
+    # finger pads share Z-range with the held cube — if the cube tilted
+    # in the gripper at pick time (audit #81 gentle close, up to ~11 deg
+    # observed), a corner pokes into a pad when open_gripper fires and
+    # the strict #80 verify gate (iv) correctly rejects.  The 3-retry
+    # loop makes geometry WORSE by letting physics tilt the cube further
+    # under continuous pad pressure.  Lifting 15 mm moves the pad bottom
+    # clear so the cube falls the last 15 mm and settles flat.  Composes
+    # with the audit-#36 post-place lift (~10 cm, AFTER the verified
+    # drop): this pre-lift is for pad-cube geometry, the post-lift is
+    # for plan_motion headroom on the next move.  Vertical, 15 mm, well
+    # within the contact_joints IK neighbourhood — no plan_motion needed.
+    if grasp_constraint_id is not None:
+        pre_release_ee = contact_ee + np.array([0.0, 0.0, 0.015])
+        pre_release_joints = solve_ik(robot_id, pre_release_ee,
+                                       grasp.orientation, pc,
+                                       seed=contact_joints)
+        if pre_release_joints is None:
+            print(f"    ERROR: IK failed for pre-release lift of "
+                  f"{obj_name} — aborting (audit #85)")
+            return None
+        move_robot_smooth(robot_id, pre_release_joints, gui)
+
     # Verify the cube actually falls free of the gripper — finger-pad
     # snags / position-control overshoot can leave it attached visually
     # even after removeConstraint (audit #75).  Helper opens the gripper,
