@@ -993,6 +993,54 @@ def handle_sense_action(
     if sense_outcome == "found_target":
         belief.mark_sensed(str(shadow_id), found=True)
         print(f"    *** TARGET FOUND in {shadow_id}! (ray-cast) ***")
+
+        # Audit #76: register an OBJECT boxel for the discovered target.
+        # Hidden targets have no OBJECT boxel at startup (they live inside
+        # a shadow region).  Without this hook, every subsequent _build_init
+        # rebuilds init from registry+belief and finds no (obj_at_boxel
+        # target ?) fact for the target — so any plan that breaks mid-
+        # execution (audit #40 stack physics failure, IK failure mid-pick)
+        # leaves the planner unable to ground a re-pick of the same target.
+        # PDDLStream then concludes "Stream plan: False" at complexity 3
+        # in ~1 s with sample_time=0 — the audit #76 freeze-mode failure.
+        # The contains_nontarget branch below already registers OBJECT
+        # boxels for discovered non-targets; this is the symmetric hook
+        # for targets.
+        target_obj_str = str(obj)
+        target_info = env.objects.get(target_obj_str)
+        if (target_info is not None
+                and registry.get_boxel(target_obj_str) is None):
+            t_bid = target_info.object_id
+            t_min, t_max = p.getAABB(t_bid)
+            t_min = np.array(t_min)
+            t_max = np.array(t_max)
+            target_bd = BoxelData(
+                id=target_obj_str,
+                boxel_type=BoxelType.OBJECT,
+                min_corner=t_min,
+                max_corner=t_max,
+                object_name=target_obj_str,
+                is_occluder=False,
+                on_surface=(
+                    "table"
+                    if t_min[2] <= env.table_surface_height + 0.01
+                    else None
+                ),
+                surface_z=env.table_surface_height,
+            )
+            registry.add_boxel(target_bd)
+            boxel_centers[target_obj_str] = target_bd.center
+            object_body_ids[target_obj_str] = env.plan_body_id(t_bid)
+            boxel_to_pybullet[target_obj_str] = {
+                'name': target_obj_str,
+                'pybullet_id': t_bid,
+                'position': np.array(target_info.position),
+            }
+            if viz is not None:
+                viz.draw_boxel_data(target_bd)
+            print(f"      -> registered OBJECT boxel for {target_obj_str} "
+                  f"at live AABB (audit #76).")
+
         refresh_object_aabbs(env, registry, viz)
         return ActionResult(continue_=True, reason="sense_found_target")
 
