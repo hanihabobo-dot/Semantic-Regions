@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #77                                                      #
+#  OPEN ISSUES — #63, #77, #78                                                 #
 #                                                                              #
 ################################################################################
 
@@ -309,9 +309,9 @@ Where:    README.md (project root, currently 29 lines — quick-start
           and_Streams, Scene_Environment, Spatial_Reasoning.
 Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
           results drive Known_Issues_and_Roadmap + Design_Decisions
-          + the README story.  Any other open issue (#77) that
-          lands between now and submission extends the diff this
-          sweep has to absorb.  Gate list refreshed
+          + the README story.  Any other open issue (#77, #78)
+          that lands between now and submission extends the diff
+          this sweep has to absorb.  Gate list refreshed
           2026-05-12 triage: dropped #50/#57/#59/#61/#65
           (deferred) and #66 (relocated to TAMPURA_PLAN.md).
           #62/#69/#70/#71/#72 closed 2026-05-12 so they no longer
@@ -1195,6 +1195,136 @@ Related:
 
 
 ================================================================================
+#78. SENSE SHOULD UPDATE BELIEF FOR EVERY SHADOW THE RAY BUNDLE CROSSES, NOT JUST THE QUERIED ONE
+================================================================================
+Status:   OPEN.  Raised 2026-05-14 (later) by user during #76
+          fix verification.  "sense should sense all shadows,
+          not just the one we are looking at."
+Priority: TIER 2 — perception efficiency / plan-length
+          reduction.  Not a correctness bug; today's pipeline
+          works.  The optimisation collapses sequential
+          per-shadow senses into one camera observation that
+          informs many regions at once, matching how a fixed
+          overhead camera actually sees the workspace.
+Where:    execution.py sense_shadow_raycasting (line ~44) —
+          the rayTestBatch call already returns per-ray
+          hit_position + hit_uid; just don't throw away the
+          intersections that fall in non-queried shadow AABBs.
+          execution.py handle_sense_action — the found_target
+          / clear_but_empty / contains_nontarget / still_blocked
+          branch dispatch currently fires for one shadow_id;
+          needs to fire for each shadow with strong-enough
+          per-ray signal.
+          PDDL: keep :action sense unchanged.  The multi-region
+          update lands in the dispatcher's between-plan registry
+          / belief diff (known_empty_shadows + visible_target_-
+          locations + refresh_object_aabbs), which the planner
+          re-reads via _build_init on every replan.  Cleaner
+          than extending the action signature.
+Depends:  None directly.  Benefits from #72 [DONE] (sharper
+          shadow AABBs after the two-slab carve mean per-ray
+          intersection tests are clean) and #71 [DONE] (live
+          OBJECT AABBs feed accurate hit classification).
+Effort:   1-2 days for the perception change + dispatcher
+          plumbing.  No domain change required under option (a).
+
+What:  Today the sense pipeline:
+       1. Plan picks one shadow_id.
+       2. rayTestBatch from camera → 8 AABB corners + 1 centre
+          (audit #69 numThreads=0).
+       3. Branch on the SINGLE outcome for the queried shadow.
+
+       But the rays we cast form a bundle from the overhead camera
+       down to the target volume; many other shadow AABBs lie
+       along these paths.  Each ray's hit position relative to
+       every shadow it crosses is observable for free: if the
+       first physical hit is past a shadow's exit plane, that
+       shadow is empty along that ray.  Across the rays per
+       sense × shadows intersected we get a dense per-shadow
+       occupancy signal for the cost of one rayTestBatch call.
+
+       Concrete payoff on find-and-tray-stack: typical runs
+       sense 3-7 shadows sequentially to find one hidden
+       target.  Each sense is move → sense in the PDDL plan
+       (~2-4 s of arm motion + camera read).  If a single
+       observation informs 3-5 shadows, the expected sense-
+       action count per run drops roughly by that factor —
+       plan length shrinks, eval wall-clock drops, replan
+       count drops.
+
+Fix:   ONE PERCEPTION-LAYER COMMIT.
+
+       Step 1 — extend sense_shadow_raycasting to bin per-ray
+       outcomes by EVERY shadow AABB the ray crosses (not just
+       the queried one).  For each ray (origin, dir):
+         entry_t, exit_t = ray_aabb_intersection(shadow.AABB)
+         first_hit_t      = rayTestBatch result
+         if first_hit_t > exit_t:           shadow empty along this ray
+         elif entry_t <= first_hit_t <= exit_t:
+                                            body present; classify the
+                                            hit (target / occluder /
+                                            non-target / robot)
+         else:                              hit pre-entry — irrelevant
+       Aggregate per shadow: {target_hits, occluder_hits,
+       nontarget_hits, robot_hits, empty_misses}.
+
+       Step 2 — multi-outcome dispatcher in handle_sense_action.
+       Fire the existing outcome branches for every shadow with
+       strong enough per-ray coverage (start at >= 50 % of rays
+       reaching the AABB):
+         - target_hits > 0                  → found_target.
+         - target_hits == 0, occluder_hits == 0,
+           nontarget_hits == 0, coverage >= 50 %
+                                            → clear_but_empty.
+         - nontarget_hits > 0               → contains_nontarget
+                                              (per detected body).
+         - coverage < 50 %                  → leave unchanged
+                                              (insufficient signal).
+
+       Step 3 — belief / registry diff loop the dispatcher over
+       the SET of informed shadows instead of the single shadow_id.
+       Each informed shadow goes through the same helpers
+       (refresh_object_aabbs, compute_shadow_blockers,
+       reboxelize_free_space) used today for one shadow.
+
+Care:
+       (1) Coverage threshold matters.  Too low → false-empty
+           on a region touched by one edge-grazing ray.  Too
+           high → most shadows never get credited and we're
+           back to per-region sensing.  Start at 50 %, log the
+           per-shadow coverage for tuning.
+       (2) found_target uses a HIT, not a miss.  Conservative
+           on target detection, permissive on emptiness — the
+           right asymmetry.  Don't let a single grazing target
+           hit fire a found_target for a barely-observed region.
+       (3) shadow_occluder_map gets rebuilt after every sense
+           via compute_shadow_blockers.  With many shadows
+           flipping view-clear in one action, run the audit
+           #58 / #76 paths on seeds 1905790753 + 999 as a
+           regression smoke check — both read the current
+           registry per-plan so they should ride along
+           naturally, but verify.
+       (4) Eval impact: audit #73 plot 4 (sense-action count)
+           is the direct indicator.  Expect a per-run sense
+           count drop on find-and-tray-stack; re-run plot 4
+           post-fix.
+
+Related:
+       #71 [DONE 2026-05-12 (later)] — refresh OBJECT AABBs
+            on sense.  Sharper OBJECT AABBs sharpen per-ray
+            hit classification.
+       #72 [DONE 2026-05-12 (later)] — two-slab shadow carve.
+            Sharper shadow AABBs reduce false ray-in-region
+            hits in the multi-shadow aggregate.
+       #76 [DONE 2026-05-14] — sense_found_target registers
+            an OBJECT boxel for the discovered target.  This
+            issue extends the same path to OTHER shadows the
+            ray bundle informed.
+       #73 [DONE 2026-05-14] — eval plot 4 is the direct
+            success metric for this issue.
+
+
+================================================================================
 SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-14)
 ================================================================================
 
@@ -1242,12 +1372,25 @@ TIER 1 — CORRECTNESS / HIGH-PRIO:
        2026-05-14 by user during #73 plot review;
        promotable to TIER 0 if it becomes a headline
        thesis figure.
+
+TIER 2 — PERCEPTION EFFICIENCY:
+  #78  sense should update belief for every shadow the ray
+       bundle crosses, not just the queried one.  Today's
+       sense pipeline picks one shadow_id, casts rays
+       through that volume, and discards the per-ray
+       intersections with every other shadow AABB on the
+       way.  A single rayTestBatch from the fixed overhead
+       camera can in principle credit 3-5 shadows per
+       sense, dropping per-run sense-action count
+       (audit #73 plot 4) by roughly that factor.  Raised
+       2026-05-14 (later) by user.
+
 TIER 3 — CODE QUALITY / DOC SWEEP:
   #63  README + wiki final doc sweep - gated on remaining open
-       issues (now: #77).  Explicitly the last commit
+       issues (now: #77, #78).  Explicitly the last commit
        before thesis submission per user 2026-05-08.
 
-Total open: 2 items (#63, #77) per the OPEN ISSUES
+Total open: 3 items (#63, #77, #78) per the OPEN ISSUES
 header at top (the source of truth).
 
 Relocated 2026-05-12:
