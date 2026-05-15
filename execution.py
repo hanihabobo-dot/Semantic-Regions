@@ -240,6 +240,53 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
     return blockers
 
 
+def audit_robot_held_state(env, robot_id, expected_held_body_id=None,
+                            tag: str = ""):
+    """List non-static bodies in contact with the robot; log anomalies.
+
+    Audit #82 diagnostic.  Surfaces the "robot holding two cubes"
+    divergence between PDDL (handempty) and physics when a release
+    failure leaves a cube friction-pinned to the EE after the dispatcher's
+    audit-#79 state-clear has already set (handempty) symbolically.
+
+    Static bodies (plane, table, robot, trays) are filtered out so the
+    return list contains only dynamic objects (cubes / occluders).
+
+    Anomaly cases (each prints "!!! HELD-STATE ANOMALY"):
+      (a) expected_held_body_id is None and any body is in contact;
+      (b) expected_held_body_id is X and a body other than X is in
+          contact, OR more than one body is in contact.
+    Success cases stay quiet (empty contacts on either expected mode;
+    exactly the expected body on expected=X).
+
+    Returns the sorted list of dynamic body ids found so callers may
+    branch on it later.
+    """
+    static_ids = {-1, robot_id}
+    for name, info in env.objects.items():
+        if name in ("plane", "table", "robot"):
+            static_ids.add(info.object_id)
+            continue
+        if getattr(info, "is_tray", False):
+            static_ids.add(info.object_id)
+
+    contacts = p.getContactPoints(bodyA=robot_id)
+    bodies = sorted({c[2] for c in contacts} - static_ids)
+
+    if not bodies:
+        return bodies  # quiet success — empty contacts on either mode
+
+    if expected_held_body_id is None:
+        print(f"    !!! HELD-STATE ANOMALY ({tag}): expected handempty, "
+              f"robot in contact with bodies={bodies}")
+    elif len(bodies) > 1 or expected_held_body_id not in bodies:
+        print(f"    !!! HELD-STATE ANOMALY ({tag}): expected only "
+              f"body={expected_held_body_id}, robot in contact with "
+              f"bodies={bodies}")
+
+    return bodies
+
+
 def _release_and_verify_drop(
     env,
     robot_id,
@@ -330,10 +377,20 @@ def _release_and_verify_drop(
 
         # (iv) robot-link contacts; also collect non-robot contacts (a
         # released cube must touch at least one non-robot body).
+        # Audit #82: per-link breakdown (link id, min penetration distance,
+        # summed normal force) so a stuck-on-release ghost surfaces WHICH
+        # link is welding the cube — pads (9,10), hand (8), wrist (7), etc.
         contacts = p.getContactPoints(bodyA=held_body_id)
         contact_bodies = {c[2] for c in contacts}
         robot_contacts = contact_bodies & {robot_id}
         non_robot = contact_bodies - {robot_id, -1}
+        robot_link_contacts: dict = {}
+        for c in contacts:
+            if c[2] != robot_id:
+                continue
+            link_b, dist, nf = c[4], c[8], c[9]
+            cur_d, cur_f = robot_link_contacts.get(link_b, (dist, 0.0))
+            robot_link_contacts[link_b] = (min(cur_d, dist), cur_f + nf)
 
         # (ii) cube bottom near the expected support surface.
         aabb_min, _ = p.getAABB(held_body_id)
@@ -352,10 +409,18 @@ def _release_and_verify_drop(
         pos_before, _ = p.getBasePositionAndOrientation(held_body_id)
         for _ in range(20):
             env.step_simulation()
-        pos_after, _ = p.getBasePositionAndOrientation(held_body_id)
+        pos_after, held_orn = p.getBasePositionAndOrientation(held_body_id)
         lateral_drift = float(np.hypot(pos_after[0] - pos_before[0],
                                         pos_after[1] - pos_before[1]))
         stationary = lateral_drift <= 1e-3  # 1 mm
+
+        # Audit #82: cube tilt at release time.  Anything >5° suggests an
+        # off-axis grip from close_gripper — the audit #40 _verify_cube_on
+        # z-range check may then pass visually while the cube sits at a
+        # non-physical angle.
+        held_euler = p.getEulerFromQuaternion(held_orn)
+        cube_tilt_deg = max(abs(np.degrees(held_euler[0])),
+                             abs(np.degrees(held_euler[1])))
 
         height_str = (
             f"bottom_z={cube_bottom_z:.4f} "
@@ -369,11 +434,19 @@ def _release_and_verify_drop(
         # they could stall short under cube-pad friction.
         finger_pos = [p.getJointState(robot_id, fj)[0]
                        for fj in FINGER_JOINTS]
+        if robot_link_contacts:
+            link_breakdown = "; ".join(
+                f"link{k}: d={d * 1000:.2f}mm, F={f:.2f}N"
+                for k, (d, f) in sorted(robot_link_contacts.items())
+            )
+        else:
+            link_breakdown = "none"
         diag = (f"constraint_gone={constraint_gone} "
-                f"robot_contacts={sorted(robot_contacts) or 'none'} "
+                f"robot_link_contacts={{{link_breakdown}}} "
                 f"non_robot_contacts={sorted(non_robot) or 'none'} "
                 f"{height_str} "
                 f"lateral_drift={lateral_drift * 1000:.2f}mm "
+                f"cube_tilt_deg={cube_tilt_deg:.2f} "
                 f"finger_pos=[{finger_pos[0]:.4f},{finger_pos[1]:.4f}]")
 
         ok = (constraint_gone
@@ -384,9 +457,15 @@ def _release_and_verify_drop(
         if ok:
             print(f"    -> Released {dropped_name} (audit #80 verify ok; "
                   f"{diag})")
+            audit_robot_held_state(
+                env, robot_id, expected_held_body_id=None,
+                tag=f"post-release:{dropped_name}:attempt-{attempt}-ok")
             return True
         print(f"    Drop verification failed for {dropped_name}: "
               f"{diag} — retry {attempt}/{max_attempts}.")
+        audit_robot_held_state(
+            env, robot_id, expected_held_body_id=None,
+            tag=f"post-release:{dropped_name}:attempt-{attempt}-fail")
 
     return False
 
@@ -579,6 +658,13 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # big object, the centre it's targeting should be higher.  make
     # it as high percentage wise as it is when the object is small."
     obj_id = env.objects[obj_name].object_id
+    # Audit #82: assert (handempty) BEFORE adding a new constraint.  If
+    # the robot is already in contact with a non-static body, we're about
+    # to pick while still physically holding the previous one — surfaces
+    # the dispatcher's audit-#79 state-clear divergence (PDDL says
+    # handempty, physics says we're friction-pinned to a ghost).
+    audit_robot_held_state(env, robot_id, expected_held_body_id=None,
+                            tag=f"pre-pick:{obj_name}")
     aabb_min, aabb_max = p.getAABB(obj_id)
     cube_top_z = float(aabb_max[2])
     cube_hw = min(aabb_max[0] - aabb_min[0],
@@ -655,6 +741,12 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
         list(parent_frame_pos), [0, 0, 0],
         parentFrameOrientation=list(parent_frame_orn)
     )
+
+    # Audit #82: post-pick assertion — only the newly grasped cube should
+    # be in contact with the robot.  Anything else surfaces a ghost from
+    # a prior release that did not actually drop.
+    audit_robot_held_state(env, robot_id, expected_held_body_id=obj_id,
+                            tag=f"post-pick:{obj_name}")
 
     # Hardcoded post-pick lift (audit #36, THESIS_NOTES §19): smaller
     # than place/stack (~5 cm) — cosmetic only for the holding-goal
