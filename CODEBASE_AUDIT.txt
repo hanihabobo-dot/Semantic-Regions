@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #77, #78                                                 #
+#  OPEN ISSUES — #82 (PICK UP NEXT), #63, #77, #78                             #
 #                                                                              #
 ################################################################################
 
@@ -1989,6 +1989,199 @@ Related:
 
 
 ================================================================================
+#82. AUDIT-#80/#81 STUCK-ON-RELEASE DIAGNOSTIC — LINK-LEVEL CONTACTS + HELD-STATE ANOMALY DETECTION
+================================================================================
+Status:   OPEN.  **PICK UP NEXT.**  Raised 2026-05-15 (later) by
+          user after seed-999 GUI re-verification of the
+          post-#80/#81 build (log run_2026-05-15_19-23-45).
+          Quote: "add debug code to it to use it as eyes and
+          check why isnt droping why isnt the robot aware that
+          the box hast droped and so n.  why or how can a robot
+          hold two object at the same time.  that is illegal.
+          the atom holding must wrong flas in such situations."
+          Diagnostic-only commit: no behavioural change.  The
+          ACTUAL fix lands in a separate issue once this data
+          identifies which robot link welds the cube post-release.
+          (The dispatcher's pre-existing "(audit #82)" tag at
+          test_full_pipeline.py:1331/1474 marks the IK-failure-
+          during-place replan path — a sibling failure class
+          inside the same gripper-handoff problem area as this
+          body, sharing the number; this body subsumes it as the
+          formal audit reference.)
+Priority: TIER 0 — surfaces a hidden bug class (PDDL (handempty)
+          divergence from physics) that pre-#80 was silently
+          masked.  Post-#80/#81 the symbolic verify gate rejects
+          the release but the cube is still physically attached
+          to the EE; the dispatcher's audit-#79 state-clear then
+          sets (handempty) symbolically and the planner happily
+          plans the next pick — at which point the robot is
+          physically holding TWO cubes (constraint-attached new
+          one + friction-attached old one).  Log evidence at
+          lines 434-468 of the latest run: post-clear move-to-
+          orange_object collisions "robot link 10 <-> blue_object",
+          then "orange_object (held) <-> blue_object" once orange
+          is picked — robot dragging both.  Until we know which
+          robot LINK is doing the welding we cannot target the
+          fix; hence: diagnostic first.
+Where:    execution.py:
+            • _release_and_verify_drop diag string — per-link
+              contact breakdown (link id, penetration distance,
+              normal force) + cube tilt angle.
+            • new _audit_robot_held_state(env, robot_id,
+              expected_held_body_id=None, tag="") helper that
+              scans every non-static body in contact with the
+              robot and logs a "!!! HELD-STATE ANOMALY" line
+              when > 1 body found or an unexpected attachment
+              is detected.
+            • execute_pick: call at start (expected=None) and
+              after createConstraint (expected=new obj_id).
+          test_full_pipeline.py:
+            • after the dispatcher's drop-verify-failure state
+              clear (place branch line ~1331, stack branch line
+              ~1474): call _audit_robot_held_state(expected=None,
+              tag="post-clear") so the next dispatcher iteration
+              can see physically-attached ghosts before it walks
+              into (handempty)-grounded next plan.
+Repro:    --scene random-pairs --goal find-and-tray-stack --seed 999
+          Log: logs/run_2026-05-15_19-23-45/run_2026-05-15_19-23-45.log
+            line 165:  purple_object STACKED on tray ok
+              (finger_pos=[0.04,0.04] robot_contacts=none — release
+              works for tray-stack because the cube falls 46 mm
+              into the cavity, breaking finger contact).
+            lines 186-189:  red_object place fails — finger_pos=
+              [0.04,0.04] (fingers ARE open) but robot_contacts=[2]
+              persists, bottom_z≈0.3225 (cube on table) — something
+              on the robot keeps touching the cube.
+            lines 362-364:  blue_object place fails 65 mm above
+              table, non_robot_contacts=[5]=green_object — blue
+              landed on top of green; AND robot is also touching
+              blue.
+            lines 434-468:  AFTER the dispatcher's audit-#79 clear,
+              robot moves to orange_object dragging blue along
+              (robot link 8/9/10 <-> blue_object collisions); picks
+              orange via fresh constraint, then "orange_object
+              (held) <-> blue_object" collisions — robot is now
+              physically holding TWO cubes while PDDL believes
+              (holding cyan_object).
+Depends:  Builds on #80 [DONE] (verify gate that rejects the
+          release in the first place) and #81 [DONE] (resetJoint-
+          State open).  Audit #79 [DONE] state-clear was the
+          tipping point — without it the dispatcher would have
+          crashed before reaching the "two cubes" state; with it
+          we silently corrupt the world model instead.
+Effort:   ~1 hour.  Single commit.  No behavioural change.
+
+What:  Three concrete user-visible problems we cannot diagnose
+       further from the current logs:
+
+       (a) WHICH ROBOT LINK welds the cube post-release.  Today
+           the diag just prints "robot_contacts=[2]" (the robot
+           body id).  Body 2 has ~12 links; we need to know if
+           it's the pads (links 9, 10), the hand (link 8), the
+           wrist (link 7), or something else.
+
+       (b) HOW WEDGED is the cube — penetration distance and
+           normal force at the contact point tell us whether
+           it's a deep mesh embedding (-mm distance, high N
+           force) or a soft graze (~0 distance, low force).
+
+       (c) WHETHER THE DISPATCHER'S (HANDEMPTY) ASSERTION
+           MATCHES PHYSICS.  Today the dispatcher prints
+           "clearing held state and replanning (audit #79)"
+           and then trusts the planner to ground from
+           (handempty).  No physical check.  The "two cubes"
+           bug (lines 434-468) is invisible until a subsequent
+           plan_motion collides with the ghost cube — too late
+           to recover gracefully.
+
+       Plus a fourth latent concern the diag will surface:
+
+       (d) CUBE ORIENTATION at release time.  If close_gripper
+           tilted the cube during grip (e.g., off-axis grasp
+           pose), the cube exits release rotated; the audit
+           #40 _verify_cube_on z-range check may then pass
+           visually while the cube is sitting at a non-physical
+           angle.  Surfacing cube_tilt_deg in the verify diag
+           costs ~3 LOC.
+
+Fix:   ONE DIAGNOSTIC COMMIT.
+
+       Step 1 — expand _release_and_verify_drop's diag string.
+       Replace the body-id-only `robot_contacts={2}` with a
+       per-link map `{link9: d=0.4mm, F=12.3N; link10: d=0.6mm,
+       F=8.1N}`.  Source data: p.getContactPoints returns
+       (flag, bodyA, bodyB, linkA, linkB, posA, posB,
+       normalOnB, distance, normalForce, ...); aggregate by
+       linkB on rows where bodyB == robot_id.
+
+       Step 2 — add cube_tilt_deg to the diag.  Read
+       p.getBasePositionAndOrientation(held_body_id)[1],
+       getEulerFromQuaternion, report max(|roll|, |pitch|) in
+       degrees.  Anything >5° suggests off-axis grip.
+
+       Step 3 — add a helper _audit_robot_held_state(env,
+       robot_id, expected_held_body_id, tag) that lists every
+       non-static body currently in contact with the robot
+       (skip plane / table / tray / robot self).  Logs
+       "!!! HELD-STATE ANOMALY" when > 1 body found OR when
+       an "unexpected" body is in contact (i.e., not the
+       constraint-held one).  Returns the list so callers
+       can branch on it later if needed.
+
+       Step 4 — call the helper from FOUR sites:
+         • execute_pick start (expected=None — assert handempty
+           BEFORE adding a new constraint).
+         • execute_pick post-createConstraint (expected=
+           new_obj_id — assert only the new cube is held).
+         • _release_and_verify_drop end-of-attempt (expected=
+           None — if release succeeded, robot should hold
+           nothing; if it failed, the helper surfaces the
+           ghost).
+         • dispatcher state-clear branches in test_full_-
+           pipeline.py (place ~1331, stack ~1474, after
+           grasp_constraint_id = None; tag="post-clear-place"
+           or "post-clear-stack").
+
+       Step 5 — re-run seed-999 with GUI and share the log.
+       The new diag lines tell us:
+         • Which robot link welds the cube (Step 1).
+         • Whether the cube is tilted during grip (Step 2).
+         • Whether the dispatcher's (handempty) is a lie
+           (Step 3/4).
+
+Care:
+       (1) Pick this up NEXT.  Do not walk past it to the
+           lowest-numbered chronological open (#63) or to
+           #77/#78 — they're TIER 1/2/3 and depend on
+           release/handoff correctness which this diagnostic
+           is the gate for.
+       (2) Diagnostic-only commit.  The behavioural fix is a
+           SEPARATE issue.  Don't bundle.  The user's earlier
+           Care notes for #80/#81 (separate commits, separate
+           re-verifications) apply transitively.
+       (3) Log noise: each verify-fail attempt now prints ~2
+           extra lines (diag breakdown + held-state).  Success
+           path stays quiet (helper early-returns on empty
+           contacts).
+       (4) GUI re-verification on seed-999 is the next step
+           after the commit.
+
+Related:
+       #80 [DONE 2026-05-15 (later)] — verify gate that
+            surfaces the symptom.
+       #81 [DONE 2026-05-15 (later)] — resetJointState
+            release + pick-side smashing refines; symptom
+            persists post-refine per user GUI observation.
+       #79 [DONE 2026-05-15] — dispatcher state-clear that
+            turns "release failed" into "(handempty)"
+            symbolically while physics says otherwise.  This
+            issue's Step 4 instruments that boundary.
+       #40 [DONE 2026-05-05; archived] — _verify_cube_on
+            stack physics check.  Cube tilt diag (Step 2)
+            is the symmetric concern at release time.
+
+
+================================================================================
 SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-15)
 ================================================================================
 
@@ -2021,7 +2214,33 @@ eval-chapter figures backlog: 10 plots delivered (TIER A/B/C
 complete); plot 10 (perception density, TIER D) deferred to FOR
 LATER backlog.  #77 raised 2026-05-14 during #73 plot review —
 anytime compactness sweep, headline strength upgrade for the
-compactness pillar.
+compactness pillar.  #82 raised 2026-05-15 (later) by user
+during seed-999 GUI re-verification of the post-#80/#81 build:
+release-failure symptom persists at a NEW layer (robot link
+contact even when finger_pos=[0.04,0.04]) and the dispatcher's
+audit-#79 state-clear creates a "robot holding two cubes"
+divergence between PDDL (handempty) and physics; #82 is the
+diagnostic gate, marked PICK UP NEXT.
+
+TIER 0 — TOP PRIORITY (correctness / sim integrity):
+  #82  AUDIT-#80/#81 STUCK-ON-RELEASE DIAGNOSTIC — PICK UP NEXT.
+       Post-#80/#81 build (commits 7116e73 / 4bc5d95 / 65146ad
+       / 8774e6f) still shows robot_contacts=[2] after every
+       PLACE on the table even though finger_pos=[0.04,0.04] —
+       SOMETHING on the robot keeps welding the cube.  Worse,
+       the dispatcher's audit-#79 state-clear sets (handempty)
+       symbolically while the cube is still physically on the
+       EE, leading to the robot dragging two cubes after the
+       next pick (seed-999 log run_2026-05-15_19-23-45 lines
+       434-468).  Diagnostic-only commit: per-link contact +
+       cube tilt + held-state anomaly scan.  No behavioural
+       change.  Once the data identifies which robot link
+       welds the cube, the actual fix lands in a separate
+       issue.  User direction 2026-05-15: "add debug code to
+       it to use it as eyes ... why or how can a robot hold
+       two object at the same time.  the atom holding must
+       wrong flas in such situations."  DO NOT walk past this
+       to #63/#77/#78.
 
 TIER 1 — CORRECTNESS / HIGH-PRIO:
   #77  Anytime compactness sweep — success rate vs time
@@ -2054,11 +2273,14 @@ TIER 3 — CODE QUALITY / DOC SWEEP:
        issues (now: #77, #78).  Explicitly the last commit
        before thesis submission per user 2026-05-08.
 
-Total open: 3 items (#77, #78, #63) per the OPEN ISSUES
+Total open: 4 items (#82, #77, #78, #63) per the OPEN ISSUES
 header at top (the source of truth).  Listed in TIER order
 for clarity — chronological numbers in the header are NOT
 priority-ordered (see the "ISSUE NUMBERING" banner near the
-top of this file).  TIER 0 queue is empty.
+top of this file).  TIER 0 has ONE item: #82, marked PICK UP
+NEXT.  The audit-#80/#81 work surfaced the symptom but cannot
+target a behavioural fix without first knowing which robot
+link welds the cube — #82 is that diagnostic gate.
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
