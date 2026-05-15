@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #77, #78, #80, #81                                       #
+#  OPEN ISSUES — #63, #77, #78, #81                                            #
 #                                                                              #
 ################################################################################
 
@@ -1570,10 +1570,30 @@ Related:
 ================================================================================
 #80. PDDL FACTS DON'T REFLECT FAILED PLACE/STACK — PLANNER BLIND TO RELEASE FAILURES
 ================================================================================
-Status:   OPEN.  Raised 2026-05-15 by user during seed-999
-          verification of the #79 follow-up.  Quote: "it thought
-          that the place action was successful.  this is wrong
-          and should be reflected correctly in pddl facts."
+Status:   [DONE 2026-05-15 (later)] - commit 7116e73 harden
+          _release_and_verify_drop into the 4-signal gate from the
+          audit body's Step 2: (i) constraint genuinely gone via
+          getConstraintInfo probe, (ii) cube bottom within 2 cm of
+          expected_support_z (passed in by execute_place=table_z and
+          execute_stack=sup_top_z; emergency-drop path omits the
+          kwarg so the height check is skipped on panic drops),
+          (iii) cube COM stationary across 20 extra settle steps
+          (<1 mm lateral drift, catches cubes pinned to a finger
+          pad moving with the arm), (iv) zero robot-link contact.
+          Diagnostic info printed on every attempt (pass or fail)
+          so a future regression surfaces immediately in the run
+          log.  Audit Step 3 (refactor success-path AABB refresh
+          into a helper) deferred per Care note 3 - the dispatcher
+          already does the refresh via registry.update_after_place
+          (PLACE) and a manual getAABB write (STACK); only the
+          permissive gate was the gap.  Seed-999 GUI re-verification
+          pending; if #81 is unfixed, expect more verify-failures
+          (correct behaviour per audit Care note 1 - the harder
+          gate makes physical-release regressions visible).
+Raised:   2026-05-15 by user during seed-999 verification of the
+          #79 follow-up.  Quote: "it thought that the place action
+          was successful.  this is wrong and should be reflected
+          correctly in pddl facts."
           DO NOT bundle with #81 — #80 is the SYMBOLIC-side gap
           (verify gate + post-action registry refresh); #81 is
           the PHYSICAL-side gap (release path doesn't actually
@@ -1925,17 +1945,6 @@ anytime compactness sweep, headline strength upgrade for the
 compactness pillar.
 
 TIER 0 — TOP PRIORITY (correctness / sim integrity):
-  #80  PDDL facts don't reflect failed place/stack — planner
-       blind to release failures.  Raised 2026-05-15 by user
-       during seed-999 verification of #79 follow-up.  Verify
-       gate too permissive (single non-robot contact accepts
-       false positives) AND success path doesn't refresh OBJECT
-       AABB into the registry.  Net effect: (obj_at_boxel red
-       free_001) in PDDL while red is physically still on the
-       gripper.  Multi-signal release check + symmetric refresh
-       on action outcome.  DO NOT bundle with #81 — see #80
-       body Care note (1).
-
   #81  Gripper stays locked to arm — release path doesn't
        actually free the cube even after audit #79 follow-up
        bumped open_gripper to 200 N / 80 steps.  Three failure-
@@ -1979,7 +1988,7 @@ TIER 3 — CODE QUALITY / DOC SWEEP:
        issues (now: #77, #78).  Explicitly the last commit
        before thesis submission per user 2026-05-08.
 
-Total open: 5 items (#80, #81, #77, #78, #63) per the OPEN
+Total open: 4 items (#81, #77, #78, #63) per the OPEN
 ISSUES header at top (the source of truth).  Listed in TIER
 order for clarity — chronological numbers in the header are
 NOT priority-ordered (see the "ISSUE NUMBERING" banner near
@@ -1995,6 +2004,26 @@ Relocated 2026-05-12:
        plan refresh.
 
 Closed since previous summary:
+  #80  [DONE 2026-05-15 (later)] - commit 7116e73 hardens
+       _release_and_verify_drop's verify gate from single-signal
+       (any non-robot contact) to 4-signal: (i) constraint gone
+       (getConstraintInfo probe), (ii) cube bottom within 2 cm
+       of expected_support_z (passed in by execute_place=table_z
+       and execute_stack=sup_top_z; emergency-drop path omits
+       the kwarg, height check skipped on panic drops), (iii)
+       cube COM stationary across 20 extra settle steps (<1 mm
+       lateral drift catches cubes pinned to a finger pad moving
+       with the arm), (iv) zero robot-link contact.  Diagnostic
+       info printed on every attempt so a future regression
+       surfaces in the run log.  Step 3 (helper-factored success-
+       path AABB refresh) deferred per audit Care note 3 — the
+       dispatcher already refreshes via registry.update_after_-
+       place (PLACE) and a manual getAABB write (STACK); only
+       the gate was permissive.  Seed-999 GUI re-verification
+       still pending and may surface more verify-failures while
+       #81 (physical release) is open — that's the audit Care
+       note 1 trade-off, harder gate makes physical-side
+       regressions visible.
   #79  [DONE 2026-05-15] - stale grasp_constraint_id after drop-
        verify failure (audit #75 caveat surfaced).  Step 1
        (commit ad63ffb): dispatcher probes p.getConstraintInfo on
