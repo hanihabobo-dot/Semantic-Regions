@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #85 (PICK UP NEXT), #84, #77, #78, #63                        #
+#  OPEN ISSUES — #84 (PICK UP NEXT), #77, #78, #63                             #
 #                                                                              #
 ################################################################################
 
@@ -319,6 +319,24 @@ Closed / relocated since last summary:
        #71's handle_sense_action refresh, same per-object
        early-out.  Cascade containment only; #84 (root cause
        of the underlying first-stack mis-landing) remains OPEN.
+  #85 [DONE 2026-05-15 (later)] — commit e0f7756.  Pre-release
+       EE lift of 15 mm in execute_place between move_robot_-
+       smooth(contact_joints) and _release_and_verify_drop.
+       solve_ik to contact_ee + [0,0,0.015] seeded from
+       contact_joints; abort with None if IK fails (caller's
+       audit-#79 probe routes to "IK failure during place —
+       replanning" because constraint stays alive on the pre-
+       lift failure path).  Pad bottoms clear the tilted cube
+       before open_gripper fires; cube falls 15 mm onto table
+       during the helper's settle.  Audit-#80 verify-gate (ii)
+       2 cm tolerance absorbs the fall; (iv) no-robot-contact
+       now satisfiable.  Composes with audit-#36 post-place
+       lift (~10 cm AFTER the verified drop, for plan_motion
+       headroom).  execute_stack out-of-scope per care note 4
+       (release pose above support; pads don't share Z-range).
+       Closes the seed-999 cascade where tilt grew on retry
+       (6.85->11.51->10.64 deg) and the cube remained pinned
+       to a finger pad across dispatcher state-clear.
 
 ================================================================================
 #63. README + WIKI FINAL DOC SWEEP — POST-EVAL FREEZE-AND-WRITE
@@ -2453,7 +2471,24 @@ Related:
 ================================================================================
 #85. PLACE-TIME PAD-VS-CUBE WEDGE — TILT GROWS ON RETRY, PIN SURVIVES STATE-CLEAR
 ================================================================================
-Status:   OPEN.  Raised 2026-05-15 (later, post-#83) by user re-
+Status:   [DONE 2026-05-15 (later)] - commit e0f7756.  Pre-release
+          EE lift of 15 mm in execute_place between move_robot_smooth
+          (contact_joints) and _release_and_verify_drop: solve_ik to
+          contact_ee + [0,0,0.015] seeded from contact_joints, then
+          move_robot_smooth.  Pad bottoms now clear the tilted cube
+          before open_gripper fires; the cube falls 15 mm onto the
+          table during the helper's settle and audit-#80 verify-gate
+          (ii) 2 cm tolerance absorbs the fall.  Composes with the
+          existing audit-#36 post-place lift (~10 cm AFTER the
+          verified drop, for plan_motion headroom).  IK failure on
+          the pre-lift returns None; caller's audit-#79 probe sees
+          constraint still alive and routes to "IK failure during
+          place — replanning" (held_obj plumbing carries forward).
+          execute_stack unaffected per audit care note 4 (release
+          pose is above the support so pads don't share Z-range
+          with the cube).  Original report below for context.
+
+          OPEN.  Raised 2026-05-15 (later, post-#83) by user re-
           run of seed-999.  Logs: run_2026-05-15_20-31-03 (initial
           symptom), run_2026-05-15_20-40-49 (severity escalation
           + cross-plan finger-pad cargo).
@@ -2657,21 +2692,7 @@ cascade containment side but cannot un-stick the physical
 pin that #85 addresses.
 
 TIER 0 — TOP PRIORITY (correctness / sim integrity):
-  #85  PLACE-TIME PAD-VS-CUBE WEDGE — PICK UP NEXT.  Logs
-       run_2026-05-15_20-31-03 + run_2026-05-15_20-40-49 show
-       place actions failing drop-verify with cube_tilt_deg
-       3-11 deg and finger-pad contact at up to 387 N (link 8,
-       the hand bottom).  Tilt GROWS on retry (6.85 -> 11.51
-       -> 10.64) so the 3-retry loop is actively harmful, not
-       just unhelpful.  Cube remains pinned across the
-       dispatcher state-clear; audit-#82 anomaly helper fires
-       on the NEXT plan's pre-pick.  Single-commit ~10 LOC
-       fix: pre-open EE lift of 15 mm in execute_place so
-       pads retract laterally over an air gap before the cube
-       settles (industry-standard pick-and-place sequence;
-       execute_stack already works because geometry naturally
-       provides this gap).
-  #84  CUBE-ON-CUBE STACK MIS-LANDING DIAGNOSTIC.  In the
+  #84  CUBE-ON-CUBE STACK MIS-LANDING DIAGNOSTIC — PICK UP NEXT.  In the
        same seed-999 log, cyan_object's first stack on
        purple_object lands the cube on the plane (z≈0) instead
        of purple's top (z≈0.3763), with robot_link_contacts=
@@ -2716,17 +2737,18 @@ TIER 3 — CODE QUALITY / DOC SWEEP:
        issues (now: #77, #78).  Explicitly the last commit
        before thesis submission per user 2026-05-08.
 
-Total open: 5 items (#85, #84, #77, #78, #63) per the OPEN ISSUES
+Total open: 4 items (#84, #77, #78, #63) per the OPEN ISSUES
 header at top (the source of truth).  Listed in TIER order for
 clarity — chronological numbers in the header are NOT priority-
 ordered (see the "ISSUE NUMBERING" banner near the top of this
-file).  TIER 0 has TWO items as of 2026-05-15 (later): #85
-(place-time pad-vs-cube wedge — PICK UP NEXT, single-commit
-mitigation) and #84 (root-cause diagnostic for the orthogonal
-cube-on-cube stack mis-landing).  #83 [DONE 2026-05-15 (later)
-commit 0a266c9] closed the OBJECT-boxel cascade containment
-side; #85 addresses the physical pin that survives state-clear
-through finger-pad friction.
+file).  TIER 0 has ONE item as of 2026-05-15 (later): #84
+(root-cause diagnostic for the cube-on-cube stack mis-landing,
+PICK UP NEXT).  #83 [DONE 2026-05-15 (later) commit 0a266c9]
+closed the OBJECT-boxel cascade containment side; #85 [DONE
+2026-05-15 (later) commit e0f7756] closed the physical pin via
+a 15 mm pre-release EE lift in execute_place — the strict #80
+verify gate now satisfiable because pads no longer share Z-range
+with the tilted cube at release time.
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
