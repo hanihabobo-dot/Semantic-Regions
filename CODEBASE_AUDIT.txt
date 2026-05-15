@@ -583,6 +583,14 @@ FOR LATER
   different layer); #69 (rayTestBatch numThreads — the realistic
   spinoff).
 
+- Planner stack (post-thesis / exploratory): move off Fast Downward toward
+  any alternative that is plug-and-play alongside the PyBullet sim (motion
+  or task planners normally used in the same ecosystem are fine for a first
+  integration).  Goal is a swappable backend without investing further in
+  FD-specific parallelisation; see deferred #50 in
+  archive/CODEBASE_AUDIT_DEFERRED.txt if work stays on the current
+  PDDLStream + FD path.
+
 
 ================================================================================
 #75. EXECUTE_PLACE / EXECUTE_STACK — NO POST-RELEASE VERIFICATION; GRIPPER-SNAG LEAVES OBJECT ATTACHED
@@ -1575,7 +1583,8 @@ Status:   [DONE 2026-05-15 (later)] - commit 7116e73 harden
           audit body's Step 2: (i) constraint genuinely gone via
           getConstraintInfo probe, (ii) cube bottom within 2 cm of
           expected_support_z (passed in by execute_place=table_z and
-          execute_stack=sup_top_z; emergency-drop path omits the
+          execute_stack=sup_top_z for cube supports / None for tray
+          supports per refine below; emergency-drop path omits the
           kwarg so the height check is skipped on panic drops),
           (iii) cube COM stationary across 20 extra settle steps
           (<1 mm lateral drift, catches cubes pinned to a finger
@@ -1586,10 +1595,26 @@ Status:   [DONE 2026-05-15 (later)] - commit 7116e73 harden
           into a helper) deferred per Care note 3 - the dispatcher
           already does the refresh via registry.update_after_place
           (PLACE) and a manual getAABB write (STACK); only the
-          permissive gate was the gap.  Seed-999 GUI re-verification
-          pending; if #81 is unfixed, expect more verify-failures
-          (correct behaviour per audit Care note 1 - the harder
-          gate makes physical-release regressions visible).
+          permissive gate was the gap.
+
+          Refine 2026-05-15 (later) - commit 4bc5d95: seed-999 GUI
+          re-verification (log run_2026-05-15_18-42-17) showed every
+          stack-on-tray rejecting with err=-46mm because
+          p.getAABB(tray) returns the AABB of the entire tray
+          including the rim (sup_max[2] = rim top) but cubes fall
+          INTO the tray and rest on the floor (~table_z, 46 mm
+          below the rim).  execute_stack now reads env.objects[on_-
+          obj].is_tray (audit #49 flag) and passes expected_-
+          support_z=None for tray supports; the dispatcher's
+          tray-aware _verify_cube_on (audit #40, test_full_-
+          pipeline.py:127-180 — z-range check for is_tray supports)
+          handles the geometric placement check downstream.  The
+          other 3 gate signals still catch gripper pins regardless
+          of support shape, so #80's primary symptom (false-
+          positive releases corrupting PDDL facts) remains
+          guarded.  Cube-on-cube stacks unchanged.  Re-verification
+          on seed-999 still pending; #81 (physical release)
+          remains open.
 Raised:   2026-05-15 by user during seed-999 verification of the
           #79 follow-up.  Quote: "it thought that the place action
           was successful.  this is wrong and should be reflected
@@ -2009,7 +2034,8 @@ Closed since previous summary:
        (any non-robot contact) to 4-signal: (i) constraint gone
        (getConstraintInfo probe), (ii) cube bottom within 2 cm
        of expected_support_z (passed in by execute_place=table_z
-       and execute_stack=sup_top_z; emergency-drop path omits
+       and execute_stack=sup_top_z for cube supports / None for
+       tray supports per refine below; emergency-drop path omits
        the kwarg, height check skipped on panic drops), (iii)
        cube COM stationary across 20 extra settle steps (<1 mm
        lateral drift catches cubes pinned to a finger pad moving
@@ -2019,11 +2045,16 @@ Closed since previous summary:
        path AABB refresh) deferred per audit Care note 3 — the
        dispatcher already refreshes via registry.update_after_-
        place (PLACE) and a manual getAABB write (STACK); only
-       the gate was permissive.  Seed-999 GUI re-verification
-       still pending and may surface more verify-failures while
-       #81 (physical release) is open — that's the audit Care
-       note 1 trade-off, harder gate makes physical-side
-       regressions visible.
+       the gate was permissive.  Refine commit 4bc5d95 (same
+       day): seed-999 GUI re-verification showed every tray-
+       stack rejecting with err=-46mm because p.getAABB(tray)
+       includes the rim (sup_max[2]) but cubes fall INTO the
+       tray.  execute_stack now passes expected_support_z=None
+       for is_tray supports; the dispatcher's tray-aware
+       _verify_cube_on (audit #40) does the geometric placement
+       check.  Seed-999 GUI re-verification still pending; #81
+       (physical release) remains open and the harder gate
+       continues to make physical-side regressions visible.
   #79  [DONE 2026-05-15] - stale grasp_constraint_id after drop-
        verify failure (audit #75 caveat surfaced).  Step 1
        (commit ad63ffb): dispatcher probes p.getConstraintInfo on
