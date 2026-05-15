@@ -1302,7 +1302,33 @@ def main(gui=True, run_logger=None, scene_config=None,
                     robot_id, env, obj_str, place_pos, grasp, config,
                     grasp_constraint_id, gui)
                 if place_result is None:
-                    print(f"    IK failure during place — replanning (audit #82)")
+                    # audit #79 — distinguish IK failure (constraint
+                    # intact) from drop-verify failure (constraint
+                    # already removed inside _release_and_verify_drop
+                    # on its first attempt, per audit #75).  Leaving
+                    # a stale id in dispatcher state crashes the next
+                    # execute_place at p.getConstraintInfo when the
+                    # planner replans from (holding ?o) via audit #58
+                    # plumbing.  Probe with getConstraintInfo: if it
+                    # raises p.error the constraint is gone, so clear
+                    # held state and let the next planner.plan() build
+                    # init from (handempty).
+                    constraint_alive = False
+                    if grasp_constraint_id is not None:
+                        try:
+                            p.getConstraintInfo(grasp_constraint_id)
+                            constraint_alive = True
+                        except p.error:
+                            constraint_alive = False
+                    if not constraint_alive:
+                        print(f"    drop-verify failed for {obj_str}; "
+                              f"clearing held state and replanning "
+                              f"(audit #79).")
+                        grasp_constraint_id = None
+                        held_body_id = None
+                        held_object_boxel_id = None
+                    else:
+                        print(f"    IK failure during place — replanning (audit #82)")
                     break
                 current_config = place_result
                 grasp_constraint_id = None
@@ -1403,7 +1429,32 @@ def main(gui=True, run_logger=None, scene_config=None,
                     robot_id, env, obj_str, on_obj_str, grasp, config,
                     grasp_constraint_id, gui)
                 if stack_result is None:
-                    print(f"    IK failure during stack — replanning (audit #30)")
+                    # audit #79 — mirror of the place dispatch branch.
+                    # execute_stack delegates release to _release_and_-
+                    # verify_drop (audit #75) which removes the
+                    # constraint on attempt 1; if subsequent retries
+                    # fail, the constraint is freed but the dispatcher
+                    # would otherwise keep a stale id and crash the
+                    # next execute_stack at p.getConstraintInfo
+                    # (execution.py:783).  Probe and clear held state
+                    # on drop-verify failure so the next planner.plan()
+                    # builds init from (handempty).
+                    constraint_alive = False
+                    if grasp_constraint_id is not None:
+                        try:
+                            p.getConstraintInfo(grasp_constraint_id)
+                            constraint_alive = True
+                        except p.error:
+                            constraint_alive = False
+                    if not constraint_alive:
+                        print(f"    drop-verify failed for {obj_str} on "
+                              f"{on_obj_str}; clearing held state and "
+                              f"replanning (audit #79).")
+                        grasp_constraint_id = None
+                        held_body_id = None
+                        held_object_boxel_id = None
+                    else:
+                        print(f"    IK failure during stack — replanning (audit #30)")
                     break
                 current_config = stack_result
                 grasp_constraint_id = None

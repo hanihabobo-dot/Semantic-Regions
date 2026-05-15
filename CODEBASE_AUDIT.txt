@@ -1325,7 +1325,178 @@ Related:
 
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-14)
+#79. STALE GRASP_CONSTRAINT_ID AFTER DROP-VERIFY FAILURE (audit #75 caveat surfaced)
+================================================================================
+Status:   [DONE 2026-05-15] — dispatcher probes constraint validity
+          after a None return from execute_place / execute_stack and
+          clears grasp_constraint_id / held_body_id / held_object_-
+          boxel_id when the constraint is gone, so the next planner.
+          plan() call builds init from (handempty) instead of
+          (holding ?o).  Log message also split: "drop-verify failed
+          ... (audit #79)" vs the legacy "IK failure during place —
+          replanning (audit #82)" so eval logs no longer conflate the
+          two failure classes.  Minimal blast radius: ~20 LOC across
+          two dispatcher call sites (test_full_pipeline.py:1304-1306
+          place branch + 1405-1407 stack branch), no API / signature
+          changes to execute_place / execute_stack / _release_and_-
+          verify_drop.  Picked over Option 2 (return tuple from
+          action helpers) per user direction 2026-05-15 — Option 1
+          touches fewer lines and keeps the action helpers'
+          Optional[RobotConfig] contract intact.
+          Original report: raised 2026-05-15 by user after the
+          pipeline crashed mid-run on --scene random-pairs
+          --goal find-and-tray-stack --seed 999.  red_object
+          snagged on a finger pad during place at free_002;
+          _release_and_verify_drop removed the constraint on
+          attempt 1 then failed 3 retries; execute_place returned
+          None; dispatcher kept stale grasp_constraint_id; planner
+          replanned from (holding red_object) producing a leading
+          place action; second execute_place crashed at
+          p.getConstraintInfo on the freed constraint id.
+          The audit #75 [DONE 2026-05-14] closing block explicitly
+          flagged this path: "Consistency caveat: rare path where
+          the planner finds a plan from (holding ?o) after a
+          drop-verify failure would hit a stale grasp_constraint_id
+          — deferred unless it surfaces in eval logs."  It surfaced.
+Priority: TIER 1 — pipeline crash on a reproducible eval seed.
+          Doesn't silently produce invalid scenes like #75 did; it
+          aborts the run.  Eval impact: any random-pairs cell that
+          trips a drop-verify failure mid-plan crashes the worker
+          process (exit_reason missing / no_summary in some
+          configurations).
+Where:    test_full_pipeline.py:1301-1310 (place dispatch — the
+          place_result-is-None branch).
+          test_full_pipeline.py:1402-1411 (stack dispatch — the
+          stack_result-is-None branch).
+          execution.py:634 + execution.py:783 (the crash sites:
+          p.getConstraintInfo on the stale id, inside execute_place
+          and execute_stack respectively).
+          execution.py:243-324 (_release_and_verify_drop — the helper
+          that removes the constraint on attempt 1 regardless of
+          whether subsequent verification retries succeed; this is
+          why the dispatcher's grasp_constraint_id goes stale).
+Depends:  None.  Builds on #75's _release_and_verify_drop helper
+          unchanged.  No PDDL domain / stream changes.  No
+          interaction with #58's held_obj kwarg plumbing — that
+          path remains correct when grasp_constraint_id is live;
+          the fix just makes it equally correct when the
+          constraint has been freed.
+Effort:   <1 day — landed in a single commit.
+
+What:  Audit #75 wired _release_and_verify_drop into execute_place
+       and execute_stack to catch finger-pad snags after release.
+       The helper removes the constraint on attempt 1, then retries
+       the open-gripper-and-settle loop up to 3 times.  When all
+       retries fail, the helper returns False and the action
+       returns None.  The dispatcher's existing None-handling
+       branch broke out of the action loop without touching
+       grasp_constraint_id / held_body_id / held_object_boxel_id,
+       so the next planner.plan() call (audit #58 plumbing) saw
+       (holding ?o) and produced a plan starting with `place`.
+       The first action in that plan re-entered execute_place,
+       which calls p.getConstraintInfo on the (now-freed) id
+       and crashes with `pybullet.error: Couldn't get user
+       constraint info`.
+
+       The crash is downstream of two correct-in-isolation
+       behaviours:
+         (a) #58 keeps the (holding ?o) symbolic state across
+             replans so the next plan doesn't waste actions
+             re-grasping.
+         (b) #75 removes the constraint eagerly inside
+             _release_and_verify_drop so the retries can settle
+             the cube under gravity without an active kinematic
+             attachment fighting the open gripper.
+       The dispatcher was the missing link: it didn't reconcile
+       PyBullet's "constraint freed" state with its own
+       grasp_constraint_id variable.
+
+Fix:   ONE COMMIT — dispatcher reconciles state with reality.
+
+       (1) Place dispatch (test_full_pipeline.py:1304-1306).
+           Replace the unconditional log + break with a probe:
+                if place_result is None:
+                    constraint_alive = False
+                    if grasp_constraint_id is not None:
+                        try:
+                            p.getConstraintInfo(grasp_constraint_id)
+                            constraint_alive = True
+                        except p.error:
+                            constraint_alive = False
+                    if not constraint_alive:
+                        print(f"    drop-verify failed for {obj_str}; "
+                              f"clearing held state and replanning "
+                              f"(audit #79).")
+                        grasp_constraint_id = None
+                        held_body_id = None
+                        held_object_boxel_id = None
+                    else:
+                        print(f"    IK failure during place — "
+                              f"replanning (audit #82)")
+                    break
+       (2) Stack dispatch (test_full_pipeline.py:1405-1407).
+           Same pattern — execute_stack uses the same helper and
+           has the same crash site at execution.py:783.
+
+       (3) Linting: py_compile clean for test_full_pipeline.py and
+           execution.py (matches the audit's standing convention,
+           e.g. #10 / #62 / #71 / #72 commits).
+
+Care:
+       (1) The probe path (try / except p.error) is the
+           authoritative signal that the constraint has been
+           freed.  Don't try to predict freed-ness from
+           _release_and_verify_drop's return value — the helper's
+           contract is "True on verified drop, False on failure";
+           it doesn't currently expose "constraint removed" as a
+           separate bit, and changing that contract would ripple
+           through three call sites (audit #58 safety net,
+           execute_place, execute_stack).  The probe is one
+           getConstraintInfo per failed action — negligible cost.
+       (2) Held-state clearing is conservative.  Even if the cube
+           is friction-snagged on a finger pad after the constraint
+           is freed, treating it as "no longer held" is correct:
+           subsequent move actions will see the cube fall to
+           wherever physics puts it, and the next sense /
+           update_object_positions cycle will re-register its
+           location.  The alternative (preserving holding ?o
+           without a constraint) leads to the crash this issue
+           fixes.
+       (3) Misleading log message fix is a bonus: pre-fix, both
+           IK failure and drop-verify failure printed "IK failure
+           during place — replanning (audit #82)".  Post-fix
+           they log distinct reasons, which makes failure-mode
+           breakdown (audit #73 plot 6) accurate for eval runs.
+       (4) The same pattern would generalise to any future
+           action whose helper might free state on failure
+           (e.g., a hypothetical multi-stage sense or look-around
+           action).  Not a refactor target today — two call sites
+           don't justify a helper.
+
+Related:
+       #75 [DONE 2026-05-14] — closing block explicitly flagged
+            this consistency caveat as "deferred unless it
+            surfaces in eval logs."  It surfaced; this issue is
+            the follow-up that closes the caveat.  #75 body
+            stays historical (don't edit it to remove the
+            caveat sentence — the audit trail is part of the
+            doc's value).
+       #58 [DONE 2026-05-08; archived] — held_obj kwarg plumbing
+            through planner.plan().  Correct in all other paths;
+            this issue is purely about the freed-constraint
+            edge.
+       #82 — IK failure during pick / place / stack triggers
+            replan from (holding ?o).  Pre-fix, drop-verify
+            failures were misattributed to #82 in dispatcher
+            logs; post-fix they log #79 instead.
+       #73 [DONE 2026-05-14] — eval plot 6 (failure-mode
+            breakdown) becomes accurate post-fix because the
+            two failure classes are now distinguishable in
+            timing_summary.json.
+
+
+================================================================================
+SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-15)
 ================================================================================
 
 Aligns with the ROADMAP banner above (pre-eval -> eval prerequisites -> eval).
@@ -1403,6 +1574,20 @@ Relocated 2026-05-12:
        plan refresh.
 
 Closed since previous summary:
+  #79  [DONE 2026-05-15] - stale grasp_constraint_id after drop-
+       verify failure (audit #75 caveat surfaced).  Dispatcher
+       probes p.getConstraintInfo on the held id when execute_place
+       / execute_stack returns None; if the constraint is gone,
+       clears grasp_constraint_id / held_body_id / held_object_-
+       boxel_id so the next planner.plan() builds init from
+       (handempty), not (holding ?o).  Closes the explicit
+       deferred caveat in #75's closing block.  Reproduced on
+       --scene random-pairs --goal find-and-tray-stack --seed 999.
+       Log message split: "drop-verify failed ... (audit #79)"
+       vs the legacy "IK failure during place — replanning
+       (audit #82)" so eval failure-mode breakdown (audit #73
+       plot 6) is accurate.  ~20 LOC across two dispatcher call
+       sites; no API change to action helpers.
   #76  [DONE 2026-05-14] - planner returns no plan for find-and-
        tray-stack post-failure.  Diagnosed as bucket (2c): hidden
        targets have no OBJECT boxel after sense_found_target, so
