@@ -249,6 +249,7 @@ def _release_and_verify_drop(
     dropped_name,
     max_attempts: int = 3,
     base_settle_steps: int = 30,
+    expected_support_z: Optional[float] = None,
 ) -> bool:
     """
     Open the gripper, remove the grasp constraint, and verify the held
@@ -259,13 +260,24 @@ def _release_and_verify_drop(
     safety net, audit #58) and execute_place / execute_stack (action
     paths, audit #75).
 
-    Drop verification queries PyBullet contact points: a released cube
-    rests on at least one non-robot body (table, tray, another cube).
-    A finger-pad snag shows only robot-link contacts — the cube is
-    still held by friction even after the constraint is gone.  The
-    earlier distance-and-speed heuristic could not distinguish a tight
-    stack (EE 1-2 cm above the cube, speed 0) from a snag (cube pinned
-    at the EE, speed 0) — both looked identical.
+    Audit #80 hardened the verify gate from a single-frame non-robot-
+    contact check to a 4-signal check.  The earlier check accepted false
+    positives: a cube touching the table for one frame while still
+    friction-pinned to a finger pad produced "released" with the cube
+    still attached to the EE — the PDDL fact (obj_at_boxel ?o ?b) then
+    diverged from physical reality and every subsequent plan was
+    grounded on a fiction.  Now require ALL of:
+      (i)   constraint genuinely gone (getConstraintInfo raises),
+      (ii)  cube bottom within 2 cm of ``expected_support_z`` (when
+            provided; callers that can't predict it — e.g. the
+            emergency-drop path — pass None and the gate is skipped),
+      (iii) cube COM stationary across an extra 20 settle steps
+            (<1 mm lateral drift — catches cubes pinned to a finger
+            that move with the arm on the next step),
+      (iv)  zero contact between held_body_id and any robot link.
+    Diagnostic info is logged on every attempt (pass or fail) so a
+    future false-positive regression is immediately visible in the run
+    log.
 
     Failure modes covered:
       • removeConstraint raises (already removed, invalid id).
@@ -304,22 +316,71 @@ def _release_and_verify_drop(
             env.step_simulation()
         env.update_object_positions()
 
-        # Verify via PyBullet contacts: a released cube touches a
-        # non-robot body (table, tray, another cube).  A finger-pad
-        # snag shows only robot contacts — the EE→obj-distance / speed
-        # heuristic (run #4 seed 999, blue_object) couldn't tell those
-        # apart because a snagged cube sits at the contact pose with
-        # near-zero speed, identical to a tight stack.
+        # Audit #80 multi-signal verify gate (see function docstring).
+
+        # (i) constraint state — explicit PyBullet probe.
+        if grasp_constraint_id is not None:
+            try:
+                p.getConstraintInfo(grasp_constraint_id)
+                constraint_gone = False
+            except p.error:
+                constraint_gone = True
+        else:
+            constraint_gone = True
+
+        # (iv) robot-link contacts; also collect non-robot contacts (a
+        # released cube must touch at least one non-robot body).
         contacts = p.getContactPoints(bodyA=held_body_id)
         contact_bodies = {c[2] for c in contacts}
+        robot_contacts = contact_bodies & {robot_id}
         non_robot = contact_bodies - {robot_id, -1}
-        if non_robot:
-            print(f"    -> Released {dropped_name} "
-                  f"(resting on bodies {sorted(non_robot)})")
+
+        # (ii) cube bottom near the expected support surface.
+        aabb_min, _ = p.getAABB(held_body_id)
+        cube_bottom_z = float(aabb_min[2])
+        if expected_support_z is not None:
+            height_err = cube_bottom_z - expected_support_z
+            height_ok = abs(height_err) <= 0.02  # 2 cm tolerance
+        else:
+            height_err = None
+            height_ok = True  # caller didn't request this gate
+
+        # (iii) cube COM stationary across 20 extra settle steps.  A
+        # cube pinned to a finger pad moves with the arm; a settled
+        # cube doesn't.  Costs ~83 ms at 240 Hz — same order as the
+        # existing base_settle_steps.
+        pos_before, _ = p.getBasePositionAndOrientation(held_body_id)
+        for _ in range(20):
+            env.step_simulation()
+        pos_after, _ = p.getBasePositionAndOrientation(held_body_id)
+        lateral_drift = float(np.hypot(pos_after[0] - pos_before[0],
+                                        pos_after[1] - pos_before[1]))
+        stationary = lateral_drift <= 1e-3  # 1 mm
+
+        height_str = (
+            f"bottom_z={cube_bottom_z:.4f} "
+            f"expected={expected_support_z:.4f} "
+            f"err={height_err * 1000:.1f}mm"
+            if expected_support_z is not None
+            else f"bottom_z={cube_bottom_z:.4f} (no_expected)"
+        )
+        diag = (f"constraint_gone={constraint_gone} "
+                f"robot_contacts={sorted(robot_contacts) or 'none'} "
+                f"non_robot_contacts={sorted(non_robot) or 'none'} "
+                f"{height_str} "
+                f"lateral_drift={lateral_drift * 1000:.2f}mm")
+
+        ok = (constraint_gone
+              and not robot_contacts
+              and bool(non_robot)
+              and height_ok
+              and stationary)
+        if ok:
+            print(f"    -> Released {dropped_name} (audit #80 verify ok; "
+                  f"{diag})")
             return True
         print(f"    Drop verification failed for {dropped_name}: "
-              f"only contacts are {sorted(contact_bodies) or 'none'} "
-              f"(robot id={robot_id}) — retry {attempt}/{max_attempts}.")
+              f"{diag} — retry {attempt}/{max_attempts}.")
 
     return False
 
@@ -676,11 +737,16 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     # verified drop the caller's post-place lift + plan-client sync run
     # normally; on failure return None and let the dispatcher replan.
     if grasp_constraint_id is not None:
+        # audit #80: pass expected support Z so the verify gate can
+        # reject cubes pinned mid-air or floating above the table.
+        # execute_place IKs the cube to land at table_z + obj_half_height
+        # (lines 642-647 above), so the cube's bottom should sit at table_z.
         if not _release_and_verify_drop(env, robot_id, gui,
                                          grasp_constraint_id,
-                                         held_body_id, obj_name):
+                                         held_body_id, obj_name,
+                                         expected_support_z=table_z):
             print(f"    ERROR: drop verification failed for {obj_name} "
-                  f"after place — aborting (audit #75)")
+                  f"after place — aborting (audit #75/#80)")
             return None
     else:
         # Defensive fallback: place called without a held object (not
@@ -815,12 +881,16 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     # removes the constraint, settles 60 steps (matching the prior in-
     # line settle so the post-stack AABB read into the registry doesn't
     # see a micro-bouncing cube), and retries on failure.
+    # audit #80: expected support Z is the support cube's live top.
+    # The stack IK targets sup_top_z + held_half_height (lines 793-794
+    # above), so the held cube's bottom should rest at sup_top_z.
     if not _release_and_verify_drop(env, robot_id, gui,
                                      grasp_constraint_id,
                                      held_body_id, obj_name,
-                                     base_settle_steps=60):
+                                     base_settle_steps=60,
+                                     expected_support_z=sup_top_z):
         print(f"    ERROR: drop verification failed for {obj_name} on "
-              f"{on_obj_name} — aborting (audit #75)")
+              f"{on_obj_name} — aborting (audit #75/#80)")
         return None
 
     # Hardcoded post-stack lift (audit #36, THESIS_NOTES §19): the EE
