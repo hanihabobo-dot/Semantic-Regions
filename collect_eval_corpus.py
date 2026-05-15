@@ -4,10 +4,11 @@ collect_eval_corpus.py — Pre-vetted seed corpus for audit #77.
 
 Iterates candidate seeds and headless-probes scene construction across
 every (scene, n_occluders, stack_height, tray) configuration the
-audit-77 anytime-compactness sweep will use.  Keeps only seeds that
-pass ALL configs.  Persists the first N vetted seeds to
-eval_corpus_100.json (committed to the repo so future inter-algorithm
-comparisons share the corpus).
+audit-77 anytime-compactness sweep will use.  Keeps ALL seeds that
+pass every config (no truncation to --n-corpus — that flag is a
+soft progress target for logging only).  Persists the vetted seeds
+to eval_corpus.json (committed to the repo so future inter-
+algorithm comparisons share the corpus).
 
 Probes run in parallel via ProcessPoolExecutor — each probe is a
 self-contained BoxelTestEnv(gui=False) construction.  PyBullet DIRECT
@@ -117,18 +118,23 @@ def main() -> int:
         description="Collect a fixed pre-vetted seed corpus for audit #77.",
     )
     ap.add_argument("--n-corpus", type=int, default=100,
-                    help="Target corpus size (default 100).")
+                    help="Soft target corpus size, used for progress "
+                         "logging only — ALL seeds that pass every "
+                         "probe config are kept (no hard cap).  Defaults "
+                         "to 100.")
     ap.add_argument("--start-seed", type=int, default=0,
                     help="First candidate seed (default 0, sequential).")
     ap.add_argument("--max-candidates", type=int, default=500,
                     help="Probe at most this many candidates "
-                         "(default 500).")
+                         "(default 500).  The actual corpus size is "
+                         "the number that pass all configs, which is "
+                         "<= max-candidates.")
     ap.add_argument("--workers", type=int,
                     default=min(4, max(1, (os.cpu_count() or 4) - 1)),
                     help="Parallel probe workers (default min(4, cpus-1)).")
     ap.add_argument("--output", type=Path,
-                    default=Path("eval_corpus_100.json"),
-                    help="Output JSON (default eval_corpus_100.json).")
+                    default=Path("eval_corpus.json"),
+                    help="Output JSON (default eval_corpus.json).")
     args = ap.parse_args()
 
     print(f"[corpus] target n={args.n_corpus}, "
@@ -186,7 +192,10 @@ def main() -> int:
                       f"({(now - t0):.0f}s elapsed)", flush=True)
 
     wall = time.perf_counter() - t0
-    accepted = accepted[:args.n_corpus]
+    # Keep ALL seeds that passed every config — no truncation to
+    # --n-corpus.  The CLI flag is now a soft progress target; the
+    # corpus IS however many seeds happened to pass the probe across
+    # the candidate range.
     payload = {
         "schema_version": 1,
         "audit_issue": 77,
