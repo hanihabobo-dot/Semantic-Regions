@@ -1072,18 +1072,19 @@ What:  The current eval pegs semantic's minimum boxel size at
 
 Fix:   ONE FEATURE BRANCH, multi-commit:
 
-       Step 0 — eval corpus (supervisor methodology constraint,
-       2026-05-14).  Build a FIXED pre-vetted seed corpus shared
-       by every subsequent comparison run.  Script (e.g.,
-       collect_eval_corpus.py): iterate candidate seeds, headless-
-       probe each scene with the pre-flight checks (no #70
-       unreach, no _is_target_blocked spawn failure, scene loads
-       cleanly to end-of-init), keep first 100 that pass.
-       Persist as eval_corpus_100.json committed to the repo so
-       re-runs are bit-identical and reviewers can audit which
-       scenes were evaluated.  GATES Steps 3-5 — without a
-       shared corpus, cross-algorithm comparisons are invalid
-       per supervisor direction.
+       Step 0 [DONE 2026-05-15] — eval corpus (supervisor methodology
+       constraint, 2026-05-14).  collect_eval_corpus.py (commit
+       38834ee, branch audit-77-anytime-sweep) sequentially probes
+       BoxelTestEnv(gui=False) across 7 (scene, n_occluders,
+       extra_distractors, tray) configs covering every cell the
+       Step 3 matrix will exercise; catches "Could not place" and
+       "audit #70" RuntimeError; keeps the first --n-corpus seeds
+       that pass all configs and writes eval_corpus_100.json with
+       seeds + probe_configs + reject stats.  Sweep build still
+       PENDING — actual eval_corpus_100.json artefact lands once
+       the script is run end-to-end.  GATED Steps 3-5 — without a
+       shared corpus, cross-algorithm comparisons are invalid per
+       supervisor direction.
 
        Step 1 — planner-side time-budget knob.  Confirm
        PDDLStream's `max_time` reaches planner.plan(); if
