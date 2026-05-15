@@ -343,6 +343,24 @@ def _release_and_verify_drop(
             pass
         return True
 
+    # Audit #84 pre-release diag - bracket entry-to-loop so a cube that
+    # is already on the floor BEFORE open_gripper fires is distinguishable
+    # from one that falls during the release loop.  Pairs with the in-
+    # loop diag below; tilt-at-grip vs tilt-at-release split visible
+    # across consecutive lines.  Fires for execute_place / execute_stack /
+    # release_held_object_in_place - extra signal welcome on all three.
+    pre_pos, pre_orn = p.getBasePositionAndOrientation(held_body_id)
+    pre_aabb_min, pre_aabb_max = p.getAABB(held_body_id)
+    pre_euler = p.getEulerFromQuaternion(pre_orn)
+    pre_tilt_deg = max(abs(np.degrees(pre_euler[0])),
+                        abs(np.degrees(pre_euler[1])))
+    print(f"    [#84-diag] pre-release {dropped_name}: "
+          f"pos=[{pre_pos[0]:.4f},{pre_pos[1]:.4f},{pre_pos[2]:.4f}] "
+          f"aabb=[{pre_aabb_min[0]:.4f},{pre_aabb_min[1]:.4f},"
+          f"{pre_aabb_min[2]:.4f}]-[{pre_aabb_max[0]:.4f},"
+          f"{pre_aabb_max[1]:.4f},{pre_aabb_max[2]:.4f}] "
+          f"tilt_deg={pre_tilt_deg:.2f}")
+
     constraint_removed = False
     for attempt in range(1, max_attempts + 1):
         # Remove the constraint exactly once; subsequent attempts only
@@ -1008,6 +1026,25 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
         contact_z,
     ])
 
+    # Audit #84 pre-lower diag - bracket the stack approach so a cube
+    # that ends up on the plane instead of the support surfaces WHICH
+    # input (support pose, grasp tilt, EE-obj Z) was wrong.
+    held_orn = p.getBasePositionAndOrientation(held_body_id)[1]
+    held_euler = p.getEulerFromQuaternion(held_orn)
+    held_tilt_deg = max(abs(np.degrees(held_euler[0])),
+                         abs(np.degrees(held_euler[1])))
+    print(f"    [#84-diag] stack {obj_name} on {on_obj_name}: "
+          f"contact_ee=[{contact_ee[0]:.4f},{contact_ee[1]:.4f},"
+          f"{contact_ee[2]:.4f}] target_obj_z={target_obj_z:.4f} "
+          f"sup_top_z={sup_top_z:.4f} ee_to_obj_z={ee_to_obj_z:.4f} "
+          f"held_half_height={held_half_height:.4f} "
+          f"sup_aabb=[{sup_min[0]:.4f},{sup_min[1]:.4f},{sup_min[2]:.4f}]"
+          f"-[{sup_max[0]:.4f},{sup_max[1]:.4f},{sup_max[2]:.4f}] "
+          f"held_aabb=[{held_aabb_min[0]:.4f},{held_aabb_min[1]:.4f},"
+          f"{held_aabb_min[2]:.4f}]-[{held_aabb_max[0]:.4f},"
+          f"{held_aabb_max[1]:.4f},{held_aabb_max[2]:.4f}] "
+          f"held_tilt_deg={held_tilt_deg:.2f}")
+
     pc = env.client_id
     contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc,
                               seed=config.joint_positions)
@@ -1017,6 +1054,33 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
         return None
 
     move_robot_smooth(robot_id, contact_joints, gui)
+
+    # Audit #84 post-arrival diag - surfaces motion-control overshoot
+    # or grasp-tilt drift between contact_z compute and arm arrival.
+    # >5 mm overshoot OR >5 deg tilt drift flips the prefix to
+    # "arrival-deviation" for easy greppability.
+    live_ee_pos = p.getLinkState(robot_id, END_EFFECTOR_LINK)[0]
+    live_obj_pos, live_obj_orn = p.getBasePositionAndOrientation(held_body_id)
+    ee_xy_err = float(np.hypot(live_ee_pos[0] - contact_ee[0],
+                                live_ee_pos[1] - contact_ee[1]))
+    ee_z_err = float(live_ee_pos[2] - contact_ee[2])
+    obj_z_err = float(live_obj_pos[2] - target_obj_z)
+    live_euler = p.getEulerFromQuaternion(live_obj_orn)
+    live_tilt_deg = max(abs(np.degrees(live_euler[0])),
+                         abs(np.degrees(live_euler[1])))
+    tilt_drift_deg = live_tilt_deg - held_tilt_deg
+    overshoot = (max(ee_xy_err, abs(ee_z_err), abs(obj_z_err)) > 0.005
+                 or abs(tilt_drift_deg) > 5.0)
+    arrival_prefix = ("[#84-diag] arrival-deviation"
+                      if overshoot else "[#84-diag] arrival")
+    print(f"    {arrival_prefix} {obj_name} on {on_obj_name}: "
+          f"live_ee=[{live_ee_pos[0]:.4f},{live_ee_pos[1]:.4f},"
+          f"{live_ee_pos[2]:.4f}] ee_xy_err={ee_xy_err*1000:.2f}mm "
+          f"ee_z_err={ee_z_err*1000:.2f}mm "
+          f"live_obj_z={live_obj_pos[2]:.4f} "
+          f"obj_z_err={obj_z_err*1000:.2f}mm "
+          f"live_tilt_deg={live_tilt_deg:.2f} "
+          f"tilt_drift_deg={tilt_drift_deg:+.2f}")
 
     # Verify the cube actually falls free of the gripper — finger-pad
     # snags / position-control overshoot can leave it attached visually
