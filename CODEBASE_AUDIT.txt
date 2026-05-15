@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #76, #77                                                 #
+#  OPEN ISSUES — #63, #77                                                      #
 #                                                                              #
 ################################################################################
 
@@ -309,9 +309,9 @@ Where:    README.md (project root, currently 29 lines — quick-start
           and_Streams, Scene_Environment, Spatial_Reasoning.
 Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
           results drive Known_Issues_and_Roadmap + Design_Decisions
-          + the README story.  Any other open issue (#76, #77)
-          that lands between now and submission extends the diff
-          this sweep has to absorb.  Gate list refreshed
+          + the README story.  Any other open issue (#77) that
+          lands between now and submission extends the diff this
+          sweep has to absorb.  Gate list refreshed
           2026-05-12 triage: dropped #50/#57/#59/#61/#65
           (deferred) and #66 (relocated to TAMPURA_PLAN.md).
           #62/#69/#70/#71/#72 closed 2026-05-12 so they no longer
@@ -774,22 +774,37 @@ Related:
 ================================================================================
 #76. PLANNER RETURNS NO PLAN FOR SOME REACH-CONSTRAINED RANDOM-PAIRS SCENES
 ================================================================================
-Status:   OPEN.  Raised 2026-05-12 (later) by user as Follow-up B
-          during #70 reach-fix verification (commits 8d9b7ad +
-          ca6746b + b48c667 + a2b37d9).  Side-finding on unseeded
-          random-pairs find-and-tray-stack run (seed=1905790753):
-          scene built reach-clean (3 occluders + 2 targets + tray,
-          31 boxels in registry, no #70 assert), but planner
-          returned solved=False / "ERROR: No plan found!" at
-          complexity 3 after 4 iterations and 0.847 s.  Final
-          iteration's "Stream plan (inf, 0, inf): False" + "Action
-          plan (inf, inf): False" indicate PDDLStream concluded NO
-          plan exists at complexity 3 (vs earlier iterations'
-          "None" = no result yet).  Whether this is (a) a genuine
-          plan-doesn't-exist verdict for this seed under the
-          post-#70 tighter _SAFE_TABLE_* window, or (b) the
-          adaptive search giving up early before escalating to
-          complexity 4+, is the open question.
+Status:   [DONE 2026-05-14] — diagnosed as audit-#76 bucket (2c)
+          (specific predicate unsatisfied).  Root cause: hidden
+          targets have no OBJECT boxel at startup, and the
+          dispatcher's sense_found_target handler didn't register
+          one after revealing the target.  Once any in-flight plan
+          broke mid-execution (audit #40 stack physics failure,
+          audit #75 drop-verify failure, IK failure mid-pick), the
+          next _build_init had no (obj_at_boxel target ?) fact for
+          the discovered target and PDDLStream concluded "Stream
+          plan: False" at complexity 3 in ~1 s with sample_time=0.
+          Fixed by extending handle_sense_action's found_target
+          branch to register an OBJECT boxel for the discovered
+          target from its live PyBullet AABB (commit 62b6050).
+          Mirrors the symmetric contains_nontarget discovery path
+          that already existed for unexpected non-targets.
+          Diagnostic instrumentation that pinned the cause (commits
+          a617e1b + 9169142) plumbed PDDLStream verbose +
+          --max-plan-time end-to-end and added [#76-diag] init-fact
+          breakdowns to the planner — kept in tree for future
+          investigations.
+          Original report: Raised 2026-05-12 (later) by user as
+          Follow-up B during #70 reach-fix verification (commits
+          8d9b7ad + ca6746b + b48c667 + a2b37d9).  Side-finding on
+          unseeded random-pairs find-and-tray-stack run
+          (seed=1905790753): scene built reach-clean (3 occluders +
+          2 targets + tray, 31 boxels in registry, no #70 assert),
+          but planner returned solved=False / "ERROR: No plan
+          found!" at complexity 3 after 4 iterations and 0.847 s.
+          Final iteration's "Stream plan (inf, 0, inf): False" +
+          "Action plan (inf, inf): False" indicate PDDLStream
+          concluded NO plan exists at complexity 3.
           Recurrence 2026-05-12 (later) on a second unseeded run
           (seed=1562056700): scene built clean (3 occluders +
           2 targets + tray, 34 boxels, 4 shadows, no #70 assert),
@@ -1215,14 +1230,6 @@ anytime compactness sweep, headline strength upgrade for the
 compactness pillar.
 
 TIER 1 — CORRECTNESS / HIGH-PRIO:
-  #76  Planner returns no plan for some reach-constrained random-
-       pairs scenes.  PROMOTED 2026-05-12 (later) from TIER 2 to
-       TIER 1: 2-of-2 unseeded random-pairs runs hit the failure
-       mode (seeds 1905790753 and 1562056700, both complexity 3
-       / under 1s).  At a >50% per-seed failure rate the eval
-       success-rate plot is misleading.  Diagnostic step 1:
-       re-run with verbose logging + pre-#70 code on the same
-       seeds to disambiguate.
   #77  Anytime compactness sweep — success rate vs time
        budget with smaller semantic boxels.  Currently
        semantic min boxel = uniform cell = 5 cm for time-
@@ -1237,10 +1244,10 @@ TIER 1 — CORRECTNESS / HIGH-PRIO:
        thesis figure.
 TIER 3 — CODE QUALITY / DOC SWEEP:
   #63  README + wiki final doc sweep - gated on remaining open
-       issues (now: #76, #77).  Explicitly the last commit
+       issues (now: #77).  Explicitly the last commit
        before thesis submission per user 2026-05-08.
 
-Total open: 3 items (#63, #76, #77) per the OPEN ISSUES
+Total open: 2 items (#63, #77) per the OPEN ISSUES
 header at top (the source of truth).
 
 Relocated 2026-05-12:
@@ -1253,6 +1260,24 @@ Relocated 2026-05-12:
        plan refresh.
 
 Closed since previous summary:
+  #76  [DONE 2026-05-14] - planner returns no plan for find-and-
+       tray-stack post-failure.  Diagnosed as bucket (2c): hidden
+       targets have no OBJECT boxel after sense_found_target, so
+       any plan-break event (audit #40 stack physics failure, #75
+       drop-verify failure, IK failure mid-pick) leaves the next
+       _build_init with no (obj_at_boxel target ?) fact and
+       PDDLStream returns "Stream plan: False" at complexity 3 in
+       ~1 s.  Fixed by extending handle_sense_action's found_target
+       branch to register an OBJECT boxel for the discovered
+       target from its live PyBullet AABB (commit 62b6050).
+       Diagnostic patches that pinned the cause kept in tree
+       (a617e1b plumbs PDDLStream verbose + --max-plan-time CLI
+       end-to-end; 9169142 adds [#76-diag] init-fact breakdowns
+       to planner.plan()).  Verified on the failing seed
+       (1905790753): planner now grounds 4-action re-pick plans
+       where before it returned no_plan in 1.2 s.  Stack physics
+       failures for that seed are downstream concerns (audit #40
+       territory), not part of this issue.
   #75  [DONE 2026-05-14] - execute_place / execute_stack post-
        release verification gap.  _release_and_verify_drop helper
        extracted in execution.py and wired to both action paths
