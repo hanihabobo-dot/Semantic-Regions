@@ -74,7 +74,8 @@ from visualization import BoxelVisualizer
 
 from belief import BeliefState
 from reboxelize import reboxelize_free_space
-from execution import (compute_shadow_blockers,
+from execution import (audit_robot_held_state,
+                       compute_shadow_blockers,
                        release_held_object_in_place,
                        execute_pick, execute_place, execute_stack,
                        handle_sense_action)
@@ -1327,6 +1328,14 @@ def main(gui=True, run_logger=None, scene_config=None,
                         grasp_constraint_id = None
                         held_body_id = None
                         held_object_boxel_id = None
+                        # Audit #82: before yielding control to the next
+                        # planner.plan() with (handempty) in init, log
+                        # whether physics agrees.  A ghost cube here means
+                        # the next pick starts while we're still friction-
+                        # pinned to a previous cube — the "two cubes" bug.
+                        audit_robot_held_state(
+                            env, robot_id, expected_held_body_id=None,
+                            tag=f"post-clear-place:{obj_str}")
                     else:
                         print(f"    IK failure during place — replanning (audit #82)")
                     break
@@ -1453,6 +1462,14 @@ def main(gui=True, run_logger=None, scene_config=None,
                         grasp_constraint_id = None
                         held_body_id = None
                         held_object_boxel_id = None
+                        # Audit #82: mirror of the place branch above —
+                        # log physical held state at the symbolic-clear
+                        # boundary so the "two cubes" divergence surfaces
+                        # before the next plan_motion crashes into the
+                        # ghost.
+                        audit_robot_held_state(
+                            env, robot_id, expected_held_body_id=None,
+                            tag=f"post-clear-stack:{obj_str}")
                     else:
                         print(f"    IK failure during stack — replanning (audit #30)")
                     break
