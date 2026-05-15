@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #84 (PICK UP NEXT), #77, #78, #63                             #
+#  OPEN ISSUES — #77 (PICK UP NEXT), #78, #63                                  #
 #                                                                              #
 ################################################################################
 
@@ -337,6 +337,27 @@ Closed / relocated since last summary:
        Closes the seed-999 cascade where tilt grew on retry
        (6.85->11.51->10.64 deg) and the cube remained pinned
        to a finger pad across dispatcher state-clear.
+  #84 [DONE 2026-05-15 (later)] — commit 9268a19.  Diagnostic-
+       only; three "[#84-diag]" log blocks landed in execution.py.
+       Step 1: execute_stack pre-lower line listing contact_ee /
+       target_obj_z / sup_top_z / ee_to_obj_z / held_half_height /
+       sup_aabb / held_aabb / held_tilt_deg.  Step 2: execute_stack
+       post-arrival line with live EE pos, ee_xy_err / ee_z_err /
+       obj_z_err vs contact_ee target, live_tilt_deg and tilt_-
+       drift_deg vs the pre-lower tilt — prefix flips to "arrival-
+       deviation" on >5 mm overshoot OR >5 deg tilt drift for
+       grep-ability.  Step 3: _release_and_verify_drop pre-release
+       line with held cube pos / AABB / tilt_deg at function entry
+       (after the no-name early-return so quiet on best-effort
+       paths).  Fires for execute_place / execute_stack /
+       release_held_object_in_place — extra signal welcome on
+       all three.  NO behavioural change; ~3 extra log lines per
+       stack action (rare, ~one per plan).  Next step is the
+       user-side seed-999 GUI re-run to classify H1 (IK/motion
+       miscalc) / H2 (pick-time grasp tilt) / H3 (tray rim
+       interference); targeted behavioural fix files under a
+       separate issue once data is in.  Mirror of audit #82's
+       shape on the stack-entry side.
 
 ================================================================================
 #63. README + WIKI FINAL DOC SWEEP — POST-EVAL FREEZE-AND-WRITE
@@ -2350,7 +2371,33 @@ Related:
 ================================================================================
 #84. CUBE-ON-CUBE STACK MIS-LANDING — ROOT CAUSE DIAGNOSTIC
 ================================================================================
-Status:   OPEN.  Raised 2026-05-15 (later) alongside #83 from
+Status:   [DONE 2026-05-15 (later)] - commit 9268a19.  Three diag
+          blocks landed in execution.py: (Step 1) execute_stack
+          pre-lower "[#84-diag] stack {obj} on {on_obj}:" listing
+          contact_ee, target_obj_z, sup_top_z, ee_to_obj_z,
+          held_half_height, sup_aabb (min/max), held_aabb (min/max),
+          held_tilt_deg from current quaternion; (Step 2)
+          execute_stack post-arrival "[#84-diag] arrival" with
+          live EE pos, ee_xy_err / ee_z_err / obj_z_err vs the
+          contact_ee target, live_tilt_deg and tilt_drift_deg vs
+          the pre-lower tilt — prefix flips to "arrival-deviation"
+          on >5 mm overshoot OR >5 deg tilt drift for grep-ability;
+          (Step 3) _release_and_verify_drop pre-release
+          "[#84-diag] pre-release {dropped_name}:" with held cube
+          pos, AABB, tilt_deg captured at function entry (after
+          the early-return guard so the no-name path stays quiet).
+          Pre-release fires for execute_place / execute_stack /
+          release_held_object_in_place — extra signal welcome on
+          all three.  Diagnostic-only, NO behavioural change;
+          ~3 extra log lines per stack action (rare).  Next
+          step is the user-side seed-999 GUI re-run to classify
+          H1 (IK/motion miscalc) / H2 (pick-time grasp tilt) /
+          H3 (tray rim interference) from the new triple of
+          lines; targeted behavioural fix lands under a separate
+          issue once data is in.  Original report below for
+          context.
+
+          OPEN.  Raised 2026-05-15 (later) alongside #83 from
           seed-999 GUI re-run log run_2026-05-15_19-59-16.  Same
           user observation ("back and forth hisrtaricly") — the
           cascade is #83, the underlying failure that triggers
@@ -2692,19 +2739,9 @@ cascade containment side but cannot un-stick the physical
 pin that #85 addresses.
 
 TIER 0 — TOP PRIORITY (correctness / sim integrity):
-  #84  CUBE-ON-CUBE STACK MIS-LANDING DIAGNOSTIC — PICK UP NEXT.  In the
-       same seed-999 log, cyan_object's first stack on
-       purple_object lands the cube on the plane (z≈0) instead
-       of purple's top (z≈0.3763), with robot_link_contacts=
-       {none} and non_robot_contacts=[0] (plane body) — so the
-       cube cleanly left the gripper and missed its support.
-       Three hypotheses (support pose drift / pick-time grasp
-       tilt / tray rim interference); none ruled out by the
-       existing #82 diag.  Diagnostic-only commit mirroring
-       #82's shape: pre-lower + post-arrival + pre-release
-       state dumps in execute_stack and _release_and_verify_-
-       drop.  Behavioural fix lands as a follow-up once data
-       classifies the hypothesis.
+  (no open items as of 2026-05-15 (later) — #84 closed in commit
+   9268a19; behavioural fix gated on seed-999 GUI re-run with the
+   new diag triple, which will file as a follow-up issue.)
 
 TIER 1 — CORRECTNESS / HIGH-PRIO:
   #77  Anytime compactness sweep — success rate vs time
@@ -2737,18 +2774,21 @@ TIER 3 — CODE QUALITY / DOC SWEEP:
        issues (now: #77, #78).  Explicitly the last commit
        before thesis submission per user 2026-05-08.
 
-Total open: 4 items (#84, #77, #78, #63) per the OPEN ISSUES
+Total open: 3 items (#77, #78, #63) per the OPEN ISSUES
 header at top (the source of truth).  Listed in TIER order for
 clarity — chronological numbers in the header are NOT priority-
 ordered (see the "ISSUE NUMBERING" banner near the top of this
-file).  TIER 0 has ONE item as of 2026-05-15 (later): #84
-(root-cause diagnostic for the cube-on-cube stack mis-landing,
-PICK UP NEXT).  #83 [DONE 2026-05-15 (later) commit 0a266c9]
-closed the OBJECT-boxel cascade containment side; #85 [DONE
-2026-05-15 (later) commit e0f7756] closed the physical pin via
-a 15 mm pre-release EE lift in execute_place — the strict #80
-verify gate now satisfiable because pads no longer share Z-range
-with the tilted cube at release time.
+file).  TIER 0 has ZERO open items as of 2026-05-15 (later):
+#84 [DONE 2026-05-15 (later) commit 9268a19] landed the diag
+triple (pre-lower / post-arrival / pre-release) so the next
+seed-999 GUI re-run will classify H1 (IK/motion miscalc) /
+H2 (pick-time grasp tilt) / H3 (tray rim interference) into a
+targeted follow-up issue; #83 [DONE 2026-05-15 (later) commit
+0a266c9] closed the OBJECT-boxel cascade containment side; #85
+[DONE 2026-05-15 (later) commit e0f7756] closed the physical
+pin via a 15 mm pre-release EE lift in execute_place — the
+strict #80 verify gate now satisfiable because pads no longer
+share Z-range with the tilted cube at release time.
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
