@@ -881,14 +881,25 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     # removes the constraint, settles 60 steps (matching the prior in-
     # line settle so the post-stack AABB read into the registry doesn't
     # see a micro-bouncing cube), and retries on failure.
-    # audit #80: expected support Z is the support cube's live top.
-    # The stack IK targets sup_top_z + held_half_height (lines 793-794
-    # above), so the held cube's bottom should rest at sup_top_z.
+    # audit #80: expected support Z is the support's live top.  Cube-on-
+    # cube stacks land on the support top, so passing sup_top_z is the
+    # tight check.  Tray supports are containers — the cube settles
+    # INSIDE the cavity at the tray floor (~ table_z), not on the rim
+    # top (sup_max[2]).  Skip the height gate for trays and let the
+    # tray-aware geometric check in _verify_cube_on (audit #40,
+    # test_full_pipeline.py:127-180) catch geometric stack failures
+    # downstream.  The other 3 gate signals (constraint gone, no robot
+    # contact, cube stationary) still catch a gripper pin regardless
+    # of support shape.
+    support_info = env.objects.get(on_obj_name)
+    support_is_tray = bool(getattr(support_info, 'is_tray', False))
+    verify_support_z = None if support_is_tray else sup_top_z
+
     if not _release_and_verify_drop(env, robot_id, gui,
                                      grasp_constraint_id,
                                      held_body_id, obj_name,
                                      base_settle_steps=60,
-                                     expected_support_z=sup_top_z):
+                                     expected_support_z=verify_support_z):
         print(f"    ERROR: drop verification failed for {obj_name} on "
               f"{on_obj_name} — aborting (audit #75/#80)")
         return None
