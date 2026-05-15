@@ -508,18 +508,29 @@ def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
 
 
 def open_gripper(robot_id: int, gui: bool = False):
-    """Open the Panda gripper (finger width ~0.08 m)."""
+    """Open the Panda gripper (finger width ~0.08 m).
+
+    Audit #79 follow-up 2026-05-15: force bumped 50 -> 200 N and steps
+    30 -> 80 so the fingers reliably reach the URDF max (0.04 m per
+    finger = 0.08 m total) even when a cube is friction-pinched between
+    the pads.  The earlier 50 N / 30-step budget was tuned for unloaded
+    fingers ("force=50 N is well above the ~20 N needed to open unloaded
+    fingers"); under load it let cubes snag, audit #75's drop-verify
+    helper then failed 3x and the place / stack action aborted.  Higher
+    force is safe — the URDF position limit clips finger travel at 0.04
+    regardless; we just want the position controller to win against
+    finger-pad friction reaction during the open transient.  80 steps
+    at 240 Hz is ~0.33 s wall-clock, an extra ~0.2 s per release that
+    is negligible against typical 2-4 s arm motion.
+    """
     import time
-    # 0.04 m per finger = 0.08 m total opening (Panda max is 0.08 m).
-    # force=50 N is well above the ~20 N needed to open unloaded fingers.
-    # 30 steps at 240 Hz ≈ 0.125 s — enough for full travel.
-    for _ in range(30):
+    for _ in range(80):
         p.setJointMotorControl2(robot_id, FINGER_JOINTS[0],
                                 p.POSITION_CONTROL,
-                                targetPosition=0.04, force=50)
+                                targetPosition=0.04, force=200)
         p.setJointMotorControl2(robot_id, FINGER_JOINTS[1],
                                 p.POSITION_CONTROL,
-                                targetPosition=0.04, force=50)
+                                targetPosition=0.04, force=200)
         p.stepSimulation()
         if gui:
             time.sleep(1 / 120)
