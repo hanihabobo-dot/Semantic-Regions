@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #77, #78, #81                                            #
+#  OPEN ISSUES — #63, #77, #78                                                 #
 #                                                                              #
 ################################################################################
 
@@ -1795,12 +1795,37 @@ Related:
 ================================================================================
 #81. GRIPPER STAYS LOCKED TO ARM — RELEASE PATH DOESN'T ACTUALLY FREE THE CUBE
 ================================================================================
-Status:   OPEN.  Raised 2026-05-15 by user during seed-999
-          verification of the #79 follow-up.  Quote: "fix the
-          other issue which is that the gripper stays locked
-          in to the arm.  make sure addconstraint is actually
-          removed and that we dont sample a letting go grasp
-          but really just open up as maximally as we can."
+Status:   [DONE 2026-05-15 (later)] - commit 65146ad replaces
+          open_gripper's POSITION_CONTROL loop with a resetJointState
+          teleport to URDF max (0.04 per finger) followed by the
+          existing 80-step POSITION_CONTROL hold for the cube to fall
+          and settle.  The teleport bypasses the motor controller's
+          force ceiling (audit failure mode b) AND eliminates the
+          sliding-pad retraction transient (audit failure mode c) -
+          both diagnosed empirically in seed-999 log run_2026-05-15_-
+          18-57-21 lines 188-190 / 277-279 where blue_object and
+          red_object places showed constraint_gone=True
+          robot_contacts=[2] (finger pad still touching cube) after
+          open_gripper.  Audit failure mode (a) (constraint not
+          removed) was already ruled out by audit #80's gate-(i)
+          probe.  Sim-only behaviour per audit body Step 2 mode (b):
+          "resetJointState directly to 0.04 ... bypasses motor
+          controller entirely - sim-only acceptable for a thesis-
+          grade release primitive."  Also adds finger-position to
+          audit #80's verify-gate diag line (FINGER_JOINTS imported
+          into execution.py) so future regressions are visible.
+          close_gripper untouched (pick path keeps gentle PC at
+          50 N per audit Care note 3).  Seed-999 GUI re-verification
+          still pending; downstream effect: audit #80's verify gate
+          should now see robot_contacts=none on every release, so
+          the #79 dispatcher-clear path stops firing on the place-
+          on-table case.
+Raised:   2026-05-15 by user during seed-999 verification of the
+          #79 follow-up.  Quote: "fix the other issue which is
+          that the gripper stays locked in to the arm.  make sure
+          addconstraint is actually removed and that we dont
+          sample a letting go grasp but really just open up as
+          maximally as we can."
           DO NOT bundle with #80 — see #80's Care note (1).
 Priority: TIER 0 — physical sim integrity.  A cube being
           dragged with the gripper after a reported successful
@@ -1969,19 +1994,6 @@ LATER backlog.  #77 raised 2026-05-14 during #73 plot review —
 anytime compactness sweep, headline strength upgrade for the
 compactness pillar.
 
-TIER 0 — TOP PRIORITY (correctness / sim integrity):
-  #81  Gripper stays locked to arm — release path doesn't
-       actually free the cube even after audit #79 follow-up
-       bumped open_gripper to 200 N / 80 steps.  Three failure-
-       mode candidates: (a) constraint not actually removed,
-       (b) finger position-control stalls under load,
-       (c) "letting-go grasp" residue drags cube laterally as
-       pads retract.  Diagnostic-first; fix the dominant
-       mode(s) found.  User direction 2026-05-15: "make sure
-       addconstraint is actually removed and that we dont
-       sample a letting go grasp but really just open up as
-       maximally as we can."  DO NOT bundle with #80.
-
 TIER 1 — CORRECTNESS / HIGH-PRIO:
   #77  Anytime compactness sweep — success rate vs time
        budget with smaller semantic boxels.  Currently
@@ -2013,11 +2025,11 @@ TIER 3 — CODE QUALITY / DOC SWEEP:
        issues (now: #77, #78).  Explicitly the last commit
        before thesis submission per user 2026-05-08.
 
-Total open: 4 items (#81, #77, #78, #63) per the OPEN
-ISSUES header at top (the source of truth).  Listed in TIER
-order for clarity — chronological numbers in the header are
-NOT priority-ordered (see the "ISSUE NUMBERING" banner near
-the top of this file).
+Total open: 3 items (#77, #78, #63) per the OPEN ISSUES
+header at top (the source of truth).  Listed in TIER order
+for clarity — chronological numbers in the header are NOT
+priority-ordered (see the "ISSUE NUMBERING" banner near the
+top of this file).  TIER 0 queue is empty.
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
@@ -2029,6 +2041,26 @@ Relocated 2026-05-12:
        plan refresh.
 
 Closed since previous summary:
+  #81  [DONE 2026-05-15 (later)] - commit 65146ad swaps
+       open_gripper's POSITION_CONTROL loop for a resetJointState
+       teleport to URDF max (0.04 per finger), followed by the
+       existing 80-step PC hold-and-settle.  Audit #79 follow-up's
+       200 N / 80 steps still lost to cube-pad friction at
+       grasping width (mode b); resetJointState bypasses the motor
+       controller's force ceiling AND eliminates the sliding-pad
+       retraction transient (mode c) in one move.  Seed-999 log
+       run_2026-05-15_18-57-21 lines 188-190 / 277-279 pinned the
+       symptom: constraint_gone=True robot_contacts=[2] (finger
+       pad still touching) after open_gripper, blocking #80's
+       gate on every place-on-table.  Audit failure mode (a) was
+       already ruled out by #80's gate-(i) probe.  Sim-only per
+       audit Step 2 mode (b) explicit acceptance.  Diagnostic
+       enhancement: finger-position added to #80 verify-gate diag
+       line (FINGER_JOINTS imported into execution.py).  close_-
+       gripper untouched (pick path).  GUI re-verification on
+       seed-999 still pending; expected effect: #80's gate sees
+       robot_contacts=none every release, the #79 dispatcher-clear
+       branch stops firing on place-on-table.
   #80  [DONE 2026-05-15 (later)] - commit 7116e73 hardens
        _release_and_verify_drop's verify gate from single-signal
        (any non-robot contact) to 4-signal: (i) constraint gone
