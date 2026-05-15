@@ -92,9 +92,27 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #63, #77, #78                                                 #
+#  OPEN ISSUES — #63, #77, #78, #80, #81                                       #
 #                                                                              #
 ################################################################################
+
+
+================================================================================
+ISSUE NUMBERING — CHRONOLOGICAL, NOT PRIORITY-ORDERED  (banner 2026-05-15)
+================================================================================
+
+Issue numbers (#1, #2, ... #81) reflect DISCOVERY ORDER, not importance.
+A LOWER number is NOT more important than a HIGHER one.  For actual priority,
+read the TIER label inside each issue body and the SUMMARY block at the bottom
+of this file.
+
+Two examples that bit contributors before this banner existed:
+  • #63 is a TIER 3 doc sweep; #81 is a TIER 0 correctness defect — work #81
+    first, even though it has the higher number.
+  • #50 (deferred) had a low number but was scoped out, while later-discovered
+    #69 was promoted to TIER 0 and shipped same-day.
+
+If you find yourself walking the list lowest-first, stop and re-sort by TIER.
 
 
 ================================================================================
@@ -1550,6 +1568,328 @@ Related:
 
 
 ================================================================================
+#80. PDDL FACTS DON'T REFLECT FAILED PLACE/STACK — PLANNER BLIND TO RELEASE FAILURES
+================================================================================
+Status:   OPEN.  Raised 2026-05-15 by user during seed-999
+          verification of the #79 follow-up.  Quote: "it thought
+          that the place action was successful.  this is wrong
+          and should be reflected correctly in pddl facts."
+          DO NOT bundle with #81 — #80 is the SYMBOLIC-side gap
+          (verify gate + post-action registry refresh); #81 is
+          the PHYSICAL-side gap (release path doesn't actually
+          free the cube).  They are complementary but distinct
+          and should be fixed + re-verified separately so
+          regressions on either layer remain detectable.
+Priority: TIER 0 — silent correctness drift.  Doesn't crash; the
+          pipeline keeps executing on a fictitious world model.
+          The PDDL belief diverges from physical reality on every
+          false-positive release, every subsequent plan is
+          grounded on a lie, and the run usually completes with
+          "goal satisfied" via the symbolic path while the
+          physical scene is incoherent (cubes dragged across the
+          table by an arm that thinks it's empty-handed, or
+          "stacked" towers that exist only in the planner's
+          head).  Worst failure mode for a thesis whose central
+          claim is that symbolic planning over the boxel registry
+          is faithful to physics.
+Where:    execution.py:243-324  _release_and_verify_drop — the
+          verify gate.  Currently decides "released" from a
+          single getContactPoints(bodyA=held_body_id) check
+          showing any non-robot contact body.  A cube can
+          simultaneously rest on the table AND be held by the
+          gripper for one frame; the gate only needs ONE non-
+          robot contact to declare success and never re-checks.
+          execution.py:589+  execute_place / execute_stack —
+          return "post_place_*" / "post_stack_*" RobotConfig
+          signalling success based on the above gate.
+          test_full_pipeline.py dispatcher place / stack
+          branches — log "*** PLACED at ... ***" / "*** STACKED
+          on ... ***", update on_relations / boxel splitting /
+          shadow_occluder_map purely on action-helper success.
+          No post-action AABB re-read against reality.
+          pddlstream_planner.py _build_init — emits
+          (obj_at_boxel ?o ?b) from the registry's OBJECT boxel.
+          If the dispatcher never wrote the cube's actual post-
+          action AABB into the registry (because the helper
+          falsely reported success), the planner sees the cube
+          at the PLANNED location, not the PHYSICAL location.
+Repro:    --scene random-pairs --goal find-and-tray-stack --seed 999
+          Log: logs/run_2026-05-15_15-43-11/run_2026-05-15_15-43-11.log
+            line 184-199:  "place red_object at free_001" →
+              "-> Released red_object (resting on bodies [1])" →
+              "*** red_object PLACED at free_001! ***"
+            line 205-212:  immediately after, "*** COLLISION
+              [move to shadow_of_red_object__00]: robot link 8 /
+              9 / 10 <-> red_object ***" — cube dragged with the
+              arm, proving the release was a false positive.
+            line 235 (PLAN #2 init):  "'red_object': ['free_001']"
+              — planner firmly believes red is at free_001;
+              every subsequent action is grounded on this lie.
+Depends:  Interacts with #81 — but DO NOT bundle.  Even if #81
+          fully fixes the physical release, #80's verify gate
+          and registry-refresh logic must still be hardened so
+          any future physical-release regression is caught at
+          the verify gate and reflected in the PDDL facts, not
+          silently propagated as a false success.
+          Builds on #71 (refresh OBJECT AABBs on sense) — the
+          symmetric "refresh on action outcome" pattern.
+Effort:   1-2 days (diagnostic + fix + re-verify on seed 999
+          with GUI).
+
+What:  Two complementary gaps:
+
+       (a) VERIFY GATE TOO PERMISSIVE.  _release_and_verify_-
+           drop's "any non-robot contact" test passes when a
+           cube rests on the table for one frame while still
+           being friction-held by the gripper.  The cube
+           subsequently lifts with the arm and the test never
+           re-fires; success is latched on the first lucky
+           contact frame.
+
+       (b) NO POST-ACTION REGISTRY REFRESH ON SUCCESS PATH.
+           Audit #71 refreshes OBJECT AABBs on sense outcomes.
+           Audit #58 safety net and #79 follow-up Option (a,
+           deferred) refresh on emergency-drop / failed-release.
+           But the SUCCESS path of place / stack assumes the
+           action-helper return value is authoritative; no live
+           AABB read against PyBullet to confirm the cube
+           actually went where planned.
+
+       Combined effect: false-positive releases produce
+       (obj_at_boxel red_object free_001) in PDDL while
+       red_object is physically at the gripper.  Every
+       downstream plan collides, fails IK, or executes
+       nonsensically.  The audit trail in the log makes this
+       look like a planning bug ("planner produced a bad plan")
+       when it is actually a perception / dispatch bug
+       ("planner produced a correct plan for a fictitious
+       world state").
+
+Fix:   ONE INVESTIGATION + FIX COMMIT (do NOT bundle with #81).
+
+       Step 1 — instrument: log per-action the post-action
+       cube AABB vs the planned-location AABB; flag mismatches
+       > 2 cm as suspect even when the verify gate says success.
+       Run on seed 999 with GUI (user standing request 2026-
+       05-15: "always run with gui") to confirm the false-
+       positive rate.
+
+       Step 2 — harden verify gate.  Multi-signal release
+       check, ALL conditions must hold:
+         (i)   constraint genuinely gone: p.getConstraintInfo
+               raises p.error.
+         (ii)  cube AABB lowest face within X mm of expected
+               support surface (table top / tray top / support
+               cube top).
+         (iii) cube COM stationary across N=20 settle steps
+               post-release (no lateral drift > 1 mm).
+         (iv)  zero contact between held_body_id and ANY robot
+               link (not just "at least one non-robot contact" —
+               that's necessary but not sufficient).
+         Any failure → return False, treat as audit #79 drop-
+         verify failure, refresh AABB to live pose, replan from
+         (handempty).
+
+       Step 3 — post-action registry refresh on the SUCCESS
+       path too.  Same helper as #79 follow-up Option (a):
+       after _release_and_verify_drop returns True, read
+       p.getAABB on the dropped body and write into the OBJECT
+       boxel.  Eliminates the gap between planner intent and
+       physical outcome.  Cheap (single getAABB) and
+       idempotent.
+
+       Step 4 — re-verify on seed 999 with GUI.  The PDDL
+       fact (obj_at_boxel red_object ?) must match the cube's
+       visible position on the table after every place / stack.
+
+Care:
+       (1) DO NOT bundle with #81.  If you fix #81 alone,
+           #80's gate is still permissive and the NEXT
+           physical-release regression silently corrupts PDDL
+           again.  If you fix #80 alone, the verify gate
+           correctly rejects the false-positive but the
+           audit-#79 cleanup runs every place — performance
+           regression visible in eval.  Both fixes layer
+           cleanly; ship them as SEPARATE commits with
+           SEPARATE re-verifications so regressions on either
+           layer remain detectable.
+       (2) Verify-gate Step 2(iii) (COM stationary) costs N
+           settle steps per action.  At 240 Hz × N=20 that's
+           ~83 ms — acceptable; same order as the existing 30-
+           step settle in _release_and_verify_drop.
+       (3) #71's refresh-OBJECT-AABB-on-sense is the canonical
+           pattern.  Step 3 here is the symmetric refresh on
+           ACTION OUTCOME (place / stack / pick).  Consider
+           factoring the refresh into a single helper used by
+           all three call sites — but only after seed-999
+           verification confirms Step 2 alone fixes the user-
+           visible symptom.
+       (4) GUI mode for verification is a user standing rule
+           as of 2026-05-15.  Any seed-999 re-run from this
+           audit body forward MUST use --gui (default) so the
+           user can confirm the visual match between the
+           reported "PLACED" message and the cube's actual
+           position.
+
+Related:
+       #75 [DONE 2026-05-14] — verify-and-retry helper.  Gate
+            is too permissive on the success side; this issue
+            tightens it.
+       #79 [DONE 2026-05-15] — clear held state on drop-
+            verify failure.  Step 1 + gripper-force follow-up
+            landed; Option (a) (refresh OBJECT AABB on drop-
+            verify failure) was deferred — this issue's Step 3
+            lands the symmetric refresh on the SUCCESS path
+            AND naturally subsumes Option (a) on the failure
+            path (both call the same helper).
+       #71 [DONE 2026-05-12 (later)] — refresh OBJECT AABBs
+            on sense.  Mirror this pattern for action outcomes.
+       #81 — physical-side complement.  DO NOT bundle.
+
+
+================================================================================
+#81. GRIPPER STAYS LOCKED TO ARM — RELEASE PATH DOESN'T ACTUALLY FREE THE CUBE
+================================================================================
+Status:   OPEN.  Raised 2026-05-15 by user during seed-999
+          verification of the #79 follow-up.  Quote: "fix the
+          other issue which is that the gripper stays locked
+          in to the arm.  make sure addconstraint is actually
+          removed and that we dont sample a letting go grasp
+          but really just open up as maximally as we can."
+          DO NOT bundle with #80 — see #80's Care note (1).
+Priority: TIER 0 — physical sim integrity.  A cube being
+          dragged with the gripper after a reported successful
+          release is a hard correctness defect on the physical
+          side.  If left unfixed it manifests as either
+          (a) collision storms during downstream motion
+          (visible in log run_2026-05-15_15-43-11 lines
+          205-212) or (b) silent symbolic-physical divergence
+          (the #80 symptom).  GUI playback on seed 999 shows
+          the cube visibly pinned to the EE through the next
+          move — undeniable visual evidence.
+Where:    execution.py:243-324  _release_and_verify_drop —
+          the release pipeline: removeConstraint → open_gripper
+          → settle.  The pipeline trusts each step without
+          verifying it.
+          robot_utils.py:510-528  open_gripper — POSITION_-
+          CONTROL to 0.04 per finger with 200 N / 80 steps
+          (audit #79 follow-up).  After this audit's seed-999
+          re-verification, the cube STILL drags with the arm —
+          force bump alone is insufficient.
+          streams.py sample_grasp — produces grasp poses
+          tuned for picking.  The release path inherits the
+          same pose, so when the fingers open they slide along
+          the cube's grasped surface; friction can drag the
+          cube even at max opening.
+Repro:    --scene random-pairs --goal find-and-tray-stack --seed 999
+          Log run_2026-05-15_15-43-11 line 184-212.  Place
+          reports success at line 199; collisions with the
+          "placed" cube immediately follow at lines 205-212 as
+          the arm moves away.  GUI playback (user confirmed
+          2026-05-15) shows the cube visibly pinned to the EE.
+Depends:  Audit #79 follow-up landed force=200 N / 80 steps.
+          Symptom persists, so this is the next layer.
+Effort:   1-2 days (sub-fix diagnostic + fix + re-verify with
+          GUI).
+
+What:  The release path has three independent failure modes
+       that need to be verified and (where present) eliminated:
+
+       (a) CONSTRAINT REMOVAL — does p.removeConstraint
+           actually free the body?  Currently we call it once
+           and trust PyBullet.  Verify by calling
+           p.getConstraintInfo on the same id IMMEDIATELY
+           after the remove; it MUST raise p.error (audit #79
+           already uses this for its dispatcher probe).  If
+           it doesn't raise, the constraint is still alive
+           and the cube is genuinely welded to the EE — no
+           amount of gripper opening will help.
+
+       (b) FINGER POSITION CONTROL FIGHTING FRICTION — even
+           with audit #79's 200 N / 80 steps, POSITION_CONTROL
+           drives toward 0.04 with a force CEILING; if the
+           cube friction reaction matches that force, the
+           fingers stall before reaching max.  Verify by
+           reading p.getJointState(robot_id, FINGER_JOINTS[i])
+           [0] after open_gripper completes — should equal
+           0.04 ± 1 mm.  If less, the controller is losing the
+           force fight.
+
+       (c) "LETTING-GO GRASP" RESIDUE — sample_grasp picks a
+           grasp pose for PICK.  On release we inherit the
+           same pose (fingers wrapped around the cube), and
+           even at max-open width the finger PADS may still
+           touch the cube surface, dragging it laterally as
+           they retract.  The user's explicit direction
+           2026-05-15: don't sample a release pose; "really
+           just open up as maximally as we can."  Translation:
+           the release shouldn't care about grasp geometry at
+           all — just maximally separate the fingers from
+           whatever is between them.
+
+Fix:   ONE COMMIT (independent of #80).
+
+       Step 1 — diagnostic instrumentation.  Add to
+       _release_and_verify_drop, immediately after the open-
+       gripper + settle sequence:
+         - getConstraintInfo(constraint_id) result (does it
+           raise as expected?)
+         - finger joint positions (did they reach 0.04?)
+         - cube ↔ finger-pad contact points (any residual
+           touch?)
+       Run --scene random-pairs --goal find-and-tray-stack
+       --seed 999 with GUI, log values, classify the failure
+       as (a), (b), or (c).  Possibly multiple co-occur.
+
+       Step 2 — fix the dominant failure mode(s):
+         If (a): wrap removeConstraint + verify in a small
+                 helper; if verify fails, log loudly and
+                 abort the action (no symbolic recovery for
+                 a stuck weld — that's a sim bug).
+         If (b): switch the open phase to VELOCITY_CONTROL at
+                 the finger joints' maxVelocity outward for N
+                 steps; optionally resetJointState directly to
+                 0.04 (bypasses motor controller entirely —
+                 sim-only acceptable for a thesis-grade
+                 release primitive).
+         If (c): zero finger-pad lateralFriction for the
+                 release transient via p.changeDynamics;
+                 restore after settle.  Or: add an explicit
+                 upward EE lift BEFORE opening so gravity
+                 separates the cube the moment the pads start
+                 retracting (rather than the cube being
+                 pinched between sliding pads).
+
+       Step 3 — re-verify on seed 999 with GUI (user standing
+       rule 2026-05-15).  Cube must visibly fall on release;
+       no collision events with robot links 8 / 9 / 10 on the
+       subsequent move action.
+
+Care:
+       (1) DO NOT bundle with #80.  Even if #81 perfectly
+           fixes the physical release, #80's verify gate
+           still needs hardening to catch the NEXT physical-
+           release regression.
+       (2) Diagnostic FIRST.  All three failure modes have
+           plausible fixes; pick the one(s) that match the
+           data, don't blindly apply all three.
+       (3) Pick contract is untouched: close_gripper stays at
+           50 N / 30 steps.  Only the RELEASE primitive
+           changes.
+
+Related:
+       #75 [DONE 2026-05-14] — drop-verify helper.  Calls
+            open_gripper; this audit's Step 2 may swap the
+            release implementation entirely.
+       #79 [DONE 2026-05-15] — Step 1 landed dispatcher
+            state-clear; follow-up landed force=200 N / 80
+            steps.  Symptom persists, so this audit is the
+            next layer.
+       #80 — symbolic complement.  Do NOT bundle.
+       #58, #71 — orthogonal (not affected by this issue).
+
+
+================================================================================
 SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-15)
 ================================================================================
 
@@ -1584,6 +1924,30 @@ LATER backlog.  #77 raised 2026-05-14 during #73 plot review —
 anytime compactness sweep, headline strength upgrade for the
 compactness pillar.
 
+TIER 0 — TOP PRIORITY (correctness / sim integrity):
+  #80  PDDL facts don't reflect failed place/stack — planner
+       blind to release failures.  Raised 2026-05-15 by user
+       during seed-999 verification of #79 follow-up.  Verify
+       gate too permissive (single non-robot contact accepts
+       false positives) AND success path doesn't refresh OBJECT
+       AABB into the registry.  Net effect: (obj_at_boxel red
+       free_001) in PDDL while red is physically still on the
+       gripper.  Multi-signal release check + symmetric refresh
+       on action outcome.  DO NOT bundle with #81 — see #80
+       body Care note (1).
+
+  #81  Gripper stays locked to arm — release path doesn't
+       actually free the cube even after audit #79 follow-up
+       bumped open_gripper to 200 N / 80 steps.  Three failure-
+       mode candidates: (a) constraint not actually removed,
+       (b) finger position-control stalls under load,
+       (c) "letting-go grasp" residue drags cube laterally as
+       pads retract.  Diagnostic-first; fix the dominant
+       mode(s) found.  User direction 2026-05-15: "make sure
+       addconstraint is actually removed and that we dont
+       sample a letting go grasp but really just open up as
+       maximally as we can."  DO NOT bundle with #80.
+
 TIER 1 — CORRECTNESS / HIGH-PRIO:
   #77  Anytime compactness sweep — success rate vs time
        budget with smaller semantic boxels.  Currently
@@ -1615,8 +1979,11 @@ TIER 3 — CODE QUALITY / DOC SWEEP:
        issues (now: #77, #78).  Explicitly the last commit
        before thesis submission per user 2026-05-08.
 
-Total open: 3 items (#63, #77, #78) per the OPEN ISSUES
-header at top (the source of truth).
+Total open: 5 items (#80, #81, #77, #78, #63) per the OPEN
+ISSUES header at top (the source of truth).  Listed in TIER
+order for clarity — chronological numbers in the header are
+NOT priority-ordered (see the "ISSUE NUMBERING" banner near
+the top of this file).
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
