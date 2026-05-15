@@ -1814,12 +1814,41 @@ Status:   [DONE 2026-05-15 (later)] - commit 65146ad replaces
           grade release primitive."  Also adds finger-position to
           audit #80's verify-gate diag line (FINGER_JOINTS imported
           into execution.py) so future regressions are visible.
-          close_gripper untouched (pick path keeps gentle PC at
-          50 N per audit Care note 3).  Seed-999 GUI re-verification
-          still pending; downstream effect: audit #80's verify gate
-          should now see robot_contacts=none on every release, so
-          the #79 dispatcher-clear path stops firing on the place-
-          on-table case.
+
+          Refine 2026-05-15 (later) - commit 8774e6f.  User GUI
+          observation on the post-#80/#81 build: the pick "smashes"
+          the cube and the cube can still graze the pads on release.
+          Two coordinated fixes:
+          (A) close_gripper parameterized with target_finger_pos /
+              force kwargs; force default 50 N -> 10 N.  execute_-
+              pick passes target = max(0.005, cube_hw) so the
+              fingers settle at the cube surface instead of trying
+              to drive to 0.02 m gap (2 cm INSIDE a 4 cm cube).
+              The JOINT_FIXED constraint provides all real grip
+              stability during motion - close_gripper is now
+              purely cosmetic + the audit #80 contact-points
+              input.
+          (B) execute_pick contact_z derived from p.getAABB(obj_id)
+              top minus a fixed 5 mm margin (then clamped above
+              finger-tip-vs-table floor).  Pre-refine, tall cubes
+              were gripped at their CENTRE and could rotate
+              forward out of the grasp; post-refine the % grip
+              height is invariant in cube size.  4 cm cubes
+              behave identically (cube_top - 5 mm matches the
+              previous clamp); larger cubes get a proportionally
+              higher grasp.
+          User direction 2026-05-15: (A) "when the gripper closes
+          it should only close a tinly little bit, otherwise it's
+          wide open ... we dont want objects floating in the air
+          but we also dont want smashing."  (B) "when the gripper
+          is targeting a big object, the centre it's targeting
+          should be higher.  make it as high percentage wise as it
+          is when the object is small."
+
+          Seed-999 GUI re-verification still pending; downstream
+          effect: audit #80's verify gate should now see robot_-
+          contacts=none on every release, so the #79 dispatcher-
+          clear path stops firing on the place-on-table case.
 Raised:   2026-05-15 by user during seed-999 verification of the
           #79 follow-up.  Quote: "fix the other issue which is
           that the gripper stays locked in to the arm.  make sure
@@ -2056,11 +2085,20 @@ Closed since previous summary:
        already ruled out by #80's gate-(i) probe.  Sim-only per
        audit Step 2 mode (b) explicit acceptance.  Diagnostic
        enhancement: finger-position added to #80 verify-gate diag
-       line (FINGER_JOINTS imported into execution.py).  close_-
-       gripper untouched (pick path).  GUI re-verification on
-       seed-999 still pending; expected effect: #80's gate sees
-       robot_contacts=none every release, the #79 dispatcher-clear
-       branch stops firing on place-on-table.
+       line (FINGER_JOINTS imported into execution.py).
+       Refine commit 8774e6f (same day): user GUI observation
+       on the pick side - the cube was being "smashed" by the
+       50 N close (target=0.01 = 2 cm INSIDE a 4 cm cube) and
+       tall cubes were being gripped at their CENTRE.  Two
+       coordinated fixes: (A) close_gripper parameterized with
+       target_finger_pos / force kwargs and execute_pick passes
+       cube_hw so fingers settle at the cube surface (10 N motor
+       budget, no smashing); the JOINT_FIXED constraint does the
+       real grip work during motion.  (B) execute_pick contact_z
+       now reads p.getAABB(obj_id) top minus 5 mm so the % grip
+       height is invariant in cube size - 4 cm cubes unchanged,
+       tall cubes get a proportionally higher grasp.  GUI re-
+       verification on seed-999 still pending.
   #80  [DONE 2026-05-15 (later)] - commit 7116e73 hardens
        _release_and_verify_drop's verify gate from single-signal
        (any non-robot contact) to 4-signal: (i) constraint gone
