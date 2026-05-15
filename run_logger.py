@@ -502,6 +502,23 @@ def parse_pipeline_args(argv=None):
              '(boxel_fits) for cube placement.',
     )
     parser.add_argument(
+        '--min-boxel-size',
+        type=float,
+        default=0.05,
+        help='Minimum FREE-SPACE octree leaf size for the SEMANTIC '
+             'baseline, in metres (audit #77 step 2). Default 0.05 m '
+             'keeps the audit-#67 floor so existing runs are unchanged. '
+             'Set finer (e.g. 0.02, 0.01) for the anytime sweep — lets '
+             'semantic exploit adaptive partitioning at higher '
+             'resolution within a fixed time budget. Floor is still '
+             'clamped above the audit-#66 auto_cell (largest object '
+             'AABB + 1 cm) so placement grounding stays satisfiable; '
+             'below auto_cell the flag is a no-op and a console line '
+             'announces the override. OBJECT / SHADOW boxels are '
+             'unaffected — they remain per-object regardless of this '
+             'knob.',
+    )
+    parser.add_argument(
         '--max-plan-time',
         type=float,
         default=1800.0,
