@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #82 (PICK UP NEXT), #63, #77, #78                             #
+#  OPEN ISSUES — #77, #78, #63 (no TIER 0 open; #82 closed 2026-05-15 later)   #
 #                                                                              #
 ################################################################################
 
@@ -1991,7 +1991,23 @@ Related:
 ================================================================================
 #82. AUDIT-#80/#81 STUCK-ON-RELEASE DIAGNOSTIC — LINK-LEVEL CONTACTS + HELD-STATE ANOMALY DETECTION
 ================================================================================
-Status:   OPEN.  **PICK UP NEXT.**  Raised 2026-05-15 (later) by
+Status:   [DONE 2026-05-15 (later)] — commit 6f042b1.  Per-link
+          contact breakdown + cube_tilt_deg added to _release_and_-
+          verify_drop's diag; new audit_robot_held_state(env,
+          robot_id, expected_held_body_id, tag) helper in execution.py
+          scans non-static body contacts and prints "!!! HELD-STATE
+          ANOMALY" when reality disagrees with the caller's
+          expectation.  Helper called from 5 sites (execute_pick
+          start with expected=None, execute_pick post-createConstraint
+          with expected=obj_id, _release_and_verify_drop end-of-attempt
+          on both success and failure paths, dispatcher state-clear
+          branches for place ~line 1329 and stack ~line 1455 in
+          test_full_pipeline.py after grasp_constraint_id=None).
+          Diagnostic-only commit; no behavioural change.  Next step
+          per audit body Care note 4: re-run --scene random-pairs
+          --goal find-and-tray-stack --seed 999 with GUI and share
+          the log so a follow-up issue can target the welding link.
+          Raised 2026-05-15 (later) by
           user after seed-999 GUI re-verification of the
           post-#80/#81 build (log run_2026-05-15_19-23-45).
           Quote: "add debug code to it to use it as eyes and
@@ -2219,28 +2235,16 @@ during seed-999 GUI re-verification of the post-#80/#81 build:
 release-failure symptom persists at a NEW layer (robot link
 contact even when finger_pos=[0.04,0.04]) and the dispatcher's
 audit-#79 state-clear creates a "robot holding two cubes"
-divergence between PDDL (handempty) and physics; #82 is the
-diagnostic gate, marked PICK UP NEXT.
+divergence between PDDL (handempty) and physics; #82 was the
+diagnostic gate, landed 2026-05-15 (later) in commit 6f042b1
+(per-link contact + cube tilt + held-state anomaly helper, no
+behavioural change).  The behavioural fix awaits a follow-up
+issue once seed-999 is re-run on the new instrumentation.
 
 TIER 0 — TOP PRIORITY (correctness / sim integrity):
-  #82  AUDIT-#80/#81 STUCK-ON-RELEASE DIAGNOSTIC — PICK UP NEXT.
-       Post-#80/#81 build (commits 7116e73 / 4bc5d95 / 65146ad
-       / 8774e6f) still shows robot_contacts=[2] after every
-       PLACE on the table even though finger_pos=[0.04,0.04] —
-       SOMETHING on the robot keeps welding the cube.  Worse,
-       the dispatcher's audit-#79 state-clear sets (handempty)
-       symbolically while the cube is still physically on the
-       EE, leading to the robot dragging two cubes after the
-       next pick (seed-999 log run_2026-05-15_19-23-45 lines
-       434-468).  Diagnostic-only commit: per-link contact +
-       cube tilt + held-state anomaly scan.  No behavioural
-       change.  Once the data identifies which robot link
-       welds the cube, the actual fix lands in a separate
-       issue.  User direction 2026-05-15: "add debug code to
-       it to use it as eyes ... why or how can a robot hold
-       two object at the same time.  the atom holding must
-       wrong flas in such situations."  DO NOT walk past this
-       to #63/#77/#78.
+  (none open — #82 closed 2026-05-15 (later); see Closed since
+   previous summary below.  Next pick-up: #77 / #78 / #63 per
+   TIER order.)
 
 TIER 1 — CORRECTNESS / HIGH-PRIO:
   #77  Anytime compactness sweep — success rate vs time
@@ -2273,14 +2277,15 @@ TIER 3 — CODE QUALITY / DOC SWEEP:
        issues (now: #77, #78).  Explicitly the last commit
        before thesis submission per user 2026-05-08.
 
-Total open: 4 items (#82, #77, #78, #63) per the OPEN ISSUES
-header at top (the source of truth).  Listed in TIER order
-for clarity — chronological numbers in the header are NOT
-priority-ordered (see the "ISSUE NUMBERING" banner near the
-top of this file).  TIER 0 has ONE item: #82, marked PICK UP
-NEXT.  The audit-#80/#81 work surfaced the symptom but cannot
-target a behavioural fix without first knowing which robot
-link welds the cube — #82 is that diagnostic gate.
+Total open: 3 items (#77, #78, #63) per the OPEN ISSUES header at
+top (the source of truth).  Listed in TIER order for clarity —
+chronological numbers in the header are NOT priority-ordered (see
+the "ISSUE NUMBERING" banner near the top of this file).  No TIER 0
+open as of 2026-05-15 (later): #82 closed; the diagnostic data it
+adds (per-link contact + cube tilt + held-state anomaly) lands as a
+no-behaviour-change commit, and the actual welding-link fix awaits
+the next GUI re-run on seed-999 — that will surface as a new
+audit issue when the data identifies the welding link.
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
@@ -2292,6 +2297,23 @@ Relocated 2026-05-12:
        plan refresh.
 
 Closed since previous summary:
+  #82  [DONE 2026-05-15 (later)] - commit 6f042b1.  Diagnostic-only
+       commit: no behavioural change.  Adds (a) per-link contact
+       breakdown in _release_and_verify_drop's diag (robot_link_-
+       contacts={linkN: d=...mm, F=...N; ...}), (b) cube_tilt_deg
+       (max |roll|, |pitch|) for off-axis-grip detection, (c) new
+       audit_robot_held_state(env, robot_id, expected_held_body_id,
+       tag) helper that prints '!!! HELD-STATE ANOMALY' when
+       physics contradicts the symbolic (handempty) / (holding ?o)
+       state.  Helper called from 5 sites: execute_pick start
+       (expected=None) + post-createConstraint (expected=obj_id);
+       _release_and_verify_drop end-of-attempt on both success and
+       failure paths; dispatcher state-clear branches for place
+       (~line 1329) and stack (~line 1455) in test_full_pipeline.py.
+       Quiet on the success path so log noise stays minimal.  Next
+       step per audit body Care note 4: re-run seed-999 GUI and
+       share the log to identify the welding link; behavioural fix
+       lands as a new audit issue once the data is in.
   #81  [DONE 2026-05-15 (later)] - commit 65146ad swaps
        open_gripper's POSITION_CONTROL loop for a resetJointState
        teleport to URDF max (0.04 per finger), followed by the
