@@ -76,6 +76,7 @@ from belief import BeliefState
 from reboxelize import reboxelize_free_space
 from execution import (audit_robot_held_state,
                        compute_shadow_blockers,
+                       refresh_object_aabbs,
                        release_held_object_in_place,
                        execute_pick, execute_place, execute_stack,
                        handle_sense_action)
@@ -1336,6 +1337,14 @@ def main(gui=True, run_logger=None, scene_config=None,
                         audit_robot_held_state(
                             env, robot_id, expected_held_body_id=None,
                             tag=f"post-clear-place:{obj_str}")
+                        # Audit #83: drop-verify failed, so the cube
+                        # may have fallen off the gripper somewhere
+                        # other than its OBJECT boxel.  Refresh every
+                        # OBJECT AABB from live PyBullet so the next
+                        # planner.plan() sees the actual location and
+                        # doesn't re-pick from the stale boxel in an
+                        # infinite cascade.
+                        refresh_object_aabbs(env, registry, viz=viz)
                     else:
                         print(f"    IK failure during place — replanning (audit #82)")
                     break
@@ -1470,6 +1479,14 @@ def main(gui=True, run_logger=None, scene_config=None,
                         audit_robot_held_state(
                             env, robot_id, expected_held_body_id=None,
                             tag=f"post-clear-stack:{obj_str}")
+                        # Audit #83: mirror of the place branch.  The
+                        # stacked cube landed somewhere (likely the
+                        # plane on a mis-aimed stack — see #84) but
+                        # its OBJECT boxel still points at the pick-
+                        # time location, so the next plan re-picks
+                        # from the wrong boxel and the failure
+                        # cascades.  Refresh from live PyBullet.
+                        refresh_object_aabbs(env, registry, viz=viz)
                     else:
                         print(f"    IK failure during stack — replanning (audit #30)")
                     break
