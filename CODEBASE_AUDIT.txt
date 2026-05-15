@@ -1191,10 +1191,28 @@ Fix:   ONE FEATURE BRANCH, multi-commit:
        (low --max-plan-time on one cell confirms the abort
        path end-to-end).
 
-       Step 2 — semantic min-boxel-size knob.  Expose
-       --min-boxel-size on the CLI; thread to
-       FreeSpaceGenerator (and CellMerger if it caps merge
-       size).  Default 5 cm so existing runs unchanged.
+       Step 2 [DONE 2026-05-15 (later) — commit 521cf39].
+       --min-boxel-size CLI knob added in run_logger.py
+       (default 0.05 m so existing runs are unchanged); threaded
+       through test_full_pipeline.main()'s effective_cell logic
+       so the SEMANTIC baseline floor is max(min_boxel_size,
+       auto_cell) while the UNIFORM baseline keeps max(uniform_-
+       cell_size, auto_cell) — the audit-#66 placement invariant
+       stays intact for both.  A new "[audit-77] ... held at
+       auto_cell" console line announces the clamp ONLY when
+       the user explicitly went finer than uniform_cell_size
+       AND the value falls below auto_cell (suppressed at default
+       so log output is bit-identical to pre-#77 runs).  run_-
+       config snapshot grew by one field (min_boxel_size) which
+       lands in timing_summary.json automatically; aggregated.csv
+       gains a column on the next eval sweep.  CellMerger has no
+       size cap (verified) — no change needed there.  Caveat for
+       Step 3: with auto_cell as the floor, --min-boxel-size 0.01
+       is a no-op on the default scene (auto_cell ~ 0.085 m
+       wins).  Sweep cells must either drop auto_cell explicitly
+       or use a scene with smaller objects to exercise the fine
+       end of the resolution axis.  py_compile clean; smoke-
+       checks confirm default suppressed / explicit fires.
 
        Step 3 — new matrix preset.  REVISED 2026-05-14 per
        Step 0: seeds come from eval_corpus_100.json (100 pre-
