@@ -1486,6 +1486,47 @@ Care:
            action).  Not a refactor target today — two call sites
            don't justify a helper.
 
+Follow-up 2026-05-15 — root-cause the snag, not just the recovery:
+       Re-run of --scene random-pairs --goal find-and-tray-stack
+       --seed 999 with the Step 1 fix landed showed the dispatcher
+       branch firing correctly ("drop-verify failed for blue_object;
+       clearing held state and replanning (audit #79)" — log
+       run_2026-05-15_14-57-46 line 524), but the run still
+       degraded: the planner's next _build_init still listed
+       blue_object at its pre-pick boxel and every subsequent
+       move/pick/place cascaded into phantom collisions (lines
+       580-695, 705-714, 883, 956 of the same log).  Two follow-up
+       options surfaced:
+         (a) refresh the OBJECT boxel AABB from live PyBullet in
+             the audit-#79 branch, mirroring the audit-#58 safety-
+             net bookkeeping at execution.py:386-429
+             (release_held_object_in_place's verified-drop tail).
+             ~30 LOC: factor out a refresh_registry_after_drop
+             helper, call from both paths.
+         (b) prevent the snag at the source — bump open_gripper's
+             force budget so the fingers actually reach the URDF
+             max (0.04 per finger) even when a cube is friction-
+             pinched between the pads.  Single-function tweak in
+             robot_utils.open_gripper.
+       Per user direction 2026-05-15 ("first try increasing by how
+       much you open the gripper to the max"), Option (b) lands
+       first.  Force 50 -> 200 N, steps 30 -> 80 at 240 Hz
+       (~0.33 s wall, +0.2 s per release).  Rationale:
+         - The Panda hand can apply 70 N continuous / 140 N peak
+           in real hardware; 200 N in sim is generous but the URDF
+           position limit clips finger travel at 0.04 regardless,
+           so we only get extra position-controller authority, not
+           extra travel.
+         - close_gripper left at 50 N untouched: closing on a held
+           cube SHOULD stop at the cube; this is the pick path.
+         - The earlier 50 N / 30-step comment "well above the
+           ~20 N needed to open unloaded fingers" was the symptom
+           — the snag mode is by definition LOADED fingers.
+       If Option (b) eliminates the seed-999 snag, Option (a)
+       is the unnecessary aftermath patch and can stay deferred.
+       If it doesn't, Option (a) lands as a second follow-up
+       commit.
+
 Related:
        #75 [DONE 2026-05-14] — closing block explicitly flagged
             this consistency caveat as "deferred unless it
@@ -1588,19 +1629,36 @@ Relocated 2026-05-12:
 
 Closed since previous summary:
   #79  [DONE 2026-05-15] - stale grasp_constraint_id after drop-
-       verify failure (audit #75 caveat surfaced).  Dispatcher
-       probes p.getConstraintInfo on the held id when execute_place
-       / execute_stack returns None; if the constraint is gone,
-       clears grasp_constraint_id / held_body_id / held_object_-
-       boxel_id so the next planner.plan() builds init from
-       (handempty), not (holding ?o).  Closes the explicit
-       deferred caveat in #75's closing block.  Reproduced on
-       --scene random-pairs --goal find-and-tray-stack --seed 999.
-       Log message split: "drop-verify failed ... (audit #79)"
-       vs the legacy "IK failure during place — replanning
-       (audit #82)" so eval failure-mode breakdown (audit #73
-       plot 6) is accurate.  ~20 LOC across two dispatcher call
-       sites; no API change to action helpers.
+       verify failure (audit #75 caveat surfaced).  Step 1
+       (commit ad63ffb): dispatcher probes p.getConstraintInfo on
+       the held id when execute_place / execute_stack returns
+       None; if the constraint is gone, clears grasp_constraint_-
+       id / held_body_id / held_object_boxel_id so the next
+       planner.plan() builds init from (handempty), not
+       (holding ?o).  Closes the explicit deferred caveat in
+       #75's closing block.  Reproduced on --scene random-pairs
+       --goal find-and-tray-stack --seed 999.  Log message split:
+       "drop-verify failed ... (audit #79)" vs the legacy "IK
+       failure during place — replanning (audit #82)" so eval
+       failure-mode breakdown (audit #73 plot 6) is accurate.
+       ~20 LOC across two dispatcher call sites; no API change
+       to action helpers.
+       Follow-up 2026-05-15 (same day): Step 1 verification on
+       seed 999 showed the dispatcher branch firing correctly
+       but the run still degraded — planner saw blue_object at
+       its pre-pick boxel and every subsequent move/pick/place
+       phantom-collided.  Per user direction, root-caused the
+       snag instead of patching the aftermath: bumped
+       open_gripper force 50 -> 200 N and steps 30 -> 80 in
+       robot_utils.py so the fingers reach the URDF max
+       (0.04 per finger) even when a cube is friction-pinched.
+       URDF position limit still clips travel at 0.04 — we just
+       win the position-controller fight against pad friction.
+       close_gripper untouched at 50 N (pick wants to stop at
+       the cube).  Re-run on seed 999 pending; if the snag
+       persists, the deferred Option (a) — refresh OBJECT AABB
+       in the audit-#79 branch via factored helper — lands as a
+       second follow-up.
   #76  [DONE 2026-05-14] - planner returns no plan for find-and-
        tray-stack post-failure.  Diagnosed as bucket (2c): hidden
        targets have no OBJECT boxel after sense_found_target, so
