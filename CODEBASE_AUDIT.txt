@@ -1073,16 +1073,25 @@ What:  The current eval pegs semantic's minimum boxel size at
 Fix:   ONE FEATURE BRANCH, multi-commit:
 
        Step 0 [DONE 2026-05-15] — eval corpus (supervisor methodology
-       constraint, 2026-05-14).  collect_eval_corpus.py (commit
-       38834ee, branch audit-77-anytime-sweep) sequentially probes
-       BoxelTestEnv(gui=False) across 7 (scene, n_occluders,
-       extra_distractors, tray) configs covering every cell the
-       Step 3 matrix will exercise; catches "Could not place" and
-       "audit #70" RuntimeError; keeps the first --n-corpus seeds
-       that pass all configs and writes eval_corpus_100.json with
-       seeds + probe_configs + reject stats.  Sweep build still
-       PENDING — actual eval_corpus_100.json artefact lands once
-       the script is run end-to-end.  GATED Steps 3-5 — without a
+       constraint, 2026-05-14).  collect_eval_corpus.py (initial commit
+       38834ee; parallel-probe + stack-height rewrite 1a4ca47, branch
+       audit-77-anytime-sweep) probes BoxelTestEnv(gui=False) across 9
+       configs covering every cell the Step 3 matrix will exercise:
+       random-pairs × n_occluders ∈ {2,3,4} × (extra_distractors,
+       tray) ∈ {(0,off), (1,on)} for holding / find-and-tray-stack,
+       plus stack × n_objects ∈ {3,4,5} for the multi-height stack
+       sweep.  Probes run in parallel via ProcessPoolExecutor; catches
+       "Could not place" and "audit #70" RuntimeError; keeps the first
+       --n-corpus seeds that pass all configs.  Sister change in
+       boxel_env.py (commit 521458d, refined a5f3420): hidden-target
+       placer attempt budget 800 -> 4000 per audit #77 — empirical
+       pass rate 33.7% on a 600-candidate build, marginal over 800
+       (~30%); remaining rejections are structural (occluder layouts
+       leave no feasible shadow region under reach + table + spacing
+       constraints), not budget-bound.  Artefact eval_corpus_100.json
+       landed in commit 8b979cf (100 seeds, 600 candidates probed,
+       5400 probe runs, 20 min wall on 4 workers; seeds: 0, 2, 4, 15,
+       16, 19, 20, 25, 28, 34, ...).  GATED Steps 3-5 — without a
        shared corpus, cross-algorithm comparisons are invalid per
        supervisor direction.
 
