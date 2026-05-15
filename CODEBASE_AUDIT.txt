@@ -92,7 +92,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #83 (PICK UP NEXT), #84, #77, #78, #63                        #
+#  OPEN ISSUES — #84 (PICK UP NEXT), #77, #78, #63                             #
 #                                                                              #
 ################################################################################
 
@@ -306,6 +306,19 @@ Closed / relocated since last summary:
        — gated on audit-14-dense-lattice-attempt branch merge
        and a sweep on a new --visibility-grid-n axis; out of
        thesis scope per user 2026-05-14.
+  #83 [DONE 2026-05-15 (later)] — commit 0a266c9.  Imported
+       refresh_object_aabbs into test_full_pipeline.py and
+       called it from both dispatcher state-clear branches
+       (place ~L1336, stack ~L1471) after the audit-#82
+       audit_robot_held_state probe.  Closes the infinite
+       replan-loop cascade that the seed-999 GUI re-run
+       surfaced ("arm just going back and forth hisrtaricly"):
+       the OBJECT boxel for a cube that fell off the gripper
+       during a failed stack now refreshes from live PyBullet
+       before the next planner.plan() reads init.  Sister to
+       #71's handle_sense_action refresh, same per-object
+       early-out.  Cascade containment only; #84 (root cause
+       of the underlying first-stack mis-landing) remains OPEN.
 
 ================================================================================
 #63. README + WIKI FINAL DOC SWEEP — POST-EVAL FREEZE-AND-WRITE
@@ -2200,10 +2213,20 @@ Related:
 ================================================================================
 #83. STALE OBJECT BOXEL AFTER PICK/STACK FAILURE — INFINITE REPLAN LOOP
 ================================================================================
-Status:   OPEN.  Raised 2026-05-15 (later) by user after seed-999
-          GUI re-run with the new #82 diagnostics enabled (log
-          run_2026-05-15_19-59-16).  User observation: "the arm
-          is just going back and forth hisrtaricly."
+Status:   [DONE 2026-05-15 (later)] — commit 0a266c9.  refresh_object_-
+          aabbs imported into test_full_pipeline.py and called from
+          both the place state-clear (~L1336) and stack state-clear
+          (~L1471) branches, after the audit-#82 audit_robot_held_-
+          state probe and before the break.  Reuses the existing
+          audit-#71 helper (per-object early-out + viz redraw) so
+          successful clears with no movement remain near-zero cost.
+          GUI re-verification on seed 999 deferred to user; #84
+          (root-cause of the underlying first-stack failure) remains
+          OPEN as the orthogonal diagnostic companion.
+Raised:   2026-05-15 (later) by user after seed-999 GUI re-run with
+          the new #82 diagnostics enabled (log run_2026-05-15_19-59-16).
+          User observation: "the arm is just going back and forth
+          hisrtaricly."
 Priority: TIER 0 — correctness; the dispatcher enters an infinite
           replan loop after a single stack failure, because the
           registry never learns that cyan_object's physical pose
@@ -2472,31 +2495,16 @@ behavioural change).  Seed-999 re-run on the new
 instrumentation (log run_2026-05-15_19-59-16) DID NOT surface
 the #82 stuck-on-release symptom this time — robot_link_-
 contacts={none} on every failure — but it DID surface two new
-TIER 0 problems: #83 (registry never refreshes the displaced
-cube's AABB after a stack failure, so the dispatcher enters
-an infinite replan loop; user reported as "arm just going
-back and forth hisrtaricly") and #84 (the underlying first-
-stack failure puts cyan_object on the plane at z≈0 instead
-of purple_object's top at z≈0.3763; three hypotheses unranked
-without further diag).  #83 is the cascade containment fix
-and is marked PICK UP NEXT; #84 is the root-cause diagnostic
-sibling.
+TIER 0 problem: #84 (the underlying first-stack failure puts
+cyan_object on the plane at z≈0 instead of purple_object's top
+at z≈0.3763; three hypotheses unranked without further diag).
+#83 [DONE 2026-05-15 (later) commit 0a266c9] closed the cascade
+containment side (refresh OBJECT AABBs on dispatcher state-
+clear); #84 is the orthogonal root-cause diagnostic and is
+marked PICK UP NEXT.
 
 TIER 0 — TOP PRIORITY (correctness / sim integrity):
-  #83  STALE OBJECT BOXEL AFTER PICK/STACK FAILURE — PICK UP NEXT.
-       Seed-999 GUI re-run with the #82 diagnostics enabled
-       (log run_2026-05-15_19-59-16) showed the dispatcher
-       enters an infinite replan loop after a single stack
-       failure: cyan_object falls to the floor on first stack
-       attempt, but the OBJECT boxel never refreshes from the
-       new AABB, so every subsequent plan re-picks "from the
-       stale boxel location."  ~30 LOC: call refresh_object_-
-       aabbs from the place / stack state-clear branches in
-       test_full_pipeline.py, mirroring the existing hook in
-       handle_sense_action.  Single commit.  Cascade contain-
-       ment only; root cause of WHY the first stack misses
-       purple's top stays in #84.
-  #84  CUBE-ON-CUBE STACK MIS-LANDING DIAGNOSTIC.  In the
+  #84  CUBE-ON-CUBE STACK MIS-LANDING DIAGNOSTIC — PICK UP NEXT.  In the
        same seed-999 log, cyan_object's first stack on
        purple_object lands the cube on the plane (z≈0) instead
        of purple's top (z≈0.3763), with robot_link_contacts=
@@ -2541,16 +2549,16 @@ TIER 3 — CODE QUALITY / DOC SWEEP:
        issues (now: #77, #78).  Explicitly the last commit
        before thesis submission per user 2026-05-08.
 
-Total open: 5 items (#83, #84, #77, #78, #63) per the OPEN ISSUES
+Total open: 4 items (#84, #77, #78, #63) per the OPEN ISSUES
 header at top (the source of truth).  Listed in TIER order for
 clarity — chronological numbers in the header are NOT priority-
 ordered (see the "ISSUE NUMBERING" banner near the top of this
-file).  TIER 0 has TWO items as of 2026-05-15 (later): #83
-(cascade containment — PICK UP NEXT) and #84 (root-cause
-diagnostic).  Both fall out of the seed-999 re-run of #82's
-diagnostic; #83 fixes the infinite replan loop in ~30 LOC, #84
-mirrors #82's diagnostic-only shape so the underlying stack mis-
-landing failure becomes targetable in a subsequent commit.
+file).  TIER 0 has ONE item as of 2026-05-15 (later): #84
+(root-cause diagnostic — PICK UP NEXT).  #83 [DONE 2026-05-15
+(later) commit 0a266c9] closed the seed-999 cascade containment
+side; #84 mirrors #82's diagnostic-only shape so the underlying
+stack mis-landing failure becomes targetable in a subsequent
+commit.
 
 Relocated 2026-05-12:
   #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
@@ -2562,6 +2570,18 @@ Relocated 2026-05-12:
        plan refresh.
 
 Closed since previous summary:
+  #83  [DONE 2026-05-15 (later)] - commit 0a266c9.  Imported
+       refresh_object_aabbs into test_full_pipeline.py and
+       called it from both dispatcher state-clear branches
+       (place ~L1336, stack ~L1471) after the audit-#82
+       audit_robot_held_state probe.  Closes the seed-999
+       infinite replan-loop cascade ("arm just going back and
+       forth hisrtaricly"): the OBJECT boxel for a cube that
+       fell off during a failed stack now refreshes from live
+       PyBullet before the next planner.plan() reads init.
+       Sister to #71's handle_sense_action refresh, same per-
+       object early-out.  Cascade containment only — #84
+       (underlying first-stack mis-landing) remains OPEN.
   #82  [DONE 2026-05-15 (later)] - commit 6f042b1.  Diagnostic-only
        commit: no behavioural change.  Adds (a) per-link contact
        breakdown in _release_and_verify_drop's diag (robot_link_-
