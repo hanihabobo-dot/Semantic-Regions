@@ -1176,14 +1176,20 @@ Fix:   ONE FEATURE BRANCH, multi-commit:
        corpus, cross-algorithm comparisons are invalid per
        supervisor direction.
 
-       Step 1 — planner-side time-budget knob.  Confirm
-       PDDLStream's `max_time` reaches planner.plan(); if
-       not, plumb --time-budget through test_full_pipeline /
-       pddlstream_planner / pddlstream call.  Smoke-check
-       that exceeding the budget aborts the current iteration
-       and report_run_outcome still writes timing_summary.json
-       (otherwise no_summary explodes per the existing #76 /
-       Step 1's failure-mode gap).
+       Step 1 [DONE — pre-satisfied by audit #76 plumbing].
+       PDDLStream's max_time reaches planner.plan() via
+       --max-plan-time (run_logger.py:504, default 1800 s);
+       test_full_pipeline.py:995/1064 forward it; pddlstream_-
+       planner.py:737 hands it to solve().  Budget exhaustion
+       returns plan=None which the dispatcher classifies as
+       exit_reason="planner_failed" (test_full_pipeline.py:
+       1086-1089) and falls through to report_run_outcome ->
+       timing_summary.json (test_full_pipeline.py:1601,
+       run_logger.py:347).  No additional planner-side
+       plumbing required for #77; smoke-check left as a
+       runtime sanity step during the Step 3 matrix sweep
+       (low --max-plan-time on one cell confirms the abort
+       path end-to-end).
 
        Step 2 — semantic min-boxel-size knob.  Expose
        --min-boxel-size on the CLI; thread to
