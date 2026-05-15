@@ -550,18 +550,41 @@ def open_gripper(robot_id: int, gui: bool = False):
             time.sleep(1 / 120)
 
 
-def close_gripper(robot_id: int, gui: bool = False):
-    """Close the Panda gripper."""
+def close_gripper(robot_id: int, gui: bool = False,
+                  target_finger_pos: float = 0.01, force: float = 10):
+    """Close the Panda gripper to ``target_finger_pos`` per finger.
+
+    Audit #81 refine 2026-05-15: force dropped 50 N -> 10 N and the
+    target is now a kwarg so the caller can pass cube_half_width
+    instead of a fixed deep-inside target.  Previously target=0.01
+    drove the pads to a 0.02 m gap — 2 cm INSIDE a 4 cm cube — and
+    50 N kept driving them inward against the contact stop, producing
+    the visible "smashing" in seed-999 GUI playback and a deeply
+    pressed contact state that persisted across the audit #81
+    resetJointState release (cube grazing pads on next motion).
+
+    User direction 2026-05-15: "when the gripper closes it should
+    only close a tinly little bit, otherwise it's wide open ... we
+    dont want objects floating in the air but we also dont want
+    smashing."
+
+    The JOINT_FIXED constraint added in execute_pick provides all the
+    grip stability during motion; close_gripper is only responsible
+    for the visual grasp and giving the contact-points verify-gate
+    something to measure.  10 N motor budget is far above the ~0.5 N
+    needed to support a 50 g cube; the cube-pad contact settles at
+    whatever the target says, no longer pushing through.
+    """
     import time
-    # 0.01 m per finger leaves a 0.02 m gap — fully closed around
-    # small objects.  Same force/step budget as open_gripper.
     for _ in range(30):
         p.setJointMotorControl2(robot_id, FINGER_JOINTS[0],
                                 p.POSITION_CONTROL,
-                                targetPosition=0.01, force=50)
+                                targetPosition=target_finger_pos,
+                                force=force)
         p.setJointMotorControl2(robot_id, FINGER_JOINTS[1],
                                 p.POSITION_CONTROL,
-                                targetPosition=0.01, force=50)
+                                targetPosition=target_finger_pos,
+                                force=force)
         p.stepSimulation()
         if gui:
             time.sleep(1 / 120)
