@@ -36,10 +36,6 @@ launched from PowerShell:
 | `run_eval` | `cd /mnt/c/.../Semantic_Boxels && source wsl_env/bin/activate && PYTHONPATH=/mnt/c/.../pddlstream_lib python3 eval_runner.py $args` | `eval_runner.py` (sweep over scene matrix, writes `eval_results/sweep_<ts>_<matrix>/`) |
 | `plot_eval` | `cd /mnt/c/.../Semantic_Boxels && source wsl_env/bin/activate && python3 eval_plotter.py $args` | `eval_plotter.py` (consumes `aggregated.csv`, writes 3 PNGs next to it) |
 
-(There is also a `cursor-agent` shim in `$PROFILE` that just forwards to the
-WSL `cursor-agent` CLI — it is editor tooling, not part of the boxels
-pipeline.)
-
 ### One-time WSL venv bootstrap
 
 `wsl_env/` is gitignored. If it doesn't exist or is missing packages, create it
