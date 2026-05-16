@@ -1253,7 +1253,20 @@ Fix:   ONE FEATURE BRANCH, multi-commit:
        so timing_summary.json / aggregated.csv record it.
        run_logger.py + test_full_pipeline.py; py_compile clean.
 
-       Step 3b — new matrix preset.  REVISED 2026-05-14 per
+       Step 3b [DONE 2026-05-16 — commit 6b92ab5].  SCALABILITY_VS_TIME
+       preset added to eval_runner.py — SEMANTIC sweeps 5 free-space
+       resolutions {0.1, 0.05, 0.03, 0.02, 0.01} m; UNIFORM runs once
+       per scene as the baseline point (hard-clamped to auto_cell by
+       audit #66 — one feasible resolution, so no size axis).
+       cell_to_argv emits --min-boxel-size and, for the stack sub-tier,
+       --stack-height from the reused n_occluders axis; cell_tag gains
+       an _mbs suffix so size variants don't collide on one directory.
+       100 corpus seeds -> 5400 cells (4500 semantic + 900 uniform);
+       py_compile + --dry-run clean.  As-built notes supersede the
+       planning text below where they differ (semantic+uniform, 5
+       sizes, 5400 cells, semantic-only at the finer resolutions).
+
+       Step 3b plan — new matrix preset.  REVISED 2026-05-14 per
        Step 0: seeds come from eval_corpus_100.json (100 pre-
        vetted scenes), NOT an inline [0..4] range.  Start
        narrow on the remaining axes:
