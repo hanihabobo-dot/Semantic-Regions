@@ -1214,7 +1214,23 @@ Fix:   ONE FEATURE BRANCH, multi-commit:
        end of the resolution axis.  py_compile clean; smoke-
        checks confirm default suppressed / explicit fires.
 
-       Step 3 — new matrix preset.  REVISED 2026-05-14 per
+       Step 3a [DONE 2026-05-16 — commit 782a29c].  Lift the
+       audit-#67 auto_cell clamp for the SEMANTIC baseline.
+       effective_cell was max(min_boxel_size, auto_cell); with
+       auto_cell ~0.16 m for occluder scenes / ~0.06 m for
+       stack, every proposed sweep size (0.05/0.03/0.02/0.01 m)
+       was clamped away — the resolution axis was a silent
+       no-op.  Fix: --min-boxel-size default 0.05 -> None;
+       unset keeps the #67 clamp (existing #9/#10 runs byte-
+       identical), an explicit value is used raw and may go
+       below auto_cell.  Uniform untouched — every uniform cell
+       is min-size, so a sub-occluder cell makes boxel_fits
+       ungroundable (audit #66).  run_config also gains
+       effective_min_boxel_size (the resolution actually used)
+       so timing_summary.json / aggregated.csv record it.
+       run_logger.py + test_full_pipeline.py; py_compile clean.
+
+       Step 3b — new matrix preset.  REVISED 2026-05-14 per
        Step 0: seeds come from eval_corpus_100.json (100 pre-
        vetted scenes), NOT an inline [0..4] range.  Start
        narrow on the remaining axes:
