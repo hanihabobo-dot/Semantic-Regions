@@ -27,7 +27,7 @@ import math
 import sys
 from collections import defaultdict
 from pathlib import Path
-from statistics import mean, median, pstdev, quantiles
+from statistics import mean, median, stdev, quantiles
 from typing import Dict, List, Optional
 
 try:
@@ -179,7 +179,7 @@ def _print_grouped_bars_text(grouped, title: str) -> None:
             if not samples:
                 continue
             m = mean(samples)
-            sd = pstdev(samples) if len(samples) > 1 else 0.0
+            sd = stdev(samples) if len(samples) > 1 else 0.0
             print(f"  {pair[0]}/{pair[1]}/{b}: mean={m:.3f} "
                   f"std={sd:.3f} n={len(samples)}")
 
@@ -213,7 +213,7 @@ def plot_grouped_bars(
             samples = grouped[p].get(b, [])
             ns.append(len(samples))
             means.append(mean(samples) if samples else 0.0)
-            stds.append(pstdev(samples) if len(samples) > 1 else 0.0)
+            stds.append(stdev(samples) if len(samples) > 1 else 0.0)
         offsets = [x + (i - (n_bars - 1) / 2) * bar_w for x in xs]
         ax.bar(offsets, means, bar_w, yerr=stds, capsize=3, label=b)
         if annotate_means:
@@ -623,7 +623,7 @@ def plot_boxel_evolution_per_replan(
                 samples = [s[col] for c in cells for s in c
                            if s["plan_index"] == pi]
                 means.append(mean(samples) if samples else 0.0)
-                stds.append(pstdev(samples) if len(samples) > 1 else 0.0)
+                stds.append(stdev(samples) if len(samples) > 1 else 0.0)
             lower = [m - sd for m, sd in zip(means, stds)]
             upper = [m + sd for m, sd in zip(means, stds)]
             ax.plot(indices, means, color=type_colors[tk],
@@ -700,7 +700,7 @@ def plot_per_call_planning_time(
             for pi in range(max_len):
                 samples = [s[pi] for s in seqs if len(s) > pi]
                 if samples:
-                    sd = pstdev(samples) if len(samples) > 1 else 0.0
+                    sd = stdev(samples) if len(samples) > 1 else 0.0
                     print(f"  {baseline}/plan#{pi}: "
                           f"mean={mean(samples):.3f} "
                           f"std={sd:.3f} n={len(samples)}")
@@ -724,7 +724,7 @@ def plot_per_call_planning_time(
         for pi in xs:
             samples = [s[pi] for s in seqs if len(s) > pi]
             means.append(mean(samples) if samples else 0.0)
-            stds.append(pstdev(samples) if len(samples) > 1 else 0.0)
+            stds.append(stdev(samples) if len(samples) > 1 else 0.0)
         line = ax.plot(xs, means, marker="o",
                        label=f"{baseline} (n_cells={len(seqs)})")[0]
         lower = [max(0.0, m - sd) for m, sd in zip(means, stds)]
@@ -1111,7 +1111,7 @@ def _print_text_table(grouped, title: str) -> None:
             if not samples:
                 continue
             m = mean(samples)
-            sd = pstdev(samples) if len(samples) > 1 else 0.0
+            sd = stdev(samples) if len(samples) > 1 else 0.0
             print(f"  series={s_val} x={x}: mean={m:.3f} "
                   f"std={sd:.3f} n={len(samples)}")
 
@@ -1294,7 +1294,7 @@ def _plot_single_x_summary(grouped, baseline_grouped, title, ylabel, out_path,
                 for samples in xy.values():
                     if samples:
                         m = mean(samples)
-                        sd = pstdev(samples) if len(samples) > 1 else 0.0
+                        sd = stdev(samples) if len(samples) > 1 else 0.0
                         print(f"  {s_val} {tag}: mean={m:.3g} "
                               f"std={sd:.3g} n={len(samples)}")
         return None
@@ -1305,7 +1305,7 @@ def _plot_single_x_summary(grouped, baseline_grouped, title, ylabel, out_path,
             if samples:
                 bars.append((f"{s_val}{main_label_suffix}",
                              mean(samples),
-                             pstdev(samples) if len(samples) > 1 else 0.0,
+                             stdev(samples) if len(samples) > 1 else 0.0,
                              len(samples)))
                 break
     if baseline_grouped:
@@ -1315,7 +1315,7 @@ def _plot_single_x_summary(grouped, baseline_grouped, title, ylabel, out_path,
                 if samples:
                     bars.append((f"{s_val}{baseline_label_suffix}",
                                  mean(samples),
-                                 pstdev(samples) if len(samples) > 1 else 0.0,
+                                 stdev(samples) if len(samples) > 1 else 0.0,
                                  len(samples)))
                     break
 
@@ -1386,7 +1386,7 @@ def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
         for s_val, xy in sorted(grp.items(), key=lambda kv: str(kv[0])):
             xs = sorted(xy.keys())
             means = [mean(xy[x]) for x in xs]
-            stds = [pstdev(xy[x]) if len(xy[x]) > 1 else 0.0 for x in xs]
+            stds = [stdev(xy[x]) if len(xy[x]) > 1 else 0.0 for x in xs]
             line = ax.plot(xs, means, marker="o", linestyle=linestyle,
                            label=f"{series_label}={s_val}{suffix}")[0]
             lo_clip = ylim[0] if ylim else 0.0
