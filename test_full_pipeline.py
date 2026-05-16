@@ -421,7 +421,7 @@ def main(gui=True, run_logger=None, scene_config=None,
          unit_costs=False,
          baseline: str = 'semantic',
          uniform_cell_size: float = 0.05,
-         min_boxel_size: float = 0.05,  # audit #77 step 2
+         min_boxel_size: Optional[float] = None,  # audit #77
          run_config: Optional[Dict[str, Any]] = None):
     print("=" * 60)
     print("FULL PIPELINE: PDDLStream + Replanning")
@@ -477,23 +477,28 @@ def main(gui=True, run_logger=None, scene_config=None,
             continue
         max_extent = max(max_extent, float(np.max(info.size)))
     auto_cell = max_extent + 0.01
-    # Audit #77 step 2: semantic baseline uses --min-boxel-size as
-    # its leaf floor (default 0.05 matches the previous shared value
-    # so existing runs are unchanged); uniform baseline keeps the
-    # original audit-#66 plumbing.  Both still respect the audit-#66
-    # auto_cell so occluder placement stays groundable.
-    semantic_floor = max(min_boxel_size, auto_cell)
-    uniform_floor = max(uniform_cell_size, auto_cell)
-    effective_cell = uniform_floor if baseline == 'uniform' else semantic_floor
+    # Audit #66/#67: a uniform cell smaller than the largest object makes
+    # (boxel_fits ?occluder ?cell) ungroundable, so uniform is always
+    # clamped to auto_cell.  Semantic free space MERGES (CellMerger), so
+    # open regions stay large-boxel even at a fine leaf floor — the #67
+    # clamp on semantic existed only to keep it comparable to uniform at
+    # equal resolution.  Audit #77: an EXPLICIT --min-boxel-size opts out
+    # of that clamp (raw, may go below auto_cell); unset keeps the #67
+    # default so existing #9/#10 comparisons are unchanged.
+    if baseline == 'uniform':
+        effective_cell = max(uniform_cell_size, auto_cell)
+    elif min_boxel_size is None:
+        effective_cell = auto_cell
+    else:
+        effective_cell = min_boxel_size
     print(f"  [audit-66/67] Effective minimum boxel size: "
           f"{effective_cell:.3f} m (largest object AABB "
           f"{max_extent:.3f} m + 0.01 m headroom).")
-    if (baseline != 'uniform'
-            and min_boxel_size < uniform_cell_size
-            and min_boxel_size < auto_cell):
-        print(f"  [audit-77] --min-boxel-size {min_boxel_size:.3f} m "
-              f"below audit-#66 auto_cell {auto_cell:.3f} m; floor "
-              f"held at auto_cell to keep occluder placement groundable.")
+    if baseline != 'uniform' and min_boxel_size is not None:
+        rel = "below" if min_boxel_size < auto_cell else "at/above"
+        print(f"  [audit-77] semantic leaf floor set to explicit "
+              f"--min-boxel-size {min_boxel_size:.3f} m "
+              f"({rel} auto_cell {auto_cell:.3f} m).")
 
     if baseline == 'uniform':
         env.use_uniform_grid = True
@@ -505,6 +510,13 @@ def main(gui=True, run_logger=None, scene_config=None,
         # cells.  Larger leaves are still allowed (CellMerger keeps
         # collapsing same-colour neighbours).
         env.free_space_generator.min_resolution = effective_cell
+
+    # audit #77 — run_config logs the REQUESTED --min-boxel-size (None
+    # when unset); also record the resolution ACTUALLY used so
+    # timing_summary.json / aggregated.csv carry it.  report_run_outcome
+    # serialises this same dict later, so the mutation propagates.
+    if run_config is not None:
+        run_config["effective_min_boxel_size"] = round(effective_cell, 4)
 
     # Let settle: 50 steps at 240 Hz ≈ 0.2 s.  Enough for the loaded
     # Panda + cubes to reach static equilibrium after spawning.

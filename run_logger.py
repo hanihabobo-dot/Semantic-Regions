@@ -504,19 +504,17 @@ def parse_pipeline_args(argv=None):
     parser.add_argument(
         '--min-boxel-size',
         type=float,
-        default=0.05,
+        default=None,
         help='Minimum FREE-SPACE octree leaf size for the SEMANTIC '
-             'baseline, in metres (audit #77 step 2). Default 0.05 m '
-             'keeps the audit-#67 floor so existing runs are unchanged. '
-             'Set finer (e.g. 0.02, 0.01) for the anytime sweep — lets '
-             'semantic exploit adaptive partitioning at higher '
-             'resolution within a fixed time budget. Floor is still '
-             'clamped above the audit-#66 auto_cell (largest object '
-             'AABB + 1 cm) so placement grounding stays satisfiable; '
-             'below auto_cell the flag is a no-op and a console line '
-             'announces the override. OBJECT / SHADOW boxels are '
-             'unaffected — they remain per-object regardless of this '
-             'knob.',
+             'baseline, in metres (audit #77). Unset (default) keeps '
+             'the audit-#67 floor — semantic is clamped to the '
+             'audit-#66 auto_cell (largest object AABB + 1 cm), so '
+             'existing #9/#10 comparisons are unchanged. An explicit '
+             'value is used RAW and may go below auto_cell, for the '
+             'audit-#77 anytime sweep — lets semantic exploit adaptive '
+             'partitioning at higher resolution within a fixed time '
+             'budget. OBJECT / SHADOW boxels are unaffected — they '
+             'remain per-object regardless of this knob.',
     )
     parser.add_argument(
         '--max-plan-time',
