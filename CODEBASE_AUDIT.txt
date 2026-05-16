@@ -358,6 +358,29 @@ Closed / relocated since last summary:
        interference); targeted behavioural fix files under a
        separate issue once data is in.  Mirror of audit #82's
        shape on the stack-entry side.
+  #86 [DONE 2026-05-16] — commit 9f9badd.  Eval-calculation audit
+       finding 1 (user-scoped 2026-05-16 session: check the eval
+       for calculation errors).  eval_plotter.py drew every
+       "+/-1 std" error band / bar with statistics.pstdev
+       (population std, /N); swapped to stdev (sample std, /N-1)
+       at all 10 call sites + the import.  Sample std is the
+       conventional estimator for "+/-1 std over seeds" in the
+       eval figures (an examiner expects N-1).  Every call site
+       was already guarded by len(...) > 1, so stdev's 2-point
+       minimum is satisfied — py_compile clean.  No central value
+       changes (means / success rates / TAMPURA medians
+       untouched); only error-bar width grows ~10.6% at N=5
+       seeds.  Committed #73 plot PNGs are NOT regenerated — a
+       future sweep widens the bands vs the on-disk figures, and
+       per the never-overwrite-plots rule any regeneration must
+       add new files.  Findings 2-5 from the same audit await
+       turn-by-turn triage: (2) success-only survivorship bias in
+       planning-time / plan-count means (skews the semantic-vs-
+       uniform comparison); (3) plan_dt dropped on the
+       drop_failed early-break in test_full_pipeline.py
+       (plan_count then exceeds len(plan_times)); (4) TAMPURA bar
+       compares our median+IQR vs their mean+/-std; (5)
+       _find_latest_timing_summary mtime-attribution edge case.
 
 ================================================================================
 #63. README + WIKI FINAL DOC SWEEP — POST-EVAL FREEZE-AND-WRITE
