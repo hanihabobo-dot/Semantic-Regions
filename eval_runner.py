@@ -147,15 +147,16 @@ def _load_corpus_seeds(n: int = 100) -> List[int]:
 
 
 # Anytime compactness sweep (audit #77 step 3b) — IPC-style cumulative-
-# solved-vs-wall-clock curve.  SEMANTIC sweeps free-space resolution
-# across 5 sizes; UNIFORM runs once per scene as the baseline point.
-# Uniform has no size axis on purpose: it is hard-clamped to auto_cell
+# solved-vs-wall-clock curve.  SEMANTIC runs at 2 resolution points:
+# "current" (min_boxel_size=None -> the audit-#67 auto_cell, ~0.16 m
+# occluder / ~0.06 m stack) and an explicit 5 cm.  UNIFORM runs once
+# per scene as the baseline point — it is hard-clamped to auto_cell
 # (a uniform cell finer than the largest object breaks placement, #66),
-# so it has exactly one feasible resolution — sweeping it would just
-# re-run the same cell.  Seeds are the pre-vetted eval corpus (step 0).
-# Time budget is NOT a matrix axis — run once at --timeout 1800 and
-# post-process aggregated.csv at any shorter wall_clock_s threshold.
-# Cells at 100 corpus seeds: semantic 4500 + uniform 900 = 5400.
+# so it has exactly one feasible resolution.  Seeds are the pre-vetted
+# eval corpus (step 0).  Time budget is NOT a matrix axis — run once at
+# --timeout 1800 and post-process aggregated.csv at any shorter
+# wall_clock_s threshold.
+# Cells at 100 corpus seeds: semantic 1800 + uniform 900 = 2700.
 _CORPUS_SEEDS = _load_corpus_seeds(100)
 
 SCALABILITY_VS_TIME = [
@@ -164,7 +165,7 @@ SCALABILITY_VS_TIME = [
         "seed":               _CORPUS_SEEDS,
         "goal":               ["holding", "find-and-tray-stack"],
         "baseline":           ["semantic"],
-        "min_boxel_size":     [0.1, 0.05, 0.03, 0.02, 0.01],
+        "min_boxel_size":     [None, 0.05],
         "unit_costs":         [False],
         "scene":              ["random-pairs"],
         "_n_hidden_strategy": "none",
@@ -184,7 +185,7 @@ SCALABILITY_VS_TIME = [
         "seed":               _CORPUS_SEEDS,
         "goal":               ["stack"],
         "baseline":           ["semantic"],
-        "min_boxel_size":     [0.1, 0.05, 0.03, 0.02, 0.01],
+        "min_boxel_size":     [None, 0.05],
         "unit_costs":         [False],
         "scene":              ["stack"],
         "_n_hidden_strategy": "none",
