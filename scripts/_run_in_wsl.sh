@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Helper to run pipeline commands inside the WSL venv from PowerShell.
-# Usage: wsl bash /mnt/c/Users/HaniAlassiriAlhabbou/git/Semantic_Boxels/_run_in_wsl.sh <args>
+# Usage: wsl bash /mnt/c/Users/HaniAlassiriAlhabbou/git/Semantic_Boxels/scripts/_run_in_wsl.sh <args>
 # Where <args> are passed verbatim to python.  Two special forms:
 #   _run_in_wsl.sh check           -> verify pybullet imports + print versions
 #   _run_in_wsl.sh <module> <args> -> python -m <module> <args>
