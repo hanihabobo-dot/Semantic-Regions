@@ -139,11 +139,74 @@ RANDOM_PAIRS_MATRIX = [
     },
 ]
 
+
+def _load_corpus_seeds(n: int = 100) -> List[int]:
+    """First ``n`` pre-vetted seeds from eval_corpus.json (audit #77 step 0)."""
+    corpus_path = Path(__file__).resolve().parent / "eval_corpus.json"
+    return json.loads(corpus_path.read_text())["seeds"][:n]
+
+
+# Anytime compactness sweep (audit #77 step 3b) — IPC-style cumulative-
+# solved-vs-wall-clock curve.  SEMANTIC sweeps free-space resolution
+# across 5 sizes; UNIFORM runs once per scene as the baseline point.
+# Uniform has no size axis on purpose: it is hard-clamped to auto_cell
+# (a uniform cell finer than the largest object breaks placement, #66),
+# so it has exactly one feasible resolution — sweeping it would just
+# re-run the same cell.  Seeds are the pre-vetted eval corpus (step 0).
+# Time budget is NOT a matrix axis — run once at --timeout 1800 and
+# post-process aggregated.csv at any shorter wall_clock_s threshold.
+# Cells at 100 corpus seeds: semantic 4500 + uniform 900 = 5400.
+_CORPUS_SEEDS = _load_corpus_seeds(100)
+
+SCALABILITY_VS_TIME = [
+    {  # semantic, occluder-driven goals — resolution swept
+        "n_occluders":        [2, 3, 4],
+        "seed":               _CORPUS_SEEDS,
+        "goal":               ["holding", "find-and-tray-stack"],
+        "baseline":           ["semantic"],
+        "min_boxel_size":     [0.1, 0.05, 0.03, 0.02, 0.01],
+        "unit_costs":         [False],
+        "scene":              ["random-pairs"],
+        "_n_hidden_strategy": "none",
+    },
+    {  # uniform, occluder-driven goals — single baseline point (auto_cell)
+        "n_occluders":        [2, 3, 4],
+        "seed":               _CORPUS_SEEDS,
+        "goal":               ["holding", "find-and-tray-stack"],
+        "baseline":           ["uniform"],
+        "unit_costs":         [False],
+        "scene":              ["random-pairs"],
+        "_n_hidden_strategy": "none",
+    },
+    {  # semantic, stack goal — resolution swept
+        "n_occluders":        [2, 3, 4],
+        "n_targets":          [3],
+        "seed":               _CORPUS_SEEDS,
+        "goal":               ["stack"],
+        "baseline":           ["semantic"],
+        "min_boxel_size":     [0.1, 0.05, 0.03, 0.02, 0.01],
+        "unit_costs":         [False],
+        "scene":              ["stack"],
+        "_n_hidden_strategy": "none",
+    },
+    {  # uniform, stack goal — single baseline point (auto_cell)
+        "n_occluders":        [2, 3, 4],
+        "n_targets":          [3],
+        "seed":               _CORPUS_SEEDS,
+        "goal":               ["stack"],
+        "baseline":           ["uniform"],
+        "unit_costs":         [False],
+        "scene":              ["stack"],
+        "_n_hidden_strategy": "none",
+    },
+]
+
 MATRIX_PRESETS = {
-    "scalability":  SCALABILITY_MATRIX,
-    "smoke":        SMOKE_MATRIX,
-    "default":      DEFAULT_MATRIX,
-    "random-pairs": RANDOM_PAIRS_MATRIX,
+    "scalability":         SCALABILITY_MATRIX,
+    "smoke":               SMOKE_MATRIX,
+    "default":             DEFAULT_MATRIX,
+    "random-pairs":        RANDOM_PAIRS_MATRIX,
+    "scalability-vs-time": SCALABILITY_VS_TIME,
 }
 
 
@@ -182,6 +245,11 @@ def iterate_matrix(matrix) -> Iterator[Dict]:
 
 def cell_tag(cell: Dict) -> str:
     """Deterministic short label used as the cell directory name."""
+    # audit #77 — min_boxel_size is a matrix axis in scalability-vs-time;
+    # without it in the tag the size variants of a cell collide on one
+    # directory.  Empty for presets that don't sweep it.
+    mbs = cell.get("min_boxel_size")
+    mbs_sfx = f"_mbs{mbs}" if mbs is not None else ""
     if cell["scene"] == "random-pairs":
         # n_targets / n_hidden are randomized inside the scene builder
         # per seed, so they are NOT part of the matrix axis and would
@@ -190,11 +258,11 @@ def cell_tag(cell: Dict) -> str:
         return (f"randpairs_occ{cell['n_occluders']}"
                 f"_seed{cell['seed']}"
                 f"_{cell['goal']}_uc{int(cell['unit_costs'])}"
-                f"_{cell.get('baseline', 'semantic')}")
+                f"_{cell.get('baseline', 'semantic')}{mbs_sfx}")
     return (f"occ{cell['n_occluders']}_tgt{cell['n_targets']}"
             f"_hid{cell['n_hidden']}_seed{cell['seed']}"
             f"_{cell['goal']}_uc{int(cell['unit_costs'])}"
-            f"_{cell.get('baseline', 'semantic')}")
+            f"_{cell.get('baseline', 'semantic')}{mbs_sfx}")
 
 
 def cell_to_argv(cell: Dict, extra_args: List[str]) -> List[str]:
@@ -232,6 +300,18 @@ def cell_to_argv(cell: Dict, extra_args: List[str]) -> List[str]:
             "--n-occluders", str(cell["n_occluders"]),
             "--seed-retry",
         ])
+    elif cell["scene"] == "stack":
+        # audit #77 — stack has no occluders, so the stack sub-tier
+        # reuses the n_occluders axis as the stack tower height.
+        # --n-objects stays at its default 3; the pipeline spawns
+        # max(n_objects, stack_height) cubes, so heights {2,3,4} spawn
+        # {3,3,4} — all within the {3,4,5} the eval corpus vetted.
+        argv.extend(["--stack-height", str(cell["n_occluders"])])
+    # audit #77 — semantic free-space granularity knob.  Emitted only
+    # when the cell carries it (scalability-vs-time); other presets
+    # omit it so run_logger keeps the audit-#67 default.
+    if cell.get("min_boxel_size") is not None:
+        argv.extend(["--min-boxel-size", str(cell["min_boxel_size"])])
     if cell["unit_costs"]:
         argv.append("--unit-costs")
     return argv + list(extra_args)
