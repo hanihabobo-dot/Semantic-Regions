@@ -1,0 +1,347 @@
+Boxel Test Environment initialized successfully!
+Camera position: [ 0.1 -0.8  0.7]
+Camera target: [0.1 0.  0.5]
+Occluders: 3 (box, box, box)
+Targets:   4 (box, box, box, box)
+Objects in scene: ['plane', 'table', 'robot', 'tray', 'red_object', 'green_object', 'orange_object', 'blue_object', 'cyan_object', 'purple_object', 'yellow_object']
+============================================================
+FULL PIPELINE: PDDLStream + Replanning
+============================================================
+
+--- Run configuration ---
+  scene              = random-pairs
+  n_occluders        = 3
+  n_targets          = 4
+  n_hidden           = 3
+  n_extra_distractors = 1
+  n_objects          = 3
+  seed               = 94
+  goal               = find-and-tray-stack
+  stack_height       = 2
+  unit_costs         = False
+  baseline           = semantic
+  uniform_cell_size  = 0.05
+  min_boxel_size     = 0.05
+  gui                = False
+  boxel_viz          = True
+  show_free          = False
+  log_level          = quiet
+
+--- Phase 1: Environment Setup ---
+Boxel Test Environment initialized successfully!
+Camera position: [ 0.1 -0.8  0.7]
+Camera target: [0.1 0.  0.5]
+Occluders: 3 (box, box, box)
+Targets:   4 (box, box, box, box)
+Objects in scene: ['plane', 'table', 'robot', 'tray', 'red_object', 'green_object', 'orange_object', 'blue_object', 'cyan_object', 'purple_object', 'yellow_object']
+  [audit-66/67] Effective minimum boxel size: 0.050 m (largest object AABB 0.082 m + 0.01 m headroom).
+  [audit-77] semantic leaf floor set to explicit --min-boxel-size 0.050 m (below auto_cell 0.092 m).
+  Hidden-target guarantee OK: 3/5 hidden (requested >= 3, seed=94).
+Robot ID: 2
+
+--- Phase 2: Calculating Boxels ---
+  Merge iteration 1: 76 merges, 79 boxels remaining
+  Merge iteration 2: 34 merges, 45 boxels remaining
+  Merge iteration 3: 14 merges, 31 boxels remaining
+  Merge iteration 4: 6 merges, 25 boxels remaining
+  Merge iteration 5: 1 merges, 24 boxels remaining
+  Merge iteration 6: 1 merges, 23 boxels remaining
+  Merging complete: 155 -> 23 boxels
+  Calculated 41 boxels
+
+--- Phase 3: Creating BoxelRegistry ---
+Saved 41 boxels to boxel_data.json
+  41 boxels, 13 shadows, 5 occluders
+
+--- Phase 4: Hidden Object Scenario ---
+  2-cube tray tower: yellow_object (on tray) + blue_object (on yellow_object)
+  Find-and-tray-stack goal: ('and', ('on', 'yellow_object', 'tray'), ('on', 'blue_object', 'yellow_object'))
+  Tray: tray
+  Shadow blockers (audit #78):
+    shadow_of_green_object__00 blocked by: ['green_object']
+    shadow_of_green_object__01 blocked by: ['green_object']
+    shadow_of_green_object__02 blocked by: ['green_object']
+    shadow_of_green_object__03 blocked by: ['green_object']
+    shadow_of_orange_object__00 blocked by: ['orange_object']
+    shadow_of_orange_object__01 blocked by: ['green_object']
+    shadow_of_orange_object__02 blocked by: ['green_object']
+    shadow_of_orange_object__03 blocked by: ['orange_object']
+    shadow_of_red_object__00 blocked by: ['red_object']
+    shadow_of_red_object__01 blocked by: ['red_object']
+    shadow_of_yellow_object__00 blocked by: ['yellow_object']
+    shadow_of_yellow_object__01 blocked by: ['red_object']
+    shadow_of_yellow_object__02 blocked by: ['yellow_object']
+  Boxel->PyBullet mapping: 5 objects
+
+--- Phase 5: Planning with Replanning ---
+  Exported initial problem to /mnt/c/Users/HaniAlassiriAlhabbou/git/Semantic_Boxels/pddl/problem_debug.pddl
+
+=== PLAN #1 ===
+Tray-stack progress: {} (unknown shadows: 13)
+  [#76-diag] init facts: 530 total, by predicate: {'blocks_view_at': 283, 'obj_at_boxel_KIF': 62, 'boxel_fits': 61, 'Boxel': 42, 'is_free_space': 23, 'is_shadow': 13, 'on_surface': 10, 'Obj': 8, 'on_table': 6, 'clear': 6, 'obj_at_boxel': 6, 'is_object': 5, 'Config': 1, 'is_tray': 1, 'obj_pose_known': 1, 'at_config': 1, 'handempty': 1}
+  [#76-diag] goal: ('and', ('on', 'yellow_object', 'tray'), ('on', 'blue_object', 'yellow_object'))
+  [#76-diag] held_obj=None, max_time=1800.0s, verbose=False
+  [#76-diag] boxel_fits per obj: {'blue_object': 19, 'green_object': 7, 'orange_object': 7, 'red_object': 7, 'tray': 2, 'yellow_object': 19}
+  [#76-diag] shadows (13 total, 0 view-clear NOW): ['shadow_of_green_object__00(blockers=1)', 'shadow_of_green_object__03(blockers=1)', 'shadow_of_green_object__02(blockers=1)', 'shadow_of_yellow_object__00(blockers=1)', 'shadow_of_red_object__01(blockers=1)', 'shadow_of_red_object__00(blockers=1)', 'shadow_of_orange_object__00(blockers=1)', 'shadow_of_yellow_object__01(blockers=1)', 'shadow_of_orange_object__03(blockers=1)', 'shadow_of_yellow_object__02(blockers=1)', 'shadow_of_orange_object__01(blockers=1)', 'shadow_of_green_object__01(blockers=1)', 'shadow_of_orange_object__02(blockers=1)']
+  [#76-diag] sense_options per obj (view-clear AND fits AND not-KIF): {'blue_object': [], 'green_object': [], 'orange_object': [], 'red_object': [], 'tray': [], 'yellow_object': []}
+  [#76-diag] obj_at_boxel per obj: {'blue_object': [], 'green_object': ['green_object'], 'orange_object': ['orange_object'], 'red_object': ['red_object'], 'tray': ['tray'], 'yellow_object': ['yellow_object', 'yellow_object']}
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 524 | Eager Calls: 0 | Cost: inf | Search Time: 0.001 | Sample Time: 0.000 | Total Time: 0.001
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 0.099
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 524 | Eager Calls: 0 | Cost: inf | Search Time: 0.103 | Sample Time: 0.000 | Total Time: 0.103
+Attempt: 1 | Results: 7 | Depth: 0 | Success: False | Time: 0.052
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 524 | Eager Calls: 0 | Cost: inf | Search Time: 0.157 | Sample Time: 0.000 | Total Time: 0.157
+Attempt: 1 | Results: 289 | Depth: 0 | Success: False | Time: 0.140
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 524 | Eager Calls: 0 | Cost: inf | Search Time: 0.300 | Sample Time: 0.000 | Total Time: 0.300
+Attempt: 1 | Results: 297 | Depth: 1 | Success: False | Time: 0.831
+Attempt: 2 | Results: 409 | Depth: 1 | Success: False | Time: 1.401
+Attempt: 3 | Results: 544 | Depth: 1 | Success: False | Time: 1.934
+Attempt: 4 | Results: 649 | Depth: 1 | Success: False | Time: 2.502
+Attempt: 5 | Results: 729 | Depth: 1 | Success: False | Time: 3.092
+Attempt: 6 | Results: 817 | Depth: 1 | Success: False | Time: 3.763
+Attempt: 7 | Results: 817 | Depth: 0 | Success: True | Time: 4.491
+Stream plan (15, 15, 0.002): [sample-grasp:(blue_object)->(#g0), sample-grasp:(yellow_object)->(#g3), sample-grasp:(green_object)->(#g4), compute-kin:(blue_object, shadow_of_green_object__00, #g0)->(#q9), compute-stack-kin:(yellow_object, tray, #g3)->(#q7), compute-kin:(green_object, green_object, #g4)->(#q14), compute-stack-kin:(blue_object, yellow_object, #g0)->(#q2), compute-kin:(yellow_object, yellow_object, #g3)->(#q6), compute-kin:(green_object, free_001, #g4)->(#q19), plan-motion:(q_home, #q6)->(#t35), plan-motion:(#q7, #q14)->(#t34), plan-motion:(#q19, #q9)->(#t40), plan-motion:(#q6, #q7)->(#t36), plan-motion:(#q14, #q19)->(#t41), plan-motion:(#q9, #q2)->(#t23)]
+Action plan (13, 15.000): [move(q_home, #q6, yellow_object, #t35), pick(yellow_object, yellow_object, #g3, #q6), move(#q6, #q7, tray, #t36), stack(yellow_object, tray, #g3, #q7), move(#q7, #q14, green_object, #t34), pick(green_object, green_object, #g4, #q14), move(#q14, #q19, free_001, #t41), place(green_object, free_001, #g4, #q19), move(#q19, #q9, shadow_of_green_object__00, #t40), sense(blue_object, shadow_of_green_object__00), pick(blue_object, shadow_of_green_object__00, #g0, #q9), move(#q9, #q2, yellow_object, #t23), stack(blue_object, yellow_object, #g0, #q2)]
+Summary: {complexity: 3, cost: 15.000, evaluations: 560, iterations: 4, length: 2, run_time: 4.816, sample_time: 0.019, search_time: 4.797, skeletons: 1, solutions: 1, solved: True, timeout: False}
+  [#76-diag] outcome=plan_found, elapsed=4.854s, plan_len=13, cost=15.0
+  [timing] planner.plan() #1: 4.989s (cumulative 4.989s)
+Plan: 13 actions
+  1. move
+  2. pick
+  3. move
+  4. stack
+  5. move
+  6. pick
+  7. move
+  8. place
+  9. move
+  10. sense
+  11. pick
+  12. move
+  13. stack
+
+  Executing: move
+    Moving to yellow_object (10 waypoints)...
+    -> Arrived at yellow_object
+
+  Executing: pick
+    Picking yellow_object from yellow_object...
+    *** yellow_object PICKED UP! ***
+
+  Executing: move
+    Moving to tray (10 waypoints)...
+    -> Arrived at tray
+
+  Executing: stack
+    Stacking yellow_object on tray...
+    [#84-diag] stack yellow_object on tray: contact_ee=[-0.1300,0.3800,0.4378] target_obj_z=0.4063 sup_top_z=0.3769 ee_to_obj_z=-0.0316 held_half_height=0.0293 sup_aabb=[-0.2510,0.2590,0.3203]-[-0.0090,0.5010,0.3769] held_aabb=[-0.1444,0.3419,0.4374]-[-0.0782,0.3997,0.4960] held_tilt_deg=14.14
+    [#84-diag] arrival-deviation yellow_object on tray: live_ee=[-0.1261,0.3794,0.4481] ee_xy_err=3.92mm ee_z_err=10.23mm live_obj_z=0.4152 obj_z_err=8.91mm live_tilt_deg=13.42 tilt_drift_deg=-0.72
+    [#84-diag] pre-release yellow_object: pos=[-0.1285,0.3782,0.4152] aabb=[-0.1614,0.3494,0.3860]-[-0.0956,0.4070,0.4444] tilt_deg=13.42
+    -> Released yellow_object (audit #80 verify ok; constraint_gone=True robot_link_contacts={none} non_robot_contacts=[3] bottom_z=0.3310 (no_expected) lateral_drift=0.00mm cube_tilt_deg=0.00 finger_pos=[0.0400,0.0400])
+    *** yellow_object STACKED on tray! ***
+
+  Executing: move
+    Moving to green_object (10 waypoints)...
+    -> Arrived at green_object
+
+  Executing: pick
+    Picking green_object from green_object...
+    *** green_object PICKED UP! ***
+
+  Executing: move
+    Moving to free_001 (10 waypoints)...
+    -> Arrived at free_001
+
+  Executing: place
+    Placing green_object at free_001...
+    [#84-diag] pre-release green_object: pos=[0.3640,0.0061,0.3665] aabb=[0.3204,-0.0399,0.3213]-[0.4077,0.0522,0.4116] tilt_deg=6.43
+    Drop verification failed for green_object: constraint_gone=True robot_link_contacts={link9: d=-0.38mm, F=9.66N; link10: d=-0.34mm, F=9.22N} non_robot_contacts=[1] bottom_z=0.3247 expected=0.3250 err=-0.3mm lateral_drift=0.07mm cube_tilt_deg=3.82 finger_pos=[0.0402,0.0402] — retry 1/3.
+    !!! HELD-STATE ANOMALY (post-release:green_object:attempt-1-fail): expected handempty, robot in contact with bodies=[5]
+    Drop verification failed for green_object: constraint_gone=True robot_link_contacts={link9: d=-0.36mm, F=10.52N; link10: d=-0.15mm, F=14.78N} non_robot_contacts=[1] bottom_z=0.3247 expected=0.3250 err=-0.3mm lateral_drift=0.02mm cube_tilt_deg=4.10 finger_pos=[0.0402,0.0403] — retry 2/3.
+    !!! HELD-STATE ANOMALY (post-release:green_object:attempt-2-fail): expected handempty, robot in contact with bodies=[5]
+    Drop verification failed for green_object: constraint_gone=True robot_link_contacts={link9: d=-0.30mm, F=9.28N; link10: d=-0.16mm, F=16.45N} non_robot_contacts=[1] bottom_z=0.3246 expected=0.3250 err=-0.4mm lateral_drift=0.02mm cube_tilt_deg=4.39 finger_pos=[0.0402,0.0403] — retry 3/3.
+    !!! HELD-STATE ANOMALY (post-release:green_object:attempt-3-fail): expected handempty, robot in contact with bodies=[5]
+    ERROR: drop verification failed for green_object after place — aborting (audit #75/#80)
+    drop-verify failed for green_object; clearing held state and replanning (audit #79).
+    !!! HELD-STATE ANOMALY (post-clear-place:green_object): expected handempty, robot in contact with bodies=[5]
+
+=== PLAN #2 ===
+Tray-stack progress: {'yellow_object': 'tray'} (unknown shadows: 13)
+  [#76-diag] init facts: 511 total, by predicate: {'blocks_view_at': 283, 'obj_at_boxel_KIF': 62, 'boxel_fits': 43, 'Boxel': 42, 'is_free_space': 23, 'is_shadow': 13, 'on_surface': 10, 'Obj': 8, 'obj_at_boxel': 6, 'on_table': 5, 'is_object': 5, 'clear': 5, 'obj_pose_known': 1, 'is_tray': 1, 'on': 1, 'Config': 1, 'at_config': 1, 'handempty': 1}
+  [#76-diag] goal: ('and', ('on', 'yellow_object', 'tray'), ('on', 'blue_object', 'yellow_object'))
+  [#76-diag] held_obj=None, max_time=1800.0s, verbose=False
+  [#76-diag] boxel_fits per obj: {'blue_object': 11, 'green_object': 7, 'orange_object': 7, 'red_object': 5, 'tray': 2, 'yellow_object': 11}
+  [#76-diag] shadows (13 total, 0 view-clear NOW): ['shadow_of_yellow_object__01(blockers=1)', 'shadow_of_red_object__00(blockers=1)', 'shadow_of_orange_object__03(blockers=1)', 'shadow_of_green_object__02(blockers=1)', 'shadow_of_orange_object__01(blockers=1)', 'shadow_of_green_object__03(blockers=1)', 'shadow_of_yellow_object__02(blockers=1)', 'shadow_of_orange_object__00(blockers=1)', 'shadow_of_green_object__01(blockers=1)', 'shadow_of_orange_object__02(blockers=1)', 'shadow_of_yellow_object__00(blockers=1)', 'shadow_of_red_object__01(blockers=1)', 'shadow_of_green_object__00(blockers=1)']
+  [#76-diag] sense_options per obj (view-clear AND fits AND not-KIF): {'blue_object': [], 'green_object': [], 'orange_object': [], 'red_object': [], 'tray': [], 'yellow_object': []}
+  [#76-diag] obj_at_boxel per obj: {'blue_object': [], 'green_object': ['green_object'], 'orange_object': ['orange_object'], 'red_object': ['red_object'], 'tray': ['tray'], 'yellow_object': ['yellow_object', 'yellow_object']}
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 505 | Eager Calls: 0 | Cost: inf | Search Time: 0.001 | Sample Time: 0.000 | Total Time: 0.001
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 0.040
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 505 | Eager Calls: 0 | Cost: inf | Search Time: 0.044 | Sample Time: 0.000 | Total Time: 0.044
+Attempt: 1 | Results: 7 | Depth: 0 | Success: False | Time: 0.045
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 505 | Eager Calls: 0 | Cost: inf | Search Time: 0.092 | Sample Time: 0.000 | Total Time: 0.092
+Attempt: 1 | Results: 289 | Depth: 0 | Success: False | Time: 0.119
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 505 | Eager Calls: 0 | Cost: inf | Search Time: 0.214 | Sample Time: 0.000 | Total Time: 0.214
+Attempt: 1 | Results: 297 | Depth: 1 | Success: False | Time: 0.509
+Attempt: 2 | Results: 369 | Depth: 1 | Success: False | Time: 1.132
+Attempt: 3 | Results: 369 | Depth: 0 | Success: True | Time: 1.799
+Stream plan (10, 10, 0.001): [sample-grasp:(blue_object)->(#g6), sample-grasp:(orange_object)->(#g5), compute-kin:(blue_object, shadow_of_orange_object__00, #g6)->(#q25), compute-stack-kin:(blue_object, yellow_object, #g6)->(#q21), compute-kin:(orange_object, orange_object, #g5)->(#q24), compute-kin:(orange_object, free_005, #g5)->(#q20), plan-motion:(q_kin_green_object_6, #q24)->(#t47), plan-motion:(#q25, #q21)->(#t45), plan-motion:(#q20, #q25)->(#t48), plan-motion:(#q24, #q20)->(#t46)]
+Action plan (9, 10.000): [move(q_kin_green_object_6, #q24, orange_object, #t47), pick(orange_object, orange_object, #g5, #q24), move(#q24, #q20, free_005, #t46), sense(blue_object, shadow_of_orange_object__00), place(orange_object, free_005, #g5, #q20), move(#q20, #q25, shadow_of_orange_object__00, #t48), pick(blue_object, shadow_of_orange_object__00, #g6, #q25), move(#q25, #q21, yellow_object, #t45), stack(blue_object, yellow_object, #g6, #q21)]
+Summary: {complexity: 3, cost: 10.000, evaluations: 529, iterations: 4, length: 2, run_time: 2.032, sample_time: 0.014, search_time: 2.018, skeletons: 1, solutions: 1, solved: True, timeout: False}
+  [#76-diag] outcome=plan_found, elapsed=2.073s, plan_len=9, cost=10.0
+  [timing] planner.plan() #2: 2.178s (cumulative 7.167s)
+Plan: 9 actions
+  1. move
+  2. pick
+  3. move
+  4. sense
+  5. place
+  6. move
+  7. pick
+  8. move
+  9. stack
+
+  Executing: move
+    Moving to orange_object (10 waypoints)...
+    -> Arrived at orange_object
+
+  Executing: pick
+    Picking orange_object from orange_object...
+    *** orange_object PICKED UP! ***
+
+  Executing: move
+    Moving to free_005 (10 waypoints)...
+    -> Arrived at free_005
+
+  Executing: sense
+    Sensing shadow_of_orange_object__00 (fixed camera)...
+    View to shadow_of_orange_object__00 still blocked (56% rays hit occluder). [attempt 1]
+    -> REPLANNING without marking shadow empty...
+
+=== PLAN #3 ===
+Tray-stack progress: {'yellow_object': 'tray'} (unknown shadows: 13)
+  [#76-diag] init facts: 509 total, by predicate: {'blocks_view_at': 283, 'obj_at_boxel_KIF': 62, 'Boxel': 42, 'boxel_fits': 41, 'is_free_space': 23, 'is_shadow': 13, 'on_surface': 10, 'Obj': 8, 'obj_at_boxel': 6, 'is_object': 5, 'clear': 5, 'on_table': 5, 'on': 1, 'obj_pose_known': 1, 'holding': 1, 'at_config': 1, 'Config': 1, 'is_tray': 1}
+  [#76-diag] goal: ('and', ('on', 'yellow_object', 'tray'), ('on', 'blue_object', 'yellow_object'))
+  [#76-diag] held_obj=orange_object, max_time=1800.0s, verbose=False
+  [#76-diag] boxel_fits per obj: {'blue_object': 10, 'green_object': 7, 'orange_object': 7, 'red_object': 5, 'tray': 2, 'yellow_object': 10}
+  [#76-diag] shadows (13 total, 0 view-clear NOW): ['shadow_of_red_object__00(blockers=1)', 'shadow_of_orange_object__01(blockers=1)', 'shadow_of_green_object__00(blockers=1)', 'shadow_of_green_object__03(blockers=1)', 'shadow_of_orange_object__02(blockers=1)', 'shadow_of_yellow_object__00(blockers=1)', 'shadow_of_orange_object__00(blockers=1)', 'shadow_of_red_object__01(blockers=1)', 'shadow_of_yellow_object__01(blockers=1)', 'shadow_of_yellow_object__02(blockers=1)', 'shadow_of_orange_object__03(blockers=1)', 'shadow_of_green_object__02(blockers=1)', 'shadow_of_green_object__01(blockers=1)']
+  [#76-diag] sense_options per obj (view-clear AND fits AND not-KIF): {'blue_object': [], 'green_object': [], 'orange_object': [], 'red_object': [], 'tray': [], 'yellow_object': []}
+  [#76-diag] obj_at_boxel per obj: {'blue_object': [], 'green_object': ['green_object'], 'orange_object': ['orange_object'], 'red_object': ['red_object'], 'tray': ['tray'], 'yellow_object': ['yellow_object', 'yellow_object']}
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 503 | Eager Calls: 0 | Cost: inf | Search Time: 0.001 | Sample Time: 0.000 | Total Time: 0.001
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 0.032
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 503 | Eager Calls: 0 | Cost: inf | Search Time: 0.035 | Sample Time: 0.000 | Total Time: 0.035
+Attempt: 1 | Results: 7 | Depth: 0 | Success: False | Time: 0.039
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 503 | Eager Calls: 0 | Cost: inf | Search Time: 0.077 | Sample Time: 0.000 | Total Time: 0.077
+Attempt: 1 | Results: 289 | Depth: 0 | Success: False | Time: 0.195
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 503 | Eager Calls: 0 | Cost: inf | Search Time: 0.275 | Sample Time: 0.000 | Total Time: 0.275
+Attempt: 1 | Results: 297 | Depth: 0 | Success: False | Time: 0.548
+Stream plan (inf, 0, inf): False
+Action plan (inf, inf): False
+Summary: {complexity: 3, cost: inf, evaluations: 503, iterations: 4, length: inf, run_time: 0.824, sample_time: 0.000, search_time: 0.824, skeletons: 0, solutions: 0, solved: False, timeout: False}
+  [#76-diag] outcome=no_plan, elapsed=0.861s, plan_len=0, cost=inf
+  audit #58: planner found no plan with orange_object held — falling back to release-and-replan.
+  Replanning while holding orange_object — releasing.
+    [#84-diag] pre-release orange_object: pos=[-0.0003,-0.3430,0.4472] aabb=[-0.0415,-0.3880,0.4019]-[0.0409,-0.2980,0.4925] tilt_deg=6.65
+    -> Released orange_object (audit #80 verify ok; constraint_gone=True robot_link_contacts={none} non_robot_contacts=[1] bottom_z=0.3250 (no_expected) lateral_drift=0.00mm cube_tilt_deg=0.00 finger_pos=[0.0400,0.0400])
+  Shadow blockers (audit #78):
+    shadow_of_green_object__00 blocked by: ['green_object']
+    shadow_of_green_object__01 blocked by: ['green_object']
+    shadow_of_green_object__02 blocked by: ['green_object']
+    shadow_of_green_object__03 blocked by: ['green_object']
+    shadow_of_orange_object__00 blocked by: ['orange_object']
+    shadow_of_orange_object__01 blocked by: ['orange_object']
+    shadow_of_orange_object__02 blocked by: ['orange_object']
+    shadow_of_orange_object__03 blocked by: ['orange_object']
+    shadow_of_red_object__00 blocked by: ['red_object']
+    shadow_of_red_object__01 blocked by: ['red_object']
+    shadow_of_yellow_object__00 blocked by: ['yellow_object']
+    shadow_of_yellow_object__01 blocked by: ['yellow_object']
+    shadow_of_yellow_object__02 blocked by: ['yellow_object']
+    -> Dropped orange_object at (np.float64(-0.005), np.float64(-0.37), np.float64(0.365))
+  [#76-diag] init facts: 509 total, by predicate: {'blocks_view_at': 283, 'obj_at_boxel_KIF': 62, 'Boxel': 42, 'boxel_fits': 41, 'is_free_space': 23, 'is_shadow': 13, 'on_surface': 10, 'Obj': 8, 'obj_at_boxel': 6, 'clear': 5, 'is_object': 5, 'on_table': 5, 'handempty': 1, 'obj_pose_known': 1, 'Config': 1, 'on': 1, 'is_tray': 1, 'at_config': 1}
+  [#76-diag] goal: ('and', ('on', 'yellow_object', 'tray'), ('on', 'blue_object', 'yellow_object'))
+  [#76-diag] held_obj=None, max_time=1800.0s, verbose=False
+  [#76-diag] boxel_fits per obj: {'blue_object': 10, 'green_object': 7, 'orange_object': 7, 'red_object': 5, 'tray': 2, 'yellow_object': 10}
+  [#76-diag] shadows (13 total, 0 view-clear NOW): ['shadow_of_green_object__00(blockers=1)', 'shadow_of_green_object__02(blockers=1)', 'shadow_of_red_object__00(blockers=1)', 'shadow_of_orange_object__03(blockers=1)', 'shadow_of_red_object__01(blockers=1)', 'shadow_of_yellow_object__00(blockers=1)', 'shadow_of_green_object__03(blockers=1)', 'shadow_of_green_object__01(blockers=1)', 'shadow_of_yellow_object__02(blockers=1)', 'shadow_of_orange_object__02(blockers=1)', 'shadow_of_orange_object__01(blockers=1)', 'shadow_of_orange_object__00(blockers=1)', 'shadow_of_yellow_object__01(blockers=1)']
+  [#76-diag] sense_options per obj (view-clear AND fits AND not-KIF): {'blue_object': [], 'green_object': [], 'orange_object': [], 'red_object': [], 'tray': [], 'yellow_object': []}
+  [#76-diag] obj_at_boxel per obj: {'blue_object': [], 'green_object': ['green_object'], 'orange_object': ['orange_object'], 'red_object': ['red_object'], 'tray': ['tray'], 'yellow_object': ['yellow_object', 'yellow_object']}
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 503 | Eager Calls: 0 | Cost: inf | Search Time: 0.001 | Sample Time: 0.000 | Total Time: 0.001
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 0.028
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 503 | Eager Calls: 0 | Cost: inf | Search Time: 0.031 | Sample Time: 0.000 | Total Time: 0.031
+Attempt: 1 | Results: 7 | Depth: 0 | Success: False | Time: 0.036
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 503 | Eager Calls: 0 | Cost: inf | Search Time: 0.069 | Sample Time: 0.000 | Total Time: 0.069
+Attempt: 1 | Results: 289 | Depth: 0 | Success: False | Time: 0.183
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 503 | Eager Calls: 0 | Cost: inf | Search Time: 0.256 | Sample Time: 0.000 | Total Time: 0.256
+Attempt: 1 | Results: 297 | Depth: 0 | Success: False | Time: 0.508
+Stream plan (inf, 0, inf): False
+Action plan (inf, inf): False
+Summary: {complexity: 3, cost: inf, evaluations: 503, iterations: 4, length: inf, run_time: 0.766, sample_time: 0.000, search_time: 0.766, skeletons: 0, solutions: 0, solved: False, timeout: False}
+  [#76-diag] outcome=no_plan, elapsed=0.799s, plan_len=0, cost=inf
+  [timing] planner.plan() #3: 1.924s (cumulative 9.091s)
+ERROR: No plan found!
+
+============================================================
+FAILED: Planner returned no plan (13 unsearched shadows remaining)
+  Plans executed: 3
+
+--- Planning timing summary ---
+  Total plan() calls       : 3
+  Cumulative planning time : 9.091s
+  Average per call         : 3.030s
+  Per-call (s)             : [4.989, 2.178, 1.924]
+  Timing summary written to logs/run_2026-05-17_04-33-59/timing_summary.json
+============================================================
+
+--- STDERR ---
+pybullet build time: Jan 29 2025 23:16:28
+[random-pairs+find-and-tray-stack] auto-bumping --n-extra-distractors from 0 to 1: the goal needs at least one visible target on top of the K hidden ones.
