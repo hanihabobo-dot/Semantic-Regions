@@ -154,7 +154,7 @@ Fix:   "...a scalable, simple framework that lets a robot plan under spatial
        them." (See also #6 on "robust manipulation".)
 
 ================================================================================
-#6  [T1 · Over-claim] [THESIS]  "robust manipulation" — execution is friction-free and collision-blind
+#6  [T1 · Over-claim] [THESIS]  "robust manipulation" — execution is friction-free and collision-blind [REJECTED]
 ================================================================================
 Where: Abstract abstract.tex:21; §1 introduction.tex:23; §5.4 evaluation.tex:34
 What:  The proposal repeatedly claims "robust manipulation" / "a scalable and
@@ -169,7 +169,7 @@ Fix:   Scope "robust" to robustness against belief/observation uncertainty (the
 Refs:  THESIS_NOTES §2, §12, §16, §19
 
 ================================================================================
-#7  [T2 · Over-claim] [THESIS]  "scalable" asserted as delivered fact
+#7  [T2 · Over-claim] [THESIS]  "scalable" asserted as delivered fact [DONE]
 ================================================================================
 Where: Abstract — abstract.tex:18-21 ("a scalable and conceptually simple
        framework")
