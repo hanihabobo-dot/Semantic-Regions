@@ -1187,7 +1187,7 @@ Fix:   Rewrite §5 as a completed Evaluation chapter: (1) Experimental Setup as
 Refs:  #87-#103; #125; THESIS_NOTES §21; eval_results/sweep_anytime/
 
 ================================================================================
-#123  [Structural] [THESIS]  No "Limitations / Accepted Simplifications" section
+#123  [Structural] [THESIS]  No "Limitations / Accepted Simplifications" section  [DONE]
 ================================================================================
 Where: new section (end of Approach/Implementation, or before the Conclusion)
 What:  The audit repeatedly forward-references a limitations section that does
