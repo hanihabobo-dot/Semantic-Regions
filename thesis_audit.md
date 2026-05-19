@@ -878,7 +878,7 @@ Fix:   Rename to e.g. "Object-Centric Semantic Discretization" or
 Refs:  THESIS_NOTES §20; #23
 
 ================================================================================
-#65  [T1 · Deviation] [THESIS]  §4.2 step 3 "Recursive Partitioning" is not implemented
+#65  [T1 · Deviation] [THESIS]  §4.2 step 3 "Recursive Partitioning" is not implemented [DONE]
 ================================================================================
 Where: §4.2 step 3 approach.tex:30; Fig 2(d) caption approach.tex:21
 What:  Step 3: "...If new objects are found within a partition, the process
