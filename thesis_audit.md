@@ -1056,7 +1056,7 @@ Fix:   The approach contrasts with UNIFORM voxel grids by being object-centric;
        comparison.
 
 ================================================================================
-#77  [T3 · Deviation] [THESIS]  §4.3/§4.4 example action "pick_object_from_known_Boxel" + false precondition claim
+#77  [T3 · Deviation] [THESIS]  §4.3/§4.4 example action "pick_object_from_known_Boxel" + false precondition claim [DONE]
 ================================================================================
 Where: §4.3 approach.tex:44; §4.4.2 closing approach.tex:115
 What:  §4.3 lists an action "pick_object_from_known_Boxel"; the real action is
