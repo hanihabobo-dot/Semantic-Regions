@@ -344,7 +344,7 @@ Fix:   "Naive representations — such as a uniform voxel grid over 3D space —
        plan with."
 
 ================================================================================
-#22  [T1 · Deviation] [THESIS]  "perceived objects" misrepresents a ground-truth oracle
+#22  [T1 · Deviation] [THESIS]  "perceived objects" misrepresents a ground-truth oracle [DONE]
 ================================================================================
 Where: §1 introduction.tex:21; §4.2 approach.tex:11, 27
 What:  §1 says Semantic Boxels are "dynamically created based on perceived
