@@ -1015,7 +1015,7 @@ Fix:   Disclose that the sensor model O is realized by the Python sense-plan-act
 Refs:  THESIS_NOTES §5; #69
 
 ================================================================================
-#74  [T2 · Scientific] [NOW]  §4.3 "model taken from the work of Bonet and Geffner" — tuple likely not in that paper
+#74  [T2 · Scientific] [NOW]  §4.3 "model taken from the work of Bonet and Geffner" — tuple likely not in that paper [DONE]
 ================================================================================
 Where: §4.3 — approach.tex:35-37
 What:  "We formalize our Semantic POD-TAMP system using a model taken from the
