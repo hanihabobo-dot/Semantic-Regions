@@ -92,10 +92,13 @@ When execution reveals otherwise (empty shadow or still blocked), the
 Python execution loop breaks out of the current plan, updates belief,
 and replans.
 
-The proposal (Section 4.4.2) described conditional sensing effects
-with branching outcomes.  PDDLStream + FastDownward do not support
-contingent planning, so optimistic sensing + replanning is used
-instead.
+An earlier design (and the proposal's first sketch) described
+conditional sensing effects with branching outcomes.  PDDLStream +
+FastDownward do not support contingent planning, so optimistic
+sensing + replanning is used instead.  Thesis audit #68-#72 rewrote
+Section 4.5.2 to the real optimistic sense action and added a
+paragraph disclosing the optimistic-sensing / reactive-replanning
+design, so the thesis now presents it directly.
 
 **Thesis framing**: This is a standard pattern in TAMP under partial
 observability (Garrett et al., 2020; Kaelbling & Lozano-Perez, 2013).
