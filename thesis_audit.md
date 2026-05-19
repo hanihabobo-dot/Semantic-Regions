@@ -925,7 +925,7 @@ Fix:   Rewrite Listing 1 to the real predicates, or keep it illustrative and add
 Refs:  THESIS_NOTES §6
 
 ================================================================================
-#68  [T1 · Deviation] [THESIS]  §4.4.2 sense action name and signature do not match the domain
+#68  [T1 · Deviation] [THESIS]  §4.4.2 sense action name and signature do not match the domain [DONE]
 ================================================================================
 Where: §4.4.2 Listing 2 — approach.tex:79-85; code domain_pddlstream.pddl:156-171
 What:  Listing 2 defines (:action sense_Boxel_for_object) with typed parameters
@@ -939,7 +939,7 @@ Fix:   Rename to "sense", show the real STRIPS signature, or state explicitly
 Refs:  THESIS_NOTES §3, §5
 
 ================================================================================
-#69  [T1 · Deviation] [THESIS]  §4.4.2 conditional found/not_found sense effects are not implemented
+#69  [T1 · Deviation] [THESIS]  §4.4.2 conditional found/not_found sense effects are not implemented [DONE]
 ================================================================================
 Where: §4.4.2 Listing 2 — approach.tex:95-113; code domain_pddlstream.pddl:156-171
 What:  Listing 2 uses contingent branching: "(when (= ?obs_status found) ...)"
@@ -954,7 +954,7 @@ Fix:   Add a thesis paragraph disclosing optimistic sensing + reactive
 Refs:  THESIS_NOTES §5
 
 ================================================================================
-#70  [T1 · Deviation] [THESIS]  §4.4 streams stream_find_sensing_config / stream_get_sensing_outcome do not exist
+#70  [T1 · Deviation] [THESIS]  §4.4 streams stream_find_sensing_config / stream_get_sensing_outcome do not exist [DONE]
 ================================================================================
 Where: §4.4.2 Listing 2 + closing para — approach.tex:92-93, 115; code
        pddl/stream.pddl
@@ -970,7 +970,7 @@ Fix:   Disclose that no sensing streams are used: the fixed overhead camera
 Refs:  THESIS_NOTES §3
 
 ================================================================================
-#71  [T1 · Scientific] [THESIS]  §4.4.2 Listing 2 claims an inference the formalism does not provide
+#71  [T1 · Scientific] [THESIS]  §4.4.2 Listing 2 claims an inference the formalism does not provide [DONE]
 ================================================================================
 Where: §4.4.2 Listing 2 — approach.tex:98-104
 What:  In the "found" branch the comment says "We can now infer it's not in any
@@ -985,7 +985,7 @@ Fix:   Add an explicit universally-quantified effect ((forall (?b) (when (not
        realizes it. Do not defer it to an unspecified "belief update."
 
 ================================================================================
-#72  [T1 · Scientific] [THESIS]  §4.4.2 puts stream_* calls inside :precondition (stream vs certified-fluent confusion)
+#72  [T1 · Scientific] [THESIS]  §4.4.2 puts stream_* calls inside :precondition (stream vs certified-fluent confusion) [DONE]
 ================================================================================
 Where: §4.4.2 Listing 2 — approach.tex:91-93
 What:  The sense action's :precondition literally contains
