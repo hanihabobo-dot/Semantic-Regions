@@ -99,15 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#9  [T2 · Style] [POLISH]  "has emerged as a critical area of research"
-================================================================================
-Where: §1 — introduction.tex:5
-What:  "To enable such capabilities, Task and Motion Planning (TAMP) has emerged
-       as a critical area of research." Stock academic-ese; signals importance
-       but adds no content.
-Fix:   "Task and Motion Planning (TAMP) studies how to do exactly this."
-
-================================================================================
 #10  [T2 · Style] [POLISH]  "addresses the fundamental challenge of connecting"
 ================================================================================
 Where: §1 — introduction.tex:6
@@ -1049,12 +1040,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-74 issues remain open. Each issue's header carries its tier (T0-T3) and
+73 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§1 Introduction: #9 #10 #11 #12 #13 #14 #15 #17 #18 #19 #20 #21 #24 #27
+§1 Introduction: #10 #11 #12 #13 #14 #15 #17 #18 #19 #20 #21 #24 #27
                  #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
