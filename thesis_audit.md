@@ -99,39 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#43  [T3 · Scientific] [NOW]  PDDLStream example fluent name inconsistency
-================================================================================
-Where: §2.3.1 — background.tex:113 vs 123
-What:  The streams paragraph certifies "(kinematics-sol ?obj ?p ?g ?q)"
-       (line 113); the very next workflow paragraph certifies "(KinSolution
-       ?obj ?p ?g ?q)" (line 123). Same concept, two names.
-Fix:   Use one name consistently in both places.
-
-================================================================================
-#44  [T3 · Scientific] [NOW]  Octree definition imprecise about leaves; citation choice
-================================================================================
-Where: §2.4.1 — background.tex:141
-What:  "An Octree is a tree data structure where each internal node has exactly
-       eight children." Acceptable but never explicitly says leaf nodes have
-       none, and "internal node" is undefined. The generic octree definition is
-       cited to hornung2013octomap + riegler2017octnet; the data structure
-       predates both by decades.
-Fix:   Add "(leaf nodes have none)"; cite a foundational source for the
-       definition, or drop the citation for the pure definition and keep
-       hornung2013octomap for OctoMap specifically.
-
-================================================================================
-#45  [T2 · Style] [POLISH]  §2.4 intro — "a critical component is how ... are represented"
-================================================================================
-Where: §2.4 — background.tex:133
-What:  "For robotic agents interacting with the physical world, a critical
-       component is how the continuous, often 3D, environment and the objects
-       within it are represented." Buries the subject; circles before reaching
-       the point.
-Fix:   "A robot needs some way to represent the 3D space around it and the
-       objects in it."
-
-================================================================================
 #46  [T2 · Style] [POLISH]  "This representation underpins both motion planning ... and task planning"
 ================================================================================
 Where: §2.4 — background.tex:133
@@ -734,12 +701,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-47 issues remain open. Each issue's header carries its tier (T0-T3) and
+44 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§2 Background:   #43 #44 #45 #46 #47
+§2 Background:   #46 #47
 §3 Related Work: #49 #50 #51 #52 #53 #54 #56
 §4 Approach:     #57
 §5 Evaluation:   #87 #88 #89 #90 #91 #92 #93 #94 #95 #96 #97 #98 #99 #100
