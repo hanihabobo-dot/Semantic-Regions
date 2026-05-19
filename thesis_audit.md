@@ -1096,7 +1096,7 @@ Fix:   Replace with a clean @techreport entry: authors Ghallab, Howe, Knoblock,
        Committee"; number "CVC TR-98-003"; year 1998.
 
 ================================================================================
-#114  [T2 · Citation] [NOW]  Multiple orphan (uncited) bibliography entries
+#114  [T2 · Citation] [NOW]  Multiple orphan (uncited) bibliography entries  [DONE]
 ================================================================================
 Where: references.bib (lipovetzky2012width, wang2024open, belle2023epistemic,
        bolander2017gentle, hansen2001lao, coumans2021pybullet)
