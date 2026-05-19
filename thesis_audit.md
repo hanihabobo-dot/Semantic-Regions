@@ -893,7 +893,7 @@ Fix:   Reword step 3 to describe the single-pass octree subdivision that
 Refs:  THESIS_NOTES §20
 
 ================================================================================
-#66  [T1 · Deviation] [THESIS]  §4.2 — Boxel generation is plain pre-planning Python, not "managed by PDDLStream procedures"  (undisclosed)
+#66  [T1 · Deviation] [THESIS]  §4.2 — Boxel generation is plain pre-planning Python, not "managed by PDDLStream procedures"  (undisclosed) [DONE]
 ================================================================================
 Where: §4.2 approach.tex:17, 21; Fig 2 caption
 What:  §4.2 says the discretization "will be managed by PDDLStream procedures"
