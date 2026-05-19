@@ -99,20 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#27  [T2 · Over-claim] [THESIS]  "structured 3D model" vs the string-based planner state
-================================================================================
-Where: §1 introduction.tex:23; §3 related_work.tex:22
-What:  The proposal presents the planner as reasoning over a "structured 3D
-       model" / geometric belief. The PDDL planner builds its initial state
-       from string dictionaries (known_empty_shadows: List[str],
-       moved_occluders: Dict[str,str]); it reasons over string boxel IDs that
-       proxy for volumes (THESIS_NOTES §11, "the String Cheat").
-Fix:   Clarify that the planner reasons over symbolic boxel identifiers that
-       abstract the 3D geometry held in the boxel registry; streams ground the
-       symbols, but the symbolic state itself is discrete.
-Refs:  THESIS_NOTES §11
-
-================================================================================
 #29  [T2 · Deviation] [THESIS]  "conceptually simple" contradicted by the documented hacks
 ================================================================================
 Where: §1 introduction.tex:23; §5.4 evaluation.tex:34
@@ -382,22 +368,6 @@ Fix:   "...reason about which regions are observed versus occluded as
        currently oracle-provided. Keep the (accurate) point that
        information-gathering is a core planner action.
 Refs:  THESIS_NOTES §1, §11
-
-================================================================================
-#55  [T1 · Deviation] [THESIS]  §3 "builds a structured 3D model of the world from sensor data" — contradicts oracle perception
-================================================================================
-Where: §3.1.3 — related_work.tex:22
-What:  Contrasting with Zhao et al. (VLM perception): "Our method, in contrast,
-       builds a structured 3D model of the world from sensor data." The built
-       system grounds in simulator ground truth (oracle_detect_objects); the
-       depth/point-cloud path is commented out. The claimed advantage over a VLM
-       — grounding in real sensor data — is exactly what the build does not do.
-Fix:   "Our method builds a structured, object-centric 3D belief representation;
-       in the current implementation the object poses are supplied by a
-       ground-truth oracle, so the comparison is at the level of representation
-       and reasoning, not perception. Integrating a real detector is future
-       work." Do not claim "from sensor data."
-Refs:  THESIS_NOTES §1, §20
 
 ================================================================================
 #56  [T1 · Deviation] [THESIS]  §3 "applied to new ... environments without needing to be retrained" overstates generality
@@ -905,16 +875,15 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-61 issues remain open. Each issue's header carries its tier (T0-T3) and
+59 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§1 Introduction: #27
-                 #29
+§1 Introduction: #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
-§3 Related Work: #49 #50 #51 #52 #53 #54 #55 #56
+§3 Related Work: #49 #50 #51 #52 #53 #54 #56
 §4 Approach:     #57
 §5 Evaluation:   #87 #88 #89 #90 #91 #92 #93 #94 #95 #96 #97 #98 #99 #100
                  #101 #102 #103 #104 #105 #106 #107 #108 #109 #110 #111
