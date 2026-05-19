@@ -1843,7 +1843,7 @@ Fix:   Change "Voxelization" to "Discretization" in the Figure 2 caption.
 
 
 ================================================================================
-#135  [Structural] [THESIS]  KIF + stream synthesis is undocumented; §2.2.1 K-literal coverage is thin
+#135  [Structural] [THESIS]  KIF + stream synthesis is undocumented; §2.2.1 K-literal coverage is thin [DONE]
 ================================================================================
 Where: §2.2.1 background.tex:84-91; §4 approach.tex (new subsection needed)
 What:  The thesis's belief representation is the Geffner-Bonet K-literal
