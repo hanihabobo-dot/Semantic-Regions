@@ -437,21 +437,6 @@ Fix:   "p is uncertain if neither K(p) nor K(¬p) holds. p is possibly true if
        K(¬p) is false — note this also includes the case where p is known true."
 
 ================================================================================
-#39  [T2 · Scientific] [NOW]  Overstated: POD problems "can often be compiled into classical planning"
-================================================================================
-Where: §2.2.1 — background.tex:91
-What:  "POD problems can often be compiled into classical planning problems
-       using these K-literals..." Omits key caveats: sound/complete polynomial
-       compilations exist only for bounded-width problems; general contingent
-       planning compiles to planning with sensing/branching or needs online
-       replanning.
-Fix:   "Under suitable conditions (e.g., bounded-width problems), POD problems
-       can be compiled into classical planning using K-literals, or solved by
-       classical replanning [bonet2011planning, bonet2014flexible]; in general,
-       sensing introduces branching that requires contingent planning or online
-       replanning."
-
-================================================================================
 #40  [T2 · Scientific] [NOW]  State-space-model tuple inconsistent between §2.1.1 and §4.3
 ================================================================================
 Where: §2.1.1 background.tex:13; §4.3 approach.tex:36-37
@@ -1143,14 +1128,14 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-81 issues remain open. Each issue's header carries its tier (T0-T3) and
+80 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Abstract / §1:   #1 #2 #3 #4 #5 #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
                  #20 #21 #24 #27 #29
-§2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #39 #40 #41 #42 #43 #44 #45
+§2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
 §3 Related Work: #49 #50 #51 #52 #53 #54 #55 #56
 §4 Approach:     #57
