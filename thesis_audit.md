@@ -1333,7 +1333,7 @@ Fix:   Find the package that already defines those symbols and resolve the
        exits 0.
 
 ================================================================================
-#132  [T2 · Style] [POLISH]  §3 opens casually — "Solving TAMP problems is hard"
+#132  [T2 · Style] [POLISH]  §3 opens casually — "Solving TAMP problems is hard"  [DONE]
 ================================================================================
 Where: §3 related_work.tex:5
 What:  §3 opens "Solving TAMP problems is hard, especially when a robot only
