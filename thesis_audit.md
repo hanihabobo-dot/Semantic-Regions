@@ -1133,7 +1133,7 @@ Fix:   Cite hansen2001lao where TAMPURA's uncertainty-aware solving is described
 Refs:  #50, #114
 
 ================================================================================
-#118  [T3 · Build] [NOW]  Octree figure filename contains a space; grammar error in §3
+#118  [T3 · Build] [NOW]  Octree figure filename contains a space; grammar error in §3  [DONE]
 ================================================================================
 Where: background.tex:144; related_work.tex:12
 What:  (a) \includegraphics{../graphics/octmap illustration.png} — the filename
