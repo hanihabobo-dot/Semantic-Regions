@@ -99,17 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#10  [T2 · Style] [POLISH]  "addresses the fundamental challenge of connecting"
-================================================================================
-Where: §1 — introduction.tex:6
-What:  "TAMP addresses the fundamental challenge of connecting high-level
-       symbolic task specifications (e.g., \"fetch the blue cup from the
-       kitchen\") with the low-level, continuous motions a robot must perform."
-       "addresses the fundamental challenge of connecting" is throat-clearing.
-Fix:   "TAMP connects a high-level goal (e.g., \"fetch the blue cup from the
-       kitchen\") to the actual motions the robot must perform to achieve it."
-
-================================================================================
 #11  [T2 · Style] [POLISH]  "the physical realities of robot operation"
 ================================================================================
 Where: §1 — introduction.tex:9
@@ -1040,12 +1029,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-73 issues remain open. Each issue's header carries its tier (T0-T3) and
+72 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§1 Introduction: #10 #11 #12 #13 #14 #15 #17 #18 #19 #20 #21 #24 #27
+§1 Introduction: #11 #12 #13 #14 #15 #17 #18 #19 #20 #21 #24 #27
                  #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
