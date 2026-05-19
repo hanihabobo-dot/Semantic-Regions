@@ -539,18 +539,6 @@ What:  "The challenge of spatial representation becomes even more acute under
 Fix:   "Representing space is harder under partial observability, because the
        robot must also represent what it does not yet know."
 
-================================================================================
-#48  [T2 · Style] [POLISH]  Voxelization lead-in — second sentence restates the first  [DONE]
-================================================================================
-Where: §2.4.1 — background.tex:136
-What:  "Robots operate in continuous spaces, but many planning algorithms ...
-       reason over discrete states or abstractions. Therefore, methods to
-       discretize or abstract continuous spatial information are essential."
-       The second sentence restates the first and ends in a content-free "are
-       essential."
-Fix:   "Robots operate in continuous space, but symbolic planners reason over
-       discrete states — so the continuous space has to be discretized somehow."
-
 
 ################################################################################
 #  ISSUES — §3 RELATED WORK  (sections/related_work.tex)
@@ -672,97 +660,6 @@ What:  "The approach aims to create a tractable yet expressive system for
        planning under spatial uncertainty." Restates the goal already implied;
        "tractable yet expressive" is an empty virtue-pairing.
 Fix:   Delete it, or fold the one real word into the prior sentence.
-
-================================================================================
-#58  [T2 · Style] [POLISH]  §4.1 overview opener buries the point  [DONE]
-================================================================================
-Where: §4.1 — approach.tex:9
-What:  "The main idea of our methodology is to link abstract belief
-       representation with continuous geometric reasoning. This is done through
-       three key components:" Slow run-up; does not start delivering until word
-       eight.
-Fix:   "Our methodology links abstract belief representation to continuous
-       geometric reasoning through three components:"
-
-================================================================================
-#59  [T2 · Style] [POLISH]  §4.1 bullet 3 repeats itself  [DONE]
-================================================================================
-Where: §4.1 — approach.tex:13
-What:  "PDDLStream Integration: A concrete implementation using custom PDDL
-       fluents, actions, and streams to realize the formal model within the
-       PDDLStream framework. This is done by defining PDDL fluents and actions
-       that operate on the belief state over Boxels." The second sentence
-       re-lists "PDDL fluents and actions."
-Fix:   "PDDLStream Integration: An implementation using custom PDDL fluents,
-       actions, and streams that operate on the belief state over Boxels,
-       realizing the formal model in PDDLStream."
-
-================================================================================
-#60  [T2 · Style] [POLISH]  §4.2 — "To create a spatial abstraction that is both meaningful and scalable"  [DONE]
-================================================================================
-Where: §4.2 — approach.tex:17
-What:  "To create a spatial abstraction that is both meaningful and scalable, we
-       propose a process of adaptive semantic discretization." The goal clause
-       is generic padding in front of the actual point.
-Fix:   "We propose adaptive semantic discretization, a process that generates
-       the Boxel abstraction." (See #64 on the word "adaptive".)
-
-================================================================================
-#61  [T2 · Style] [POLISH]  §4.2 — Object-Centric Bounding says one thing four times  [DONE]
-================================================================================
-Where: §4.2 — approach.tex:27
-What:  "When an object ... is detected, a dedicated Boxel is generated to be a
-       tight bounding box around its perceived pose. This uses the object's
-       known 3D model to define the volume. This isolates known objects into
-       distinct spatial regions. This is done by generating a cuboid that fully
-       contains the object's 3D model." Sentences 1 and 4 both describe
-       generating a bounding cuboid.
-Fix:   "When an object is detected, we generate a dedicated Boxel: a cuboid that
-       tightly bounds the object's known 3D model at its detected pose. This
-       isolates each known object in its own spatial region."
-
-================================================================================
-#62  [T2 · Style] [POLISH]  §4.2 — "first-class citizens" borrowed jargon + "This is critical"  [DONE]
-================================================================================
-Where: §4.2 — approach.tex:28
-What:  "This is critical as it explicitly represents currently unobservable
-       regions, making them first-class citizens for information-gathering
-       actions." "This is critical" editorializes; "first-class citizens" is
-       borrowed programming jargon.
-Fix:   "This explicitly represents regions the robot currently cannot observe,
-       so the planner can target them with information-gathering actions."
-
-================================================================================
-#63  [T2 · Style] [POLISH]  §4 — "is done through / is done by" passive padding  [DONE]
-================================================================================
-Where: §4.1 — approach.tex:9, 13
-What:  "This is done through three key components:" and "This is done by
-       defining PDDL fluents and actions..." Impersonal stock connectors that
-       add words without agency.
-Fix:   See #58 (line 9) and #59 (line 13) — both remove the connector.
-
-================================================================================
-#81  [T3 · Deviation] [THESIS]  §4.2 free-space merge is convex-only — over-segments vs the "task-relevant/scalable" framing  [DONE]
-================================================================================
-Where: §4.2 — approach.tex:30, 32
-What:  §4.2 implies a small set of meaningful task-relevant free-space
-       subspaces. CellMerger merges two free cells only when they share an
-       exactly aligned face; there is no semantic merge (identical
-       observability / blocks_view_at). This leaves more, smaller free Boxels
-       than a semantic partition would.
-Fix:   Note that free-space merging is convex-only (aligned-face), producing
-       more Boxels than a full semantic merge — acceptable for current object
-       counts.
-Refs:  THESIS_NOTES §7
-
-================================================================================
-#86  [T3 · Style] [POLISH]  §4.3 — "drives the belief state"  [DONE]
-================================================================================
-Where: §4.3 — approach.tex:48
-What:  "...a sequence of actions ... that drives the belief state, initially
-       b0 = S0, to a belief state bg..." "drives" is a mildly dramatic verb.
-Fix:   "...a sequence of actions ... that moves the belief state from b0 = S0 to
-       a belief state bg in which every possible state is a goal state..."
 
 
 ################################################################################
@@ -1080,83 +977,6 @@ Fix:   "By replacing exhaustive state-space representations with the Boxel
 #  ISSUES — CITATIONS, BIBLIOGRAPHY & LATEX BUILD
 ################################################################################
 
-================================================================================
-#113  [T1 · Citation] [NOW]  references.bib entry [1] (PDDL) is malformed — corporate author mis-parsed  [DONE]
-================================================================================
-Where: references.bib (aeronautiques1998pddl)
-What:  The entry renders the author as "C. Aeronautiques, A. Howe, ...". The
-       Google-Scholar mis-parse: "Aeronautiques, Constructions" is the corporate
-       author "Constructions Aeronautiques", not a person; "McDermott, ISI Drew"
-       absorbs his institution (ISI); "Sri, David Wilkins" absorbs SRI. The
-       title has a stray "|"; it is an @article with journal "Technical Report,
-       Tech. Rep." — it is actually a tech report.
-Fix:   Replace with a clean @techreport entry: authors Ghallab, Howe, Knoblock,
-       McDermott, Ram, Veloso, Weld, Wilkins; title "{PDDL} -- The Planning
-       Domain Definition Language"; institution "AIPS-98 Planning Competition
-       Committee"; number "CVC TR-98-003"; year 1998.
-
-================================================================================
-#114  [T2 · Citation] [NOW]  Multiple orphan (uncited) bibliography entries  [DONE]
-================================================================================
-Where: references.bib (lipovetzky2012width, wang2024open, belle2023epistemic,
-       bolander2017gentle, hansen2001lao, coumans2021pybullet)
-What:  references.bib has 25 entries; the sections \cite only ~19. The six above
-       are never cited and so silently vanish from the printed bibliography.
-       Notably hansen2001lao (LAO* search) is directly relevant — TAMPURA uses
-       LAO* — a missing-citation opportunity (see #50).
-Fix:   Delete genuinely unused entries, or cite them where relevant: add
-       \cite{coumans2021pybullet} where PyBullet is named (evaluation.tex:8),
-       and consider \cite{hansen2001lao} where TAMPURA / uncertainty-aware
-       solvers are discussed.
-
-================================================================================
-#115  [T3 · Citation] [NOW]  Malformed bib entries — coumans2021pybullet, belle2023epistemic  [DONE]
-================================================================================
-Where: references.bib
-What:  coumans2021pybullet has a garbled journal field ("ed: PyBullet Quickstart
-       Guide. https://docs. google. com/document/u/1/d") and PyBullet is
-       currently uncited. belle2023epistemic is typed @misc but carries
-       journal/volume/pages/publisher fields — it should be @article.
-Fix:   Fix coumans2021pybullet to a clean @misc with howpublished =
-       \url{http://pybullet.org}; change belle2023epistemic to @article (only if
-       it will be cited — otherwise see #114).
-
-================================================================================
-#116  [T3 · Scientific] [NOW]  TAMPURA uses LAO* — flag the missing-citation opportunity  [DONE]
-================================================================================
-Where: §2.2.2 / §3.1.1 — background.tex:94 / related_work.tex:11
-What:  The proposal discusses POMDP-based TAMP and TAMPURA but never cites the
-       LAO* solver that TAMPURA's planner relies on. hansen2001lao is already in
-       references.bib but uncited (see #114).
-Fix:   Cite hansen2001lao where TAMPURA's uncertainty-aware solving is described
-       (ties in with #50).
-Refs:  #50, #114
-
-================================================================================
-#118  [T3 · Build] [NOW]  Octree figure filename contains a space; grammar error in §3  [DONE]
-================================================================================
-Where: background.tex:144; related_work.tex:12
-What:  (a) \includegraphics{../graphics/octmap illustration.png} — the filename
-       has a literal space, which risks a file-not-found / wrong-path error
-       under lualatex; the explicit ../graphics/ prefix is also redundant given
-       \graphicspath. (b) related_work.tex:12: "...which is does not scale well"
-       — grammar error (companion to #30's "we proposes").
-Fix:   Rename the file to octmap_illustration.png (no space) and reference it
-       relying on \graphicspath. Fix the §3 sentence to "...which does not scale
-       well to large environments."
-
-================================================================================
-#119  [T3 · Build] [NOW]  The committed main.pdf is stale  [DONE]
-================================================================================
-Where: proposal-template/main.pdf
-What:  The committed PDF shows the citation "[bai2025learning]" as raw
-       unresolved text on page 10. The key bai2025learning IS present in
-       references.bib and the \cite is correct — so the PDF simply predates the
-       bib entry. The PDF is out of sync with the sources.
-Fix:   Recompile (`latexmk main.tex`, which runs biber + lualatex) so main.pdf
-       matches the current sources, and commit the regenerated PDF. Recompiling
-       is also the verification step for every fix in this audit.
-
 
 ################################################################################
 #  ISSUES — THESIS CONVERSION (STRUCTURAL)          (added 2026-05-17)
@@ -1185,41 +1005,6 @@ Fix:   Rewrite §5 as a completed Evaluation chapter: (1) Experimental Setup as
        chart; (3) hand interpretation to #125. Resolve #87-#103 inside this
        rewrite, not as 17 isolated sentence edits.
 Refs:  #87-#103; #125; THESIS_NOTES §21; eval_results/sweep_anytime/
-
-================================================================================
-#123  [Structural] [THESIS]  No "Limitations / Accepted Simplifications" section  [DONE]
-================================================================================
-Where: new section (end of Approach/Implementation, or before the Conclusion)
-What:  The audit repeatedly forward-references a limitations section that does
-       not exist: #29 says "add a forward reference to a 'Limitations /
-       Accepted Simplifications' section"; #6, #26, #69 say "add an honest
-       limitations note" / "disclose". notes/THESIS_NOTES.md catalogs 21
-       accepted simplifications whose stated purpose is to be "acknowledged and
-       discussed in the thesis" — and not one has an assigned home.
-Fix:   Add a Limitations / Accepted Simplifications section. Give every
-       THESIS_NOTES.md item (§1-§21) a home — here, or in the relevant chapter
-       with a cross-reference. This section is the target of the "disclose" /
-       "limitations note" fixes in #6 #7 #22 #26 #28 #29 #54 #55 #66 #69 #73
-       #79 #81.
-Refs:  notes/THESIS_NOTES.md §1-§21; #6 #7 #22 #26 #28 #29 #54 #55 #66 #69 #73 #79 #81
-
-================================================================================
-#124  [Structural] [THESIS]  No real "Future Work" section  [DONE]
-================================================================================
-Where: §5.4 evaluation.tex:36; new section
-What:  §5.4's only future-work sentence is generic ("extending the variety of
-       semantic information used for discretization and exploring more complex,
-       multi-robot planning scenarios") and does not match the project's actual
-       deferred items.
-Fix:   Add a Future Work section enumerating the real deferred items: recursive
-       free-space / in-partition object discovery (THESIS_NOTES §20; #23 #65);
-       a learned perception detector replacing the oracle (#22 #55 #89); a
-       robot-mounted sensor and the sensing-config stream (THESIS_NOTES §3;
-       #25 #70); the dense-visibility ray lattice (THESIS_NOTES §14);
-       atom-regrounding to replace the 3-strike give-up (THESIS_NOTES §18;
-       #26); and generalizing the hardcoded geometric constants (THESIS_NOTES
-       §13; #56).
-Refs:  THESIS_NOTES §3 §13 §14 §18 §20; #22 #23 #25 #26 #55 #56 #65 #70 #89
 
 ================================================================================
 #125  [Structural] [THESIS]  No Discussion of results
@@ -1281,21 +1066,6 @@ Fix:   Add an explicit "Contributions of this thesis" list (bulleted or
 Refs:  #121 #122 #125 #129
 
 ================================================================================
-#129  [Build] [THESIS]  Top-level units are \section, not \chapter
-================================================================================
-Where: main.tex; all sections/*.tex
-What:  main.tex \input{}s files whose top-level unit is \section (Introduction,
-       Background, ...). The labels already assume chapters —
-       \label{chap:methodology}, \label{chap:evaluation}. A thesis uses
-       \chapter, which needs a chapter-bearing document class (report,
-       scrreprt, or the RWTH thesis class).
-Fix:   Switch to a document class with \chapter; convert each top-level
-       \section to \chapter and demote the nested headings one level. Confirm
-       the RWTH thesis template's intended class. Recompile and verify every
-       \cref / \ref still resolves.
-Refs:  #117 #130
-
-================================================================================
 #130  [Build] [THESIS]  Thesis front and back matter is missing
 ================================================================================
 Where: main.tex; resources/title.tex; resources/acronyms.tex; sections/appendix.tex
@@ -1320,57 +1090,6 @@ Defects surfaced while working the audit walkthrough that were not among
 #1-#130. Numbering continues from #130.
 
 ================================================================================
-#131  [T3 · Build] [NOW]  amssymb "already defined" errors — every build exits 12  [DONE]
-================================================================================
-Where: resources/preamble.tex (amssymb load); whole-document build
-What:  latexmk / LuaLaTeX reports "! LaTeX Error: Command \eth already defined"
-       (also \smallsetminus, \digamma, \backepsilon) — amssymb redefines four
-       symbols a previously-loaded package already provides. The errors are
-       non-fatal (LuaLaTeX continues; main.pdf builds, 20 pages), but every
-       build then exits 12, masking any genuine error behind the same code.
-Fix:   Find the package that already defines those symbols and resolve the
-       clash — drop amssymb if redundant, or fix the load order — so the build
-       exits 0.
-
-================================================================================
-#132  [T2 · Style] [POLISH]  §3 opens casually — "Solving TAMP problems is hard"  [DONE]
-================================================================================
-Where: §3 related_work.tex:5
-What:  §3 opens "Solving TAMP problems is hard, especially when a robot only
-       has partial information." Too colloquial for a thesis Related Work
-       opener.
-Fix:   Recast in a measured register, e.g. "Integrating task and motion
-       planning with partial observability is challenging..." — plain and
-       direct, not inflated.
-
-================================================================================
-#134  [T3 · Style] [NOW]  §4.2 Figure 2 caption says "Voxelization" not "Discretization"  [DONE]
-================================================================================
-Where: §4.2 Figure 2 caption — approach.tex:21
-What:  The caption titles the figure "Adaptive Semantic Voxelization Process",
-       while §4.2 names the process "Adaptive Semantic Discretization" and the
-       component is built around Boxels (graphic file Boxelization.png, label
-       fig:boxelization). Same term inconsistency as #133, which fixed only the
-       §1 roadmap (introduction.tex:24) and did not reach this caption.
-Fix:   Change "Voxelization" to "Discretization" in the Figure 2 caption.
-
-================================================================================
-#135  [T3 · Build] [THESIS]  Bare \ref used instead of \cref — template violation  [DONE]
-================================================================================
-Where: approach.tex:36,38,40,49,85; background.tex:93,161;
-       introduction.tex:24; related_work.tex:28
-What:  The proposal template (sections/template-instructions.tex, "Cross-
-       References") mandates \cref for all internal references; \cref emits
-       both the type name and the number. The four section files instead
-       hardcode the word "Section"/"Chapter" plus a bare \ref. approach.tex:49
-       also calls a \section a "Chapter". #117 introduced \cref but did not
-       sweep these older occurrences. Surfaced by the 2026-05-19
-       template-compliance audit.
-Fix:   Replace each "Section~\ref{...}" / "Chapter \ref{...}" with \cref{...},
-       letting cleveref supply the type name. Verify the build still resolves
-       every reference.
-
-================================================================================
 #136  [Structural] [THESIS]  The official i6 thesis template has not been obtained
 ================================================================================
 Where: project setup — proposal-template/ is built on the *proposal* template
@@ -1385,8 +1104,8 @@ What:  The entire thesis is being written inside the Chair of Machine Learning
        Surfaced by the 2026-05-19 RWTH-compliance check.
 Fix:   Clone git.rwth-aachen.de/i6/general/thesis-template (requires RWTH
        GitLab login) into a readable location. It supersedes the manual
-       structural retrofit attempted in #129 and #130.
-Refs:  #129 #130 #137
+       structural retrofit attempted in #130.
+Refs:  #130 #137
 
 ================================================================================
 #137  [Structural] [THESIS]  Written content must be migrated into the thesis template
@@ -1396,15 +1115,14 @@ What:  Once the official i6 thesis template (#136) is obtained, the prose,
        references, figures, listings, macros, and acronyms written in the
        proposal template must be transferred into it. The thesis template's
        class and structure determine the correct top-level unit and front/back
-       matter, which subsumes the manual #129 (section->chapter) and #130
-       (front/back matter) retrofits.
+       matter, which subsumes the manual #130 (front/back matter) retrofit.
 Fix:   Map each proposal section/file onto the thesis template's structure;
        carry over references.bib, graphics, custom macros, and acronyms;
        re-resolve all \cref targets; rebuild and verify. The content-level
        conversions (#121 results chapter, #126 retrospective voice, #127
        abstract recast, #128 contributions list + outline) are then applied
        inside the thesis template, not the proposal template.
-Refs:  #121 #126 #127 #128 #129 #130 #136
+Refs:  #121 #126 #127 #128 #130 #136
 
 ================================================================================
 #138  [T3 · Style] [THESIS]  Label prefixes inconsistent — chap: used on \section labels
@@ -1419,21 +1137,6 @@ Fix:   Settle a single label-prefix convention. Best handled during the
        chapter/section structure decides the correct prefix; update every
        \label and its \cref/\ref sites together.
 Refs:  #135 #137
-
-================================================================================
-#139  [T3 · Build] [THESIS]  references.bib LAO* title uses U+2217 — missing glyph  [DONE]
-================================================================================
-Where: references.bib:205 (hansen2001lao)
-What:  The hansen2001lao title contains a literal U+2217 ASTERISK OPERATOR
-       (rendered "LAO" followed by the operator). STIXTwoText, the body and
-       bibliography font, has no glyph for U+2217, so LuaLaTeX emits a
-       "Missing character: There is no U+2217" warning and the asterisk does
-       not appear in the printed References list. Surfaced once the #131 fix
-       let the build exit 0 and stop masking warnings; the entry became
-       visible in the bibliography after hansen2001lao was cited in #116.
-Fix:   Replace the U+2217 character in the title with a plain ASCII asterisk
-       ("LAO*"), the standard rendering of the algorithm name.
-Refs:  #116 #131
 
 
 ================================================================================
