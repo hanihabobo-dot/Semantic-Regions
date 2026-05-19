@@ -8,12 +8,11 @@ Slimmed: 2026-05-12 (later) - resolved bodies (#62, #69, #70) and the entire
          summaries remain in the SUMMARY block at the bottom; full historical
          trail is in git history (git log --grep="Fix #N" or
          "audit: mark #N").  Each open issue body below stands on its own.
-Slimmed: 2026-05-19 - full bodies of DONE issues #75, #76, #79, #80, #81,
-         #82, #83, #84, #85 moved to archive/CODEBASE_AUDIT_DEFERRED.txt
-         ("RESOLVED / DONE ISSUES" section).  One-line summaries remain
-         in the SUMMARY block below.  Open issues #77 and #78 keep
-         full bodies in this file; #63 closed 2026-05-19 (body
-         stamped [DONE] in place).
+Slimmed: 2026-05-19 - full bodies of DONE issues #63, #75, #76, #79-#85
+         moved to archive/CODEBASE_AUDIT_DEFERRED.txt ("RESOLVED / DONE
+         ISSUES" section); the verbose ROADMAP and SUMMARY closed-issue
+         detail collapsed to one-liners.  Only the 2 open issues (#77,
+         #78) keep full bodies in this file.
 
 Deferred/background/resolved: archive/CODEBASE_AUDIT_DEFERRED.txt
 
@@ -167,397 +166,15 @@ If you find yourself walking the list lowest-first, stop and re-sort by TIER.
 
 
 ================================================================================
-ROADMAP — PRE-EVALUATION VS. EVALUATION (updated 2026-05-08)
+STATUS (2026-05-19)
 ================================================================================
-Pre-evaluation (intended order before the eval sweep):
-  #31 [DONE 2026-05-07] (comment-quality sweep, absorbs #32)
-    → #41 [DONE 2026-05-07] (on_table) + #48 [DONE 2026-05-07] (clear on_relations[X])
-    → #36 [DONE 2026-05-07] (hardcoded place/stack lift)
-    → #49 [DONE 2026-05-07] (tray goal)
-    → #53 [DONE 2026-05-07] (TIER 0 diagnostic triage — 1-cube tray-stack)
-    → #54 [DONE 2026-05-07] (TIER 0 follow-up triage — visible-only tray-stack)
-    → #55 [DONE 2026-05-08] (find-and-tray-stack 2-cube goal — lazy-
-        collision hack + held-cube AABB fallback; Path C archived on
-        branch audit-55-pose-aware-stack)
-    → #60 [DONE 2026-05-08] — post-action lift now reaches plan_motion
-        via runtime sync into plan_client (fix ii) + execution-time
-        motion replan from the lifted pose (fix i).  Diagnostic logs
-        from commit 23687af (#60 step a) confirmed candidates (i) and
-        (ii) firing universally; targeted Option B fix landed in
-        commit c08dc65.  Pre-evaluation chain complete.
-    → after #60: #50 (planner perf) is the only pre-eval-adjacent
-      open item, parallelised with the eval sweep.
-  (#40 landed 2026-05-05 — physics verifier for stack goals; will
-   move to archive on next slim.  #47 [DEFERRED OUT OF SCOPE 2026-05-06]
-   — user decision; the archived #21 log-only band-aid is the
-   accepted level of correctness, real fix abandoned.
-   #30 [WONTFIX 2026-05-06] — split-pick mitigation scrapped per
-   supervisor; ~2× holding-goal slowdown accepted.)
-
-Evaluation prerequisites (runner + uniform baseline for thesis comparison):
-  #9  [DONE 2026-05-08 (later)] metric hooks + batch experiment runner +
-      scalability matrix + plots (absorbs #12).  eval_runner.py +
-      eval_plotter.py landed; subprocess-per-cell, scalability preset
-      (n_occluders 1..6 × n_targets 1..3 × 5 seeds = 90 cells),
-      aggregated.csv + jsonl, matplotlib-with-text-fallback plotter.
-      Master --seed now plumbs through random.seed() + np.random.seed()
-      at process start so two runs at the same seed are bit-identical
-      end-to-end (target choice, PDDL init shuffle, IK joint sampling,
-      RRT goal bias, placement-offset shuffle, path-smoothing pivots).
-      FastDownward's internal tie-breaking RNG (random_seed=-1 in
-      vendored PDDLStream) is NOT overridden — same noise hits every
-      approach at the same seed, so approach-vs-baseline averaging
-      remains valid.
-  #10 [DONE 2026-05-08 (later)] uniform voxelization baseline.
-      Free-space-only swap: UniformGridGenerator (uniform_grid.py)
-      replaces FreeSpaceGenerator under --baseline uniform; OBJECT +
-      SHADOW boxels untouched, planner contract preserved.  Strict
-      static lattice — positions fixed at scene init, only per-cell
-      labels flip as objects are revealed/moved.  TAMPURA-style
-      Python-side label maintenance via the existing _build_init
-      re-emit on every planner.plan() call (no PDDL domain changes).
-      eval_runner.py SCALABILITY_MATRIX gains the baseline axis
-      (90 -> 180 cells, semantic + uniform); eval_plotter.py
-      --baseline-csv hook already consumes the comparison input.
-      Commit afdaadd; py_compile clean.
-
-Evaluation phase (Results chapter — user-scoped sweep):
-  (no remaining items — see Closed/relocated below.)
-  #11 [WONTFIX 2026-05-06] — fixed-semantic-regions baseline killed;
-       semantic-vs-uniform comparison via #10 alone carries the thesis
-       claim, and #49's tray entity already exemplifies a fixed
-       labelled region.
-  #12 [MERGED INTO #9 2026-05-06] — scalability matrix folded into
-       the eval runner.
-  #13 [WONTFIX 2026-05-06] — recursive free-space discovery is dead
-       code under our fixed-camera + no-concave-geometry setup; cited
-       as future work in THESIS_NOTES §20.
-
-Post-evaluation (final doc sweep — last commit before submission):
-  #63  [DONE 2026-05-19] README + wiki final doc sweep.  README flags
-       table refreshed to the current CLI; wiki verified current
-       (2026-05-16 full refresh post-dates every code commit).
-
-Parallel / non-blocking:
-  #50  planner perf investigation — can run alongside the eval sweep; any wins
-       feed back into #9's scalability plots.  Subsumes the per-hotspot
-       questions formerly tracked as #34 (ray×free-boxel precompute) — those
-       land here as profiler hits, not as separate audit items.
-  #57  registry should own cube geometry (audit #55 follow-up; replace the
-       PyBullet AABB fallback in compute_stack_kin_solution).
-  #59  scaled-up find-and-stack — N hidden targets stacked physically-
-       sensibly via (compat_stack ?o ?on_obj) PDDL predicate (very low
-       priority per user direction 2026-05-08).
-  #61  smart console filter — strip residual startup/shutdown garbage
-       and add Claude-Code-style thinking-animation affordance during
-       long planner.plan() / RRT / stream-sample calls.  UX polish on
-       the existing smart_filter pipeline; no correctness impact.
-  #65  rename: boxel -> hanixel (HANI = Heterogeneous Axis-aligned
-       Named Interval; XEL = voxel-suffix).  User decision
-       2026-05-09.  Mechanical case-preserved sweep across *.py,
-       *.pddl, README, forward-looking audit body — keep changelog
-       history + archive/* as-is for the trail.  Single dedicated
-       branch `rename-boxel-to-hanixel` off main.  Land after any
-       in-flight branch (audit-64-tampura-binary-grid currently
-       open) merges or rebases, to avoid identifier-collision
-       merge noise.  TIER 3 — cosmetic only.
-  #66  uniform/tampura baselines — place fails when object > cell.
-       Default occluders (5-7 cm wide, 12-16 cm tall) don't fit
-       any uniform 5 cm cell; (boxel_fits ?occluder ?cell)
-       unsatisfiable; place can't ground; PDDLStream loops.
-       Split fix: Plan A (auto-tune cell size to largest visible
-       AABB + 1 cm) lands on `main` — ~30 LOC, no domain change,
-       also cuts grounding cost ~8x.  Plan C (continuous-pose
-       place via new sample-place-pose stream) lands on
-       `audit-64-tampura-binary-grid` — domain rewrite, the
-       actual TAMPURA approach.  Single shared audit body
-       across both branches.  TIER 1 — correctness blocker for
-       uniform.
-
-Closed / relocated since last summary:
-  #4  resolved 2026-05-03 (accepted stale shadow AABBs as a thesis
-       gap; see THESIS_NOTES.md and git log for context)
-  #6  removed — multi-boxel place not pursued
-  #42 archive/CODEBASE_AUDIT_DEFERRED.txt (collisions logged, no replan;
-       supervisor reconfirmed 2026-05-06 — "no need to track knocked-down
-       objects")
-  #40 [DONE 2026-05-05] — physics verifier landed; archived 2026-05-06 slim
-  #30 [WONTFIX 2026-05-06] — split-pick scrapped per supervisor; archived
-       2026-05-06 slim
-  #56 [DONE then REVERTED 2026-05-08] — CLI flag for post-action lift;
-       plumbing reverted because mechanism was broken (now closed via
-       #60).  Archived 2026-05-08 (later) slim.
-  #58 [DONE 2026-05-08] — preserve grasp across replans; held_obj kwarg
-       threaded through planner.plan().  Archived 2026-05-08 (later) slim.
-  #60 [DONE 2026-05-08] — post-action lift now reaches plan_motion (Option
-       B: sync + replan).  Archived 2026-05-08 (later) slim.
-  #62 [DONE 2026-05-12] — quick-fix (4) landed in two commits.
-       0816037: reused (boxel_fits ?o ?b) to gate :action sense; AABB
-       fallback in test_boxel_fits handles pre-sense targets; widened
-       _build_init emission to FREE_SPACE ∪ SHADOW.
-       ed1789e: refined SHADOW branch with a camera-raycast visibility
-       check + stable-resting-pose gate (rejects lifted shadow
-       fragments).  Addresses audit #72 lateral overhang directly.
-       Profile-first path (1-3) remains gated on #50 (deferred).
-  #69 [DONE 2026-05-12] — commit 1b63c46: pass numThreads=0 to all
-       6 rayTestBatch call sites (boxel_env._create_targets,
-       boxel_env.oracle_detect_objects, execution.sense_shadow_-
-       raycasting, execution.compute_shadow_blockers,
-       shadow_calculator back-corner rays, streams.test_target_-
-       can_hide_in_shadow).  Audit body said 5 sites; current code
-       has 6 (streams.py site landed in #62 commit ed1789e).
-       Largest wins: 147-ray sense batch (execution.py:116) and
-       72-ray test_target_can_hide_in_shadow batch fired every
-       replan via _build_init (streams.py:507).  Thread-safety
-       comment added at each site so a future refactor can't
-       introduce a concurrent stepSimulation.
-  #71 [DONE 2026-05-12 (later)] — commit 0e885d5: refresh_object_-
-       aabbs helper in execution.py rewrites OBJECT boxel min_corner
-       / max_corner from p.getAABB on each handle_sense_action outcome
-       (found_target, clear_but_empty/contains_nontarget pre-reboxelize,
-       still_blocked).  Closes the OBJECT-side staleness gap left by
-       pick/place/stack/settle; SHADOW recomputation deliberately
-       skipped (accepted thesis gap per user scope cut).
-  #72 [DONE 2026-05-12 (later)] — commit 6e3e8dd: option C two-
-       slab carve.  shadow_calculator.calculate_shadow_boxel
-       splits each shadow along dom_axis at the midpoint into a
-       near slab clamped to the occluder's perpendicular footprint
-       (non-Z axis only) and a far slab with full hit-point
-       lateral range.  boxel_env.generate_boxels suffixes shadow
-       IDs with __NN when more than one slab exists so the
-       registry's id-keyed dict doesn't overwrite earlier slabs
-       (also fixes a latent collision in the existing _subtract_-
-       aabb multi-fragment path).  Closes the seed-779694423 user-
-       visible defect where shadow wireframes extended ~7-10 cm
-       past occluders on the camera-facing side.  GUI verification
-       on the same seed deferred to user; smart_filter regex
-       (shadow_of_\w+) still matches the suffixed IDs.
-  #73 [DONE 2026-05-14] — eval-chapter figures backlog.  TIER A
-       (plots 1, 2, 3, 11 — compactness pillar), TIER B (plots 4,
-       5, 6 — knowledge-grounded pillar), TIER C (plots 7, 8, 9 —
-       tractability + TAMPURA) complete across 14 commits.  Step
-       1 logging in 9918047 (boxel counts + init-state facts +
-       per-predicate breakdown into timing_summary.json); plot
-       commits ce8d6e5 (1) / b7f7406 (2) / c8ca69f (3) / 5829b94
-       (4) / 8fd5aa2 (5) / 1308c3d (6) / cd9a1e5 (7) / 7ef62f3
-       (8) / 8275549 (9) / 6434762 (11); polish 1627daf (drop
-       success-only filter for end-of-run snapshots) + f45f366
-       (shaded std bands, single-X bar fallback) + b1007f1
-       (summary_table.md + 2 CSVs).  eval_plotter.py gained 10
-       (group_*, plot_*) helper pairs + a write_summary_table
-       writer; run_logger / eval_runner schemas extended with
-       boxel counts, init-state fact totals, n_facts_by_-
-       predicate, per-boxel volume lists, per-replan boxel
-       snapshots, sense counter.  Headline finding: ~3x wall-
-       clock lead over TAMPURA Partial Observability on find-
-       and-tray-stack (Ours 18.2s vs 57.0s).  TIER D plot 10
-       (perception density sweep) deferred to FOR LATER backlog
-       — gated on audit-14-dense-lattice-attempt branch merge
-       and a sweep on a new --visibility-grid-n axis; out of
-       thesis scope per user 2026-05-14.
-  #83 [DONE 2026-05-15 (later)] — commit 0a266c9.  Imported
-       refresh_object_aabbs into test_full_pipeline.py and
-       called it from both dispatcher state-clear branches
-       (place ~L1336, stack ~L1471) after the audit-#82
-       audit_robot_held_state probe.  Closes the infinite
-       replan-loop cascade that the seed-999 GUI re-run
-       surfaced ("arm just going back and forth hisrtaricly"):
-       the OBJECT boxel for a cube that fell off the gripper
-       during a failed stack now refreshes from live PyBullet
-       before the next planner.plan() reads init.  Sister to
-       #71's handle_sense_action refresh, same per-object
-       early-out.  Cascade containment only; #84 (root cause
-       of the underlying first-stack mis-landing) remains OPEN.
-  #85 [DONE 2026-05-15 (later)] — commit e0f7756.  Pre-release
-       EE lift of 15 mm in execute_place between move_robot_-
-       smooth(contact_joints) and _release_and_verify_drop.
-       solve_ik to contact_ee + [0,0,0.015] seeded from
-       contact_joints; abort with None if IK fails (caller's
-       audit-#79 probe routes to "IK failure during place —
-       replanning" because constraint stays alive on the pre-
-       lift failure path).  Pad bottoms clear the tilted cube
-       before open_gripper fires; cube falls 15 mm onto table
-       during the helper's settle.  Audit-#80 verify-gate (ii)
-       2 cm tolerance absorbs the fall; (iv) no-robot-contact
-       now satisfiable.  Composes with audit-#36 post-place
-       lift (~10 cm AFTER the verified drop, for plan_motion
-       headroom).  execute_stack out-of-scope per care note 4
-       (release pose above support; pads don't share Z-range).
-       Closes the seed-999 cascade where tilt grew on retry
-       (6.85->11.51->10.64 deg) and the cube remained pinned
-       to a finger pad across dispatcher state-clear.
-  #84 [DONE 2026-05-15 (later)] — commit 9268a19.  Diagnostic-
-       only; three "[#84-diag]" log blocks landed in execution.py.
-       Step 1: execute_stack pre-lower line listing contact_ee /
-       target_obj_z / sup_top_z / ee_to_obj_z / held_half_height /
-       sup_aabb / held_aabb / held_tilt_deg.  Step 2: execute_stack
-       post-arrival line with live EE pos, ee_xy_err / ee_z_err /
-       obj_z_err vs contact_ee target, live_tilt_deg and tilt_-
-       drift_deg vs the pre-lower tilt — prefix flips to "arrival-
-       deviation" on >5 mm overshoot OR >5 deg tilt drift for
-       grep-ability.  Step 3: _release_and_verify_drop pre-release
-       line with held cube pos / AABB / tilt_deg at function entry
-       (after the no-name early-return so quiet on best-effort
-       paths).  Fires for execute_place / execute_stack /
-       release_held_object_in_place — extra signal welcome on
-       all three.  NO behavioural change; ~3 extra log lines per
-       stack action (rare, ~one per plan).  Next step is the
-       user-side seed-999 GUI re-run to classify H1 (IK/motion
-       miscalc) / H2 (pick-time grasp tilt) / H3 (tray rim
-       interference); targeted behavioural fix files under a
-       separate issue once data is in.  Mirror of audit #82's
-       shape on the stack-entry side.
-  #86 [DONE 2026-05-16] — commit 9f9badd.  Eval-calculation audit
-       finding 1 (user-scoped 2026-05-16 session: check the eval
-       for calculation errors).  eval_plotter.py drew every
-       "+/-1 std" error band / bar with statistics.pstdev
-       (population std, /N); swapped to stdev (sample std, /N-1)
-       at all 10 call sites + the import.  Sample std is the
-       conventional estimator for "+/-1 std over seeds" in the
-       eval figures (an examiner expects N-1).  Every call site
-       was already guarded by len(...) > 1, so stdev's 2-point
-       minimum is satisfied — py_compile clean.  No central value
-       changes (means / success rates / TAMPURA medians
-       untouched); only error-bar width grows ~10.6% at N=5
-       seeds.  Committed #73 plot PNGs are NOT regenerated — a
-       future sweep widens the bands vs the on-disk figures, and
-       per the never-overwrite-plots rule any regeneration must
-       add new files.  Findings 2-5 from the same audit await
-       turn-by-turn triage: (2) success-only survivorship bias in
-       planning-time / plan-count means (skews the semantic-vs-
-       uniform comparison); (3) plan_dt dropped on the
-       drop_failed early-break in test_full_pipeline.py
-       (plan_count then exceeds len(plan_times)); (4) TAMPURA bar
-       compares our median+IQR vs their mean+/-std; (5)
-       _find_latest_timing_summary mtime-attribution edge case.
-
-================================================================================
-#63. README + WIKI FINAL DOC SWEEP — POST-EVAL FREEZE-AND-WRITE
-================================================================================
-Status:   [DONE 2026-05-19] — README flags table refreshed to the
-          current run_logger.py CLI: added the `random-pairs` scene
-          choice plus --n-extra-distractors / --seed-retry /
-          --min-boxel-size / --max-plan-time (5 flags that had
-          drifted out of the table).  The machine-specific "Running
-          on this machine (WSL + PowerShell)" section was already
-          removed (2026-05-18 policy move — launch wrappers now live
-          only in the CODEBASE POLICY block of this file).  Wiki
-          verified current: the 2026-05-16 "full refresh to current
-          codebase" commit (a44e9ec) post-dates every code commit —
-          all main-repo commits since are thesis-document /
-          audit-tracking only, no code change — so the 12 wiki
-          pages (PDDL_Domain_Reference spot-checked against
-          pddl/domain_pddlstream.pddl) need no edit.  Caveat: the
-          open CODEBASE issues #77 / #78 are code work not yet
-          landed; if they ever land, the per-commit wiki-update
-          policy covers the doc touch — this issue is NOT re-run.
-Priority: TIER 3 — Documentation; gated on all code work being done.
-          User-flagged 2026-05-08: "we need to update the read me and
-          wiki.  this is should be done post eval.  most likly the
-          last thing we change."  Doc state should not chase a moving
-          target — land this AFTER #9 / #10 (eval) and any other open
-          issue that alters behaviour, predicates, streams, or
-          pipeline shape.
-Where:    README.md (project root, currently 29 lines — quick-start
-          + flags table + wiki link + license).
-          ../pybullet.wiki/ — local clone of the GitHub wiki repo
-          per CODEBASE POLICY L823-828.  11 pages: Architecture_-
-          Overview, Core_Data_Structures, Design_Decisions,
-          Execution_Pipeline, Home, Known_Issues_and_Roadmap,
-          PDDL_Domain_Reference, Planning_System, Robot_Control_-
-          and_Streams, Scene_Environment, Spatial_Reasoning.
-Depends:  #9 + #10 (eval runner + uniform-vox baseline) — eval
-          results drive Known_Issues_and_Roadmap + Design_Decisions
-          + the README story.  Any other open issue (#77, #78)
-          that lands between now and submission extends the diff
-          this sweep has to absorb.  Gate list refreshed
-          2026-05-12 triage: dropped #50/#57/#59/#61/#65
-          (deferred) and #66 (relocated to TAMPURA_PLAN.md).
-          #62/#69/#70/#71/#72 closed 2026-05-12 so they no longer
-          extend this sweep (#70 was REOPENED then CLOSED again
-          same day on user verification; see #70 body; #71 closed
-          2026-05-12 (later) — handle_sense_action refresh hook
-          landed; #72 closed 2026-05-12 (later) — two-slab carve
-          + ID disambiguation landed).  #73 closed 2026-05-14 —
-          eval-chapter figures landed (10 plots delivered; plot 10
-          deferred to FOR LATER).
-          #75 + #76 added 2026-05-12 (later) — drop verification
-          gap + planner-no-plan investigation (promoted to TIER 1
-          on 2-of-2 recurrence).
-Effort:   1-2 days (one focused pass per page).
-
-What:  CODEBASE POLICY (L823-828) already requires per-change wiki
-       updates, so the wiki is never far out of date.  But by
-       thesis-submission time several pages will have accumulated
-       drift from the 2026-05-07/08 audit chain (#41 on_table, #49
-       tray, #55 lazy-collision, #58 held_obj, #60 lift sync) plus
-       whatever lands during eval.  This issue is the final once-
-       over: walk the audit changelog since the last full sweep,
-       diff each wiki page against current code, push the result.
-
-       Likely drift hotspots at landing time:
-       - PDDL_Domain_Reference.md — predicates / action signatures
-         vs. pddl/domain_pddlstream.pddl + pddl/stream.pddl
-         (on_table, is_tray, any size-compat predicate from #59).
-       - Execution_Pipeline.md — post-action lift (#36) +
-         runtime-pose sync (#60) integrated into the dispatch loop
-         description.
-       - Planning_System.md — held_obj plumbing (#58) +
-         (holding ?o) init-fact path; replan walkthrough.
-       - Architecture_Overview.md / Core_Data_Structures.md —
-         registry ownership story if #57 lands (geometry source).
-       - Known_Issues_and_Roadmap.md — rewrite to match final
-         open / resolved / deferred split; cross-link to thesis
-         Results chapter.
-       - Design_Decisions.md — sync with THESIS_NOTES.md (the
-         canonical source); any gaps accepted during eval land
-         here.
-       - README.md — flags table missing --goal, --n-hidden,
-         --n-occluders, --seed; quick-start may benefit from an
-         eval-runner pointer once #9 lands.
-       - Cross-page link health — internal wiki anchors and
-         README -> wiki links.
-
-What's already done (don't redo):
-       - Wiki scaffolding + 11 pages exist and are touched per
-         feature commit (CODEBASE POLICY L823-828).
-       - THESIS_NOTES.md is canonical for accepted simplifications;
-         this issue propagates THESIS_NOTES decisions into the
-         public-facing wiki, it does NOT relitigate them.
-       - README structure (quick-start, flags table, wiki link)
-         is correct — only contents drift.
-
-Fix:   ONE PASS, RUN LAST.
-
-       (a) Walk audit changelog (this file + archive/RESOLVED) for
-           every Updated / Added / Slimmed / Restructured entry
-           since the last full wiki sweep; bullet which wiki page
-           each lands in.
-       (b) Page-by-page diff against current code: regenerate code
-           blocks from actual files, predicate / action / stream
-           tables from pddl/, sequence ordering against execute_-
-           pick / place / stack + dispatch loop, link health.
-       (c) Refresh README — add missing flags (--goal, --n-hidden,
-           --n-occluders, --seed), update quick-start if #9 lands
-           a recommended eval invocation, verify wiki link target.
-       (d) Push wiki to both remotes if mirrored (CODEBASE POLICY
-           L802-810; verify whether pybullet.wiki has a github +
-           origin counterpart).
-       (e) Audit entry at landing: "WIKI / README final sweep —
-           frozen at <commit>."  No further edits unless filed
-           as a downstream issue.
-
-Care: Do NOT start before #9 / #10 land — starting earlier means
-       redoing the same pages when eval reveals something needing
-       a doc note.  Per-commit wiki touch-ups by other open issues
-       remain the primary update mechanism; this final sweep is
-       the safety net.
-
-Related: All other open issues at landing time — this is the
-              catch-all final pass.  Sister to THESIS_NOTES.md
-              hygiene (THESIS_NOTES is internal; README/wiki is
-              public — kept separate by audience).
-
+The pre-evaluation correctness chain, the evaluation framework (#9 runner +
+#10 uniform-voxelization baseline), the eval-chapter figures (#73), the
+gripper-handoff correctness chain (#75-#85), and the README/wiki doc sweep
+(#63) are all DONE.  Two issues remain open — see the SUMMARY block at the
+bottom of this file for the tiered list and the full closed / deferred /
+wontfix breakdown.  Closed-issue detail lives in git history
+(git log --grep="audit: mark #N") and archive/CODEBASE_AUDIT_DEFERRED.txt.
 
 ================================================================================
 FOR LATER
@@ -1139,186 +756,46 @@ Related:
 
 
 ================================================================================
-SUMMARY — OPEN ISSUES BY PRIORITY (updated 2026-05-19)
+SUMMARY — STATUS (updated 2026-05-19)
 ================================================================================
+Issue numbers are chronological (discovery order), NOT priority — follow the
+TIER labels.  Full bodies of closed issues are in git history
+(git log --grep="audit: mark #N") and the "RESOLVED / DONE ISSUES" section of
+archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-Aligns with the ROADMAP banner above (pre-eval -> eval prerequisites -> eval).
-Issue numbers are chronological (audit discovery order), NOT priority order -
-follow the tier / roadmap ordering, not the lowest open number.
-Each issue is ideally one commit; parallelise where dependencies allow.
+OPEN — 2 items (full bodies above):
+  #77  TIER 1 — anytime compactness sweep: success rate vs. wall-clock
+       time budget with finer semantic boxels (IPC-style cumulative-
+       solved curve).
+  #78  TIER 2 — sense should update belief for every shadow the ray
+       bundle crosses, not just the queried one.
+  TIER 0: zero open items.
 
-The pre-evaluation correctness chain ended 2026-05-08 with #60 [DONE].
-Eval (#9, #10) landed 2026-05-08; #67 [DONE 2026-05-10] closed the
-silent-abort no_summary failure mode.  #68 (scene randomizer) landed
-2026-05-10 (later) via commit 63b1c64 + follow-ups (audit-state
-correction 2026-05-12).  Triage pass 2026-05-12 (later) per user
-direction: deferred #50/#57/#59/#61/#65; relocated #66 (uniform/
-TAMPURA baseline place) to TAMPURA_PLAN.md as the seed of a
-dedicated TAMPURA workstream (collect first, plan later); promoted
-#69 (rayTestBatch numThreads) to TIER 0 (top prio).  #62 [DONE
-2026-05-12] (held-replan quick-fix), #69 [DONE 2026-05-12]
-(numThreads on all 6 rayTestBatch sites), and #70 [DONE 2026-05-12]
-all closed mid-day; #70 then [REOPENED 2026-05-12 (later)] when the
-user re-reported the symptom — the original [DONE] was a doc-state
-error (no code commit had applied the fix; commit 8d9b7ad now does).
-#75 added 2026-05-12 (later) — execute_place / execute_stack don't
-verify the gripper actually opened; the audit #58 verify-and-retry
-helper exists but was never wired to the action path.  #71 [DONE
-2026-05-12 (later)] (refresh OBJECT AABBs on sense) and #72 [DONE
-2026-05-12 (later)] (shadow lateral overhang two-slab carve) cleared
-the pre-#73 geometry-instrumentation gates.  #73 [DONE 2026-05-14] —
-eval-chapter figures backlog: 10 plots delivered (TIER A/B/C
-complete); plot 10 (perception density, TIER D) deferred to FOR
-LATER backlog.  #77 raised 2026-05-14 during #73 plot review —
-anytime compactness sweep, headline strength upgrade for the
-compactness pillar.  #82 raised 2026-05-15 (later) by user
-during seed-999 GUI re-verification of the post-#80/#81 build:
-release-failure symptom persists at a NEW layer (robot link
-contact even when finger_pos=[0.04,0.04]) and the dispatcher's
-audit-#79 state-clear creates a "robot holding two cubes"
-divergence between PDDL (handempty) and physics; #82 was the
-diagnostic gate, landed 2026-05-15 (later) in commit 6f042b1
-(per-link contact + cube tilt + held-state anomaly helper, no
-behavioural change).  Seed-999 re-run on the new
-instrumentation (log run_2026-05-15_19-59-16) DID NOT surface
-the #82 stuck-on-release symptom this time — robot_link_-
-contacts={none} on every failure — but it DID surface two new
-TIER 0 problems: #85 (place-time pad-vs-cube wedge — strict
-drop-verify gate correctly rejects a tilted cube whose corner
-pokes into a finger pad after open_gripper; the 3-retry loop
-makes geometry WORSE by letting physics tilt the cube further
-under continuous pad pressure; cube remains pinned across
-plan boundaries and dispatcher state-clear via finger-pad
-friction).  #84 (root-cause diagnostic for the orthogonal
-cube-on-cube stack mis-landing).  #83 [DONE 2026-05-15
-(later) commit 0a266c9] closed the OBJECT-boxel staleness
-cascade containment side but cannot un-stick the physical
-pin that #85 addresses.
+CLOSED (one-line; full detail in git / archive):
+  #63  [2026-05-19] README + wiki final doc sweep.
+  #86  [2026-05-16] eval_plotter sample-std (N-1) fix for error bands.
+  #85  [2026-05-15] place-time pad-vs-cube wedge; 15 mm pre-release lift.
+  #84  [2026-05-15] cube-on-cube stack mis-landing root-cause diagnostic.
+  #83  [2026-05-15] refresh_object_aabbs on dispatcher state-clear.
+  #82  [2026-05-15] stuck-on-release diagnostic (per-link + tilt + anomaly).
+  #81  [2026-05-15] resetJointState release teleport; gentle close.
+  #80  [2026-05-15] 4-signal drop-verify gate; tray-aware support_z.
+  #79  [2026-05-15] clear stale grasp_constraint_id on drop-verify failure.
+  #76  [2026-05-14] planner no-plan post-failure; register discovered tgt.
+  #75  [2026-05-14] execute_place/stack post-release verification gap.
+  #73  [2026-05-14] eval-chapter figures (10 plots; ~3x lead over TAMPURA).
+  #72  [2026-05-12] shadow AABB lateral-overhang two-slab carve.
+  #71  [2026-05-12] refresh OBJECT boxel AABBs on every sense.
+  #70  [2026-05-12] random-pairs unreachable-placement reach-constraint fix.
+  #69  [2026-05-12] rayTestBatch numThreads=0 on all 6 call sites.
+  #68  [2026-05-10] scene randomizer.  #67 [2026-05-10] Phase-4 hidden swap.
+  #62  [2026-05-12] replan-while-holding quick-fix.
+  #10  [2026-05-08] uniform-voxelization baseline.
+  #9   [2026-05-08] eval runner + scalability matrix + plots.
+  Older (#1-#60 era): bodies removed in the 2026-05-12 slim — see git log.
 
-TIER 0 — TOP PRIORITY (correctness / sim integrity):
-  (no open items as of 2026-05-15 (later) — #84 closed in commit
-   9268a19; behavioural fix gated on seed-999 GUI re-run with the
-   new diag triple, which will file as a follow-up issue.)
-
-TIER 1 — CORRECTNESS / HIGH-PRIO:
-  #77  Anytime compactness sweep — success rate vs time
-       budget with smaller semantic boxels.  Currently
-       semantic min boxel = uniform cell = 5 cm for time-
-       comparable runs; fixing TIME instead lets semantic
-       run at 1-3 cm and solve more instances than uniform
-       at the same budget.  Plot: cumulative solved vs
-       wall_clock_s (IPC-style anytime curve), one line
-       per (baseline, min_boxel_size).  Headline strength
-       upgrade for the compactness pillar.  Raised
-       2026-05-14 by user during #73 plot review;
-       promotable to TIER 0 if it becomes a headline
-       thesis figure.
-
-TIER 2 — PERCEPTION EFFICIENCY:
-  #78  sense should update belief for every shadow the ray
-       bundle crosses, not just the queried one.  Today's
-       sense pipeline picks one shadow_id, casts rays
-       through that volume, and discards the per-ray
-       intersections with every other shadow AABB on the
-       way.  A single rayTestBatch from the fixed overhead
-       camera can in principle credit 3-5 shadows per
-       sense, dropping per-run sense-action count
-       (audit #73 plot 4) by roughly that factor.  Raised
-       2026-05-14 (later) by user.
-
-TIER 3 — CODE QUALITY / DOC SWEEP:
-  (no open items — #63 closed 2026-05-19.)
-
-Total open: 2 items (#77, #78) per the OPEN ISSUES
-header at top (the source of truth).  Listed in TIER order for
-clarity — chronological numbers in the header are NOT priority-
-ordered (see the "ISSUE NUMBERING" banner near the top of this
-file).  TIER 0 has ZERO open items as of 2026-05-15 (later):
-#84 [DONE 2026-05-15 (later) commit 9268a19] landed the diag
-triple (pre-lower / post-arrival / pre-release) so the next
-seed-999 GUI re-run will classify H1 (IK/motion miscalc) /
-H2 (pick-time grasp tilt) / H3 (tray rim interference) into a
-targeted follow-up issue; #83 [DONE 2026-05-15 (later) commit
-0a266c9] closed the OBJECT-boxel cascade containment side; #85
-[DONE 2026-05-15 (later) commit e0f7756] closed the physical
-pin via a 15 mm pre-release EE lift in execute_place — the
-strict #80 verify gate now satisfiable because pads no longer
-share Z-range with the tilted cube at release time.
-
-Relocated 2026-05-12:
-  #66  -> TAMPURA_PLAN.md.  Plan A [DONE on main 2026-05-09]
-       (auto-tune uniform cell size); Plan C [PENDING on
-       audit-64-tampura-binary-grid] (continuous-pose place,
-       real TAMPURA approach).  Body moved to TAMPURA_PLAN.md
-       as the seed of a dedicated TAMPURA workstream; future
-       TAMPURA-related issues collect there before the next
-       plan refresh.
-
-Closed (one-line summaries; full bodies of #75/#76/#79-#85 moved to
-archive/CODEBASE_AUDIT_DEFERRED.txt "RESOLVED / DONE ISSUES" section
-in the 2026-05-19 slim — see git log for the rest):
-  #63  [DONE 2026-05-19] - README + wiki final doc sweep.  README flags
-       table refreshed (5 drifted flags added); wiki verified current.
-  #85  [DONE 2026-05-15 (later) commit e0f7756] - place-time pad-vs-cube
-       wedge; 15 mm pre-release EE lift in execute_place clears the pads.
-  #84  [DONE 2026-05-15 (later) commit 9268a19] - cube-on-cube stack
-       mis-landing root-cause diagnostic (pre-lower / post-arrival /
-       pre-release diag triple; behavioural fix is a follow-up issue).
-  #83  [DONE 2026-05-15 (later) commit 0a266c9] - refresh_object_aabbs
-       on dispatcher state-clear; closes the infinite replan-loop cascade.
-  #82  [DONE 2026-05-15 (later) commit 6f042b1] - stuck-on-release
-       diagnostic: per-link contacts + cube_tilt_deg + held-state anomaly
-       helper.  Diagnostic-only.
-  #81  [DONE 2026-05-15 (later) commit 65146ad + refine 8774e6f] -
-       resetJointState release teleport; gentle parameterized close.
-  #80  [DONE 2026-05-15 (later) commit 7116e73 + refine 4bc5d95] -
-       4-signal drop-verify gate; tray-aware expected_support_z.
-  #79  [DONE 2026-05-15 commit ad63ffb + follow-up] - clear stale
-       grasp_constraint_id on drop-verify failure; open_gripper 200 N/80.
-  #76  [DONE 2026-05-14 commit 62b6050] - planner no-plan post-failure;
-       register OBJECT boxel for discovered target in sense_found_target.
-  #75  [DONE 2026-05-14] - execute_place/execute_stack post-release
-       verification gap; _release_and_verify_drop wired to action paths.
-  #73  [DONE 2026-05-14] - eval-chapter figures backlog (10 plots,
-       TIER A/B/C; plot 10 deferred).  ~3x wall-clock lead over TAMPURA.
-  #72  [DONE 2026-05-12 (later) commit 6e3e8dd] - shadow AABB lateral
-       overhang; two-slab carve + __NN id disambiguation.
-  #71  [DONE 2026-05-12 (later) commit 0e885d5] - refresh OBJECT boxel
-       AABBs on every sense.
-  #70  [DONE 2026-05-12 (later, again)] - random-pairs unreachable
-       placements; reach-constraint fix across 8d9b7ad/ca6746b/b48c667.
-  #69  [DONE 2026-05-12 commit 1b63c46+2b6f595] - rayTestBatch
-       numThreads=0 on all 6 call sites.
-  #62  [DONE 2026-05-12 commit 0816037+ed1789e] - replan-while-holding
-       quick-fix; (boxel_fits) gates sense, FREE_SPACE∪SHADOW emission.
-  #68  [DONE 2026-05-10 commit 63b1c64] - scene randomizer.
-  #67  [DONE 2026-05-10 commit 4c9e4d5] - Phase 4 hidden-target
-       criterion swap.
-  #10  [DONE 2026-05-08 (later) commit afdaadd] - uniform voxelization
-       baseline.
-  #9   [DONE 2026-05-08 (later) commit e8237b6] - eval runner +
-       scalability matrix + plots.
-
-Deferred 2026-05-12 (later) -> archive/CODEBASE_AUDIT_DEFERRED.txt:
-  #50  Planner perf investigation - DEFERRED per user 2026-05-12.
-       AUDIT_50_SWEEP.md investigation deliverable stays as
-       scaffolding for any future revisit; #62 quick-fix path
-       proceeds without the broader profile sweep.
-  #57  Registry should own cube geometry - DEFERRED.
-       Architectural cleanup; no correctness bug; current
-       fallback works.
-  #59  Scaled-up find-and-stack - DEFERRED.  User direction
-       2026-05-08: "very very low prio."
-  #61  Smart console filter UX polish - DEFERRED.  Cosmetic;
-       eval batch runs use --log-level normal.
-  #65  Rename boxel -> hanixel - DEFERRED.  Cosmetic
-       terminology overhaul; revisit post-thesis if still wanted.
-
-Deferred (earlier) -> archive/CODEBASE_AUDIT_DEFERRED.txt:
-             #2, #14, #42, #47, #51.
-
-Resolved/subsumed (bodies removed in 2026-05-12 (later) slim;
-                   see git log for historical detail):
-             #1, #3, #4, #5, #7, #8, #9, #10, #11, #12, #13, #15-#22,
-             #23-#36, #37-#41, #43-#46, #48-#49, #53-#56, #58, #60,
-             #62, #67, #68, #69, #70.
+DEFERRED (bodies in archive/CODEBASE_AUDIT_DEFERRED.txt):
+  #2, #14, #42, #47, #51 (earlier);  #50, #57, #59, #61, #65 (2026-05-12).
+WONTFIX / merged / removed:  #6, #11, #12, #13, #30.
+RELOCATED:  #66 -> TAMPURA_PLAN.md (Plan A done on main; Plan C pending on
+  branch audit-64-tampura-binary-grid).
