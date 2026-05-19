@@ -1146,7 +1146,7 @@ Fix:   Rename the file to octmap_illustration.png (no space) and reference it
        well to large environments."
 
 ================================================================================
-#119  [T3 · Build] [NOW]  The committed main.pdf is stale
+#119  [T3 · Build] [NOW]  The committed main.pdf is stale  [DONE]
 ================================================================================
 Where: proposal-template/main.pdf
 What:  The committed PDF shows the citation "[bai2025learning]" as raw
