@@ -756,7 +756,7 @@ Fix:   Note that free-space merging is convex-only (aligned-face), producing
 Refs:  THESIS_NOTES §7
 
 ================================================================================
-#86  [T3 · Style] [POLISH]  §4.3 — "drives the belief state"
+#86  [T3 · Style] [POLISH]  §4.3 — "drives the belief state"  [DONE]
 ================================================================================
 Where: §4.3 — approach.tex:48
 What:  "...a sequence of actions ... that drives the belief state, initially
