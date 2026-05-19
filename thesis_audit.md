@@ -99,41 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#40  [T2 · Scientific] [NOW]  State-space-model tuple inconsistent between §2.1.1 and §4.3
-================================================================================
-Where: §2.1.1 background.tex:13; §4.3 approach.tex:36-37
-What:  §2.1.1 defines the model as a six-tuple <S, s0, SG, Act, A, f> with a
-       separate applicability function A. §4.3 defines M = <S, S0, SG, A, f, O>
-       with no applicability function and A as the action set. A reader cannot
-       tell whether applicability was dropped deliberately. The symbol S/script-S
-       is also overloaded (whole model in §2.1.1, state set in §4.3); f is
-       reused for two different transition functions.
-Fix:   Make the two tuples consistent (include applicability in M, or note it is
-       folded into action preconditions). Rename the §2.1.1 model symbol to
-       avoid clashing with the state set.
-
-================================================================================
-#41  [T2 · Style] [POLISH]  "is why TAMP is an active research area"
-================================================================================
-Where: §2.3 — background.tex:98
-What:  "This challenge of combining high-level logic with real-world geometry is
-       why TAMP is an active research area, with frameworks like PDDLStream
-       being developed to bridge the gap." Stock importance-claim; limp passive
-       trailer.
-Fix:   "Combining high-level logic with real-world geometry is the central
-       difficulty of TAMP, and frameworks like PDDLStream exist to bridge it."
-
-================================================================================
-#42  [T2 · Style] [POLISH]  "prominent and flexible TAMP framework"
-================================================================================
-Where: §2.3.1 — background.tex:102
-What:  "PDDLStream ... is a prominent and flexible TAMP framework designed to
-       bridge this symbolic-continuous gap." "prominent and flexible" are
-       unearned booster adjectives.
-Fix:   "PDDLStream is a TAMP framework built to bridge this symbolic-continuous
-       gap."
-
-================================================================================
 #43  [T3 · Scientific] [NOW]  PDDLStream example fluent name inconsistency
 ================================================================================
 Where: §2.3.1 — background.tex:113 vs 123
@@ -769,13 +734,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-50 issues remain open. Each issue's header carries its tier (T0-T3) and
+47 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§2 Background:   #40 #41 #42 #43 #44 #45
-                 #46 #47
+§2 Background:   #43 #44 #45 #46 #47
 §3 Related Work: #49 #50 #51 #52 #53 #54 #56
 §4 Approach:     #57
 §5 Evaluation:   #87 #88 #89 #90 #91 #92 #93 #94 #95 #96 #97 #98 #99 #100
