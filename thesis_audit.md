@@ -1090,6 +1090,11 @@ Fix:   "from the fixed camera viewpoint"; note shadow geometry is computed at
        initial boxelization and not refreshed after an occluder moves (the moved
        occluder is tracked in belief); full re-boxelization is future work.
 Refs:  THESIS_NOTES §3, §8, §10
+Note:  The shadow set is updated as the robot acts: sensing resolves a shadow,
+       and discovering a new object adds one. A relocated object is NOT given a
+       new shadow at its destination — re-creating shadows for moved objects
+       could admit non-terminating plans, so it is omitted; safe handling needs
+       extra belief bookkeeping and is future work. §4.2 step 2 states this.
 
 ================================================================================
 #80  [T3 · Deviation] [THESIS]  §4.2 step 2 / Fig 2(c) "a new, distinct Boxel" singular [DONE]
