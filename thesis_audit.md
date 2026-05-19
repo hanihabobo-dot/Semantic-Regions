@@ -99,20 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#24  [T2 · Over-claim] [THESIS]  "long-horizon reasoning" / "complex tasks" vs the tabletop scenario
-================================================================================
-Where: §1 introduction.tex:5, 23; Abstract abstract.tex:21
-What:  §1 opens with robots "performing tasks that demand ... long-horizon
-       reasoning" and promises the system performs "complex tasks." The
-       evaluated tasks are single-target hidden-object retrieval and
-       stacking on one tabletop — short-horizon relative to the framing.
-Fix:   State the thesis's own scope early: "This thesis demonstrates the
-       approach on tabletop hidden-object retrieval and stacking; the
-       partial-observability mechanism is the contribution, and longer task
-       horizons are a natural extension."
-Refs:  THESIS_NOTES §9
-
-================================================================================
 #27  [T2 · Over-claim] [THESIS]  "structured 3D model" vs the string-based planner state
 ================================================================================
 Where: §1 introduction.tex:23; §3 related_work.tex:22
@@ -919,12 +905,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-62 issues remain open. Each issue's header carries its tier (T0-T3) and
+61 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§1 Introduction: #24 #27
+§1 Introduction: #27
                  #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
