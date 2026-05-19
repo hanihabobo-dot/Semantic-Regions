@@ -272,7 +272,7 @@ Fix:   "Closing this gap needs a way to fill in the geometric details of a
        exactly that mechanism.)
 
 ================================================================================
-#16  [T2 · Style] [POLISH]  "aims to develop a system where" + "as needed" padding
+#16  [T2 · Style] [POLISH]  "aims to develop a system where" + "as needed" padding [DONE]
 ================================================================================
 Where: §1 — introduction.tex:23
 What:  "This thesis aims to develop a system where a robot, facing uncertainty
@@ -359,7 +359,7 @@ Fix:   State plainly that object detection is a ground-truth oracle that returns
 Refs:  THESIS_NOTES §1
 
 ================================================================================
-#23  [T2 · Deviation] [THESIS]  "adaptively generated Cuboids" — adaptivity/recursion not built
+#23  [T2 · Deviation] [THESIS]  "adaptively generated Cuboids" — adaptivity/recursion not built [DONE]
 ================================================================================
 Where: §1 — introduction.tex:21
 What:  §1 defines the contribution as "Semantic Boxels---task-relevant,
@@ -461,7 +461,7 @@ Fix:   Qualify "conceptually simple" to mean the boxel representation and the
 Refs:  THESIS_NOTES §6, §11, §13, §18, §19
 
 ================================================================================
-#30  [T3 · Style] [NOW]  Grammar — "we proposes"
+#30  [T3 · Style] [NOW]  Grammar — "we proposes" [DONE]
 ================================================================================
 Where: §1 — introduction.tex:21
 What:  "Here, we proposes a novel approach..." Subject-verb disagreement in a
