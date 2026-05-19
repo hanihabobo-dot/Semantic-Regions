@@ -722,7 +722,7 @@ Fix:   "When an object is detected, we generate a dedicated Boxel: a cuboid that
        isolates each known object in its own spatial region."
 
 ================================================================================
-#62  [T2 · Style] [POLISH]  §4.2 — "first-class citizens" borrowed jargon + "This is critical"
+#62  [T2 · Style] [POLISH]  §4.2 — "first-class citizens" borrowed jargon + "This is critical"  [DONE]
 ================================================================================
 Where: §4.2 — approach.tex:28
 What:  "This is critical as it explicitly represents currently unobservable
