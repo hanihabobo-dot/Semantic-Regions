@@ -1355,7 +1355,7 @@ What:  The caption titles the figure "Adaptive Semantic Voxelization Process",
 Fix:   Change "Voxelization" to "Discretization" in the Figure 2 caption.
 
 ================================================================================
-#135  [T3 · Build] [THESIS]  Bare \ref used instead of \cref — template violation
+#135  [T3 · Build] [THESIS]  Bare \ref used instead of \cref — template violation  [DONE]
 ================================================================================
 Where: approach.tex:36,38,40,49,85; background.tex:93,161;
        introduction.tex:24; related_work.tex:28
