@@ -99,17 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#37  [T2 · Style] [POLISH]  "inherent stochasticity of well-modeled actions"
-================================================================================
-Where: §2.2.2 — background.tex:94
-What:  One very long sentence ending "...rather than inherent stochasticity of
-       well-modeled actions." Dense, ornate phrasing for a simple idea.
-Fix:   Split it: "POD planning assumes outcomes and observations are
-       deterministic but unknown. This makes it more tractable than POMDPs, and
-       it fits robotic problems where the uncertainty comes from not knowing the
-       world rather than from actions behaving randomly."
-
-================================================================================
 #38  [T2 · Scientific] [NOW]  K-literal "possibly true" conflated with "uncertain"
 ================================================================================
 Where: §2.2.1 — background.tex:86-91
@@ -791,12 +780,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-52 issues remain open. Each issue's header carries its tier (T0-T3) and
+51 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§2 Background:   #37 #38 #40 #41 #42 #43 #44 #45
+§2 Background:   #38 #40 #41 #42 #43 #44 #45
                  #46 #47
 §3 Related Work: #49 #50 #51 #52 #53 #54 #56
 §4 Approach:     #57
