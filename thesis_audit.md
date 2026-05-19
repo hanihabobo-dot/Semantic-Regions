@@ -387,7 +387,7 @@ Fix:   State the thesis's own scope early: "This thesis demonstrates the
 Refs:  THESIS_NOTES §9
 
 ================================================================================
-#25  [T2 · Over-claim] [THESIS]  §1 implies the robot moves to sense
+#25  [T2 · Over-claim] [THESIS]  §1 implies the robot moves to sense [DONE]
 ================================================================================
 Where: §1 — introduction.tex:23
 What:  §1 frames information-gathering as a continuous-capability action the
@@ -433,7 +433,7 @@ Fix:   Clarify that the planner reasons over symbolic boxel identifiers that
 Refs:  THESIS_NOTES §11
 
 ================================================================================
-#28  [T2 · Deviation] [THESIS]  §1 omits the optimistic-sensing + replanning design
+#28  [T2 · Deviation] [THESIS]  §1 omits the optimistic-sensing + replanning design [DONE]
 ================================================================================
 Where: §1 — introduction.tex:16, 23
 What:  §1 frames the planner as natively reasoning over uncertain/branching
