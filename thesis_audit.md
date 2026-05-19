@@ -99,19 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#34  [T2 · Scientific] [NOW]  STRIPS prose under-describes the stack action's delete-list
-================================================================================
-Where: §2.1.1 — background.tex:51-60
-What:  The :action stack effect lists both (not (clear ?obj2)) and (clear
-       ?obj1); the schema itself is consistent with blocksworld semantics. But
-       the prose below says only "(not (holding ?obj1)) is part of the
-       delete-list, and (on ?obj1 ?obj2) is part of the add-list" — it omits
-       that (not (clear ?obj2)) is ALSO a delete-list literal and that (clear
-       ?obj1) and (hand-empty) are add-list literals.
-Fix:   Expand the prose: delete-list = {(holding ?obj1), (clear ?obj2)};
-       add-list = {(on ?obj1 ?obj2), (hand-empty), (clear ?obj1)}.
-
-================================================================================
 #35  [T3 · Scientific] [NOW]  Inconsistent predicate name: hand-empty vs handempty
 ================================================================================
 Where: §2.1.1 background.tex:29, 55; §4.4.1 approach.tex:70
@@ -825,12 +812,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-55 issues remain open. Each issue's header carries its tier (T0-T3) and
+54 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§2 Background:   #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
+§2 Background:   #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
 §3 Related Work: #49 #50 #51 #52 #53 #54 #56
 §4 Approach:     #57
