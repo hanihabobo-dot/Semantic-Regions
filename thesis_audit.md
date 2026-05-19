@@ -698,7 +698,7 @@ Fix:   "PDDLStream Integration: An implementation using custom PDDL fluents,
        realizing the formal model in PDDLStream."
 
 ================================================================================
-#60  [T2 · Style] [POLISH]  §4.2 — "To create a spatial abstraction that is both meaningful and scalable"
+#60  [T2 · Style] [POLISH]  §4.2 — "To create a spatial abstraction that is both meaningful and scalable"  [DONE]
 ================================================================================
 Where: §4.2 — approach.tex:17
 What:  "To create a spatial abstraction that is both meaningful and scalable, we
