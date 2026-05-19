@@ -708,7 +708,7 @@ Fix:   "We propose adaptive semantic discretization, a process that generates
        the Boxel abstraction." (See #64 on the word "adaptive".)
 
 ================================================================================
-#61  [T2 · Style] [POLISH]  §4.2 — Object-Centric Bounding says one thing four times
+#61  [T2 · Style] [POLISH]  §4.2 — Object-Centric Bounding says one thing four times  [DONE]
 ================================================================================
 Where: §4.2 — approach.tex:27
 What:  "When an object ... is detected, a dedicated Boxel is generated to be a
