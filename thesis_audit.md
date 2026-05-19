@@ -99,15 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#12  [T2 · Style] [POLISH]  PDDLStream "has become a widely used framework"
-================================================================================
-Where: §1 — introduction.tex:13
-What:  "To this end, various methods have been developed, among which
-       PDDLStream ... has become a widely used framework." Formulaic lead-in
-       that delays naming PDDLStream.
-Fix:   "One widely used framework for this is PDDLStream."
-
-================================================================================
 #13  [T2 · Style] [POLISH]  "strong assumptions that limit its applicability in realistic, real-world settings"
 ================================================================================
 Where: §1 — introduction.tex:16
@@ -1019,12 +1010,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-71 issues remain open. Each issue's header carries its tier (T0-T3) and
+70 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§1 Introduction: #12 #13 #14 #15 #17 #18 #19 #20 #21 #24 #27
+§1 Introduction: #13 #14 #15 #17 #18 #19 #20 #21 #24 #27
                  #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
