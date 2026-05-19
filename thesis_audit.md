@@ -1129,7 +1129,7 @@ Fix:   Replace InBoxel with the real obj_at_boxel_KIF fluent when reconciling
 Refs:  THESIS_NOTES §6, §9; #67
 
 ================================================================================
-#83  [T3 · Deviation] [THESIS]  §4.4.2 Listing 2 precondition double-negation vs the real single-negation
+#83  [T3 · Deviation] [THESIS]  §4.4.2 Listing 2 precondition double-negation vs the real single-negation [DONE]
 ================================================================================
 Where: §4.4.2 Listing 2 — approach.tex:88-90
 What:  Listing 2 encodes uncertainty as "(not (obj_in_Boxel ...)) (not
@@ -1143,7 +1143,7 @@ Fix:   When Listing 2 is reconciled, show the single-negation obj_at_boxel_KIF
 Refs:  THESIS_NOTES §6; #67, #69
 
 ================================================================================
-#84  [T2 · Style] [POLISH]  §4.4 — "we can define" hedge stack
+#84  [T2 · Style] [POLISH]  §4.4 — "we can define" hedge stack [DONE]
 ================================================================================
 Where: §4.4 — approach.tex:51
 What:  "To illustrate how this model can be implemented, we can define a set of
@@ -1155,7 +1155,7 @@ Fix:   "We now define example PDDL fluents and PDDLStream actions that operate
        implementation, but it shows how the model is used."
 
 ================================================================================
-#85  [T2 · Style] [POLISH]  §4.4.2 — "Information gathering is a central part of the framework"
+#85  [T2 · Style] [POLISH]  §4.4.2 — "Information gathering is a central part of the framework" [DONE]
 ================================================================================
 Where: §4.4.2 — approach.tex:76
 What:  "Information gathering is a central part of the framework. The following
