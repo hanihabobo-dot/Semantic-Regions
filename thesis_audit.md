@@ -1079,7 +1079,7 @@ Fix:   Reword the comment to "known to be in a specific Boxel" rather than
 Refs:  THESIS_NOTES §11
 
 ================================================================================
-#79  [T3 · Deviation] [THESIS]  §4.2 step 2 occlusion wording overstates — single fixed viewpoint, geometry not refreshed
+#79  [T3 · Deviation] [THESIS]  §4.2 step 2 occlusion wording overstates — single fixed viewpoint, geometry not refreshed [DONE]
 ================================================================================
 Where: §4.2 step 2 — approach.tex:28
 What:  Step 2 computes occlusion "from the robot's current or potential
