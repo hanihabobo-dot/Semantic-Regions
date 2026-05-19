@@ -1601,7 +1601,7 @@ Fix:   Recompile (`latexmk main.tex`, which runs biber + lualatex) so main.pdf
        is also the verification step for every fix in this audit.
 
 ================================================================================
-#120  [T3 · Style] [NOW]  Informal nickname — "Sidd's Critical Regions" / "Sidd's approach"
+#120  [T3 · Style] [NOW]  Informal nickname — "Sidd's Critical Regions" / "Sidd's approach" [REJECTED]
 ================================================================================
 Where: §2.4 background.tex:154-157; §3.2.2 related_work.tex:39
 What:  The §2.4 paragraph heading is "Sidd's Critical Regions"; the text says
@@ -1612,6 +1612,9 @@ Fix:   Use formal phrasing — heading "Critical Regions"; in text "the Critical
        Regions approach of Shah and Srivastava" / "Molina et al." Remove all
        "Sidd" references.
 Refs:  #112
+Note:  [REJECTED 2026-05-18] User keeps the "Sidd's" naming for disambiguation;
+       many distinct notions of "critical region" exist. The wrong-paper
+       attribution is a separate, still-open matter — see #112.
 
 
 ################################################################################
@@ -1785,6 +1788,48 @@ Fix:   Add what an RWTH Master's thesis requires: a declaration of authorship
 Refs:  main.tex:10,26-27; #117 #129
 
 
+################################################################################
+#  ISSUES — ADDED DURING THE AUDIT WALKTHROUGH      (added 2026-05-18)
+################################################################################
+
+Defects surfaced while working the audit walkthrough that were not among
+#1-#130. Numbering continues from #130.
+
+================================================================================
+#131  [T3 · Build] [NOW]  amssymb "already defined" errors — every build exits 12
+================================================================================
+Where: resources/preamble.tex (amssymb load); whole-document build
+What:  latexmk / LuaLaTeX reports "! LaTeX Error: Command \eth already defined"
+       (also \smallsetminus, \digamma, \backepsilon) — amssymb redefines four
+       symbols a previously-loaded package already provides. The errors are
+       non-fatal (LuaLaTeX continues; main.pdf builds, 20 pages), but every
+       build then exits 12, masking any genuine error behind the same code.
+Fix:   Find the package that already defines those symbols and resolve the
+       clash — drop amssymb if redundant, or fix the load order — so the build
+       exits 0.
+
+================================================================================
+#132  [T2 · Style] [POLISH]  §3 opens casually — "Solving TAMP problems is hard"
+================================================================================
+Where: §3 related_work.tex:5
+What:  §3 opens "Solving TAMP problems is hard, especially when a robot only
+       has partial information." Too colloquial for a thesis Related Work
+       opener.
+Fix:   Recast in a measured register, e.g. "Integrating task and motion
+       planning with partial observability is challenging..." — plain and
+       direct, not inflated.
+
+================================================================================
+#133  [T3 · Style] [NOW]  §1 roadmap term — "voxelization" vs §4 "discretization" [DONE]
+================================================================================
+Where: §1 introduction.tex:24
+What:  The §1 roadmap referred to "adaptive semantic voxelization" while §4.2
+       names the process "Adaptive Semantic Discretization" — two terms for the
+       same process.
+Fix:   Changed the §1 roadmap to "adaptive semantic discretization" to match
+       §4. Done in commit c140cfa (the §1 thesis-voice conversion).
+
+
 ================================================================================
 SUMMARY BY TIER  (updated 2026-05-17)
 ================================================================================
@@ -1867,3 +1912,17 @@ POLISH — prose quality, not upgrade-specific; lowest upgrade priority (55):
   #63 #84 #85 #86 #99 #100 #101 #102 #103 #106 #107 #108 #109 #110 #111
 
 Total: 130 issues — 120 audited (#1-#120) + 10 thesis-conversion (#121-#130).
+
+
+================================================================================
+ADDENDUM  (2026-05-18 — audit walkthrough)
+================================================================================
+
+Changes after the 2026-05-17 summaries above:
+  - #131-#133 added (see "ISSUES — ADDED DURING THE AUDIT WALKTHROUGH"):
+    #131 [T3 Build / NOW], #132 [T2 Style / POLISH],
+    #133 [T3 Style / NOW, DONE].
+  - #120 marked [REJECTED] — user keeps the "Sidd's" naming.
+  Current totals: 133 issues = 123 tiered (1 T0, 20 T1, 75 T2, 27 T3)
+  + 10 thesis-conversion (#121-#130). Disposition: 10 THESIS-CONVERSION,
+  45 THESIS, 22 NOW, 56 POLISH.
