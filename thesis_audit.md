@@ -674,7 +674,7 @@ What:  "The approach aims to create a tractable yet expressive system for
 Fix:   Delete it, or fold the one real word into the prior sentence.
 
 ================================================================================
-#58  [T2 · Style] [POLISH]  §4.1 overview opener buries the point
+#58  [T2 · Style] [POLISH]  §4.1 overview opener buries the point  [DONE]
 ================================================================================
 Where: §4.1 — approach.tex:9
 What:  "The main idea of our methodology is to link abstract belief
@@ -685,7 +685,7 @@ Fix:   "Our methodology links abstract belief representation to continuous
        geometric reasoning through three components:"
 
 ================================================================================
-#59  [T2 · Style] [POLISH]  §4.1 bullet 3 repeats itself
+#59  [T2 · Style] [POLISH]  §4.1 bullet 3 repeats itself  [DONE]
 ================================================================================
 Where: §4.1 — approach.tex:13
 What:  "PDDLStream Integration: A concrete implementation using custom PDDL
@@ -733,7 +733,7 @@ Fix:   "This explicitly represents regions the robot currently cannot observe,
        so the planner can target them with information-gathering actions."
 
 ================================================================================
-#63  [T2 · Style] [POLISH]  §4 — "is done through / is done by" passive padding
+#63  [T2 · Style] [POLISH]  §4 — "is done through / is done by" passive padding  [DONE]
 ================================================================================
 Where: §4.1 — approach.tex:9, 13
 What:  "This is done through three key components:" and "This is done by
