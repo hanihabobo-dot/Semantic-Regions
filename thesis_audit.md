@@ -1354,6 +1354,22 @@ What:  The caption titles the figure "Adaptive Semantic Voxelization Process",
        §1 roadmap (introduction.tex:24) and did not reach this caption.
 Fix:   Change "Voxelization" to "Discretization" in the Figure 2 caption.
 
+================================================================================
+#135  [T3 · Build] [THESIS]  Bare \ref used instead of \cref — template violation
+================================================================================
+Where: approach.tex:36,38,40,49,85; background.tex:93,161;
+       introduction.tex:24; related_work.tex:28
+What:  The proposal template (sections/template-instructions.tex, "Cross-
+       References") mandates \cref for all internal references; \cref emits
+       both the type name and the number. The four section files instead
+       hardcode the word "Section"/"Chapter" plus a bare \ref. approach.tex:49
+       also calls a \section a "Chapter". #117 introduced \cref but did not
+       sweep these older occurrences. Surfaced by the 2026-05-19
+       template-compliance audit.
+Fix:   Replace each "Section~\ref{...}" / "Chapter \ref{...}" with \cref{...},
+       letting cleveref supply the type name. Verify the build still resolves
+       every reference.
+
 
 ================================================================================
 SUMMARY BY TIER  (updated 2026-05-17)
