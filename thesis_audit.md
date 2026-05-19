@@ -1067,7 +1067,7 @@ What:  §4.3 lists an action "pick_object_from_known_Boxel"; the real action is
 Fix:   Use the real action name "pick" and correct the precondition claim.
 
 ================================================================================
-#78  [T3 · Deviation] [THESIS]  §4.4.1 obj_pose_known commented "K(HasExactPose)" — really Boxel-granularity
+#78  [T3 · Deviation] [THESIS]  §4.4.1 obj_pose_known commented "K(HasExactPose)" — really Boxel-granularity [DONE]
 ================================================================================
 Where: §4.4.1 Listing 1 — approach.tex:68
 What:  Listing 1 comments "(obj_pose_known ?o) ; K(HasExactPose(?o))". After an
