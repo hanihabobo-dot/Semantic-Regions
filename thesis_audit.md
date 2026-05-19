@@ -1843,6 +1843,24 @@ Fix:   Change "Voxelization" to "Discretization" in the Figure 2 caption.
 
 
 ================================================================================
+#135  [Structural] [THESIS]  KIF + stream synthesis is undocumented; §2.2.1 K-literal coverage is thin
+================================================================================
+Where: §2.2.1 background.tex:84-91; §4 approach.tex (new subsection needed)
+What:  The thesis's belief representation is the Geffner-Bonet K-literal
+       translation (Know-If Fluents, KIFs), combined with PDDLStream streams for
+       continuous geometry. §2.2.1 mentions K-literals only briefly and never
+       explains the translation or names KIFs; §4 never presents the synthesis
+       (KIF belief + streams in one PDDL domain) as the core idea of the
+       approach.
+Fix:   (A) Expand §2.2.1 to present the K-literal translation (each literal L
+       becomes K(L)/K(not L), unknown = neither, compiling partial observability
+       into a classical problem) and introduce the term Know-If Fluent.
+       (B) Add a new §4 subsection presenting the synthesis: belief carried by
+       KIFs over Boxels, mixed with PDDLStream streams for the continuous
+       geometry, in one PDDL domain.
+
+
+================================================================================
 SUMMARY BY TIER  (updated 2026-05-17)
 ================================================================================
 
