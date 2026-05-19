@@ -866,7 +866,7 @@ What:  "This is done through three key components:" and "This is done by
 Fix:   See #58 (line 9) and #59 (line 13) — both remove the connector.
 
 ================================================================================
-#64  [T2 · Deviation] [THESIS]  §4.2 component named "Adaptive Semantic Discretization" overpromises
+#64  [T2 · Deviation] [THESIS]  §4.2 component named "Adaptive Semantic Discretization" overpromises [REJECTED]
 ================================================================================
 Where: §4.2 — approach.tex:11, 16-17
 What:  Component 1 is named "Adaptive Semantic Discretization: A dynamic
