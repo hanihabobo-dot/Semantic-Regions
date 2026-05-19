@@ -99,16 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#11  [T2 · Style] [POLISH]  "the physical realities of robot operation"
-================================================================================
-Where: §1 — introduction.tex:9
-What:  "Due to necessary abstractions, there exists a significant gap between
-       these abstract plans and the physical realities of robot operation."
-       Weak existential "there exists"; "physical realities" is inflated.
-Fix:   "Because the symbolic plan ignores geometry, it can call for actions the
-       robot cannot physically carry out."
-
-================================================================================
 #12  [T2 · Style] [POLISH]  PDDLStream "has become a widely used framework"
 ================================================================================
 Where: §1 — introduction.tex:13
@@ -1029,12 +1019,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-72 issues remain open. Each issue's header carries its tier (T0-T3) and
+71 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§1 Introduction: #11 #12 #13 #14 #15 #17 #18 #19 #20 #21 #24 #27
+§1 Introduction: #12 #13 #14 #15 #17 #18 #19 #20 #21 #24 #27
                  #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
