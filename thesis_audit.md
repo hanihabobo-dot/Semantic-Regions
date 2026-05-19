@@ -1370,6 +1370,56 @@ Fix:   Replace each "Section~\ref{...}" / "Chapter \ref{...}" with \cref{...},
        letting cleveref supply the type name. Verify the build still resolves
        every reference.
 
+================================================================================
+#136  [Structural] [THESIS]  The official i6 thesis template has not been obtained
+================================================================================
+Where: project setup — proposal-template/ is built on the *proposal* template
+What:  The entire thesis is being written inside the Chair of Machine Learning
+       and Reasoning *proposal* template (git.rwth-aachen.de/i6/general/
+       proposal-template). The chair's thesis guidelines
+       (https://ml.rwth-aachen.de/theses/guidelines/) provide a SEPARATE
+       official thesis template (https://git.rwth-aachen.de/i6/general/
+       thesis-template), distinct from the proposal template. The thesis
+       template defines the correct document class, top-level unit (chapter
+       vs section), front/back matter, and declaration-of-authorship slot.
+       Surfaced by the 2026-05-19 RWTH-compliance check.
+Fix:   Clone git.rwth-aachen.de/i6/general/thesis-template (requires RWTH
+       GitLab login) into a readable location. It supersedes the manual
+       structural retrofit attempted in #129 and #130.
+Refs:  #129 #130 #137
+
+================================================================================
+#137  [Structural] [THESIS]  Written content must be migrated into the thesis template
+================================================================================
+Where: whole document
+What:  Once the official i6 thesis template (#136) is obtained, the prose,
+       references, figures, listings, macros, and acronyms written in the
+       proposal template must be transferred into it. The thesis template's
+       class and structure determine the correct top-level unit and front/back
+       matter, which subsumes the manual #129 (section->chapter) and #130
+       (front/back matter) retrofits.
+Fix:   Map each proposal section/file onto the thesis template's structure;
+       carry over references.bib, graphics, custom macros, and acronyms;
+       re-resolve all \cref targets; rebuild and verify. The content-level
+       conversions (#121 results chapter, #126 retrospective voice, #127
+       abstract recast, #128 contributions list + outline) are then applied
+       inside the thesis template, not the proposal template.
+Refs:  #121 #126 #127 #128 #129 #130 #136
+
+================================================================================
+#138  [T3 · Style] [THESIS]  Label prefixes inconsistent — chap: used on \section labels
+================================================================================
+Where: approach.tex:4 (chap:methodology); evaluation.tex:4 (chap:evaluation);
+       discussion.tex:4 (chap:discussion); conclusion.tex:4 (chap:conclusion)
+What:  Several top-level \section labels use a "chap:" prefix while other
+       sections use "sec:". The proposal template has no chapters, so "chap:"
+       is misleading. Surfaced by the 2026-05-19 template-compliance audit.
+Fix:   Settle a single label-prefix convention. Best handled during the
+       thesis-template migration (#137), since the thesis template's
+       chapter/section structure decides the correct prefix; update every
+       \label and its \cref/\ref sites together.
+Refs:  #135 #137
+
 
 ================================================================================
 SUMMARY BY TIER  (updated 2026-05-17)
