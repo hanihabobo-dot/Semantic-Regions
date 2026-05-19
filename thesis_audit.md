@@ -99,16 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#2  [T2 · Style] [POLISH]  "computationally intensive probabilistic models" — mildly inflated
-================================================================================
-Where: Abstract — abstract.tex:7-8
-What:  "Existing TAMP frameworks often assume full observability or rely on
-       computationally intensive probabilistic models." Clear, but slightly
-       inflated.
-Fix:   "Existing TAMP frameworks either assume the robot can see everything, or
-       use probabilistic models that are expensive to compute."
-
-================================================================================
 #3  [T2 · Style] [POLISH]  Redundant appositive — "serve as the foundation" repeats "belief model"
 ================================================================================
 Where: Abstract — abstract.tex:10-14
@@ -1117,12 +1107,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-79 issues remain open. Each issue's header carries its tier (T0-T3) and
+78 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Abstract / §1:   #2 #3 #4 #5 #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
+Abstract / §1:   #3 #4 #5 #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
                  #20 #21 #24 #27 #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
