@@ -95,26 +95,6 @@ STYLE STANDARD (T2 Style issues)
 
 
 ################################################################################
-#  ISSUES — §1 INTRODUCTION  (sections/introduction.tex)
-################################################################################
-
-================================================================================
-#29  [T2 · Deviation] [THESIS]  "conceptually simple" contradicted by the documented hacks
-================================================================================
-Where: §1 introduction.tex:23; §5.4 evaluation.tex:34
-What:  The proposal repeatedly calls the framework "conceptually simple" /
-       claims it "simplifies planning." THESIS_NOTES catalogs 21 accepted
-       simplifications that are mostly hacks: string-based state (§11),
-       hardcoded magic numbers overfit to one table/robot (§13), the 3-strike
-       give-up (§18), the hardcoded post-action lift (§19).
-Fix:   Qualify "conceptually simple" to mean the boxel representation and the
-       K-literal abstraction specifically, and add a forward reference to a
-       "Limitations / Accepted Simplifications" section. Do not imply the
-       implementation is simple.
-Refs:  THESIS_NOTES §6, §11, §13, §18, §19
-
-
-################################################################################
 #  ISSUES — §2 BACKGROUND  (sections/background.tex)
 ################################################################################
 
@@ -875,12 +855,11 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-59 issues remain open. Each issue's header carries its tier (T0-T3) and
+58 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§1 Introduction: #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
 §3 Related Work: #49 #50 #51 #52 #53 #54 #56
