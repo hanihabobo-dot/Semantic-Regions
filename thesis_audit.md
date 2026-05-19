@@ -99,17 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#3  [T2 · Style] [POLISH]  Redundant appositive — "serve as the foundation" repeats "belief model"
-================================================================================
-Where: Abstract — abstract.tex:10-14
-What:  "...construct an abstract belief model grounded in Semantic Boxels---
-       task-relevant Cuboids that serve as the foundation for belief
-       representation---enabling POD planning..." The appositive restates
-       "abstract belief model grounded in Semantic Boxels."
-Fix:   "...build a belief model from Semantic Boxels — task-relevant cuboids —
-       so that POD planning can reason about spatial uncertainty..."
-
-================================================================================
 #4  [T2 · Style] [POLISH]  "leveraging its stream mechanism" — inflated verb
 ================================================================================
 Where: Abstract — abstract.tex:15-18
@@ -1107,12 +1096,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-78 issues remain open. Each issue's header carries its tier (T0-T3) and
+77 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Abstract / §1:   #3 #4 #5 #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
+Abstract / §1:   #4 #5 #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
                  #20 #21 #24 #27 #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
