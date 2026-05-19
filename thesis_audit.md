@@ -99,16 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#32  [T2 · Style] [POLISH]  "is concerned with the autonomous generation of"
-================================================================================
-Where: §2.1 — background.tex:8
-What:  "Artificial Intelligence (AI) planning is concerned with the autonomous
-       generation of a sequence of actions, or a plan, to achieve a specified
-       goal from a given initial state." Nominalized, roundabout.
-Fix:   "AI planning produces a sequence of actions — a plan — that gets from a
-       given initial state to a specified goal."
-
-================================================================================
 #33  [T3 · Style] [POLISH]  "Conceptually," — empty lead word
 ================================================================================
 Where: §2.1.1 — background.tex:11
@@ -844,12 +834,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-57 issues remain open. Each issue's header carries its tier (T0-T3) and
+56 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§2 Background:   #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
+§2 Background:   #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
 §3 Related Work: #49 #50 #51 #52 #53 #54 #56
 §4 Approach:     #57
