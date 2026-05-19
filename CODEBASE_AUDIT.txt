@@ -269,77 +269,13 @@ FOR LATER
   seeds — no domain re-encoding by us if their published encodings cover
   the task; otherwise drop the comparison rather than shoehorn.
 
-- Parallel FastDownward / GPU robotics sim — post-thesis research
-  direction.  Idea raised 2026-05-10 (later) by user; web-searched
-  same day for prior work, findings below.  Bullet refined from
-  "speculative" to "mostly-solved on CPU; dead-end on GPU for FD
-  specifically; sim-side GPU exists but means a different simulator."
-
-  ON THE FASTDOWNWARD SIDE — substantial prior work exists:
-    - HDA* / Distributed Fast Downward (Kishimoto, Fukunaga, Botea —
-      ICAPS 2009; arXiv 1201.3204) — Hash-Distributed A* as a drop-in
-      replacement for FD's sequential A*.  MPI-based; works on shared
-      memory, distributed, or mixed.  30-60x speedup on 128 cores.
-      Uses Abstract Zobrist Hashing to assign each state to a unique
-      process for local duplicate detection.  Live code:
-      github.com/jinnaiyuu/distributed-fast-downward (research code,
-      not tracking modern FD; targets OPTIMAL A*, not the satisficing
-      greedy best-first that PDDLStream's adaptive algorithm uses —
-      so a drop-in port to our pipeline is non-trivial).
-    - ArvandHerd (IPC 2011 winner, parallel track) — 4 Arvand configs
-      + 1 LAMA config running on separate processors with minimal
-      cross-process comms.  This is exactly the "FD portfolio mode"
-      angle; it works because the "find a meaningful split" problem
-      is hard and config-portfolio is the practical workaround.
-    - Fast Downward Stone Soup (Helmert et al., ICAPS 2011) and
-      Fast Downward Remix — sequential portfolio configurators
-      (15 of 38 FD configs, varying time slices).
-    - Springer 2021 "Parallel best-first search algorithms for
-      planning problems on multi-core processors" — async work-pool
-      design with abstraction-based duplicate-detection partitioning;
-      maps directly to a "split by CPU thread count" framing.
-    - arXiv 2407.21485 (2024) — Parallel Strategies for Best-First
-      Generalized Planning; recent active research.
-
-  ON THE GPU SIDE — essentially dead-end for classical PDDL planning:
-    - FD's data structures are pointer-heavy and not trivially
-      vectorisable; the literature has very few wins.  The most
-      likely win is heuristic batching (e.g. pattern-database
-      lookups) — narrow, not a general parallelisation.
-    - LLM-generated heuristics on GPU (arXiv 2501.18784, 2025) is
-      the more promising angle: don't parallelise the search,
-      parallelise the heuristic computation.
-
-  ON THE SIMULATOR SIDE — PyBullet GPU is dormant; alternatives
-  exist but mean swapping simulator entirely:
-    - Bullet 3.x has an OpenCL GPU rigid-body pipeline (Erwin
-      Coumans, 2012) — 100k bodies real-time on a Radeon 7970.
-      Never wired into PyBullet; maintainer position on GitHub
-      issue #3105 is "may be enabled in the future."  Code dormant
-      since AMD stopped funding the work in ~2013.
-    - For GPU-accelerated robotics sim today: NVIDIA Isaac Sim /
-      Isaac Lab (thousands of envs in parallel, Omniverse-based);
-      MuJoCo MJX (JAX); Genesis.  All require a full simulator
-      swap — out of thesis scope.
-    - Within PyBullet itself, the realistic CPU-parallelism win
-      is rayTestBatch numThreads — see #69 for the 6-call-site
-      one-line patch.
-
-  WHY THIS STAYS FOR LATER (not promoted to a numbered issue):
-    - Even if HDA*/MPI was wired into the planner stack, our
-      wall-clock perf complaint is upstream of FD search itself
-      (see #50/#62 — Python-side stream/init redundancy).  An
-      infinitely-fast FD would shrink an already-small slice.
-    - The realistic CPU-side win that doesn't require any
-      simulator/planner swap is captured concretely as #69
-      (rayTestBatch numThreads).
-    - GPU is research-grade work measured in months, not days,
-      and the literature is thin enough that it's a dissertation
-      topic in its own right — not a pre-submission tweak.
-
-  Cross-references: #50/#62 (Python-side perf hunt — same goal,
-  different layer); #69 (rayTestBatch numThreads — the realistic
-  spinoff).
+- Parallel FastDownward / GPU — post-thesis research direction (raised
+  2026-05-10).  CPU-side parallel FD has prior work (HDA*, ArvandHerd,
+  FD Stone Soup); GPU is a dead-end for classical PDDL planning.  Stays
+  unscheduled: our wall-clock cost is upstream of FD search (#50/#62 —
+  Python-side stream/init redundancy), and the realistic CPU win is #69
+  (rayTestBatch numThreads).  GPU robotics sim means swapping simulator
+  entirely (Isaac, MuJoCo MJX, Genesis) — out of thesis scope.
 
 - Planner stack (post-thesis / exploratory): move off Fast Downward toward
   any alternative that is plug-and-play alongside the PyBullet sim (motion
