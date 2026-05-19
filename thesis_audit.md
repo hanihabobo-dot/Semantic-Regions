@@ -911,7 +911,7 @@ Fix:   State that Boxel generation is a Python perception/discretization stage
 Refs:  (undisclosed deviation)
 
 ================================================================================
-#67  [T1 · Deviation] [THESIS]  §4.4.1 Listing 1 PDDL fluent names do not exist in the domain
+#67  [T1 · Deviation] [THESIS]  §4.4.1 Listing 1 PDDL fluent names do not exist in the domain [DONE]
 ================================================================================
 Where: §4.4.1 Listing 1 — approach.tex:56-72; code pddl/domain_pddlstream.pddl
 What:  Listing 1 declares (semantic_zone ?b - Boxel_id), (obj_in_Boxel ?o ?b),
