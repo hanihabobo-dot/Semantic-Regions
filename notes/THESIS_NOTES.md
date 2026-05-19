@@ -109,15 +109,20 @@ comment block above the sense action.
 
 ## 6. Know-If Fluent Simplification
 
-The proposal defines two predicates: `obj_in_Boxel` (K(p)) and
-`obj_not_in_Boxel` (K(not p)), with "possibly in" being the absence
-of both.  The implementation uses a single `obj_at_boxel_KIF`
-predicate: present = "we know", absent = "unknown".
+The conceptual model (proposal Sections 2.2.1 and 4.3) describes
+belief with two K-literals, K(p) and K(not p), with "possibly" being
+the absence of both.  The implemented domain collapses these into a
+single Know-If fluent `obj_at_boxel_KIF` (present = the value is
+known, absent = unknown), alongside `obj_at_boxel` which carries the
+value.  Thesis audit #67 rewrote Section 4.5.1 (Listing 1) to the
+real predicates and added a sentence disclosing this collapse and its
+equivalence to the K-literal pair, so the deviation is now stated in
+the thesis rather than silent.
 
 **Thesis framing**: Valid KIF simplification (Bonet & Geffner style).
 Equivalent expressiveness for the current scenario.
 
-**References**: Archive PA-3 (accepted deviation).
+**References**: Archive PA-3 (accepted deviation); thesis audit #67.
 
 ---
 
