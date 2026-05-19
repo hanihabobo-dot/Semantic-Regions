@@ -95,26 +95,8 @@ STYLE STANDARD (T2 Style issues)
 
 
 ################################################################################
-#  ISSUES — ABSTRACT  (sections/abstract.tex)
-################################################################################
-
-
-################################################################################
 #  ISSUES — §1 INTRODUCTION  (sections/introduction.tex)
 ################################################################################
-
-================================================================================
-#8  [T2 · Style] [POLISH]  Generic boilerplate opener of the whole thesis
-================================================================================
-Where: §1 — introduction.tex:5
-What:  "Robotic systems are increasingly envisioned to operate autonomously in
-       complex, dynamic, and human-centric environments, performing tasks that
-       demand both long-horizon reasoning and intricate physical interaction."
-       Interchangeable opener; the adjective pile-up and "intricate physical
-       interaction" could front any robotics paper.
-Fix:   "We want robots that can do everyday tasks on their own — fetch an
-       object, clear a table — which needs both multi-step reasoning and
-       careful physical manipulation."
 
 ================================================================================
 #9  [T2 · Style] [POLISH]  "has emerged as a critical area of research"
@@ -903,11 +885,6 @@ Fix:   "By replacing exhaustive state-space representations with the Boxel
 
 
 ################################################################################
-#  ISSUES — CITATIONS, BIBLIOGRAPHY & LATEX BUILD
-################################################################################
-
-
-################################################################################
 #  ISSUES — THESIS CONVERSION (STRUCTURAL)          (added 2026-05-17)
 ################################################################################
 
@@ -1072,13 +1049,13 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-75 issues remain open. Each issue's header carries its tier (T0-T3) and
+74 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Abstract / §1:   #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
-                 #20 #21 #24 #27 #29
+§1 Introduction: #9 #10 #11 #12 #13 #14 #15 #17 #18 #19 #20 #21 #24 #27
+                 #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
 §3 Related Work: #49 #50 #51 #52 #53 #54 #55 #56
