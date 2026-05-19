@@ -99,17 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#31  [T2 · Style] [POLISH]  §2 chapter intro is a contents-list filler sentence
-================================================================================
-Where: §2 — background.tex:5
-What:  "This chapter covers the foundational concepts in AI planning, state
-       representation, reasoning under uncertainty, and the relevant frameworks
-       used in this thesis." Restates the subsection headings; no information.
-Fix:   Delete it, or orient the reader: "This chapter builds up the pieces the
-       thesis depends on, ending with PDDLStream and how 3D space is represented
-       for planning."
-
-================================================================================
 #32  [T2 · Style] [POLISH]  "is concerned with the autonomous generation of"
 ================================================================================
 Where: §2.1 — background.tex:8
@@ -855,12 +844,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-58 issues remain open. Each issue's header carries its tier (T0-T3) and
+57 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
+§2 Background:   #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
 §3 Related Work: #49 #50 #51 #52 #53 #54 #56
 §4 Approach:     #57
