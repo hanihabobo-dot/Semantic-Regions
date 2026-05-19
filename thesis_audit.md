@@ -1001,7 +1001,7 @@ Fix:   Rewrite the precondition to reference certified fluents (e.g.
 Refs:  #70
 
 ================================================================================
-#73  [T1 · Deviation] [THESIS]  §4.3 formal element O (sensor model) is not a planner component
+#73  [T1 · Deviation] [THESIS]  §4.3 formal element O (sensor model) is not a planner component [DONE]
 ================================================================================
 Where: §4.3 — approach.tex:46; code domain_pddlstream.pddl, belief.py:37-43
 What:  §4.3 lists O (Sensor Model) as a first-class element of M = <S, S0, SG,
