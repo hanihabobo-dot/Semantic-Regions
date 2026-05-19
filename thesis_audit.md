@@ -99,17 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#15  [T2 · Style] [POLISH]  "Bridging this gap demands specialized mechanisms"
-================================================================================
-Where: §1 — introduction.tex:11-12
-What:  "Bridging this gap demands specialized mechanisms to ground symbolic
-       plans in continuous state and action spaces." Impersonal academic-ese;
-       largely restates the preceding paragraph.
-Fix:   "Closing this gap needs a way to fill in the geometric details of a
-       symbolic plan." (Or delete — the next paragraph introduces PDDLStream as
-       exactly that mechanism.)
-
-================================================================================
 #17  [T2 · Style] [POLISH]  "enhancing robot autonomy and robustness in complex, partially known environments"
 ================================================================================
 Where: §1 — introduction.tex:23
@@ -990,12 +979,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-68 issues remain open. Each issue's header carries its tier (T0-T3) and
+67 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§1 Introduction: #15 #17 #18 #19 #20 #21 #24 #27
+§1 Introduction: #17 #18 #19 #20 #21 #24 #27
                  #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
