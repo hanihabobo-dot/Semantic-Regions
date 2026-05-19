@@ -99,15 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#35  [T3 · Scientific] [NOW]  Inconsistent predicate name: hand-empty vs handempty
-================================================================================
-Where: §2.1.1 background.tex:29, 55; §4.4.1 approach.tex:70
-What:  §2.1.1 uses "(hand-empty)" (background.tex:29, 55); §4.4.1's fluent
-       listing uses "(handempty)" (approach.tex:70). In PDDL these are two
-       different predicates.
-Fix:   Pick one spelling (the code uses "handempty") and use it everywhere.
-
-================================================================================
 #36  [T2 · Style] [POLISH]  "It is important to distinguish"
 ================================================================================
 Where: §2.2.2 — background.tex:94
@@ -812,12 +803,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-54 issues remain open. Each issue's header carries its tier (T0-T3) and
+53 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§2 Background:   #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
+§2 Background:   #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
 §3 Related Work: #49 #50 #51 #52 #53 #54 #56
 §4 Approach:     #57
