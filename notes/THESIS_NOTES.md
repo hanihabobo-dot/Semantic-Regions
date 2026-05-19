@@ -506,37 +506,40 @@ the tray-goal evaluation experience).
 
 ---
 
-## 20. Single-pass perception — recursive free-space discovery deferred (#13)
+## 20. Free-space octree partitioning; mid-run object discovery is future work (#13, audit #65)
 
-The proposal (Section 4.2) describes recursive object discovery: "If
-new objects are found within a partition, the process repeats —
-bound the biggest object and define its occluded space."  The
-current `FreeSpaceGenerator` does a single-pass octree that marks
-cells as FREE or OCCUPIED; it never detects new objects inside
-partitions.  All objects are detected upfront by
-`oracle_detect_objects` from a fixed overhead viewpoint.
+§4.2 step 3 ("Recursive Partitioning") describes the free-space
+octree.  Starting from one workspace-spanning Boxel, any Boxel that
+overlaps an object or occlusion is recursively split into eight
+octants down to a minimum size; the resulting free cells are then
+merged greedily across shared faces.  This is implemented by
+`FreeSpaceGenerator` (octree) and `CellMerger` (greedy merge), and the
+whole pipeline is re-run by `reboxelize.py` whenever the scene
+changes.  Thesis audit #65 reconciled the proposal text with this;
+the earlier wording ("if new objects are found within a partition...
+bound the biggest object and define its occluded space") wrongly
+implied the octree re-runs object bounding, and was removed.
 
-For the tabletop scenario with a fixed overhead camera, every object
-that exists is visible (modulo sliver occluders — see §14).  The
-recursive pass is therefore not triggered by any current scene.  It
-would matter only for:
-- partial-coverage sensors (e.g. a robot-mounted camera that has to
-  move to see the back of the table);
-- objects hidden inside containers, cupboards, or other concave
-  geometry not present in the tabletop scenes.
+What the partitioning does *not* do is discover objects: it consumes
+a set of objects identified before generation runs and never finds a
+previously-unknown object inside a partition.  Letting it reveal a
+new object — and recurse to bound it and the occlusion it casts — is
+future work.  It would matter for partial-coverage sensors (e.g. a
+robot-mounted camera that has to move to see the back of the table)
+or objects hidden inside concave geometry (containers, cupboards) not
+present in the tabletop scenes.  The semantic-boxel representation
+does not preclude it: the registry would gain new object/shadow
+boxels mid-run and re-trigger reboxelize.
 
-**Thesis framing**: documented as an accepted simplification for the
-fixed-overhead-camera scenario.  The semantic-boxel representation
-itself does not preclude recursion — the registry would simply gain
-new object/shadow boxels mid-run and re-trigger reboxelize.  The
-gap is in perception scope, not in the planning architecture.  Cited
-as future work in the perception chapter and not as a TAMP
-limitation.
+**Thesis framing**: with a single overhead viewpoint every tabletop
+object is observed up front (modulo sliver occluders — see §14), so
+no current scene triggers mid-run discovery.  Cited as future work in
+the perception chapter, not as a TAMP limitation.
 
-**References**: `CODEBASE_AUDIT.txt` #13; `free_space.py`
-`FreeSpaceGenerator`; section 1 (oracle perception) and section 14
-(perception density vs planning cost) of this file establish the
-related "all objects detected upfront" assumption.
+**References**: `CODEBASE_AUDIT.txt` #13; thesis audit #65;
+`free_space.py` `FreeSpaceGenerator`, `cell_merger.py` `CellMerger`,
+`reboxelize.py`; section 1 (oracle perception) and section 14
+(perception density vs planning cost) of this file.
 
 ---
 
