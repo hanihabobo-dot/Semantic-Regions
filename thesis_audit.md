@@ -1140,98 +1140,24 @@ Refs:  #135 #137
 
 
 ================================================================================
-SUMMARY BY TIER  (updated 2026-05-17)
+OPEN ISSUES
 ================================================================================
 
-Numbers are filing order, not priority. Work T0 -> T1 -> T2 -> T3.
+81 issues remain open. Each issue's header carries its tier (T0-T3) and
+disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
+from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
+mark"` for their record.
 
-TIER 0 — factual / citation errors (1):
-  #112  Critical Regions / RBVD attributed to the wrong paper.
+Abstract / §1:   #1 #2 #3 #4 #5 #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
+                 #20 #21 #24 #27 #29
+§2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #39 #40 #41 #42 #43 #44 #45
+                 #46 #47
+§3 Related Work: #49 #50 #51 #52 #53 #54 #55 #56
+§4 Approach:     #57
+§5 Evaluation:   #87 #88 #89 #90 #91 #92 #93 #94 #95 #96 #97 #98 #99 #100
+                 #101 #102 #103 #104 #105 #106 #107 #108 #109 #110 #111
+Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138
 
-TIER 1 — major proposal-vs-implementation deviations (20):
-  #6    "robust manipulation" — friction-free weld + collision-blind execution.
-  #22   "perceived objects" misrepresents a ground-truth oracle.
-  #26   §1 implies a sound belief search; build has a 3-strike false-negative.
-  #55   §3 "structured 3D model from sensor data" contradicts oracle perception.
-  #56   §3 "applied to new environments without retraining" overstates generality.
-  #65   §4.2 step 3 "Recursive Partitioning" is not implemented.
-  #66   Boxel generation is plain Python, not "PDDLStream procedures" (undisclosed).
-  #67   §4.4.1 Listing 1 PDDL fluent names do not exist in the domain.
-  #68   §4.4.2 sense action name/signature do not match the domain.
-  #69   §4.4.2 conditional found/not_found sense effects are not implemented.
-  #70   §4.4 sensing streams do not exist.
-  #71   §4.4.2 Listing 2 claims an inference the formalism does not provide.
-  #72   §4.4.2 puts stream_* calls inside :precondition (modeling error).
-  #73   §4.3 formal element O (sensor model) is not a planner component.
-  #87   §5.3 "Fixed Semantic Regions" baseline does not exist (killed).
-  #88   §5.3 TAMPURA baseline is published numbers only, not a re-implementation.
-  #89   §5.1 names Bayes3D for perception — integrated nowhere.
-  #90   §5.2 "Plan Quality / Cost" metric is never logged or plotted.
-  #104  §5.4 conclusion is written as a finished paper ("As demonstrated").
-  #113  references.bib entry [1] (PDDL) is malformed — corporate author mis-parse.
-
-TIER 2 — style, clarity, honest framing (74):
-  Abstract:   #1 #2 #3 #4 #5 #7
-  §1:         #8 #9 #10 #11 #12 #13 #14 #15 #16 #17 #18 #19 #20 #21 #23 #24 #25
-              #27 #28 #29
-  §2:         #31 #32 #34 #36 #37 #38 #39 #40 #41 #42 #45 #46 #47 #48
-  §3:         #49 #51 #52 #53 #54
-  §4:         #57 #58 #59 #60 #61 #62 #63 #64 #74 #84 #85
-  §5:         #91 #92 #93 #94 #95 #99 #100 #101 #102 #103 #106 #107 #108 #109
-              #110 #111
-  Biblio:     #114 #117
-
-TIER 3 — minor: naming, headings, build, polish (25):
-  #30 #33 #35 #43 #44 #50 #75 #76 #77 #78 #79 #80 #81 #82 #83 #86 #96 #97 #98
-  #105 #115 #116 #118 #119 #120
-
-Total: 120 tiered issues (#1-#120) — 1 T0, 20 T1, 74 T2, 25 T3.
-Plus 10 untiered thesis-conversion issues (#121-#130) — see SUMMARY BY
-DISPOSITION below.
-
-NEEDS VERIFICATION before fixing:
-  #74   Confirm the M = <S,S0,SG,A,f,O> tuple against Bonet & Geffner (2014).
-  #112  Confirm the Critical Regions origin (Molina et al., "Learn and Link").
-
-
-================================================================================
-SUMMARY BY DISPOSITION  (added 2026-05-17)
-================================================================================
-
-The proposal-to-thesis axis. Tiers (above) grade severity; disposition says
-why a fix exists. If the goal is specifically the thesis upgrade, work the
-THESIS group and #121-#130 first; the POLISH group can wait, and the NOW group
-is independent quick wins.
-
-THESIS-CONVERSION — structural; the upgrade cannot happen without these (10):
-  #121 #122 #123 #124 #125 #126 #127 #128 #129 #130
-
-THESIS — reconcile the text with the built system / report real results (45):
-  #6 #7 #22 #23 #24 #25 #26 #27 #28 #29 #54 #55 #56 #64 #65 #66 #67 #68 #69
-  #70 #71 #72 #73 #75 #76 #77 #78 #79 #80 #81 #82 #83 #87 #88 #89 #90 #91 #92
-  #93 #94 #95 #96 #97 #98 #104
-
-NOW — correctness errors, independent of the upgrade (20):
-  #30 #34 #35 #38 #39 #40 #43 #44 #50 #74 #105 #112 #113 #114 #115 #116 #117
-  #118 #119 #120
-
-POLISH — prose quality, not upgrade-specific; lowest upgrade priority (55):
-  #1 #2 #3 #4 #5 #8 #9 #10 #11 #12 #13 #14 #15 #16 #17 #18 #19 #20 #21 #31 #32
-  #33 #36 #37 #41 #42 #45 #46 #47 #48 #49 #51 #52 #53 #57 #58 #59 #60 #61 #62
-  #63 #84 #85 #86 #99 #100 #101 #102 #103 #106 #107 #108 #109 #110 #111
-
-Total: 130 issues — 120 audited (#1-#120) + 10 thesis-conversion (#121-#130).
-
-
-================================================================================
-ADDENDUM  (2026-05-18 — audit walkthrough)
-================================================================================
-
-Changes after the 2026-05-17 summaries above:
-  - #131-#133 added (see "ISSUES — ADDED DURING THE AUDIT WALKTHROUGH"):
-    #131 [T3 Build / NOW], #132 [T2 Style / POLISH],
-    #133 [T3 Style / NOW, DONE].
-  - #120 marked [REJECTED] — user keeps the "Sidd's" naming.
-  Current totals: 133 issues = 123 tiered (1 T0, 20 T1, 75 T2, 27 T3)
-  + 10 thesis-conversion (#121-#130). Disposition: 10 THESIS-CONVERSION,
-  45 THESIS, 22 NOW, 56 POLISH.
+Gating: the §5 issues (#87-#111) are subsumed by the #121 evaluation rewrite;
+#121/#126/#127/#128/#130 and the #137 migration depend on obtaining the
+official i6 thesis template (#136); #125 (Discussion) needs evaluation results.
