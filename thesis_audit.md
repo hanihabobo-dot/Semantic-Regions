@@ -99,20 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#21  [T2 · Style] [POLISH]  "explosion in the size of the belief space" — redundant clause
-================================================================================
-Where: §1 — introduction.tex:18
-What:  "Naive representations—such as uniform voxelizations of 3D space—can
-       quickly become computationally intractable, leading to an explosion in
-       the size of the belief space." The explosion IS the intractability — the
-       clause says the same thing twice. (The uniform-voxelization contrast is
-       also softer than implied: the built semantic side also incurs fact-count
-       growth — see THESIS_NOTES §9, §14.)
-Fix:   "Naive representations — such as a uniform voxel grid over 3D space —
-       make the belief space blow up in size and quickly become impractical to
-       plan with."
-
-================================================================================
 #24  [T2 · Over-claim] [THESIS]  "long-horizon reasoning" / "complex tasks" vs the tabletop scenario
 ================================================================================
 Where: §1 introduction.tex:5, 23; Abstract abstract.tex:21
@@ -933,12 +919,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-63 issues remain open. Each issue's header carries its tier (T0-T3) and
+62 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§1 Introduction: #21 #24 #27
+§1 Introduction: #24 #27
                  #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
