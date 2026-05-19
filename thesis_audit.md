@@ -95,44 +95,8 @@ STYLE STANDARD (T2 Style issues)
 
 
 ################################################################################
-#  ISSUES — §2 BACKGROUND  (sections/background.tex)
-################################################################################
-
-================================================================================
-#46  [T2 · Style] [POLISH]  "This representation underpins both motion planning ... and task planning"
-================================================================================
-Where: §2.4 — background.tex:133
-What:  "This representation underpins both motion planning (navigating and
-       avoiding collisions) and task planning (reasoning about object
-       interactions and achieving goals)." Asserts a vague dependency; carries
-       no usable information.
-Fix:   Delete it — the next sentence (on partial observability) carries the real
-       point.
-
-================================================================================
-#47  [T2 · Style] [POLISH]  "becomes even more acute"
-================================================================================
-Where: §2.4 — background.tex:133
-What:  "The challenge of spatial representation becomes even more acute under
-       partial observability..." Inflated phrasing for "is harder."
-Fix:   "Representing space is harder under partial observability, because the
-       robot must also represent what it does not yet know."
-
-
-################################################################################
 #  ISSUES — §3 RELATED WORK  (sections/related_work.tex)
 ################################################################################
-
-================================================================================
-#49  [T2 · Style] [POLISH]  Related Work opener — third sentence is filler
-================================================================================
-Where: §3 — related_work.tex:5
-What:  "...This section reviews previous work on this topic... We examine the
-       limitations of current methods to provide context for our work." The
-       third sentence states what every related-work section does.
-Fix:   Keep the first two sentences, drop the third (or fold it in:
-       "...focusing on planning approaches and belief representations, and on
-       where each falls short").
 
 ================================================================================
 #50  [T3 · Scientific] [NOW]  TAMPURA description slightly imprecise
@@ -701,13 +665,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-44 issues remain open. Each issue's header carries its tier (T0-T3) and
+41 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§2 Background:   #46 #47
-§3 Related Work: #49 #50 #51 #52 #53 #54 #56
+§3 Related Work: #50 #51 #52 #53 #54 #56
 §4 Approach:     #57
 §5 Evaluation:   #87 #88 #89 #90 #91 #92 #93 #94 #95 #96 #97 #98 #99 #100
                  #101 #102 #103 #104 #105 #106 #107 #108 #109 #110 #111
