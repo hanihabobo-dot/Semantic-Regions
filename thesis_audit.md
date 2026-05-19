@@ -99,17 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#1  [T2 · Style] [POLISH]  Abstract opens with proposal-meta throat-clearing
-================================================================================
-Where: Abstract — abstract.tex:4-6
-What:  "This research proposal outlines a plan to extend Partially Observable
-       Deterministic (POD) planning methods to the domain of Task and Motion
-       Planning (TAMP) under partial observability." The reader already knows
-       it is a proposal; "outlines a plan to" and "to the domain of" are padding.
-Fix:   "This proposal extends Partially Observable Deterministic (POD) planning
-       to Task and Motion Planning (TAMP) under partial observability."
-
-================================================================================
 #2  [T2 · Style] [POLISH]  "computationally intensive probabilistic models" — mildly inflated
 ================================================================================
 Where: Abstract — abstract.tex:7-8
@@ -1128,12 +1117,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-80 issues remain open. Each issue's header carries its tier (T0-T3) and
+79 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Abstract / §1:   #1 #2 #3 #4 #5 #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
+Abstract / §1:   #2 #3 #4 #5 #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
                  #20 #21 #24 #27 #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
