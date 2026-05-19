@@ -1344,7 +1344,7 @@ Fix:   Recast in a measured register, e.g. "Integrating task and motion
        direct, not inflated.
 
 ================================================================================
-#134  [T3 · Style] [NOW]  §4.2 Figure 2 caption says "Voxelization" not "Discretization"
+#134  [T3 · Style] [NOW]  §4.2 Figure 2 caption says "Voxelization" not "Discretization"  [DONE]
 ================================================================================
 Where: §4.2 Figure 2 caption — approach.tex:21
 What:  The caption titles the figure "Adaptive Semantic Voxelization Process",
