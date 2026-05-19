@@ -1495,7 +1495,7 @@ Fix:   "By replacing exhaustive state-space representations with the Boxel
 ################################################################################
 
 ================================================================================
-#112  [T0 · Citation] [NOW]  "Critical Regions" and "RBVD" attributed to the wrong paper
+#112  [T0 · Citation] [NOW]  "Critical Regions" and "RBVD" attributed to the wrong paper [DONE]
 ================================================================================
 Where: §2.4 background.tex:154-157; §3.2.2 related_work.tex:39;
        references.bib (shah2022abstractions)
