@@ -1044,7 +1044,7 @@ Fix:   When §4.3 is reconciled with the real domain, restate f as STRIPS effect
 Refs:  THESIS_NOTES §6; #67
 
 ================================================================================
-#76  [T3 · Deviation] [THESIS]  §4.1/§4.2 "contrasts with octrees" is imprecise
+#76  [T3 · Deviation] [THESIS]  §4.1/§4.2 "contrasts with octrees" is imprecise [DONE]
 ================================================================================
 Where: §4.2 — approach.tex:32
 What:  "This adaptive, object-centric approach contrasts with octrees and
