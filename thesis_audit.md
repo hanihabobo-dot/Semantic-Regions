@@ -99,17 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#13  [T2 · Style] [POLISH]  "strong assumptions that limit its applicability in realistic, real-world settings"
-================================================================================
-Where: §1 — introduction.tex:16
-What:  "Despite its effectiveness, the original PDDLStream framework assumes
-       full observability and deterministic action outcomes—strong assumptions
-       that limit its applicability in realistic, real-world settings."
-       Roundabout and redundant ("realistic, real-world").
-Fix:   "But the original PDDLStream assumes the robot can see everything and
-       that actions always succeed — assumptions that rarely hold in practice."
-
-================================================================================
 #14  [T2 · Style] [POLISH]  "necessitating active information gathering as part of task execution"
 ================================================================================
 Where: §1 — introduction.tex:16
@@ -1010,12 +999,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-70 issues remain open. Each issue's header carries its tier (T0-T3) and
+69 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§1 Introduction: #13 #14 #15 #17 #18 #19 #20 #21 #24 #27
+§1 Introduction: #14 #15 #17 #18 #19 #20 #21 #24 #27
                  #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
