@@ -98,19 +98,6 @@ STYLE STANDARD (T2 Style issues)
 #  ISSUES — ABSTRACT  (sections/abstract.tex)
 ################################################################################
 
-================================================================================
-#5  [T2 · Style] [POLISH]  Bloated abstract closing sentence
-================================================================================
-Where: Abstract — abstract.tex:19-21
-What:  "...a scalable and conceptually simple framework that simplifies planning
-       under spatial uncertainty for robotic systems, enabling them to perform
-       complex tasks involving information gathering and robust manipulation in
-       partially known environments." Long abstract tail; "simple"/"simplifies"
-       repeat; "robotic systems ... enabling them" is stiff.
-Fix:   "...a scalable, simple framework that lets a robot plan under spatial
-       uncertainty — searching for objects it cannot see and then manipulating
-       them." (See also #6 on "robust manipulation".)
-
 
 ################################################################################
 #  ISSUES — §1 INTRODUCTION  (sections/introduction.tex)
@@ -1085,12 +1072,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-76 issues remain open. Each issue's header carries its tier (T0-T3) and
+75 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Abstract / §1:   #5 #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
+Abstract / §1:   #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
                  #20 #21 #24 #27 #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
