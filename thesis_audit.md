@@ -95,40 +95,6 @@ STYLE STANDARD (T2 Style issues)
 
 
 ################################################################################
-#  ISSUES — §3 RELATED WORK  (sections/related_work.tex)
-################################################################################
-
-================================================================================
-#56  [T1 · Deviation] [THESIS]  §3 "applied to new ... environments without needing to be retrained" overstates generality
-================================================================================
-Where: §3.1.3 — related_work.tex:24
-What:  Contrasting with Bai et al.: "...can be applied to new goals and
-       environments without needing to be retrained." "No retraining" is true,
-       but "new environments" implies portability the build lacks: hardcoded
-       constants overfit it to one table, the Franka Panda, and the test
-       objects (grasp offsets, approach/lift heights, octree resolution, camera
-       pose).
-Fix:   "...can be retargeted to new goals without retraining a policy" — and
-       acknowledge that a new environment currently requires re-tuning hardcoded
-       geometric constants (a generalization future-work item).
-Refs:  THESIS_NOTES §3, §13
-
-
-################################################################################
-#  ISSUES — §4 APPROACH  (sections/approach.tex)
-################################################################################
-
-================================================================================
-#57  [T2 · Style] [POLISH]  §4 chapter opener — filler "aims to create" sentence
-================================================================================
-Where: §4 — approach.tex:6
-What:  "The approach aims to create a tractable yet expressive system for
-       planning under spatial uncertainty." Restates the goal already implied;
-       "tractable yet expressive" is an empty virtue-pairing.
-Fix:   Delete it, or fold the one real word into the prior sentence.
-
-
-################################################################################
 #  ISSUES — §5 EVALUATION PLAN  (sections/evaluation.tex)
 ################################################################################
 
@@ -604,13 +570,11 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-36 issues remain open. Each issue's header carries its tier (T0-T3) and
+34 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§3 Related Work: #56
-§4 Approach:     #57
 §5 Evaluation:   #87 #88 #89 #90 #91 #92 #93 #94 #95 #96 #97 #98 #99 #100
                  #101 #102 #103 #104 #105 #106 #107 #108 #109 #110 #111
 Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138
