@@ -1565,7 +1565,7 @@ Fix:   Cite hansen2001lao where TAMPURA's uncertainty-aware solving is described
 Refs:  #50, #114
 
 ================================================================================
-#117  [T2 · Build] [NOW]  Duplicate \label and figure \label placed outside the float
+#117  [T2 · Build] [NOW]  Duplicate \label and figure \label placed outside the float [DONE]
 ================================================================================
 Where: background.tex:50 & approach.tex:55 (duplicate label); background.tex:
        141-147 & approach.tex:18-23 (label outside float)
