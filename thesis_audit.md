@@ -1110,7 +1110,7 @@ Fix:   Delete genuinely unused entries, or cite them where relevant: add
        solvers are discussed.
 
 ================================================================================
-#115  [T3 · Citation] [NOW]  Malformed bib entries — coumans2021pybullet, belle2023epistemic
+#115  [T3 · Citation] [NOW]  Malformed bib entries — coumans2021pybullet, belle2023epistemic  [DONE]
 ================================================================================
 Where: references.bib
 What:  coumans2021pybullet has a garbled journal field ("ed: PyBullet Quickstart
