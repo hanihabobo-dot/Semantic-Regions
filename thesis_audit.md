@@ -1204,7 +1204,7 @@ Fix:   Add a Limitations / Accepted Simplifications section. Give every
 Refs:  notes/THESIS_NOTES.md §1-§21; #6 #7 #22 #26 #28 #29 #54 #55 #66 #69 #73 #79 #81
 
 ================================================================================
-#124  [Structural] [THESIS]  No real "Future Work" section
+#124  [Structural] [THESIS]  No real "Future Work" section  [DONE]
 ================================================================================
 Where: §5.4 evaluation.tex:36; new section
 What:  §5.4's only future-work sentence is generic ("extending the variety of
