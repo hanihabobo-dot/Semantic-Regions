@@ -99,67 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#50  [T3 · Scientific] [NOW]  TAMPURA description slightly imprecise
-================================================================================
-Where: §3.1.1 — related_work.tex:11
-What:  "TAMPURA ... makes this approach more tractable by learning a simplified,
-       abstract model of the problem. The planner then chooses from a library of
-       pre-defined controllers..." It is the abstract preconditions/effects of
-       the (given) controllers that are learned, and the result is a
-       non-deterministic MDP solved by an uncertainty-aware solver (LAO*).
-Fix:   "TAMPURA learns a coarse abstract model of each given closed-loop
-       controller's preconditions and effects, builds a non-deterministic MDP,
-       and solves it with an uncertainty-aware solver (LAO*) to produce
-       risk-aware, information-gathering plans."
-Refs:  #116 (missing LAO* citation)
-
-================================================================================
-#51  [T2 · Style] [POLISH]  "offers a semantically grounded framework for abstracting planning challenges"
-================================================================================
-Where: §3.2.2 — related_work.tex:39
-What:  "The method proposed in [shah2022abstractions] for learning a global set
-       of task-relevant Critical Regions (CRs) offers a semantically grounded
-       framework for abstracting planning challenges." Abstract and ornate;
-       "abstracting planning challenges" is vague jargon.
-Fix:   "The Critical Regions method [shah2022abstractions] learns a global set
-       of task-relevant regions, giving the planner a meaningful, non-uniform
-       way to abstract the space."
-
-================================================================================
-#52  [T2 · Style] [POLISH]  "may prove inadequate" — hedged academic-ese
-================================================================================
-Where: §3.2.2 — related_work.tex:39
-What:  "However, in dynamic manipulation scenarios involving specific objects,
-       this global and often static partitioning may prove inadequate."
-Fix:   "But this partitioning is global and mostly fixed, so it does not work
-       well when objects move."
-
-================================================================================
-#53  [T2 · Style] [POLISH]  "struggles to accommodate" — repeats the prior sentence
-================================================================================
-Where: §3.2.2 — related_work.tex:39
-What:  "A pre-defined or globally fixed CR map struggles to accommodate such
-       dynamic, object-specific uncertainties." Abstract academic-ese; largely
-       repeats the sentence before it.
-Fix:   Merge with the previous sentence or cut: "...for example, the region
-       \"behind object A\" depends on where A currently is and where the robot
-       is standing — a fixed map cannot track that."
-
-================================================================================
-#54  [T2 · Over-claim] [THESIS]  §3 "reason directly about what it can and cannot see"
-================================================================================
-Where: §3.1.3 — related_work.tex:20
-What:  Contrasting with Ma et al.: "...This allows our planner to reason
-       directly about what it can and cannot see..." The visibility judgement
-       is computed by an oracle (ray-casting against ground-truth bodies); the
-       planner reasons over symbolic boxel facts, not raw sensor data.
-Fix:   "...reason about which regions are observed versus occluded as
-       first-class planning state" — and note the visibility signal is
-       currently oracle-provided. Keep the (accurate) point that
-       information-gathering is a core planner action.
-Refs:  THESIS_NOTES §1, §11
-
-================================================================================
 #56  [T1 · Deviation] [THESIS]  §3 "applied to new ... environments without needing to be retrained" overstates generality
 ================================================================================
 Where: §3.1.3 — related_work.tex:24
@@ -665,12 +604,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-41 issues remain open. Each issue's header carries its tier (T0-T3) and
+36 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§3 Related Work: #50 #51 #52 #53 #54 #56
+§3 Related Work: #56
 §4 Approach:     #57
 §5 Evaluation:   #87 #88 #89 #90 #91 #92 #93 #94 #95 #96 #97 #98 #99 #100
                  #101 #102 #103 #104 #105 #106 #107 #108 #109 #110 #111
