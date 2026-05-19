@@ -99,15 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#14  [T2 · Style] [POLISH]  "necessitating active information gathering as part of task execution"
-================================================================================
-Where: §1 — introduction.tex:16
-What:  "...may be initially unknown, necessitating active information gathering
-       as part of task execution." Stiff nominalized academic-ese.
-Fix:   "...may be unknown at the start, so the robot has to actively look for it
-       while carrying out the task."
-
-================================================================================
 #15  [T2 · Style] [POLISH]  "Bridging this gap demands specialized mechanisms"
 ================================================================================
 Where: §1 — introduction.tex:11-12
@@ -999,12 +990,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-69 issues remain open. Each issue's header carries its tier (T0-T3) and
+68 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§1 Introduction: #14 #15 #17 #18 #19 #20 #21 #24 #27
+§1 Introduction: #15 #17 #18 #19 #20 #21 #24 #27
                  #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
