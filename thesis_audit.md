@@ -1320,7 +1320,7 @@ Defects surfaced while working the audit walkthrough that were not among
 #1-#130. Numbering continues from #130.
 
 ================================================================================
-#131  [T3 · Build] [NOW]  amssymb "already defined" errors — every build exits 12
+#131  [T3 · Build] [NOW]  amssymb "already defined" errors — every build exits 12  [DONE]
 ================================================================================
 Where: resources/preamble.tex (amssymb load); whole-document build
 What:  latexmk / LuaLaTeX reports "! LaTeX Error: Command \eth already defined"
