@@ -99,16 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#20  [T2 · Style] [POLISH]  "strike a balance between expressivity and computational efficiency"
-================================================================================
-Where: §1 — introduction.tex:18
-What:  "Effective solutions must therefore strike a balance between expressivity
-       and computational efficiency in belief representation and planning."
-       Generic trade-off cliché.
-Fix:   "A useful belief representation must therefore be detailed enough to be
-       expressive, yet small enough to plan with quickly."
-
-================================================================================
 #21  [T2 · Style] [POLISH]  "explosion in the size of the belief space" — redundant clause
 ================================================================================
 Where: §1 — introduction.tex:18
@@ -943,12 +933,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-64 issues remain open. Each issue's header carries its tier (T0-T3) and
+63 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§1 Introduction: #20 #21 #24 #27
+§1 Introduction: #21 #24 #27
                  #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
