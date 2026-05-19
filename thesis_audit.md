@@ -1031,7 +1031,7 @@ Fix:   Verify the formalism in Bonet & Geffner (2014). If the explicit-state
        Geffner's formulation" and present the tuple as the proposal's own.
 
 ================================================================================
-#75  [T3 · Deviation] [THESIS]  §4.3 formal element f — no K-literal transition function
+#75  [T3 · Deviation] [THESIS]  §4.3 formal element f — no K-literal transition function [DONE]
 ================================================================================
 Where: §4.3 — approach.tex:45
 What:  §4.3 defines f as "a deterministic state-transition function ... based on
