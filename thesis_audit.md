@@ -1831,6 +1831,18 @@ Fix:   Changed the §1 roadmap to "adaptive semantic discretization" to match
 
 
 ================================================================================
+#134  [T3 · Style] [NOW]  §4.2 Figure 2 caption says "Voxelization" not "Discretization"
+================================================================================
+Where: §4.2 Figure 2 caption — approach.tex:21
+What:  The caption titles the figure "Adaptive Semantic Voxelization Process",
+       while §4.2 names the process "Adaptive Semantic Discretization" and the
+       component is built around Boxels (graphic file Boxelization.png, label
+       fig:boxelization). Same term inconsistency as #133, which fixed only the
+       §1 roadmap (introduction.tex:24) and did not reach this caption.
+Fix:   Change "Voxelization" to "Discretization" in the Figure 2 caption.
+
+
+================================================================================
 SUMMARY BY TIER  (updated 2026-05-17)
 ================================================================================
 
