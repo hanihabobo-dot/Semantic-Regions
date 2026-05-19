@@ -1122,7 +1122,7 @@ Fix:   Fix coumans2021pybullet to a clean @misc with howpublished =
        it will be cited — otherwise see #114).
 
 ================================================================================
-#116  [T3 · Scientific] [NOW]  TAMPURA uses LAO* — flag the missing-citation opportunity
+#116  [T3 · Scientific] [NOW]  TAMPURA uses LAO* — flag the missing-citation opportunity  [DONE]
 ================================================================================
 Where: §2.2.2 / §3.1.1 — background.tex:94 / related_work.tex:11
 What:  The proposal discusses POMDP-based TAMP and TAMPURA but never cites the
