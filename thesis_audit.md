@@ -99,17 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#4  [T2 · Style] [POLISH]  "leveraging its stream mechanism" — inflated verb
-================================================================================
-Where: Abstract — abstract.tex:15-18
-What:  "The proposed methodology formally integrates this semantic abstraction
-       with a PDDLStream-based TAMP framework, leveraging its stream mechanism
-       to ground symbolic plans in continuous geometric domains." "leveraging"
-       = "using"; "continuous geometric domains" = "continuous geometry."
-Fix:   "We integrate this abstraction into a PDDLStream-based TAMP framework,
-       using its streams to connect symbolic plans to continuous geometry."
-
-================================================================================
 #5  [T2 · Style] [POLISH]  Bloated abstract closing sentence
 ================================================================================
 Where: Abstract — abstract.tex:19-21
@@ -1096,12 +1085,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-77 issues remain open. Each issue's header carries its tier (T0-T3) and
+76 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Abstract / §1:   #4 #5 #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
+Abstract / §1:   #5 #8 #9 #10 #11 #12 #13 #14 #15 #17 #18 #19
                  #20 #21 #24 #27 #29
 §2 Background:   #31 #32 #33 #34 #35 #36 #37 #38 #40 #41 #42 #43 #44 #45
                  #46 #47
