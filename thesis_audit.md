@@ -99,75 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#88  [T1 · Deviation] [THESIS]  §5.3 TAMPURA baseline is not a re-implementation — only two published numbers are used
-================================================================================
-Where: §5.3 — evaluation.tex:27
-What:  §5.3: "POMDP-based TAMP (Conceptual/Simplified): If feasible, we will
-       compare against a simplified implementation or published results of a
-       POMDP-based TAMP system like TAMPURA..." eval_plotter.py hardcodes
-       TAMPURA_MEAN = 57.0, TAMPURA_STD = 38.0 from arXiv:2403.10454 Table II.
-       No TAMPURA planner code exists; a live comparison is "FOR LATER" per
-       TAMPURA_PLAN.md.
-Fix:   State plainly that the TAMPURA comparison uses published Table II numbers
-       only (not a re-implementation) — a single bar chart. Drop "simplified
-       implementation" as an option.
-Refs:  THESIS_NOTES §21; CODEBASE_AUDIT.txt #73; TAMPURA_PLAN.md
-
-================================================================================
-#89  [T1 · Deviation] [THESIS]  §5.1 names Bayes3D for perception — integrated nowhere
-================================================================================
-Where: §5.1 — evaluation.tex:10
-What:  §5.1: "...a stream that interfaces with a library like Bayes3D
-       [gothoskar2023bayes3d] or a mock perception oracle..." A repo-wide search
-       finds Bayes3D only in the proposal LaTeX and references.bib — zero Python
-       hits. Perception is oracle_detect_objects() reading ground-truth poses.
-Fix:   Remove the Bayes3D mention. State that perception is an oracle reading
-       PyBullet ground-truth poses, providing exact estimates and isolating the
-       planning contribution from perception noise.
-Refs:  THESIS_NOTES §1
-
-================================================================================
-#90  [T1 · Deviation] [THESIS]  §5.2 "Plan Quality / Cost" metric is never logged or plotted
-================================================================================
-Where: §5.2 — evaluation.tex:18
-What:  §5.2: "Plan Quality / Cost: The length or cost of the executed plan
-       (e.g., number of actions, total path length of the end-effector)."
-       run_logger.py logs success, exit_reason, plan_count (replan count),
-       n_sense_actions, planning times, boxel/fact counts — but no plan action
-       count, no PDDL plan cost, no end-effector path length. eval_plotter.py
-       has no such plot.
-Fix:   Either implement an action-count / plan-cost / EE-path-length metric, or
-       replace "Plan Quality / Cost" in §5.2 with the metrics actually logged
-       (replan count, boxel counts, init-state fact counts).
-Refs:  CODEBASE_AUDIT.txt #73; THESIS_NOTES §17
-
-================================================================================
-#91  [T2 · Deviation] [THESIS]  §5.1 "pose estimates with simulated uncertainty" — the oracle returns exact ground truth
-================================================================================
-Where: §5.1 — evaluation.tex:10
-What:  §5.1: "...a mock perception oracle that provides pose estimates with
-       simulated uncertainty." There is no pose-noise injection; the oracle
-       returns exact poses. The only modeled uncertainty is visibility/occlusion
-       uncertainty (which shadow hides the target), not pose noise.
-Fix:   "...exact pose estimates for visible objects." Clarify the modeled
-       uncertainty is occlusion/visibility uncertainty over which Boxel a hidden
-       object occupies, not perceptual pose noise.
-Refs:  THESIS_NOTES §1
-
-================================================================================
-#92  [T2 · Deviation] [THESIS]  §5.1 implies perception is a stream over simulated sensor data
-================================================================================
-Where: §5.1 — evaluation.tex:10
-What:  §5.1's framing ("a stream that interfaces with ... simulated sensor
-       data") implies perception is a PDDLStream stream consuming RGB/depth.
-       RGB/depth are rendered for the GUI but not processed; detection happens
-       up front via oracle_detect_objects, not as an on-demand stream.
-Fix:   Describe perception as an up-front oracle detection step plus a sense
-       action backed by raycasting from a fixed overhead camera. Remove the
-       implication that simulated sensor data is processed.
-Refs:  THESIS_NOTES §1, §3
-
-================================================================================
 #93  [T2 · Deviation] [THESIS]  §5.1/§5.2 scalability "size of the workspace" — no such axis
 ================================================================================
 Where: §5.1 evaluation.tex:9; §5.2 evaluation.tex:19
@@ -555,13 +486,13 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-33 issues remain open. Each issue's header carries its tier (T0-T3) and
+28 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§5 Evaluation:   #88 #89 #90 #91 #92 #93 #94 #95 #96 #97 #98 #99 #100
-                 #101 #102 #103 #104 #105 #106 #107 #108 #109 #110 #111
+§5 Evaluation:   #93 #94 #95 #96 #97 #98 #99 #100 #101 #102 #103 #104
+                 #105 #106 #107 #108 #109 #110 #111
 Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138
 
 Gating: the §5 issues (#87-#111) are subsumed by the #121 evaluation rewrite;
