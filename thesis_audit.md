@@ -1081,7 +1081,7 @@ Fix:   "By replacing exhaustive state-space representations with the Boxel
 ################################################################################
 
 ================================================================================
-#113  [T1 · Citation] [NOW]  references.bib entry [1] (PDDL) is malformed — corporate author mis-parsed
+#113  [T1 · Citation] [NOW]  references.bib entry [1] (PDDL) is malformed — corporate author mis-parsed  [DONE]
 ================================================================================
 Where: references.bib (aeronautiques1998pddl)
 What:  The entry renders the author as "C. Aeronautiques, A. Howe, ...". The
