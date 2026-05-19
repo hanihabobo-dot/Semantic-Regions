@@ -99,17 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#38  [T2 · Scientific] [NOW]  K-literal "possibly true" conflated with "uncertain"
-================================================================================
-Where: §2.2.1 — background.tex:86-91
-What:  "If neither holds, p is uncertain. p is \"possibly true\" if K(¬p) is
-       false." The definition is technically correct but stated so it blurs two
-       distinct epistemic states: "possibly true" (¬K(¬p), which also includes
-       p known true) is broader than "uncertain" (¬K(p) ∧ ¬K(¬p)).
-Fix:   "p is uncertain if neither K(p) nor K(¬p) holds. p is possibly true if
-       K(¬p) is false — note this also includes the case where p is known true."
-
-================================================================================
 #40  [T2 · Scientific] [NOW]  State-space-model tuple inconsistent between §2.1.1 and §4.3
 ================================================================================
 Where: §2.1.1 background.tex:13; §4.3 approach.tex:36-37
@@ -780,12 +769,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-51 issues remain open. Each issue's header carries its tier (T0-T3) and
+50 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§2 Background:   #38 #40 #41 #42 #43 #44 #45
+§2 Background:   #40 #41 #42 #43 #44 #45
                  #46 #47
 §3 Related Work: #49 #50 #51 #52 #53 #54 #56
 §4 Approach:     #57
