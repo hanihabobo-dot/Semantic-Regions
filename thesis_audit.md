@@ -1421,7 +1421,7 @@ Fix:   Settle a single label-prefix convention. Best handled during the
 Refs:  #135 #137
 
 ================================================================================
-#139  [T3 · Build] [THESIS]  references.bib LAO* title uses U+2217 — missing glyph
+#139  [T3 · Build] [THESIS]  references.bib LAO* title uses U+2217 — missing glyph  [DONE]
 ================================================================================
 Where: references.bib:205 (hansen2001lao)
 What:  The hansen2001lao title contains a literal U+2217 ASTERISK OPERATOR
