@@ -1651,7 +1651,7 @@ Fix:   Rewrite §5 as a completed Evaluation chapter: (1) Experimental Setup as
 Refs:  #87-#103; #125; THESIS_NOTES §21; eval_results/sweep_anytime/
 
 ================================================================================
-#122  [Structural] [THESIS]  No Implementation chapter — the built system is undocumented
+#122  [Structural] [THESIS]  No Implementation chapter — the built system is undocumented [REJECTED]
 ================================================================================
 Where: new chapter; §4 approach.tex
 What:  §4 "Approach" describes a DESIGN — "we propose", and §4.4 states outright
@@ -1666,6 +1666,12 @@ Fix:   Add an Implementation chapter. Keep §4 as the conceptual approach;
        describe the real system in the new chapter. Reconcile #64-#83 against
        it, rather than as 20 isolated sentence-patches.
 Refs:  #64-#83; THESIS_NOTES §1-§20
+Note:  [REJECTED] 2026-05-19 — a separate Implementation chapter is not added.
+       The #64-#83 reconciliation was instead carried out within §4 itself: the
+       §4.3 and §4.5 rewrites now describe the built system (the real PDDL
+       domain and sense action, the four streams, optimistic sensing, the boxel
+       pipeline). A separate Implementation chapter would duplicate §4. A
+       placeholder stub was created then removed (commits 91a04da, 4f6cda6).
 
 ================================================================================
 #123  [Structural] [THESIS]  No "Limitations / Accepted Simplifications" section
