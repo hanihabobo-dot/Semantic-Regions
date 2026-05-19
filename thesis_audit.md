@@ -540,7 +540,7 @@ Fix:   "Representing space is harder under partial observability, because the
        robot must also represent what it does not yet know."
 
 ================================================================================
-#48  [T2 · Style] [POLISH]  Voxelization lead-in — second sentence restates the first
+#48  [T2 · Style] [POLISH]  Voxelization lead-in — second sentence restates the first  [DONE]
 ================================================================================
 Where: §2.4.1 — background.tex:136
 What:  "Robots operate in continuous spaces, but many planning algorithms ...
