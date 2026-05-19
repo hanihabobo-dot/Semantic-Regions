@@ -99,21 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#87  [T1 · Deviation] [THESIS]  §5.3 "Fixed Semantic Regions" baseline does not exist — it was killed
-================================================================================
-Where: §5.3 — evaluation.tex:26
-What:  §5.3 lists three baselines and describes the second as live: "Fixed
-       Semantic Regions: A baseline using a fixed, pre-defined set of Critical
-       Regions (inspired by [shah2022abstractions])..." CODEBASE_AUDIT.txt #11
-       is [WONTFIX] — this baseline was killed; no fixed-region generator
-       exists, and run_logger.py's --baseline choices are only
-       semantic / uniform.
-Fix:   Remove baseline (2) from the §5.3 enumeration, or relabel it future work.
-       If retained as a contrast, note the tray entity (audit #49) is the
-       closest shipped analogue of a fixed labelled region.
-Refs:  CODEBASE_AUDIT.txt #11; THESIS_NOTES §9
-
-================================================================================
 #88  [T1 · Deviation] [THESIS]  §5.3 TAMPURA baseline is not a re-implementation — only two published numbers are used
 ================================================================================
 Where: §5.3 — evaluation.tex:27
@@ -570,12 +555,12 @@ Refs:  #135 #137
 OPEN ISSUES
 ================================================================================
 
-34 issues remain open. Each issue's header carries its tier (T0-T3) and
+33 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§5 Evaluation:   #87 #88 #89 #90 #91 #92 #93 #94 #95 #96 #97 #98 #99 #100
+§5 Evaluation:   #88 #89 #90 #91 #92 #93 #94 #95 #96 #97 #98 #99 #100
                  #101 #102 #103 #104 #105 #106 #107 #108 #109 #110 #111
 Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138
 
