@@ -401,7 +401,7 @@ Fix:   Clarify (here or by deferring to §4) that sensing is a symbolic action
 Refs:  THESIS_NOTES §3
 
 ================================================================================
-#26  [T1 · Deviation] [THESIS]  §1 implies a sound belief search; the build has a 3-strike false-negative give-up
+#26  [T1 · Deviation] [THESIS]  §1 implies a sound belief search; the build has a 3-strike false-negative give-up [DONE]
 ================================================================================
 Where: §1 introduction.tex:18-23; §2.2.1 background.tex:85 ("observations
        prune it")
