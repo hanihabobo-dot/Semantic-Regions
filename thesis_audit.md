@@ -742,7 +742,7 @@ What:  "This is done through three key components:" and "This is done by
 Fix:   See #58 (line 9) and #59 (line 13) — both remove the connector.
 
 ================================================================================
-#81  [T3 · Deviation] [THESIS]  §4.2 free-space merge is convex-only — over-segments vs the "task-relevant/scalable" framing
+#81  [T3 · Deviation] [THESIS]  §4.2 free-space merge is convex-only — over-segments vs the "task-relevant/scalable" framing  [DONE]
 ================================================================================
 Where: §4.2 — approach.tex:30, 32
 What:  §4.2 implies a small set of meaningful task-relevant free-space
