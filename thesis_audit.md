@@ -1092,7 +1092,7 @@ Fix:   "from the fixed camera viewpoint"; note shadow geometry is computed at
 Refs:  THESIS_NOTES §3, §8, §10
 
 ================================================================================
-#80  [T3 · Deviation] [THESIS]  §4.2 step 2 / Fig 2(c) "a new, distinct Boxel" singular
+#80  [T3 · Deviation] [THESIS]  §4.2 step 2 / Fig 2(c) "a new, distinct Boxel" singular [DONE]
 ================================================================================
 Where: §4.2 step 2 — approach.tex:28; Fig 2(c) caption
 What:  Step 2 says an occluder's occluded space "is calculated and designated as
