@@ -1420,6 +1420,21 @@ Fix:   Settle a single label-prefix convention. Best handled during the
        \label and its \cref/\ref sites together.
 Refs:  #135 #137
 
+================================================================================
+#139  [T3 · Build] [THESIS]  references.bib LAO* title uses U+2217 — missing glyph
+================================================================================
+Where: references.bib:205 (hansen2001lao)
+What:  The hansen2001lao title contains a literal U+2217 ASTERISK OPERATOR
+       (rendered "LAO" followed by the operator). STIXTwoText, the body and
+       bibliography font, has no glyph for U+2217, so LuaLaTeX emits a
+       "Missing character: There is no U+2217" warning and the asterisk does
+       not appear in the printed References list. Surfaced once the #131 fix
+       let the build exit 0 and stop masking warnings; the entry became
+       visible in the bibliography after hansen2001lao was cited in #116.
+Fix:   Replace the U+2217 character in the title with a plain ASCII asterisk
+       ("LAO*"), the standard rendering of the algorithm name.
+Refs:  #116 #131
+
 
 ================================================================================
 SUMMARY BY TIER  (updated 2026-05-17)
