@@ -1122,7 +1122,7 @@ Fix:   Note that free-space merging is convex-only (aligned-face), producing
 Refs:  THESIS_NOTES §7
 
 ================================================================================
-#82  [T3 · Deviation] [THESIS]  §4.3 state example K(InBoxel(obj_k, Boxel_j)) uses a non-existent relation
+#82  [T3 · Deviation] [THESIS]  §4.3 state example K(InBoxel(obj_k, Boxel_j)) uses a non-existent relation [DONE]
 ================================================================================
 Where: §4.3 — approach.tex:41, 43
 What:  §4.3's state-proposition example "K(InBoxel(obj_k, Boxel_j))" uses the
