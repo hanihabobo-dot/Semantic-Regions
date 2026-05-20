@@ -202,12 +202,52 @@ SCALABILITY_VS_TIME = [
     },
 ]
 
+# audit #98 — coarse-end resolution sweep, sibling of SCALABILITY_VS_TIME.
+# Probes min_boxel_size at 1.5x and 2x the per-scene auto_cell to
+# characterise the resolution-vs-success curve ABOVE the audit-#67
+# auto_cell floor (SCALABILITY_VS_TIME only sweeps at-or-below it).
+# Per audit #98 Fix Step 1 option (b): per-scene numeric mbs values —
+# random-pairs auto_cell ~9 cm so 1.5x / 2x = 0.135 / 0.18 m; stack
+# auto_cell ~6 cm so 1.5x / 2x = 0.09 / 0.12 m.  Uniform arm omitted —
+# its cell size is hard-clamped to auto_cell by audit #66 and cannot
+# move along the resolution axis.  Cell count: 100 corpus seeds x 3
+# difficulty points x 2 random-pairs goals x 2 mbs values = 1200 cells
+# for random-pairs; + 100 x 3 (stack_height) x 1 goal x 2 mbs = 600
+# cells for stack; 1800 cells total.  Output dir defaults to
+# eval_results/sweep_<timestamp>_scalability-vs-resolution; pass
+# --output eval_results/sweep_anytime to merge into the existing sweep
+# (--skip-existing reuses already-completed cells safely).
+SCALABILITY_VS_RESOLUTION = [
+    {  # semantic, occluder-driven goals — coarse-end sweep
+        "n_occluders":        [2, 3, 4],
+        "seed":               _CORPUS_SEEDS,
+        "goal":               ["holding", "find-and-tray-stack"],
+        "baseline":           ["semantic"],
+        "min_boxel_size":     [0.135, 0.18],
+        "unit_costs":         [False],
+        "scene":              ["random-pairs"],
+        "_n_hidden_strategy": "none",
+    },
+    {  # semantic, stack goal — coarse-end sweep
+        "n_occluders":        [2, 3, 4],
+        "n_targets":          [3],
+        "seed":               _CORPUS_SEEDS,
+        "goal":               ["stack"],
+        "baseline":           ["semantic"],
+        "min_boxel_size":     [0.09, 0.12],
+        "unit_costs":         [False],
+        "scene":              ["stack"],
+        "_n_hidden_strategy": "none",
+    },
+]
+
 MATRIX_PRESETS = {
-    "scalability":         SCALABILITY_MATRIX,
-    "smoke":               SMOKE_MATRIX,
-    "default":             DEFAULT_MATRIX,
-    "random-pairs":        RANDOM_PAIRS_MATRIX,
-    "scalability-vs-time": SCALABILITY_VS_TIME,
+    "scalability":               SCALABILITY_MATRIX,
+    "smoke":                     SMOKE_MATRIX,
+    "default":                   DEFAULT_MATRIX,
+    "random-pairs":              RANDOM_PAIRS_MATRIX,
+    "scalability-vs-time":       SCALABILITY_VS_TIME,
+    "scalability-vs-resolution": SCALABILITY_VS_RESOLUTION,
 }
 
 
