@@ -526,9 +526,13 @@ def plot_boxel_volume_histogram(
         hi = lo + 1.0
     bins = [10 ** (lo + (hi - lo) * i / 30) for i in range(31)]
 
+    # Per-panel y-axis: uniform's ~50k-count free-space spike used to
+    # dominate a shared-y plot and flatten the semantic distribution
+    # visually.  sharex is preserved so the log-volume bins align
+    # across panels.
     fig, axes = plt.subplots(1, len(baselines),
                              figsize=(5 * len(baselines), 4.5),
-                             sharey=True, sharex=True)
+                             sharex=True)
     if len(baselines) == 1:
         axes = [axes]
     for ax, baseline in zip(axes, baselines):
@@ -830,9 +834,16 @@ def plot_wallclock_vs_planning(
         print(f"[plotter] no data for {title}")
         return None
 
+    # --max-plan-time default (run_logger.py:504) — the per-cell
+    # wall-clock budget cap.  Pin the scatter range to [0, CAP_S] on
+    # both axes so the y=x reference line spans the full square and
+    # the empty region in the upper-left ("planning fast, wall-clock
+    # slow") and the unreachable lower-right ("wall-clock < planning")
+    # are visible at a glance.
+    CAP_S = 1800.0
+
     baseline_colors = {"semantic": "#1f77b4", "uniform": "#ff7f0e"}
     fig, ax = plt.subplots(figsize=(7, 5.5))
-    all_max = 0.0
     for baseline in baselines:
         pairs = grouped[baseline]
         if not pairs:
@@ -843,18 +854,16 @@ def plot_wallclock_vs_planning(
                    c=baseline_colors.get(baseline),
                    edgecolors="black", linewidths=0.4,
                    label=f"{baseline} (n={len(pairs)})")
-        all_max = max(all_max, max(xs), max(ys))
 
-    if all_max > 0:
-        diag = [0, all_max]
-        ax.plot(diag, diag, linestyle="--", color="gray",
-                linewidth=1.0, alpha=0.7, label="y = x (pure planning)")
+    diag = [0, CAP_S]
+    ax.plot(diag, diag, linestyle="--", color="gray",
+            linewidth=1.0, alpha=0.7, label="y = x (pure planning)")
 
     ax.set_xlabel("total planning time (s)")
     ax.set_ylabel("wall clock (s)")
     ax.set_title(title)
-    ax.set_xlim(left=0)
-    ax.set_ylim(bottom=0)
+    ax.set_xlim(0, CAP_S)
+    ax.set_ylim(0, CAP_S)
     ax.grid(True, alpha=0.3)
     ax.legend(loc="best")
     fig.tight_layout()
@@ -1575,6 +1584,17 @@ def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
                   for m, s in zip(means, stds)]
             ax.fill_between(xs, lo, hi, alpha=0.18,
                             color=line.get_color())
+            # Annotate per-point sample size when n is small (success-
+            # only metrics can leave a "trend" line riding on n=1
+            # outliers — e.g. uniform/f-a-t-s/occ=4 had 1/100 success,
+            # 533 s).  Threshold 5 hides the routine n~100 case and
+            # surfaces the suspicious ones.
+            for x_val, m in zip(xs, means):
+                n = len(xy[x_val])
+                if n <= 5:
+                    ax.annotate(f"n={n}", xy=(x_val, m),
+                                xytext=(5, 5), textcoords="offset points",
+                                fontsize=8, color=line.get_color())
 
     _plot(grouped, main_label_suffix, "-")
     if baseline_grouped is not None:
