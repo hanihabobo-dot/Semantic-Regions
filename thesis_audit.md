@@ -228,19 +228,121 @@ Fix:   One of, ideally both:
 Refs:  CODEBASE_AUDIT.txt #77 #93 #97
 
 
+################################################################################
+#  ISSUES — ADDED 2026-05-20  (EVAL WRITE-UP)
+################################################################################
+
+The sweep in eval_results/sweep_anytime/ is ~94% complete (CODEBASE_AUDIT.txt
+#93). These issues take the raw data and turn it into chapters. Together
+they subsume the relevant parts of #121, #125, and the eval-anchored bits
+of #126/#127 --- once all five land, those umbrellas can be removed.
+
+================================================================================
+#141  [Eval] [THESIS]  Read every sweep plot and write per-plot lessons
+================================================================================
+Where: eval_results/sweep_anytime/ --- 24 per-goal plots (3 goals x 8 types)
+       plus 5 cross-goal plots (failure_modes, plan_count_distribution,
+       tampura_wallclock_comparison, solved_vs_time, solved_vs_time_linear);
+       new notes/PLOT_LESSONS.md.
+What:  Plot interpretation currently lives in the author's head and scattered
+       notes. Without a consolidated record, #142-#145 risk writing claims
+       the data does not actually support, or missing claims it does.
+Fix:   Walk through each plot in eval_results/sweep_anytime/ (skip the
+       _pre_fix_99/ archive and plots_preliminary/). Write notes/
+       PLOT_LESSONS.md with one short paragraph per plot stating: what it
+       shows, the headline number or pattern, and which thesis claim it
+       supports or undermines. Cross-check the mbs0.05-null finding (#140)
+       against the actual curves rather than relying on summary stats.
+Refs:  #121 #125 #140 #142 #143 #144 #145; CODEBASE_AUDIT.txt #93
+
+================================================================================
+#142  [Thesis] [THESIS]  Write the "Experimental Setup" section of Results as built
+================================================================================
+Where: thesis/chapters/results.tex --- the current "Experimental Setup"
+       \section is forward-looking ("we will vary the number of occluders").
+What:  The setup must report what was actually run: hardware, # seeds, time
+       budget per call, sweep grid (variants x goals x n_occluders), time
+       budget anytime tracks, seed-pairing across variants, what was
+       excluded from the analysis, software versions. None of this is in
+       the text yet; the prose is proposal voice.
+Fix:   Rewrite the section in past/present indicative. Document the
+       hardware, the exact sweep grid as run (3 goals x N variants x
+       n_occluders in {...}; M seeds each; T-second anytime budget), the
+       semantic / semantic+mbs0.05 / uniform / TAMPURA-published variants,
+       what was held fixed across seed pairs, software versions, and the
+       single excluded condition if any. Resolves the procedure part of
+       #121 and the results.tex pieces of #126.
+Refs:  #121 #126 #141; THESIS_NOTES sweep_anytime
+
+================================================================================
+#143  [Thesis] [THESIS]  Write the "Results" section with figures, tables, and numbers
+================================================================================
+Where: thesis/chapters/results.tex --- new section between Experimental
+       Setup and Baselines.
+What:  results.tex contains no actual numbers, figures, or tables. The
+       PNGs exist in eval_results/sweep_anytime/; the prose that interprets
+       them does not.
+Fix:   Add a Results section that embeds the headline plots
+       (success_rate_vs_n_occluders, planning_time_vs_n_occluders,
+       boxel_count_breakdown, init_state_facts_vs_n_occluders,
+       solved_vs_time, tampura_wallclock_comparison, failure_modes) as
+       figures, with one-paragraph commentary on each. Add a headline-
+       numbers table --- success rate and median planning time per goal x
+       variant. Carry over the #141 lessons. Resolves the results part of
+       #121.
+Refs:  #121 #140 #141 #142; eval_results/sweep_anytime/
+
+================================================================================
+#144  [Thesis] [THESIS]  Write the Discussion chapter content
+================================================================================
+Where: thesis/chapters/discussion.tex --- replace the lorem ipsum placeholder
+       above the Limitations section.
+What:  The Discussion chapter has no interpretive content yet. The
+       Limitations subsection is in place, but the chapter has to actually
+       discuss results: where semantic beats / matches / loses to uniform;
+       what the TAMPURA bar shows architecturally (offline Learn-Model vs
+       online stream sampling --- THESIS_NOTES sec.21, NOT a hardware
+       comparison); failure-mode patterns from the failure_modes plot; the
+       mbs0.05 null finding (#140); threats to validity.
+Fix:   Write the discussion content from #141 + #143. Frame the TAMPURA
+       comparison architecturally per THESIS_NOTES sec.21. Address mbs0.05
+       honestly per #140(b). Leave the existing Limitations section
+       in place. Resolves #125.
+Refs:  #125 #140 #141 #143; THESIS_NOTES sec.21
+
+================================================================================
+#145  [Thesis] [THESIS]  Close out Conclusion and Abstract with eval-supported claims
+================================================================================
+Where: thesis/chapters/conclusion.tex (above the Future Work section);
+       thesis/chapters/abstract.tex.
+What:  Both chapters currently state contributions without referring to the
+       actual eval outcomes. The abstract claims the framework "scales
+       better than uniform voxelization" with no number attached; the
+       conclusion says "Future work will focus on..." without first
+       summarizing what the demonstrated work showed.
+Fix:   Update the conclusion to summarize the demonstrated contribution
+       with the #143 headline numbers (semantic vs uniform; the TAMPURA
+       architectural finding; the mbs0.05 null result). Rewrite the
+       abstract per #127 with 1-2 sentences of headline results. Closes the
+       remaining proposal-voice items of #126/#127 in these chapters.
+Refs:  #126 #127 #143 #144
+
+
 ================================================================================
 OPEN ISSUES
 ================================================================================
 
-6 issues remain open. Each issue's header carries its tier (T0-T3) and
+11 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Structural:      #121 #125 #126 #127 #130 #140
+Structural:      #121 #125 #126 #127 #130 #140 #141 #142 #143 #144 #145
 
-Gating: #121/#125/#127/#140 depend on the eval sweep being final;
-#126/#130 are now unblocked (the i6 thesis template has been obtained
-and the proposal-template content has been migrated into thesis/).
-All §5 sentence-level polish issues (#87-#111) have been resolved and
-removed; their structural successor is #121.
+Gating: #141 is the first concrete step and is unblocked --- walking the
+plots produces the data backbone for #142-#145. #142-#145 then chain off
+#141 in order. #130's remaining items (real submission date, appendix
+decision) are independent and need user input. #121/#125/#127 are
+umbrellas that #141-#145 subdivide; remove them after all five land.
+The §5 sentence-level polish issues (#87-#111) were resolved earlier
+in the audit walkthrough.
