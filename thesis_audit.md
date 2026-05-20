@@ -109,25 +109,6 @@ Fix:   "We evaluate the framework in a simulated robotic manipulation
        environment, described below."
 
 ================================================================================
-#100  [T2 · Style] [POLISH]  §5.2 — "To facilitate direct comparison with state-of-the-art approaches"
-================================================================================
-Where: §5.2 — evaluation.tex:14
-What:  "To facilitate direct comparison with state-of-the-art approaches, we
-       plan to adopt evaluation metrics similar to those used for TAMPURA."
-       Wordy lead-in; "state-of-the-art" is filler since TAMPURA is named next.
-Fix:   "For comparability, we adopt evaluation metrics similar to TAMPURA's."
-
-================================================================================
-#101  [T2 · Style] [POLISH]  §5.2 — "This helps assess the efficiency of the generated plans"
-================================================================================
-Where: §5.2 — evaluation.tex:18
-What:  "Plan Quality / Cost: ... This helps assess the efficiency of the
-       generated plans." The second sentence says the plan-cost metric measures
-       plan efficiency — true by definition.
-Fix:   Delete the second sentence; the metric name and parenthetical already
-       explain it.
-
-================================================================================
 #102  [T2 · Style] [POLISH]  §5.2 — "This will be a key metric for evaluating the tractability"
 ================================================================================
 Where: §5.2 — evaluation.tex:17
@@ -450,13 +431,12 @@ Refs:  CODEBASE_AUDIT.txt #77 #93 #97
 OPEN ISSUES
 ================================================================================
 
-23 issues remain open. Each issue's header carries its tier (T0-T3) and
+21 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§5 Evaluation:   #99 #100 #101 #102 #103 #104 #105 #106 #107 #108 #109 #110
-                 #111
+§5 Evaluation:   #99 #102 #103 #104 #105 #106 #107 #108 #109 #110 #111
 Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138 #140
 
 Gating: the §5 issues (#87-#111) are subsumed by the #121 evaluation rewrite;
