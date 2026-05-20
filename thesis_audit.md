@@ -122,22 +122,6 @@ Fix:   One document-wide pass: convert completed work to past/present voice;
        §5.4 to proposal voice.
 Refs:  #1 #16 #104; #127 #128
 
-================================================================================
-#130  [Build] [THESIS]  Thesis front and back matter is missing
-================================================================================
-Where: main.tex; resources/title.tex; resources/acronyms.tex; sections/appendix.tex
-What:  main.tex has no thesis front/back matter. \date{\today} (main.tex:10)
-       still carries a "TODO use \formatdate" note. sections/appendix.tex
-       exists but is commented out (main.tex:26-27).
-Fix:   Add what an RWTH Master's thesis requires: a declaration of authorship
-       (Eidesstattliche Versicherung); a proper title page (examiners,
-       institute, real submission date — replace \date{\today}); a table of
-       contents; a list of figures; a list of tables; optionally
-       acknowledgements; a printed acronyms list (resources/acronyms.tex
-       already exists). Decide the appendix content (e.g. the full PDDL domain,
-       parameter tables, extra plots) or remove the commented-out stub.
-Refs:  main.tex:10,26-27; #117 #129
-
 ################################################################################
 #  ISSUES --- ADDED 2026-05-20  (SIM-SCREENSHOT FIGURE PLACEMENT)
 ################################################################################
@@ -311,22 +295,22 @@ Refs:  #146-#154
 OPEN ISSUES
 ================================================================================
 
-12 issues remain open. Each issue's header carries its tier (T0-T3) and
+11 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Structural:      #126 #130
+Structural:      #126
 Figure placement: #146 #147 #148 #149 #150 #151 #152 #153 #154 #155
 
-Gating: #141-#145 and #156 done --- all eval-write-up content (Results,
-Discussion, abstract + conclusion closure) is in thesis/, and the
-chapters are clear of internal file-path and hardware-spec clutter.
-#125, #140, #121, #127 were closed jointly. #130's remaining items
-(real submission date, appendix decision) need user input. #126
-(document-wide forward-voice conversion) is left open as a final
-verification pass since the chapters individually are already
-retrospective. The §5 sentence-level polish issues (#87-#111) were
-resolved earlier in the audit walkthrough. Figure-placement issues
-#146-#154 are all gated by #155 (screenshot curation); #155 is
-independent and can be done in any order against the others.
+Gating: #141-#145, #130, and #156 done --- all eval-write-up content
+(Results, Discussion, abstract + conclusion closure) is in thesis/, the
+chapters are clear of internal file-path and hardware-spec clutter, and
+the front/back matter (submission date, PDDL appendix) is in place.
+#125, #140, #121, #127 were closed jointly. #126 (document-wide
+forward-voice conversion) is left open as a final verification pass
+since the chapters individually are already retrospective. The §5
+sentence-level polish issues (#87-#111) were resolved earlier in the
+audit walkthrough. Figure-placement issues #146-#154 are all gated by
+#155 (screenshot curation); #155 is independent and can be done in any
+order against the others.
