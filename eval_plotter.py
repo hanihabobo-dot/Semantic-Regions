@@ -57,6 +57,37 @@ EXIT_REASON_COLOUR = {
 }
 
 
+# Audit #99 — variant tag combining baseline + min_boxel_size.  The
+# legacy plotter keyed off ``baseline`` only ("semantic" vs "uniform"),
+# silently averaging mbs=None and mbs=0.05 semantic cells in every
+# line/bar/histogram on a SCALABILITY_VS_TIME sweep.  Switching the
+# per-row key to a variant tag splits the resolution arms back out.
+# Old sweeps without min_boxel_size collapse to {"semantic", "uniform"}
+# just like before, so existing plots regenerate byte-similarly.
+def _row_variant(r: dict) -> str:
+    baseline = r.get("baseline") or "semantic"
+    if baseline == "uniform":
+        return "uniform"
+    mbs = r.get("min_boxel_size")
+    if mbs in (None, ""):
+        return "semantic"
+    try:
+        return f"semantic+mbs{float(mbs):g}"
+    except (TypeError, ValueError):
+        return "semantic"
+
+
+# Audit #99 — variant colour map aligned with plot_solved_vs_time's
+# _variant_style (#94) so legends stay consistent across plots.
+# Unknown variants (e.g. future mbs values) fall back to matplotlib's
+# default colour cycle via the .get() callers.
+_VARIANT_COLOUR = {
+    "semantic":         "#1f77b4",   # blue
+    "semantic+mbs0.05": "#ff7f0e",   # orange
+    "uniform":          "#7f7f7f",   # grey
+}
+
+
 def load_rows(csv_path: Path) -> List[dict]:
     rows: List[dict] = []
     with csv_path.open(encoding="utf-8") as f:
@@ -81,6 +112,9 @@ def load_rows(csv_path: Path) -> List[dict]:
                     except ValueError:
                         pass
             r["success"] = (str(r.get("success")).strip().lower() == "true")
+            # Audit #99 — pre-compute variant key so downstream
+            # groupers don't silently average across resolution arms.
+            r["_variant"] = _row_variant(r)
             rows.append(r)
     return rows
 
@@ -100,9 +134,14 @@ def load_jsonl_rows(jsonl_path: Path) -> List[dict]:
             if not line:
                 continue
             try:
-                rows.append(json.loads(line))
+                r = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            # Audit #99 — variant tag mirrors the CSV loader so the
+            # jsonl-only plots (volume histogram, per-call planning
+            # time, boxel evolution) split mbs arms the same way.
+            r["_variant"] = _row_variant(r)
+            rows.append(r)
     return rows
 
 
@@ -162,7 +201,12 @@ def group_by_scene_goal_baseline(
     metric: Optional[str] = None,
     success_only: bool = True,
 ) -> Dict[tuple, Dict[str, List[float]]]:
-    """Returns ``{(scene, goal): {baseline: [samples]}}``.
+    """Returns ``{(scene, goal): {variant: [samples]}}``.
+
+    Audit #99 — sub-key was ``baseline`` ("semantic" / "uniform"),
+    now the variant tag that also splits min_boxel_size.  Old
+    sweeps without mbs collapse to the same 2 keys; new sweeps
+    surface mbs arms separately.
 
     ``metric=None`` -> samples are 1.0/0.0 success flags (for success
     rate plots).  Otherwise samples are the per-cell metric value;
@@ -172,9 +216,9 @@ def group_by_scene_goal_baseline(
     for r in rows:
         scene = r.get("scene")
         goal = r.get("goal")
-        baseline = r.get("baseline") or "semantic"
+        variant = r.get("_variant") or _row_variant(r)
         if metric is None:
-            out[(scene, goal)][baseline].append(
+            out[(scene, goal)][variant].append(
                 1.0 if r.get("success") else 0.0
             )
             continue
@@ -184,7 +228,7 @@ def group_by_scene_goal_baseline(
         if v in (None, ""):
             continue
         try:
-            out[(scene, goal)][baseline].append(float(v))
+            out[(scene, goal)][variant].append(float(v))
         except (TypeError, ValueError):
             continue
     return out
@@ -351,16 +395,29 @@ def group_boxel_counts(rows: List[dict],
             x = int(r["n_occluders"])
         except (KeyError, TypeError, ValueError):
             continue
-        baseline = r.get("baseline") or "semantic"
+        # Audit #99 — variant key splits mbs=None / mbs=0.05 / uniform.
+        variant = r.get("_variant") or _row_variant(r)
         for k, col in type_cols.items():
             v = r.get(col)
             if v in (None, ""):
                 continue
             try:
-                out[baseline][x][k].append(int(v))
+                out[variant][x][k].append(int(v))
             except (TypeError, ValueError):
                 continue
     return out
+
+
+# Audit #99 — per-variant alpha + hatch so the stacked bar legend
+# distinguishes semantic-auto, semantic+mbs, and uniform at a glance.
+def _variant_bar_style(variant: str) -> tuple:
+    if variant == "semantic":
+        return (1.0, None)
+    if variant.startswith("semantic+mbs"):
+        return (0.85, "//")
+    if variant == "uniform":
+        return (0.55, None)
+    return (0.7, "..")
 
 
 def plot_boxel_count_breakdown(
@@ -368,31 +425,31 @@ def plot_boxel_count_breakdown(
     title: str,
     out_path: Path,
 ) -> Optional[Path]:
-    """Stacked bars OBJECT / SHADOW / FREE_SPACE by n_occluders;
-    semantic and uniform shown side-by-side per X position.
+    """Stacked bars OBJECT / SHADOW / FREE_SPACE by n_occluders; one
+    side-by-side group per variant (semantic / semantic+mbs* / uniform).
 
     Audit #73 TIER A plot 1 — the compactness pillar's headline figure.
-    Uniform's bar grows with n_occluders × workspace_vol / cell_size^3;
-    semantic's grows linearly with (OBJECT + SHADOW) counts.
+    Audit #99 — variant axis replaces the legacy baseline axis so the
+    mbs resolution arms are visible as separate bars.
     """
     if not HAVE_MPL:
         print(f"\n=== {title} (matplotlib not available) ===")
-        for baseline in sorted(grouped):
-            for x in sorted(grouped[baseline]):
-                parts = grouped[baseline][x]
+        for variant in sorted(grouped):
+            for x in sorted(grouped[variant]):
+                parts = grouped[variant][x]
                 summary = ", ".join(
                     f"{k}={mean(parts[k]):.1f}" if parts.get(k) else f"{k}=-"
                     for k in ("object", "shadow", "free_space"))
-                print(f"  {baseline}/n_occluders={x}: {summary}")
+                print(f"  {variant}/n_occluders={x}: {summary}")
         return None
 
-    baselines = sorted(grouped.keys())
-    xs_all = sorted({x for b in baselines for x in grouped[b]})
+    variants = sorted(grouped.keys())
+    xs_all = sorted({x for v in variants for x in grouped[v]})
     if not xs_all:
         print(f"[plotter] no data for {title}")
         return None
-    n_baselines = max(len(baselines), 1)
-    bar_w = 0.8 / n_baselines
+    n_variants = max(len(variants), 1)
+    bar_w = 0.8 / n_variants
     type_keys = ["object", "shadow", "free_space"]
     type_colors = {"object": "#1f77b4",
                    "shadow": "#ff7f0e",
@@ -402,17 +459,18 @@ def plot_boxel_count_breakdown(
                    "free_space": "FREE_SPACE"}
 
     fig, ax = plt.subplots(figsize=(max(6, 1.8 * len(xs_all)), 5))
-    for i, baseline in enumerate(baselines):
-        offsets = [x + (i - (n_baselines - 1) / 2) * bar_w for x in xs_all]
+    for i, variant in enumerate(variants):
+        alpha, hatch = _variant_bar_style(variant)
+        offsets = [x + (i - (n_variants - 1) / 2) * bar_w for x in xs_all]
         bottoms = [0.0] * len(xs_all)
         for tk in type_keys:
             means = []
             for x in xs_all:
-                samples = grouped[baseline].get(x, {}).get(tk, [])
+                samples = grouped[variant].get(x, {}).get(tk, [])
                 means.append(mean(samples) if samples else 0.0)
             ax.bar(offsets, means, bar_w, bottom=bottoms,
                    color=type_colors[tk],
-                   alpha=1.0 if baseline == "semantic" else 0.55,
+                   alpha=alpha, hatch=hatch,
                    edgecolor="black", linewidth=0.5)
             bottoms = [b + m for b, m in zip(bottoms, means)]
 
@@ -430,13 +488,13 @@ def plot_boxel_count_breakdown(
     from matplotlib.patches import Patch
     handles = [Patch(facecolor=type_colors[tk], label=type_labels[tk])
                for tk in type_keys]
-    if len(baselines) > 1:
-        handles += [
-            Patch(facecolor="lightgrey", edgecolor="black",
-                  label="semantic (solid)"),
-            Patch(facecolor="lightgrey", edgecolor="black",
-                  alpha=0.55, label="uniform (faded)"),
-        ]
+    if len(variants) > 1:
+        for variant in variants:
+            alpha, hatch = _variant_bar_style(variant)
+            handles.append(Patch(
+                facecolor="lightgrey", edgecolor="black",
+                alpha=alpha, hatch=hatch, label=variant,
+            ))
     ax.legend(handles=handles, loc="best")
     fig.tight_layout()
     fig.savefig(out_path, dpi=120)
@@ -448,13 +506,11 @@ def plot_boxel_count_breakdown(
 def group_boxel_volumes(rows: List[dict],
                         goal: Optional[str] = None
                         ) -> Dict[str, Dict[str, List[float]]]:
-    """``{baseline: {type_key: [all volumes pooled across cells]}}``.
+    """``{variant: {type_key: [all volumes pooled across cells]}}``.
 
-    Audit #73 TIER A plot 3 data prep.  Pools volumes across cells
-    within a (baseline, goal) bucket — the histogram shows the
-    DISTRIBUTION of boxel sizes the planner sees, regardless of
-    which cell produced any particular sample.  ``type_key`` ∈
-    {"object", "shadow", "free_space"}.
+    Audit #73 TIER A plot 3 data prep; audit #99 — sub-key is now the
+    variant tag instead of baseline so the histogram doesn't pool
+    mbs=None and mbs=0.05 cells into one panel.
     """
     out: Dict = defaultdict(lambda: defaultdict(list))
     vol_cols = {
@@ -465,13 +521,13 @@ def group_boxel_volumes(rows: List[dict],
     for r in rows:
         if goal is not None and r.get("goal") != goal:
             continue
-        baseline = r.get("baseline") or "semantic"
+        variant = r.get("_variant") or _row_variant(r)
         for k, col in vol_cols.items():
             vs = r.get(col)
             if not vs:
                 continue
             try:
-                out[baseline][k].extend(float(v) for v in vs)
+                out[variant][k].extend(float(v) for v in vs)
             except (TypeError, ValueError):
                 continue
     return out
@@ -482,28 +538,27 @@ def plot_boxel_volume_histogram(
     title: str,
     out_path: Path,
 ) -> Optional[Path]:
-    """Side-by-side histograms (semantic | uniform) of boxel
+    """Side-by-side histograms (one panel per variant) of boxel
     volumes, overlaid by type.  Log-x because volumes span 3-4
     decades (OBJECT ~1e-5 m³ vs FREE_SPACE ~1e-2 m³).
 
-    Audit #73 TIER A plot 3 — heterogeneity proof.  Semantic should
-    show a wide spread (a few big FREE_SPACE + many small OBJECT/
-    SHADOW); uniform by construction shows a narrow spike at
-    cell_size³.
+    Audit #73 TIER A plot 3 — heterogeneity proof.  Audit #99 — one
+    panel per variant (semantic / semantic+mbs* / uniform) instead
+    of one per baseline, so mbs arms get their own panel.
     """
     if not HAVE_MPL:
         print(f"\n=== {title} (matplotlib not available) ===")
-        for baseline in sorted(grouped):
-            for tk, vs in grouped[baseline].items():
+        for variant in sorted(grouped):
+            for tk, vs in grouped[variant].items():
                 if not vs:
                     continue
-                print(f"  {baseline}/{tk}: n={len(vs)}, "
+                print(f"  {variant}/{tk}: n={len(vs)}, "
                       f"min={min(vs):.6f}, max={max(vs):.6f}, "
                       f"mean={mean(vs):.6f}")
         return None
 
-    baselines = sorted(grouped.keys())
-    if not baselines:
+    variants = sorted(grouped.keys())
+    if not variants:
         print(f"[plotter] no data for {title}")
         return None
 
@@ -515,8 +570,8 @@ def plot_boxel_volume_histogram(
                    "shadow": "SHADOW",
                    "free_space": "FREE_SPACE"}
 
-    all_vols = [v for b in baselines for tk in type_keys
-                for v in grouped[b].get(tk, []) if v > 0]
+    all_vols = [v for w in variants for tk in type_keys
+                for v in grouped[w].get(tk, []) if v > 0]
     if not all_vols:
         print(f"[plotter] no positive volumes for {title}")
         return None
@@ -530,14 +585,14 @@ def plot_boxel_volume_histogram(
     # dominate a shared-y plot and flatten the semantic distribution
     # visually.  sharex is preserved so the log-volume bins align
     # across panels.
-    fig, axes = plt.subplots(1, len(baselines),
-                             figsize=(5 * len(baselines), 4.5),
+    fig, axes = plt.subplots(1, len(variants),
+                             figsize=(5 * len(variants), 4.5),
                              sharex=True)
-    if len(baselines) == 1:
+    if len(variants) == 1:
         axes = [axes]
-    for ax, baseline in zip(axes, baselines):
+    for ax, variant in zip(axes, variants):
         for tk in type_keys:
-            vs = [v for v in grouped[baseline].get(tk, []) if v > 0]
+            vs = [v for v in grouped[variant].get(tk, []) if v > 0]
             if not vs:
                 continue
             ax.hist(vs, bins=bins, color=type_colors[tk],
@@ -545,7 +600,7 @@ def plot_boxel_volume_histogram(
                     label=f"{type_labels[tk]} (n={len(vs)})")
         ax.set_xscale("log")
         ax.set_xlabel("boxel volume (m³)")
-        ax.set_title(baseline)
+        ax.set_title(variant)
         ax.grid(True, axis="y", alpha=0.3)
         ax.legend(loc="upper right", fontsize=8)
     axes[0].set_ylabel("count")
@@ -561,12 +616,12 @@ def group_boxel_evolution_per_replan(
     rows: List[dict],
     goal: Optional[str] = None,
 ) -> Dict[str, List[List[dict]]]:
-    """``{baseline: [per_cell_trajectory, ...]}`` where each trajectory is
+    """``{variant: [per_cell_trajectory, ...]}`` where each trajectory is
     a list of ``{plan_index, n_object_boxels, n_shadow_boxels,
     n_free_space_boxels}`` dicts (one per planner.plan() call).
 
-    Audit #73 TIER A plot 11 data prep.  Reads jsonl rows only — the
-    boxel_counts_per_replan column is LIST_VALUED.
+    Audit #73 TIER A plot 11 data prep; audit #99 — key is variant not
+    baseline so mbs arms get their own panel.
     """
     out: Dict = defaultdict(list)
     for r in rows:
@@ -575,8 +630,8 @@ def group_boxel_evolution_per_replan(
         traj = r.get("boxel_counts_per_replan")
         if not traj:
             continue
-        baseline = r.get("baseline") or "semantic"
-        out[baseline].append(traj)
+        variant = r.get("_variant") or _row_variant(r)
+        out[variant].append(traj)
     return out
 
 
@@ -585,18 +640,16 @@ def plot_boxel_evolution_per_replan(
     title: str,
     out_path: Path,
 ) -> Optional[Path]:
-    """One panel per baseline: per-replan boxel count means with shaded
+    """One panel per variant: per-replan boxel count means with shaded
     +/-1 std bands, one line per type (OBJECT / SHADOW / FREE_SPACE).
 
-    Audit #73 TIER A plot 11 — adaptive-partition evolution.  Visualises
-    whether the partition actually mutates as occluders move and shadows
-    resolve across replans (semantic should drift; uniform should be
-    approximately flat).
+    Audit #73 TIER A plot 11 — adaptive-partition evolution; audit #99 —
+    one panel per variant instead of one per baseline.
     """
     if not HAVE_MPL:
         print(f"\n=== {title} (matplotlib not available) ===")
-        for baseline in sorted(grouped):
-            cells = grouped[baseline]
+        for variant in sorted(grouped):
+            cells = grouped[variant]
             indices = sorted({s["plan_index"] for c in cells for s in c})
             for pi in indices:
                 obj = [s["n_object_boxels"] for c in cells for s in c
@@ -606,14 +659,14 @@ def plot_boxel_evolution_per_replan(
                 fs = [s["n_free_space_boxels"] for c in cells for s in c
                       if s["plan_index"] == pi]
                 if obj:
-                    print(f"  {baseline}/plan#{pi}: "
+                    print(f"  {variant}/plan#{pi}: "
                           f"obj_mean={mean(obj):.1f} "
                           f"shd_mean={mean(shd):.1f} "
                           f"fs_mean={mean(fs):.1f} n={len(obj)}")
         return None
 
-    baselines = sorted(grouped.keys())
-    if not baselines or not any(grouped[b] for b in baselines):
+    variants = sorted(grouped.keys())
+    if not variants or not any(grouped[v] for v in variants):
         print(f"[plotter] no data for {title}")
         return None
 
@@ -628,16 +681,16 @@ def plot_boxel_evolution_per_replan(
                    "free_space": "FREE_SPACE"}
 
     fig, axes = plt.subplots(
-        1, len(baselines),
-        figsize=(5 * len(baselines), 4),
+        1, len(variants),
+        figsize=(5 * len(variants), 4),
         sharey=True, squeeze=False,
     )
     axes = axes[0]
-    for ax, baseline in zip(axes, baselines):
-        cells = grouped[baseline]
+    for ax, variant in zip(axes, variants):
+        cells = grouped[variant]
         indices = sorted({s["plan_index"] for c in cells for s in c})
         if not indices:
-            ax.set_title(f"{baseline} (no data)")
+            ax.set_title(f"{variant} (no data)")
             continue
         for tk, col in type_cols.items():
             means = []
@@ -653,7 +706,7 @@ def plot_boxel_evolution_per_replan(
                     label=type_labels[tk], marker="o", markersize=4)
             ax.fill_between(indices, lower, upper,
                             color=type_colors[tk], alpha=0.2)
-        ax.set_title(baseline)
+        ax.set_title(variant)
         ax.set_xlabel("plan index (replan)")
         ax.set_xticks(indices)
         ax.grid(True, axis="y", alpha=0.3)
@@ -672,15 +725,11 @@ def group_per_call_planning_time(
     rows: List[dict],
     goal: Optional[str] = None,
 ) -> Dict[str, List[List[float]]]:
-    """``{baseline: [per_cell_list, ...]}`` where each per_cell_list is one
-    cell's ``per_call_planning_time_s`` — one entry per planner.plan()
-    call.
+    """``{variant: [per_cell_list, ...]}`` where each per_cell_list is one
+    cell's ``per_call_planning_time_s``.
 
-    Audit #73 TIER C plot 7 data prep.  Reads jsonl rows only — the
-    per_call_planning_time_s column is LIST_VALUED in eval_runner.py.
-    Includes failed runs: every plan call gets timed regardless of
-    overall outcome, and a failure-correlated slowdown is itself a
-    finding.
+    Audit #73 TIER C plot 7 data prep; audit #99 — key is variant not
+    baseline so mbs arms get their own line.
     """
     out: Dict = defaultdict(list)
     for r in rows:
@@ -689,9 +738,9 @@ def group_per_call_planning_time(
         seq = r.get("per_call_planning_time_s")
         if not seq:
             continue
-        baseline = r.get("baseline") or "semantic"
+        variant = r.get("_variant") or _row_variant(r)
         try:
-            out[baseline].append([float(t) for t in seq])
+            out[variant].append([float(t) for t in seq])
         except (TypeError, ValueError):
             continue
     return out
@@ -702,21 +751,15 @@ def plot_per_call_planning_time(
     title: str,
     out_path: Path,
 ) -> Optional[Path]:
-    """One line per baseline; X = plan index (0 = first plan, 1 = first
+    """One line per variant; X = plan index (0 = first plan, 1 = first
     replan, ...); Y = mean per-call planning time with +/-1 std band.
 
-    Audit #73 TIER C plot 7 — per-call planning time vs replan index.
-    Quantifies THESIS_NOTES §21.3's framing that PDDLStream "pays
-    geometry-sampling cost per plan call" — replans cheaper would
-    indicate caching warm-up; flat = no caching benefit; worse = state
-    growth pathology.  Sample count thins toward higher plan_index as
-    cells terminate at smaller plan_count; legend reports n_cells so
-    readers can weight the right-edge means.
+    Audit #73 TIER C plot 7; audit #99 — variant keys replace baseline.
     """
     if not HAVE_MPL:
         print(f"\n=== {title} (matplotlib not available) ===")
-        for baseline in sorted(grouped):
-            seqs = grouped[baseline]
+        for variant in sorted(grouped):
+            seqs = grouped[variant]
             if not seqs:
                 continue
             max_len = max(len(s) for s in seqs)
@@ -724,19 +767,19 @@ def plot_per_call_planning_time(
                 samples = [s[pi] for s in seqs if len(s) > pi]
                 if samples:
                     sd = stdev(samples) if len(samples) > 1 else 0.0
-                    print(f"  {baseline}/plan#{pi}: "
+                    print(f"  {variant}/plan#{pi}: "
                           f"mean={mean(samples):.3f} "
                           f"std={sd:.3f} n={len(samples)}")
         return None
 
-    baselines = sorted(grouped.keys())
-    if not baselines or not any(grouped[b] for b in baselines):
+    variants = sorted(grouped.keys())
+    if not variants or not any(grouped[v] for v in variants):
         print(f"[plotter] no data for {title}")
         return None
 
     fig, ax = plt.subplots(figsize=(7, 5))
-    for baseline in baselines:
-        seqs = grouped[baseline]
+    for variant in variants:
+        seqs = grouped[variant]
         if not seqs:
             continue
         max_len = max(len(s) for s in seqs)
@@ -748,8 +791,9 @@ def plot_per_call_planning_time(
             samples = [s[pi] for s in seqs if len(s) > pi]
             means.append(mean(samples) if samples else 0.0)
             stds.append(stdev(samples) if len(samples) > 1 else 0.0)
-        line = ax.plot(xs, means, marker="o",
-                       label=f"{baseline} (n_cells={len(seqs)})")[0]
+        color = _VARIANT_COLOUR.get(variant)
+        line = ax.plot(xs, means, marker="o", color=color,
+                       label=f"{variant} (n_cells={len(seqs)})")[0]
         lower = [max(0.0, m - sd) for m, sd in zip(means, stds)]
         upper = [m + sd for m, sd in zip(means, stds)]
         ax.fill_between(xs, lower, upper, alpha=0.2,
@@ -790,8 +834,8 @@ def group_wallclock_vs_planning(
         if pt in (None, "") or wc in (None, ""):
             continue
         try:
-            out[r.get("baseline") or "semantic"].append(
-                (float(pt), float(wc)))
+            variant = r.get("_variant") or _row_variant(r)
+            out[variant].append((float(pt), float(wc)))
         except (TypeError, ValueError):
             continue
     return out
@@ -803,34 +847,30 @@ def plot_wallclock_vs_planning(
     out_path: Path,
 ) -> Optional[Path]:
     """Scatter: X = total_planning_time_s, Y = wall_clock_s, color by
-    baseline.  Diagonal y=x marks "pure planning" — wall_clock <
+    variant.  Diagonal y=x marks "pure planning" — wall_clock <
     planning_time is impossible, so points sit on or above the line.
 
     Audit #73 TIER C plot 8 — wall-clock vs planning decomposition.
-    Quantifies "what fraction of wall-clock is planning vs sim /
-    execution".  Points well above y=x: long PyBullet step / perception
-    / replan-orchestration tail.  Points near y=x: the planner
-    dominated wall-clock (the case where #50's planner-perf
-    investigation pays off).
+    Audit #99 — colour by variant (semantic / semantic+mbs* / uniform).
     """
     if not HAVE_MPL:
         print(f"\n=== {title} (matplotlib not available) ===")
-        for baseline in sorted(grouped):
-            pairs = grouped[baseline]
+        for variant in sorted(grouped):
+            pairs = grouped[variant]
             if not pairs:
                 continue
             pts = [p for p, _ in pairs]
             wcs = [w for _, w in pairs]
             ratios = [p / w for p, w in pairs if w > 0]
-            print(f"  {baseline}: n={len(pairs)}, "
+            print(f"  {variant}: n={len(pairs)}, "
                   f"mean_planning_s={mean(pts):.3f}, "
                   f"mean_wall_clock_s={mean(wcs):.3f}, "
                   f"mean_planning_ratio="
                   f"{mean(ratios) if ratios else 0:.3f}")
         return None
 
-    baselines = sorted(grouped.keys())
-    if not baselines or not any(grouped[b] for b in baselines):
+    variants = sorted(grouped.keys())
+    if not variants or not any(grouped[v] for v in variants):
         print(f"[plotter] no data for {title}")
         return None
 
@@ -842,18 +882,17 @@ def plot_wallclock_vs_planning(
     # are visible at a glance.
     CAP_S = 1800.0
 
-    baseline_colors = {"semantic": "#1f77b4", "uniform": "#ff7f0e"}
     fig, ax = plt.subplots(figsize=(7, 5.5))
-    for baseline in baselines:
-        pairs = grouped[baseline]
+    for variant in variants:
+        pairs = grouped[variant]
         if not pairs:
             continue
         xs = [p for p, _ in pairs]
         ys = [w for _, w in pairs]
         ax.scatter(xs, ys, s=36, alpha=0.65,
-                   c=baseline_colors.get(baseline),
+                   c=_VARIANT_COLOUR.get(variant),
                    edgecolors="black", linewidths=0.4,
-                   label=f"{baseline} (n={len(pairs)})")
+                   label=f"{variant} (n={len(pairs)})")
 
     diag = [0, CAP_S]
     ax.plot(diag, diag, linestyle="--", color="gray",
@@ -905,7 +944,8 @@ def plot_tampura_wallclock_comparison(
         if wc in (None, ""):
             continue
         try:
-            our_data[r.get("baseline") or "semantic"].append(float(wc))
+            variant = r.get("_variant") or _row_variant(r)
+            our_data[variant].append(float(wc))
         except (TypeError, ValueError):
             continue
 
@@ -914,9 +954,9 @@ def plot_tampura_wallclock_comparison(
               f"for {title}")
         return None
 
-    bars = []  # (label, central, lo_err, hi_err, n)
-    for baseline in sorted(our_data.keys()):
-        vs = sorted(our_data[baseline])
+    bars = []  # (label, central, lo_err, hi_err, n, color)
+    for variant in sorted(our_data.keys()):
+        vs = sorted(our_data[variant])
         n = len(vs)
         if n == 0:
             continue
@@ -927,26 +967,28 @@ def plot_tampura_wallclock_comparison(
             # n < 4: not enough data for quartiles; fall back to
             # min/max range so the bar still gives a magnitude clue.
             q1, q3 = vs[0], vs[-1]
-        bars.append((f"Ours\n{baseline}", med, med - q1, q3 - med, n))
+        bars.append((f"Ours\n{variant}", med, med - q1, q3 - med, n,
+                     _VARIANT_COLOUR.get(variant, "#1f77b4")))
     bars.append(("TAMPURA\nPartial Obs.",
-                 TAMPURA_MEAN, TAMPURA_STD, TAMPURA_STD, TAMPURA_N))
+                 TAMPURA_MEAN, TAMPURA_STD, TAMPURA_STD, TAMPURA_N,
+                 "#d62728"))
 
     if not HAVE_MPL:
         print(f"\n=== {title} (matplotlib not available) ===")
-        for lab, c, lo, hi, n in bars:
+        for lab, c, lo, hi, n, _col in bars:
             print(f"  {lab.replace(chr(10), ' ')}: "
                   f"{c:.1f} (-{lo:.1f}/+{hi:.1f}) n={n}")
         return None
 
     fig, ax = plt.subplots(figsize=(6.5, 5))
     xs = list(range(len(bars)))
-    colors = ["#1f77b4", "#ff7f0e", "#d62728"]
     centrals = [b[1] for b in bars]
     yerr_lo = [b[2] for b in bars]
     yerr_hi = [b[3] for b in bars]
+    colors = [b[5] for b in bars]
     ax.bar(xs, centrals, 0.6, yerr=[yerr_lo, yerr_hi], capsize=5,
-           color=colors[:len(bars)], edgecolor="black", linewidth=0.5)
-    for x, (_, c, _, hi, n) in zip(xs, bars):
+           color=colors, edgecolor="black", linewidth=0.5)
+    for x, (_, c, _, hi, n, _col) in zip(xs, bars):
         ax.text(x, c + hi, f"{c:.1f}s\n(n={n})",
                 ha="center", va="bottom", fontsize=9)
     ax.set_xticks(xs)
@@ -957,7 +999,7 @@ def plot_tampura_wallclock_comparison(
     # "57.0s\n(n=N)" annotations placed at (c + hi) clipped against
     # the matplotlib-auto top.  Pin the top to 25% above the tallest
     # error-bar reach so the annotation has guaranteed headroom.
-    _max_top = max(c + hi for _, c, _, hi, _ in bars)
+    _max_top = max(c + hi for _, c, _, hi, _, _ in bars)
     ax.set_ylim(bottom=0, top=_max_top * 1.25)
     ax.grid(True, axis="y", alpha=0.3)
     fig.text(0.5, 0.02,
@@ -975,35 +1017,30 @@ def plot_tampura_wallclock_comparison(
 
 def group_failure_modes(rows: List[dict]
                         ) -> Dict[tuple, Dict[str, int]]:
-    """``{(goal, baseline): {exit_reason: count}}``.
+    """``{(goal, variant): {exit_reason: count}}``.
 
-    Audit #73 TIER B plot 6 data prep.  Counts ALL cells (successful
-    runs go into the "success" bucket).  Bar height per (goal, baseline)
-    thus equals total cells in that group — gives the reader an implicit
-    failure-rate reference.
+    Audit #73 TIER B plot 6 data prep; audit #99 — sub-key is variant
+    not baseline so the (find-and-tray-stack, semantic) bar height no
+    longer doubles up the mbs=None + mbs=0.05 cells.
     """
     out: Dict = defaultdict(lambda: defaultdict(int))
     for r in rows:
         goal = r.get("goal")
-        baseline = r.get("baseline") or "semantic"
+        variant = r.get("_variant") or _row_variant(r)
         if r.get("success"):
             key = "success"
         else:
             key = r.get("exit_reason") or "unknown"
-        out[(goal, baseline)][key] += 1
+        out[(goal, variant)][key] += 1
     return out
 
 
 def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
                        title: str,
                        out_path: Path) -> Optional[Path]:
-    """Stacked bar per (goal, baseline) with exit_reason categories.
+    """Stacked bar per (goal, variant) with exit_reason categories.
 
-    Audit #73 TIER B plot 6 — failure-mode breakdown.  Counts include
-    "success" so bar height = total cells per group (lets the reader
-    see failure rate visually).  Each failure mode gets its own colour;
-    "success" is pinned to the bottom layer in green so the eye reads
-    "tall green = good".
+    Audit #73 TIER B plot 6; audit #99 — variant axis.
     """
     if not HAVE_MPL:
         print(f"\n=== {title} (matplotlib not available) ===")
@@ -1013,7 +1050,7 @@ def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
             print(f"  {key}: {summary}")
         return None
 
-    keys = sorted(grouped.keys())  # (goal, baseline) tuples
+    keys = sorted(grouped.keys())  # (goal, variant) tuples
     all_reasons = sorted({r for v in grouped.values() for r in v.keys()})
     # Pin 'success' to the bottom layer so it forms the visual base of
     # the bar and failures stack above it.
@@ -1021,7 +1058,7 @@ def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
         all_reasons.remove("success")
         all_reasons = ["success"] + all_reasons
 
-    labels = [f"{g}\n{b}" for g, b in keys]
+    labels = [f"{g}\n{v}" for g, v in keys]
     xs = list(range(len(keys)))
 
     fig, ax = plt.subplots(figsize=(max(7, 1.6 * len(keys)), 5))
@@ -1041,7 +1078,7 @@ def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
 
     ax.set_xticks(xs)
     ax.set_xticklabels(labels, fontsize=9)
-    ax.set_xlabel("(goal, baseline)")
+    ax.set_xlabel("(goal, variant)")
     ax.set_ylabel("cell count")
     ax.set_title(title)
     ax.grid(True, axis="y", alpha=0.3)
@@ -1206,22 +1243,19 @@ def plot_solved_vs_time(grouped: Dict[tuple, tuple],
 
 def group_plan_count_distribution(rows: List[dict]
                                   ) -> Dict[tuple, List[int]]:
-    """``{(goal, baseline): [plan_count, ...]}``.
+    """``{(goal, variant): [plan_count, ...]}``.
 
-    Audit #73 TIER B plot 5 data prep.  All cells included; failed
-    runs typically sit at max_replans and pile at the right edge of
-    the histogram, which is the intended diagnostic (the failure
-    tail surfaces alongside the convergence distribution).
+    Audit #73 TIER B plot 5 data prep; audit #99 — sub-key is variant.
     """
     out: Dict = defaultdict(list)
     for r in rows:
         goal = r.get("goal")
-        baseline = r.get("baseline") or "semantic"
+        variant = r.get("_variant") or _row_variant(r)
         pc = r.get("plan_count")
         if pc in (None, ""):
             continue
         try:
-            out[(goal, baseline)].append(int(pc))
+            out[(goal, variant)].append(int(pc))
         except (ValueError, TypeError):
             continue
     return out
@@ -1230,13 +1264,11 @@ def group_plan_count_distribution(rows: List[dict]
 def plot_plan_count_distribution(grouped: Dict[tuple, List[int]],
                                  title: str,
                                  out_path: Path) -> Optional[Path]:
-    """Histogram of plan_count per (goal, baseline) — one panel per
-    cell of the goal x baseline grid.
+    """Histogram of plan_count per (goal, variant) — one panel per
+    cell of the goal x variant grid.
 
-    Audit #73 TIER B plot 5 — replan-count distribution.  Tests
-    whether semantic's partition converges in fewer replans than
-    uniform on the same scenes.  All cells included so the failure
-    pile (typically at max_replans) is visible at the right edge.
+    Audit #73 TIER B plot 5; audit #99 — variant axis (semantic /
+    semantic+mbs* / uniform).
     """
     if not HAVE_MPL:
         print(f"\n=== {title} (matplotlib not available) ===")
@@ -1260,24 +1292,24 @@ def plot_plan_count_distribution(grouped: Dict[tuple, List[int]],
     bins = list(range(0, max_pc + 2))  # integer bins [0, 1, ..., max+1]
 
     goals = sorted({g for g, _ in keys})
-    baselines = sorted({b for _, b in keys})
+    variants = sorted({v for _, v in keys})
     fig, axes = plt.subplots(
-        len(goals), len(baselines),
-        figsize=(4 * len(baselines), 3 * len(goals)),
+        len(goals), len(variants),
+        figsize=(4 * len(variants), 3 * len(goals)),
         sharey=True, sharex=True, squeeze=False,
     )
-    cmap = plt.get_cmap("tab10")
     for gi, goal in enumerate(goals):
-        for bi, baseline in enumerate(baselines):
+        for bi, variant in enumerate(variants):
             ax = axes[gi][bi]
-            vs = grouped.get((goal, baseline), [])
+            vs = grouped.get((goal, variant), [])
+            colour = _VARIANT_COLOUR.get(variant, "#999999")
             if vs:
-                ax.hist(vs, bins=bins, color=cmap(bi % 10),
+                ax.hist(vs, bins=bins, color=colour,
                         alpha=0.75, edgecolor="black", linewidth=0.4,
                         label=f"n={len(vs)}, "
                               f"mean={sum(vs) / len(vs):.1f}")
                 ax.legend(loc="upper right", fontsize=8)
-            ax.set_title(f"{goal} / {baseline}")
+            ax.set_title(f"{goal} / {variant}")
             ax.grid(True, axis="y", alpha=0.3)
             if gi == len(goals) - 1:
                 ax.set_xlabel("plan_count")
@@ -1356,10 +1388,14 @@ def write_summary_table(rows: List[dict], out_dir: Path) -> None:
             return "—"
         return format(v, spec) if isinstance(v, float) else str(v)
 
+    # Audit #99 — group by (goal, variant) so mbs arms get their own
+    # rows instead of being averaged into "semantic".  Old sweeps
+    # without min_boxel_size collapse to {"semantic","uniform"}
+    # variants, producing the same 2-row-per-goal layout as before.
     by_gb: Dict[tuple, List[dict]] = defaultdict(list)
     for r in rows:
         by_gb[(r.get("goal") or "?",
-               r.get("baseline") or "semantic")].append(r)
+               r.get("_variant") or _row_variant(r))].append(r)
 
     by_gbo: Dict[tuple, List[dict]] = defaultdict(list)
     for r in rows:
@@ -1368,26 +1404,26 @@ def write_summary_table(rows: List[dict], out_dir: Path) -> None:
         except (TypeError, ValueError):
             occ = None
         by_gbo[(r.get("goal") or "?",
-                r.get("baseline") or "semantic", occ)].append(r)
+                r.get("_variant") or _row_variant(r), occ)].append(r)
 
     md = [
         f"# Summary table — {out_dir.name}",
         "",
-        "## Aggregate by (goal, baseline)",
+        "## Aggregate by (goal, variant)",
         "",
-        "| goal | baseline | n_cells | success | success_rate "
+        "| goal | variant | n_cells | success | success_rate "
         "| mean plan_time (s) | mean plan_count "
         "| mean init_facts | mean total_boxels |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    csv_overview = [["goal", "baseline", "n_cells", "n_success",
+    csv_overview = [["goal", "variant", "n_cells", "n_success",
                      "success_rate", "mean_plan_time_s", "mean_plan_count",
                      "mean_init_facts", "mean_total_boxels"]]
     for key in sorted(by_gb.keys()):
         s = _stats(by_gb[key])
-        goal, baseline = key
+        goal, variant = key
         md.append(
-            f"| {goal} | {baseline} | {s['n_cells']} | {s['n_success']} | "
+            f"| {goal} | {variant} | {s['n_cells']} | {s['n_success']} | "
             f"{s['success_rate']*100:.1f}% | "
             f"{_fmt(s['mean_plan_time_s'])} | "
             f"{_fmt(s['mean_plan_count'])} | "
@@ -1395,7 +1431,7 @@ def write_summary_table(rows: List[dict], out_dir: Path) -> None:
             f"{_fmt(s['mean_total_boxels'], '.1f')} |"
         )
         csv_overview.append([
-            goal, baseline, s["n_cells"], s["n_success"],
+            goal, variant, s["n_cells"], s["n_success"],
             f"{s['success_rate']:.4f}",
             "" if s["mean_plan_time_s"] is None else f"{s['mean_plan_time_s']:.4f}",
             "" if s["mean_plan_count"] is None else f"{s['mean_plan_count']:.4f}",
@@ -1411,22 +1447,22 @@ def write_summary_table(rows: List[dict], out_dir: Path) -> None:
         "has no occluders by construction (the matrix-axis value is tag-"
         "only and is not passed through to the pipeline).",
         "",
-        "| goal | baseline | n_occluders | n_cells | success | success_rate "
+        "| goal | variant | n_occluders | n_cells | success | success_rate "
         "| mean plan_time (s) | mean plan_count "
         "| mean init_facts | mean total_boxels |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    csv_detail = [["goal", "baseline", "n_occluders", "n_cells", "n_success",
+    csv_detail = [["goal", "variant", "n_occluders", "n_cells", "n_success",
                    "success_rate", "mean_plan_time_s", "mean_plan_count",
                    "mean_init_facts", "mean_total_boxels"]]
     for key in sorted(by_gbo.keys(),
                       key=lambda k: (k[0], k[1],
                                      -1 if k[2] is None else k[2])):
         s = _stats(by_gbo[key])
-        goal, baseline, occ = key
+        goal, variant, occ = key
         occ_str = "—" if occ is None else str(occ)
         md.append(
-            f"| {goal} | {baseline} | {occ_str} | {s['n_cells']} | "
+            f"| {goal} | {variant} | {occ_str} | {s['n_cells']} | "
             f"{s['n_success']} | {s['success_rate']*100:.1f}% | "
             f"{_fmt(s['mean_plan_time_s'])} | "
             f"{_fmt(s['mean_plan_count'])} | "
@@ -1434,7 +1470,7 @@ def write_summary_table(rows: List[dict], out_dir: Path) -> None:
             f"{_fmt(s['mean_total_boxels'], '.1f')} |"
         )
         csv_detail.append([
-            goal, baseline, "" if occ is None else occ,
+            goal, variant, "" if occ is None else occ,
             s["n_cells"], s["n_success"],
             f"{s['success_rate']:.4f}",
             "" if s["mean_plan_time_s"] is None else f"{s['mean_plan_time_s']:.4f}",
@@ -1575,8 +1611,17 @@ def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
             xs = sorted(xy.keys())
             means = [mean(xy[x]) for x in xs]
             stds = [stdev(xy[x]) if len(xy[x]) > 1 else 0.0 for x in xs]
-            line = ax.plot(xs, means, marker="o", linestyle=linestyle,
-                           label=f"{series_label}={s_val}{suffix}")[0]
+            # Audit #99 — when the series is the per-row variant tag,
+            # look up the canonical colour so legends stay consistent
+            # with the bar / histogram / anytime plots.  Other series
+            # (n_targets) fall through to matplotlib's default cycle.
+            kwargs = {"marker": "o", "linestyle": linestyle,
+                      "label": f"{series_label}={s_val}{suffix}"}
+            if series_label == "variant":
+                colour = _VARIANT_COLOUR.get(s_val)
+                if colour is not None:
+                    kwargs["color"] = colour
+            line = ax.plot(xs, means, **kwargs)[0]
             lo_clip = ylim[0] if ylim else 0.0
             hi_clip = ylim[1] if ylim else None
             lo = [max(lo_clip, m - s) for m, s in zip(means, stds)]
@@ -1676,7 +1721,7 @@ def main(argv=None) -> int:
         )
         plot_failure_modes(
             group_failure_modes(all_rows),
-            title="Failure-mode breakdown by (goal, baseline)",
+            title="Failure-mode breakdown by (goal, variant)",
             out_path=out_dir / "failure_modes.png",
         )
         # Audit #73 TIER B plot 5: replan-count distribution per
@@ -1685,7 +1730,7 @@ def main(argv=None) -> int:
         # plan_count from aggregated.csv — no schema change.
         plot_plan_count_distribution(
             group_plan_count_distribution(all_rows),
-            title="Replan-count distribution by (goal, baseline)",
+            title="Replan-count distribution by (goal, variant)",
             out_path=out_dir / "plan_count_distribution.png",
         )
         # Audit #73 TIER C plot 9: TAMPURA wall-clock comparison
@@ -1726,32 +1771,43 @@ def main(argv=None) -> int:
     if args.baseline_csv:
         baseline_rows = load_rows(args.baseline_csv)
     else:
-        rows, baseline_rows = _split_by_baseline(rows)
-        if baseline_rows is not None:
-            main_label_suffix = " (semantic)"
-            baseline_label_suffix = " (uniform)"
-            print(f"[plotter] auto-split by baseline column: "
-                  f"semantic={len(rows)} rows, "
-                  f"uniform={len(baseline_rows)} rows")
+        baseline_rows = None
 
     # random-pairs draws (n_hidden, n_targets) per seed, so n_targets is
     # not a meaningful series axis here.  Plot one figure PER goal so
     # find-and-tray-stack and holding do not share axes (user direction
-    # 2026-05-12 — both-on-one plot was unreadable).  Non-random-pairs
-    # sweeps keep the single-figure layout (n_targets as the series).
+    # 2026-05-12 — both-on-one plot was unreadable).
+    #
+    # Audit #99 — random-pairs uses the per-row _variant tag as the
+    # series so semantic-auto / semantic+mbs* / uniform each get their
+    # own line.  Drop the baseline_grouped split (it conflated mbs arms
+    # within semantic and forced a 2-line layout that hid the third
+    # variant).  Non-random-pairs sweeps (SCALABILITY_MATRIX, n_targets
+    # axis) keep the legacy baseline split because that preset doesn't
+    # sweep mbs and n_targets is the meaningful series there.
     if _is_random_pairs_matrix(rows + (baseline_rows or [])):
-        series_key = "goal"
-        series_label = "goal"
-        all_goals = sorted({r.get("goal") for r in rows + (baseline_rows or [])
+        series_key = "_variant"
+        series_label = "variant"
+        all_input_rows = rows + (baseline_rows or [])
+        all_goals = sorted({r.get("goal") for r in all_input_rows
                             if r.get("goal")})
         goal_buckets = [
             (g,
-             [r for r in rows if r.get("goal") == g],
-             ([r for r in baseline_rows if r.get("goal") == g]
-              if baseline_rows else None))
+             [r for r in all_input_rows if r.get("goal") == g],
+             None)
             for g in all_goals
         ]
     else:
+        # SCALABILITY_MATRIX path: keep _split_by_baseline to drive the
+        # dashed-uniform overlay on the n_targets-series line plots.
+        if not args.baseline_csv:
+            rows, baseline_rows = _split_by_baseline(rows)
+            if baseline_rows is not None:
+                main_label_suffix = " (semantic)"
+                baseline_label_suffix = " (uniform)"
+                print(f"[plotter] auto-split by baseline column: "
+                      f"semantic={len(rows)} rows, "
+                      f"uniform={len(baseline_rows)} rows")
         series_key = "n_targets"
         series_label = "n_targets"
         goal_buckets = [(None, rows, baseline_rows)]
@@ -1902,7 +1958,7 @@ def main(argv=None) -> int:
     # successes so bar height = total cells per group.
     plot_failure_modes(
         group_failure_modes(all_rows),
-        title="Failure-mode breakdown by (goal, baseline)",
+        title="Failure-mode breakdown by (goal, variant)",
         out_path=out_dir / "failure_modes.png",
     )
     # Audit #73 TIER B plot 5: replan-count distribution per
@@ -1911,7 +1967,7 @@ def main(argv=None) -> int:
     # plan_count from aggregated.csv — no schema change.
     plot_plan_count_distribution(
         group_plan_count_distribution(all_rows),
-        title="Replan-count distribution by (goal, baseline)",
+        title="Replan-count distribution by (goal, variant)",
         out_path=out_dir / "plan_count_distribution.png",
     )
     # Audit #73 TIER C plot 9: TAMPURA wall-clock comparison
