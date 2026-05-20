@@ -6,10 +6,13 @@ and table that the sweep produced, explains how to read each one, then
 walks through the findings the data supports with the corresponding
 plot inline as evidence.
 
-> **Status (2026-05-20).**  Full sweep, 2700 / 2700 planned cells; 2545
-> cells parsed (the rest are environment crashes that audit #96 closed;
-> see § Caveats).  Three planner configurations × three goals × the
-> 100-seed audit-#77 corpus.
+> **Status (2026-05-20).**  Full sweep, 2700 / 2700 planned cells; 2534
+> cells have full `run_config` parsed (the remaining 166 are
+> timeout / no_summary / crash failure stubs with no init-state
+> captured — see § Caveats).  The 5 ModuleNotFoundError cells from
+> audit #96 have already re-run clean and are folded into the 2534.
+> Three planner configurations × three goals × the 100-seed
+> audit-#77 corpus.
 
 ---
 
@@ -182,9 +185,10 @@ caveat from THESIS_NOTES §21.1 carried in the figure caption.
 
 ## 3. Headline numbers
 
-Numbers from `summary_table.md` (full sweep, 2545 parsed cells out
-of 2700; the 5 ModuleNotFoundError cells from audit #96 already
-re-ran clean).
+Numbers from `summary_table.md` (full sweep, 2534 cells with parsed
+`run_config` out of 2700; the 5 ModuleNotFoundError cells from
+audit #96 already re-ran clean and are included in the 2534 — the
+166-cell gap is timeout / no_summary / crash stubs).
 
 ### 3.1 Aggregate by (goal, variant)
 
@@ -406,11 +410,10 @@ seeds.
 5. **TAMPURA comparison is not hardware-matched.**  THESIS_NOTES
    §21.1 notes the gap.  Caveat lives in the figure caption.
 
-6. **`per_call_planning_time__*` tail is thinning.**  Audit #103
-   territory: the legend's `n_cells=N` label is the head-count at
-   `plan_index=0`; at higher plan indices fewer cells contribute
-   and the mean becomes noisier.  Read the left two-thirds of
-   each line.
+6. **`per_call_planning_time__*` tail is thinning.**  The legend's
+   `n_cells=N` label is the head-count at `plan_index=0`; at higher
+   plan indices fewer cells contribute and the mean becomes
+   noisier.  Read the left two-thirds of each line.
 
 7. **No #78 (multi-shadow sense) yet.**  Every sense in this sweep
    informs one shadow.  A measured drop in `n_sense_actions` per
