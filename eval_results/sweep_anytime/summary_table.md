@@ -14,11 +14,11 @@
 | stack | semantic+mbs0.05 | 300 | 184 | 61.3% | 1.23 | 1.19 | 312 | 27.8 |
 | stack | uniform | 301 | 118 | 39.2% | 23.84 | 1.04 | 12097 | 1339.9 |
 
-## Per-occluder breakdown
+## Per-difficulty breakdown
 
-Note: stack-scene cells log `n_occluders=0` because stack_scene has no occluders by construction (the matrix-axis value is tag-only and is not passed through to the pipeline).
+Note: 'difficulty' is `n_occluders` for the random-pairs / scalability paths and `stack_height` for the stack scene (audit #95).  The stack-scene matrix axis is tag-only — run_config records `n_occluders=0` because stack_scene has no occluders by construction.
 
-| goal | variant | n_occluders | n_cells | success | success_rate | mean plan_time (s) | mean plan_count | mean init_facts | mean total_boxels |
+| goal | variant | difficulty | n_cells | success | success_rate | mean plan_time (s) | mean plan_count | mean init_facts | mean total_boxels |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 | find-and-tray-stack | semantic | 2 | 99 | 39 | 39.4% | 14.93 | 2.31 | 402 | 37.7 |
 | find-and-tray-stack | semantic | 3 | 100 | 38 | 38.0% | 51.57 | 2.76 | 570 | 46.2 |
@@ -38,10 +38,12 @@ Note: stack-scene cells log `n_occluders=0` because stack_scene has no occluders
 | holding | uniform | 2 | 100 | 33 | 33.0% | 21.24 | 1.45 | 2052 | 333.5 |
 | holding | uniform | 3 | 100 | 36 | 36.0% | 48.90 | 2.14 | 2386 | 322.7 |
 | holding | uniform | 4 | 100 | 31 | 31.0% | 83.04 | 2.65 | 2653 | 321.2 |
-| stack | semantic | 0 | 295 | 184 | 62.4% | 1.23 | 1.19 | 312 | 27.8 |
-| stack | semantic | 3 | 1 | 0 | 0.0% | — | — | — | — |
-| stack | semantic | 4 | 4 | 0 | 0.0% | — | — | — | — |
-| stack | semantic+mbs0.05 | 0 | 294 | 184 | 62.6% | 1.23 | 1.19 | 312 | 27.8 |
-| stack | semantic+mbs0.05 | 3 | 1 | 0 | 0.0% | — | — | — | — |
-| stack | semantic+mbs0.05 | 4 | 5 | 0 | 0.0% | — | — | — | — |
-| stack | uniform | 0 | 301 | 118 | 39.2% | 23.84 | 1.04 | 12097 | 1339.9 |
+| stack | semantic | 2 | 100 | 97 | 97.0% | 1.15 | 1.02 | 273 | 26.3 |
+| stack | semantic | 3 | 100 | 74 | 74.0% | 1.25 | 1.32 | 272 | 26.3 |
+| stack | semantic | 4 | 100 | 13 | 13.0% | 1.77 | 1.69 | 394 | 30.9 |
+| stack | semantic+mbs0.05 | 2 | 100 | 97 | 97.0% | 1.13 | 1.02 | 273 | 26.3 |
+| stack | semantic+mbs0.05 | 3 | 100 | 74 | 74.0% | 1.29 | 1.32 | 272 | 26.3 |
+| stack | semantic+mbs0.05 | 4 | 100 | 13 | 13.0% | 1.63 | 1.69 | 394 | 30.9 |
+| stack | uniform | 2 | 100 | 97 | 97.0% | 20.08 | 1.02 | 11210 | 1340.8 |
+| stack | uniform | 3 | 99 | 20 | 20.2% | 32.20 | 1.05 | 11116 | 1340.8 |
+| stack | uniform | 4 | 102 | 1 | 1.0% | 220.54 | 3.00 | 13919 | 1338.1 |

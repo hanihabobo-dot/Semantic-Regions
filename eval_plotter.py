@@ -93,6 +93,38 @@ _VARIANT_COLOUR = {
 }
 
 
+# Audit #95 — meaningful difficulty axis for a row.  The eval matrix
+# reuses ``n_occluders`` as the axis name even for the stack sub-tier,
+# where the value is actually passed through to ``--stack-height``
+# (eval_runner.cell_to_argv).  Successful stack cells overwrite
+# n_occluders with run_config (always 0 for stack scenes); failure
+# stubs keep the cell-level matrix value.  Either way the meaningful
+# axis is ``stack_height``; ``n_occluders`` is correct only for the
+# random-pairs and scalability paths.  Use this helper everywhere
+# downstream parsers want a "scene difficulty" number.
+def _row_difficulty(r: dict) -> Optional[int]:
+    is_stack = (r.get("goal") == "stack"
+                or r.get("scene") == "stack")
+    if is_stack:
+        sh = r.get("stack_height")
+        if sh not in (None, ""):
+            try:
+                return int(sh)
+            except (TypeError, ValueError):
+                pass
+        # Failure stubs (timeout / no_summary) lack run_config, so
+        # stack_height is absent; fall back to the matrix-axis
+        # n_occluders which the stack sub-tier uses as the height
+        # value (eval_runner.cell_to_argv lines around --stack-height).
+    n = r.get("n_occluders")
+    if n in (None, ""):
+        return None
+    try:
+        return int(n)
+    except (TypeError, ValueError):
+        return None
+
+
 def load_rows(csv_path: Path) -> List[dict]:
     rows: List[dict] = []
     with csv_path.open(encoding="utf-8") as f:
@@ -343,8 +375,19 @@ def group_metric(rows: List[dict],
     for r in rows:
         if success_only and not r.get("success"):
             continue
+        # Audit #95 — when the X axis is n_occluders, use the per-row
+        # difficulty so stack cells slot into stack_height buckets
+        # instead of collapsing onto run_config's n_occluders=0.
+        if axis_x == "n_occluders":
+            x = _row_difficulty(r)
+            if x is None:
+                continue
+        else:
+            try:
+                x = int(r[axis_x])
+            except (KeyError, TypeError, ValueError):
+                continue
         try:
-            x = int(r[axis_x])
             v = float(r[metric])
         except (KeyError, TypeError, ValueError):
             continue
@@ -360,10 +403,17 @@ def group_success_rate(rows: List[dict],
                        series: str = "n_targets") -> Dict[object, Dict[int, List[float]]]:
     out: Dict = defaultdict(lambda: defaultdict(list))
     for r in rows:
-        try:
-            x = int(r[axis_x])
-        except (KeyError, ValueError, TypeError):
-            continue
+        # Audit #95 — same swap as group_metric: stack-height for stack
+        # rows when the requested axis is n_occluders.
+        if axis_x == "n_occluders":
+            x = _row_difficulty(r)
+            if x is None:
+                continue
+        else:
+            try:
+                x = int(r[axis_x])
+            except (KeyError, ValueError, TypeError):
+                continue
         s = r.get(series)
         if s in (None, ""):
             continue
@@ -396,9 +446,10 @@ def group_boxel_counts(rows: List[dict],
     for r in rows:
         if goal is not None and r.get("goal") != goal:
             continue
-        try:
-            x = int(r["n_occluders"])
-        except (KeyError, TypeError, ValueError):
+        # Audit #95 — stack-height for stack rows; n_occluders for the
+        # random-pairs / scalability paths.
+        x = _row_difficulty(r)
+        if x is None:
             continue
         # Audit #99 — variant key splits mbs=None / mbs=0.05 / uniform.
         variant = r.get("_variant") or _row_variant(r)
@@ -429,6 +480,7 @@ def plot_boxel_count_breakdown(
     grouped: Dict[str, Dict[int, Dict[str, List[int]]]],
     title: str,
     out_path: Path,
+    xlabel: str = "n_occluders",
 ) -> Optional[Path]:
     """Stacked bars OBJECT / SHADOW / FREE_SPACE by n_occluders; one
     side-by-side group per variant (semantic / semantic+mbs* / uniform).
@@ -482,11 +534,13 @@ def plot_boxel_count_breakdown(
     ax.set_ylabel("boxel count (mean over seeds)")
     ax.set_title(title)
     if len(xs_all) > 1:
-        ax.set_xlabel("n_occluders")
+        ax.set_xlabel(xlabel)
         ax.set_xticks(xs_all)
     else:
-        # Single-X (stack subtier): n_occluders=0 tick is meaningless;
-        # the scene context is already in the title.
+        # Single-X (rare with audit-#95 stack_height grouping): the
+        # x=0 tick is meaningless when only one difficulty point is
+        # present, so drop the label entirely and let the title carry
+        # the scene context.
         ax.set_xticks([])
         ax.set_xlabel("")
     ax.grid(True, axis="y", alpha=0.3)
@@ -1417,14 +1471,14 @@ def write_summary_table(rows: List[dict], out_dir: Path) -> None:
         by_gb[(r.get("goal") or "?",
                r.get("_variant") or _row_variant(r))].append(r)
 
+    # Audit #95 — group by per-row difficulty: stack_height for stack
+    # rows (n_occluders=0 from run_config / matrix-axis value for
+    # failure stubs is meaningless), n_occluders otherwise.
     by_gbo: Dict[tuple, List[dict]] = defaultdict(list)
     for r in rows:
-        try:
-            occ = int(r.get("n_occluders"))
-        except (TypeError, ValueError):
-            occ = None
         by_gbo[(r.get("goal") or "?",
-                r.get("_variant") or _row_variant(r), occ)].append(r)
+                r.get("_variant") or _row_variant(r),
+                _row_difficulty(r))].append(r)
 
     md = [
         f"# Summary table — {out_dir.name}",
@@ -1461,18 +1515,20 @@ def write_summary_table(rows: List[dict], out_dir: Path) -> None:
 
     md += [
         "",
-        "## Per-occluder breakdown",
+        "## Per-difficulty breakdown",
         "",
-        "Note: stack-scene cells log `n_occluders=0` because stack_scene "
-        "has no occluders by construction (the matrix-axis value is tag-"
-        "only and is not passed through to the pipeline).",
+        "Note: 'difficulty' is `n_occluders` for the random-pairs / "
+        "scalability paths and `stack_height` for the stack scene "
+        "(audit #95).  The stack-scene matrix axis is tag-only — "
+        "run_config records `n_occluders=0` because stack_scene has "
+        "no occluders by construction.",
         "",
-        "| goal | variant | n_occluders | n_cells | success | success_rate "
+        "| goal | variant | difficulty | n_cells | success | success_rate "
         "| mean plan_time (s) | mean plan_count "
         "| mean init_facts | mean total_boxels |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    csv_detail = [["goal", "variant", "n_occluders", "n_cells", "n_success",
+    csv_detail = [["goal", "variant", "difficulty", "n_cells", "n_success",
                    "success_rate", "mean_plan_time_s", "mean_plan_count",
                    "mean_init_facts", "mean_total_boxels"]]
     for key in sorted(by_gbo.keys(),
@@ -1845,6 +1901,12 @@ def main(argv=None) -> int:
     for goal, g_rows, g_baseline in goal_buckets:
         suffix = f"__{goal}" if goal else ""
         title_suffix = f" — {goal}" if goal else ""
+        # Audit #95 — stack goal's difficulty axis is stack_height, not
+        # n_occluders (matrix-axis value is tag-only for the stack
+        # sub-tier).  Label X accordingly; the groupers above slot the
+        # rows into the right buckets via _row_difficulty().
+        x_label = "stack_height" if goal == "stack" else "n_occluders"
+        x_label_in_title = x_label.replace("_", " ")
         plot_metric(
             group_metric(g_rows, series=series_key,
                          metric="total_planning_time_s",
@@ -1857,6 +1919,7 @@ def main(argv=None) -> int:
                                            success_only=True)
                               if g_baseline else None),
             series_label=series_label,
+            xlabel=x_label,
             main_label_suffix=main_label_suffix,
             baseline_label_suffix=baseline_label_suffix,
         )
@@ -1869,6 +1932,7 @@ def main(argv=None) -> int:
             baseline_grouped=(group_success_rate(g_baseline, series=series_key)
                               if g_baseline else None),
             series_label=series_label,
+            xlabel=x_label,
             main_label_suffix=main_label_suffix,
             baseline_label_suffix=baseline_label_suffix,
         )
@@ -1883,6 +1947,7 @@ def main(argv=None) -> int:
                                            success_only=True)
                               if g_baseline else None),
             series_label=series_label,
+            xlabel=x_label,
             main_label_suffix=main_label_suffix,
             baseline_label_suffix=baseline_label_suffix,
         )
@@ -1893,8 +1958,9 @@ def main(argv=None) -> int:
         # prints '[plotter] no data ...' and skips the figure).
         plot_boxel_count_breakdown(
             group_boxel_counts(g_rows + (g_baseline or []), goal=goal),
-            title=f"Boxel count breakdown vs n_occluders{title_suffix}",
+            title=f"Boxel count breakdown vs {x_label_in_title}{title_suffix}",
             out_path=out_dir / f"boxel_count_breakdown{suffix}.png",
+            xlabel=x_label,
         )
         # Audit #73 TIER A plot 2: PDDL init-state fact count vs
         # n_occluders.  Same X-axis as plot 1 but in the planner's
@@ -1911,7 +1977,7 @@ def main(argv=None) -> int:
             group_metric(g_rows, series=series_key,
                          metric="n_init_state_facts",
                          success_only=False),
-            title=f"Init-state fact count vs n_occluders{title_suffix}",
+            title=f"Init-state fact count vs {x_label_in_title}{title_suffix}",
             ylabel="mean n_init_state_facts",
             out_path=out_dir / f"init_state_facts_vs_n_occluders{suffix}.png",
             baseline_grouped=(group_metric(g_baseline, series=series_key,
@@ -1919,6 +1985,7 @@ def main(argv=None) -> int:
                                            success_only=False)
                               if g_baseline else None),
             series_label=series_label,
+            xlabel=x_label,
             main_label_suffix=main_label_suffix,
             baseline_label_suffix=baseline_label_suffix,
         )
@@ -1941,6 +2008,7 @@ def main(argv=None) -> int:
                                            success_only=False)
                               if g_baseline else None),
             series_label=series_label,
+            xlabel=x_label,
             main_label_suffix=main_label_suffix,
             baseline_label_suffix=baseline_label_suffix,
         )
