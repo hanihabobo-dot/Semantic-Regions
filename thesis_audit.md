@@ -482,18 +482,61 @@ Fix:   Settle a single label-prefix convention. Best handled during the
 Refs:  #135 #137
 
 
+################################################################################
+#  ISSUES — ADDED 2026-05-20  (EVAL-DESIGN GAP FROM SWEEP DATA)
+################################################################################
+
+================================================================================
+#140  [Structural] [THESIS]  §5 needs a fine-resolution-discriminating scene (or honest null disclosure)
+================================================================================
+Where: §5 evaluation.tex (Experimental Setup + Baselines);
+       CODEBASE_AUDIT.txt #97.
+What:  The sweep data (CODEBASE_AUDIT.txt #93, refreshed
+       2026-05-20 at ~94% coverage) shows semantic and
+       semantic+mbs0.05 are statistically indistinguishable on
+       every goal: stack identical seed-for-seed at 184/300
+       each; holding 42.3% vs 46.3% (within seed noise);
+       find-and-tray-stack 39.7% vs 32.3% (mbs0.05 actually
+       worse).  The thesis therefore cannot honestly claim
+       "finer resolution wins under a fixed time budget" on
+       this data --- at the scene scales tested, the 0.05 m
+       leaf floor does not change outcomes because auto_cell
+       (~6-9 cm, the largest object's footprint) is the
+       binding constraint.
+Fix:   One of, ideally both:
+       (a) Add a scene / task to the eval that ONLY finer
+           resolution can solve --- see CODEBASE_AUDIT.txt #97
+           for design candidates (narrow-corridor reach,
+           sub-cell pocket placement, sub-cell hidden target,
+           dense small-occluder shelf).  Then report a real
+           positive result.
+       (b) Disclose the null result honestly in the Results
+           + Discussion: at the scene scales tested, the
+           5 cm leaf floor does not change outcomes because
+           auto_cell is the binding constraint.  This is a
+           characterisation of the regime, not a negative for
+           the method.
+       Most honest: BOTH.  Implement (a) for a positive
+       finding on a scene that discriminates; report (b) on
+       the original scenes as a regime-characterisation
+       finding.  The chapter then says where mbs0.05 helps
+       and where it does not, instead of overclaiming or
+       hand-waving.
+Refs:  CODEBASE_AUDIT.txt #77 #93 #97
+
+
 ================================================================================
 OPEN ISSUES
 ================================================================================
 
-28 issues remain open. Each issue's header carries its tier (T0-T3) and
+29 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 §5 Evaluation:   #93 #94 #95 #96 #97 #98 #99 #100 #101 #102 #103 #104
                  #105 #106 #107 #108 #109 #110 #111
-Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138
+Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138 #140
 
 Gating: the §5 issues (#87-#111) are subsumed by the #121 evaluation rewrite;
 #121/#126/#127/#128/#130 and the #137 migration depend on obtaining the
