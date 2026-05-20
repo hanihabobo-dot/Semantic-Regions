@@ -39,6 +39,24 @@ except ImportError:
     HAVE_MPL = False
 
 
+# Audit #94 — explicit colour map for exit_reason categories so the
+# stacked-bar legend in plot_failure_modes does not collide on tab10's
+# default cycle (where index 2 is green, matching the success colour
+# and rendering "success" vs "planner_failed" or whichever lands on
+# index 2 visually indistinguishable).
+EXIT_REASON_COLOUR = {
+    "success":          "#2ca02c",   # green
+    "planner_failed":   "#d62728",   # red
+    "timeout":          "#7f0000",   # dark red
+    "replan_limit":     "#ff7f0e",   # orange
+    "no_summary":       "#8c564b",   # brown
+    "physics_mismatch": "#9467bd",   # purple
+    "drop_failed":      "#e377c2",   # pink
+    "all_searched":     "#17becf",   # cyan
+    "unknown":          "#999999",   # gray
+}
+
+
 def load_rows(csv_path: Path) -> List[dict]:
     rows: List[dict] = []
     with csv_path.open(encoding="utf-8") as f:
@@ -54,7 +72,8 @@ def load_rows(csv_path: Path) -> List[dict]:
                         r[k] = int(v)
                     except ValueError:
                         pass
-            for k in ("total_planning_time_s", "wall_clock_s"):
+            for k in ("total_planning_time_s", "wall_clock_s",
+                      "min_boxel_size"):
                 v = r.get(k)
                 if v not in (None, ""):
                     try:
@@ -925,7 +944,12 @@ def plot_tampura_wallclock_comparison(
     ax.set_xticklabels([b[0] for b in bars])
     ax.set_ylabel("wall clock per episode (s)")
     ax.set_title(title)
-    ax.set_ylim(bottom=0)
+    # Audit #94 cosmetic — set_ylim was bottom=0 only, so the
+    # "57.0s\n(n=N)" annotations placed at (c + hi) clipped against
+    # the matplotlib-auto top.  Pin the top to 25% above the tallest
+    # error-bar reach so the annotation has guaranteed headroom.
+    _max_top = max(c + hi for _, c, _, hi, _ in bars)
+    ax.set_ylim(bottom=0, top=_max_top * 1.25)
     ax.grid(True, axis="y", alpha=0.3)
     fig.text(0.5, 0.02,
              "Ours: median + IQR over seeds, success-only.  "
@@ -996,7 +1020,11 @@ def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
     bottoms = [0.0] * len(keys)
     for ri, reason in enumerate(all_reasons):
         counts = [grouped[k].get(reason, 0) for k in keys]
-        color = "#2ca02c" if reason == "success" else cmap(ri % 10)
+        # Audit #94 — use the explicit EXIT_REASON_COLOUR map (top of
+        # this module) instead of falling through to cmap(ri % 10),
+        # which previously collided "success" and "planner_failed" on
+        # the same green when planner_failed landed on tab10 index 2.
+        color = EXIT_REASON_COLOUR.get(reason, cmap(ri % 10))
         ax.bar(xs, counts, 0.7, bottom=bottoms,
                color=color, edgecolor="black", linewidth=0.5,
                label=reason)
@@ -1009,6 +1037,138 @@ def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
     ax.set_title(title)
     ax.grid(True, axis="y", alpha=0.3)
     ax.legend(loc="upper right", fontsize=8, title="exit_reason")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
+
+
+# ---------------------------------------------------------------------------
+# Audit #94 (#77 step 4) — IPC-style cumulative-solve-vs-wall-clock curve.
+# ---------------------------------------------------------------------------
+
+def _has_anytime_axis(rows: List[dict]) -> bool:
+    """Detect a SCALABILITY_VS_TIME (audit #77) sweep by the presence
+    of a non-null min_boxel_size in the row set.
+
+    The anytime curve is only meaningful when the sweep varies
+    min_boxel_size — otherwise it collapses to one line per baseline.
+    """
+    for r in rows:
+        mbs = r.get("min_boxel_size")
+        if mbs in (None, ""):
+            continue
+        try:
+            if float(mbs) > 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def group_solved_vs_time(rows: List[dict]
+                         ) -> Dict[tuple, tuple]:
+    """``{(goal, baseline, min_boxel_size_or_None): (n_total, [wall_clocks_of_successes])}``.
+
+    Input for the IPC-style cumulative-solve curve (audit #94 /
+    #77 step 4).  Denominator is ALL cells in the (goal, variant)
+    group so the right-hand asymptote equals that group's success
+    rate; the curve plots successful wall_clock_s ascending.
+    """
+    out_n: Dict[tuple, int] = defaultdict(int)
+    out_solved: Dict[tuple, List[float]] = defaultdict(list)
+    for r in rows:
+        goal = r.get("goal")
+        baseline = r.get("baseline") or "semantic"
+        mbs = r.get("min_boxel_size")
+        if mbs in (None, ""):
+            mbs_key: Optional[float] = None
+        else:
+            try:
+                mbs_key = float(mbs)
+            except (TypeError, ValueError):
+                mbs_key = None
+        key = (goal, baseline, mbs_key)
+        out_n[key] += 1
+        if not r.get("success"):
+            continue
+        wc = r.get("wall_clock_s")
+        if wc in (None, ""):
+            continue
+        try:
+            out_solved[key].append(float(wc))
+        except (TypeError, ValueError):
+            continue
+    return {key: (n, sorted(out_solved[key])) for key, n in out_n.items()}
+
+
+def plot_solved_vs_time(grouped: Dict[tuple, tuple],
+                        title: str,
+                        out_path: Path) -> Optional[Path]:
+    """IPC-style cumulative-solve-rate-vs-wall-clock-budget curve
+    (audit #94 / #77 step 4).  One subplot per goal; one line per
+    (baseline, min_boxel_size).
+
+    Y: percentage of cells in the (goal, variant) group solved within
+    the wall-clock budget on X.  X: wall-clock budget in seconds, log
+    scale.  Denominator is ALL cells (success + failure), so the
+    plateau on the right equals the group's overall success rate.
+    """
+    if not HAVE_MPL:
+        print(f"\n=== {title} (matplotlib not available) ===")
+        for key in sorted(grouped.keys(),
+                          key=lambda k: (k[0] or "", k[1] or "",
+                                         k[2] if k[2] is not None else -1.0)):
+            n_total, solved = grouped[key]
+            print(f"  {key}: solved={len(solved)}/{n_total}")
+        return None
+
+    by_goal: Dict[str, Dict[tuple, tuple]] = defaultdict(dict)
+    for (goal, baseline, mbs), payload in grouped.items():
+        if goal is None:
+            continue
+        by_goal[goal][(baseline, mbs)] = payload
+
+    goals = sorted(by_goal.keys())
+    if not goals:
+        print(f"[plotter] no rows with a goal field for {title}")
+        return None
+
+    fig, axes = plt.subplots(1, len(goals),
+                              figsize=(5 * len(goals), 4.6),
+                              sharey=True)
+    if len(goals) == 1:
+        axes = [axes]
+
+    def _variant_style(baseline: str, mbs: Optional[float]) -> tuple:
+        if baseline == "uniform":
+            return ("uniform", "#7f7f7f")
+        if mbs is None:
+            return ("semantic", "#1f77b4")
+        return (f"semantic+mbs{mbs}", "#ff7f0e")
+
+    for ax, goal in zip(axes, goals):
+        for (baseline, mbs), (n_total, solved) in sorted(
+                by_goal[goal].items(),
+                key=lambda kv: (kv[0][0],
+                                kv[0][1] if kv[0][1] is not None else -1.0)):
+            label_base, color = _variant_style(baseline, mbs)
+            label = f"{label_base} ({len(solved)}/{n_total})"
+            if not solved or n_total == 0:
+                ax.plot([], [], color=color, label=label)
+                continue
+            ys = [(i + 1) / n_total * 100 for i in range(len(solved))]
+            ax.step([solved[0]] + solved, [0] + ys, where="post",
+                    color=color, label=label)
+        ax.set_xscale("log")
+        ax.set_xlabel("wall-clock budget (s, log)")
+        ax.set_title(goal)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="lower right", fontsize=8)
+    axes[0].set_ylabel("instances solved (%)")
+    axes[0].set_ylim(0, 100)
+    fig.suptitle(title)
     fig.tight_layout()
     fig.savefig(out_path, dpi=120)
     plt.close(fig)
@@ -1497,6 +1657,15 @@ def main(argv=None) -> int:
             title="TAMPURA wall-clock comparison (find-and-tray-stack)",
             out_path=out_dir / "tampura_wallclock_comparison.png",
         )
+        # Audit #94 (#77 step 4): IPC-style anytime curve.  No-op if
+        # the sweep does not vary min_boxel_size (SCALABILITY_VS_TIME).
+        if _has_anytime_axis(all_rows):
+            plot_solved_vs_time(
+                group_solved_vs_time(all_rows),
+                title="Cumulative solve rate vs wall-clock budget "
+                      "(anytime / #77)",
+                out_path=out_dir / "solved_vs_time.png",
+            )
         write_summary_table(all_rows, out_dir)
         return 0
 
@@ -1706,6 +1875,15 @@ def main(argv=None) -> int:
         title="TAMPURA wall-clock comparison (find-and-tray-stack)",
         out_path=out_dir / "tampura_wallclock_comparison.png",
     )
+    # Audit #94 (#77 step 4): IPC-style anytime curve.  No-op if the
+    # sweep does not vary min_boxel_size (SCALABILITY_VS_TIME).
+    if _has_anytime_axis(all_rows):
+        plot_solved_vs_time(
+            group_solved_vs_time(all_rows),
+            title="Cumulative solve rate vs wall-clock budget "
+                  "(anytime / #77)",
+            out_path=out_dir / "solved_vs_time.png",
+        )
     # Audit #73 — tabular summary alongside the plots (markdown +
     # 2 CSVs).  Aggregate by (goal, baseline) + per-occluder breakdown.
     write_summary_table(all_rows, out_dir)
