@@ -95,55 +95,6 @@ STYLE STANDARD (T2 Style issues)
 
 
 ################################################################################
-#  ISSUES — §5 EVALUATION PLAN  (sections/evaluation.tex)
-################################################################################
-
-================================================================================
-#108  [T2 · Style] [POLISH]  §5.4 — "reason effectively about"
-================================================================================
-Where: §5.4 — evaluation.tex:32
-What:  "...allows a PDDLStream-based TAMP framework to reason effectively about
-       object locations and occlusions." Soft, interchangeable phrase; does not
-       say what the system does with that reasoning.
-Fix:   "...lets a PDDLStream-based TAMP framework plan around uncertain object
-       locations and occlusions."
-
-================================================================================
-#109  [T2 · Style] [POLISH]  §5.4 — "scalable and task-relevant representation" abstract virtue-stacking
-================================================================================
-Where: §5.4 — evaluation.tex:32
-What:  "The core of our methodology is the adaptive semantic discretization of
-       the workspace, which provides a scalable and task-relevant representation
-       of spatial uncertainty." A chain of abstract adjectives; the reader
-       cannot picture the output.
-Fix:   "At the core of the methodology is adaptive semantic discretization: it
-       partitions the workspace into Boxels, concentrating detail on the objects
-       and occluded regions that matter for the task."
-
-================================================================================
-#110  [T2 · Style] [POLISH]  §5.4 — "expected contribution" reuses the same empty adjectives
-================================================================================
-Where: §5.4 — evaluation.tex:36
-What:  "The expected contribution of this research is a scalable and robust
-       framework for TAMP in partially known environments." Repeats the empty
-       adjective pair; states a contribution without saying what is new.
-Fix:   "The expected contribution is a TAMP framework that handles partial
-       observability without enumerating an exhaustive state space, by reasoning
-       over a compact, object-centric abstraction."
-
-================================================================================
-#111  [T2 · Style] [POLISH]  §5.4 — "leveraging a semantically meaningful abstraction"
-================================================================================
-Where: §5.4 — evaluation.tex:36
-What:  "By moving away from exhaustive state-space representations and leveraging
-       a semantically meaningful abstraction, this work paves the way for..."
-       "leveraging" is corporate-speak; "semantically meaningful abstraction" is
-       abstract where "Boxels" is concrete.
-Fix:   "By replacing exhaustive state-space representations with the Boxel
-       abstraction, this work aims to..."
-
-
-################################################################################
 #  ISSUES — THESIS CONVERSION (STRUCTURAL)          (added 2026-05-17)
 ################################################################################
 
@@ -351,14 +302,14 @@ Refs:  CODEBASE_AUDIT.txt #77 #93 #97
 OPEN ISSUES
 ================================================================================
 
-14 issues remain open. Each issue's header carries its tier (T0-T3) and
+10 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§5 Evaluation:   #108 #109 #110 #111
 Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138 #140
 
-Gating: the §5 issues (#87-#111) are subsumed by the #121 evaluation rewrite;
-#121/#126/#127/#128/#130 and the #137 migration depend on obtaining the
-official i6 thesis template (#136); #125 (Discussion) needs evaluation results.
+Gating: #121/#126/#127/#128/#130 and the #137 migration depend on obtaining
+the official i6 thesis template (#136); #125 (Discussion) needs evaluation
+results. All §5 sentence-level polish issues (#87-#111) have been resolved
+and removed; their structural successor is #121.
