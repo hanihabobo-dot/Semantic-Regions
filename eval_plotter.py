@@ -47,7 +47,12 @@ except ImportError:
 EXIT_REASON_COLOUR = {
     "success":          "#2ca02c",   # green
     "planner_failed":   "#d62728",   # red
-    "timeout":          "#7f0000",   # dark red
+    # Audit #99 polish — timeout is the worst-case "ran out of clock"
+    # outcome.  Bumped from dark-red (#7f0000) to vivid red so it
+    # reads clearly red against the brown ``no_summary`` band in a
+    # stack, and pinned to the top of every stack (see
+    # plot_failure_modes ordering below).
+    "timeout":          "#ff1744",   # vivid red
     "replan_limit":     "#ff7f0e",   # orange
     "no_summary":       "#8c564b",   # brown
     "physics_mismatch": "#9467bd",   # purple
@@ -599,6 +604,10 @@ def plot_boxel_volume_histogram(
                     alpha=0.55, edgecolor="black", linewidth=0.3,
                     label=f"{type_labels[tk]} (n={len(vs)})")
         ax.set_xscale("log")
+        # Audit #99 polish — log-y so OBJECT/SHADOW (~1-3k counts) stay
+        # visible on the uniform panel where FREE_SPACE spikes to ~90k
+        # and would otherwise flatten the other two categories.
+        ax.set_yscale("log")
         ax.set_xlabel("boxel volume (m³)")
         ax.set_title(variant)
         ax.grid(True, axis="y", alpha=0.3)
@@ -1057,6 +1066,12 @@ def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
     if "success" in all_reasons:
         all_reasons.remove("success")
         all_reasons = ["success"] + all_reasons
+    # Audit #99 polish — timeout is the worst-case ("ran out of clock");
+    # pin to the TOP of every stack so the vivid-red band is the topmost
+    # element regardless of how alphabetical sort places it.
+    if "timeout" in all_reasons:
+        all_reasons.remove("timeout")
+        all_reasons.append("timeout")
 
     labels = [f"{g}\n{v}" for g, v in keys]
     xs = list(range(len(keys)))
