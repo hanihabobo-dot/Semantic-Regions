@@ -148,7 +148,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #77 #78 #93 #95 #97 #98                                       #
+#  OPEN ISSUES — #77 #93 #97 #98                                               #
 #                                                                              #
 ################################################################################
 
@@ -177,13 +177,16 @@ STATUS (2026-05-20)
 The pre-evaluation correctness chain, the evaluation framework (#9 runner +
 #10 uniform-voxelization baseline), the eval-chapter figures (#73), the
 gripper-handoff correctness chain (#75-#85), and the README/wiki doc sweep
-(#63) are all DONE.  Six issues remain open: the two pre-existing
-#77 / #78, plus four eval-data-review issues (#93, #95, #97, #98) filed
-2026-05-20 from the re-parse of eval_results/sweep_anytime/ — including
-#97 (fine-resolution-discriminating scene) and its symmetric counterpart
+(#63) are all DONE.  Four issues remain open: the pre-existing #77,
+plus three eval-data-review issues (#93, #97, #98) filed 2026-05-20
+from the re-parse of eval_results/sweep_anytime/ — including #97
+(fine-resolution-discriminating scene) and its symmetric counterpart
 #98 (coarse-end resolution sweep), both motivated by #93's finding that
 semantic+mbs0.05 is indistinguishable from semantic at the current scene
-scales.  See the SUMMARY block at the bottom of this file for the tiered
+scales.  #78 (perception multi-shadow) deferred 2026-05-20 — see
+archive/CODEBASE_AUDIT_DEFERRED.txt; #95 closed 2026-05-20 by the
+_row_difficulty plotter rework; #96 closed 2026-05-20 (interpreter pin
++ Care(3) scan); #99 closed 2026-05-20 (variant-key plotter).  See the SUMMARY block at the bottom of this file for the tiered
 list and the full closed / deferred / wontfix breakdown.  Closed-issue
 detail lives in git history (git log --grep="audit: mark #N") and
 archive/CODEBASE_AUDIT_DEFERRED.txt.
@@ -395,136 +398,6 @@ Related:
             why uniform cannot run finer than auto_cell here.
        thesis_audit.md #140 — thesis-side mirror of the null
             result and discriminating-scene plan.
-
-
-================================================================================
-#78. SENSE SHOULD UPDATE BELIEF FOR EVERY SHADOW THE RAY BUNDLE CROSSES, NOT JUST THE QUERIED ONE
-================================================================================
-Status:   OPEN.  Raised 2026-05-14 (later) by user during #76
-          fix verification.  "sense should sense all shadows,
-          not just the one we are looking at."
-Priority: TIER 2 — perception efficiency / plan-length
-          reduction.  Not a correctness bug; today's pipeline
-          works.  The optimisation collapses sequential
-          per-shadow senses into one camera observation that
-          informs many regions at once, matching how a fixed
-          overhead camera actually sees the workspace.
-Where:    execution.py sense_shadow_raycasting (line ~44) —
-          the rayTestBatch call already returns per-ray
-          hit_position + hit_uid; just don't throw away the
-          intersections that fall in non-queried shadow AABBs.
-          execution.py handle_sense_action — the found_target
-          / clear_but_empty / contains_nontarget / still_blocked
-          branch dispatch currently fires for one shadow_id;
-          needs to fire for each shadow with strong-enough
-          per-ray signal.
-          PDDL: keep :action sense unchanged.  The multi-region
-          update lands in the dispatcher's between-plan registry
-          / belief diff (known_empty_shadows + visible_target_-
-          locations + refresh_object_aabbs), which the planner
-          re-reads via _build_init on every replan.  Cleaner
-          than extending the action signature.
-Depends:  None directly.  Benefits from #72 [DONE] (sharper
-          shadow AABBs after the two-slab carve mean per-ray
-          intersection tests are clean) and #71 [DONE] (live
-          OBJECT AABBs feed accurate hit classification).
-Effort:   1-2 days for the perception change + dispatcher
-          plumbing.  No domain change required under option (a).
-
-What:  Today the sense pipeline:
-       1. Plan picks one shadow_id.
-       2. rayTestBatch from camera → 8 AABB corners + 1 centre
-          (audit #69 numThreads=0).
-       3. Branch on the SINGLE outcome for the queried shadow.
-
-       But the rays we cast form a bundle from the overhead camera
-       down to the target volume; many other shadow AABBs lie
-       along these paths.  Each ray's hit position relative to
-       every shadow it crosses is observable for free: if the
-       first physical hit is past a shadow's exit plane, that
-       shadow is empty along that ray.  Across the rays per
-       sense × shadows intersected we get a dense per-shadow
-       occupancy signal for the cost of one rayTestBatch call.
-
-       Concrete payoff on find-and-tray-stack: typical runs
-       sense 3-7 shadows sequentially to find one hidden
-       target.  Each sense is move → sense in the PDDL plan
-       (~2-4 s of arm motion + camera read).  If a single
-       observation informs 3-5 shadows, the expected sense-
-       action count per run drops roughly by that factor —
-       plan length shrinks, eval wall-clock drops, replan
-       count drops.
-
-Fix:   ONE PERCEPTION-LAYER COMMIT.
-
-       Step 1 — extend sense_shadow_raycasting to bin per-ray
-       outcomes by EVERY shadow AABB the ray crosses (not just
-       the queried one).  For each ray (origin, dir):
-         entry_t, exit_t = ray_aabb_intersection(shadow.AABB)
-         first_hit_t      = rayTestBatch result
-         if first_hit_t > exit_t:           shadow empty along this ray
-         elif entry_t <= first_hit_t <= exit_t:
-                                            body present; classify the
-                                            hit (target / occluder /
-                                            non-target / robot)
-         else:                              hit pre-entry — irrelevant
-       Aggregate per shadow: {target_hits, occluder_hits,
-       nontarget_hits, robot_hits, empty_misses}.
-
-       Step 2 — multi-outcome dispatcher in handle_sense_action.
-       Fire the existing outcome branches for every shadow with
-       strong enough per-ray coverage (start at >= 50 % of rays
-       reaching the AABB):
-         - target_hits > 0                  → found_target.
-         - target_hits == 0, occluder_hits == 0,
-           nontarget_hits == 0, coverage >= 50 %
-                                            → clear_but_empty.
-         - nontarget_hits > 0               → contains_nontarget
-                                              (per detected body).
-         - coverage < 50 %                  → leave unchanged
-                                              (insufficient signal).
-
-       Step 3 — belief / registry diff loop the dispatcher over
-       the SET of informed shadows instead of the single shadow_id.
-       Each informed shadow goes through the same helpers
-       (refresh_object_aabbs, compute_shadow_blockers,
-       reboxelize_free_space) used today for one shadow.
-
-Care:
-       (1) Coverage threshold matters.  Too low → false-empty
-           on a region touched by one edge-grazing ray.  Too
-           high → most shadows never get credited and we're
-           back to per-region sensing.  Start at 50 %, log the
-           per-shadow coverage for tuning.
-       (2) found_target uses a HIT, not a miss.  Conservative
-           on target detection, permissive on emptiness — the
-           right asymmetry.  Don't let a single grazing target
-           hit fire a found_target for a barely-observed region.
-       (3) shadow_occluder_map gets rebuilt after every sense
-           via compute_shadow_blockers.  With many shadows
-           flipping view-clear in one action, run the audit
-           #58 / #76 paths on seeds 1905790753 + 999 as a
-           regression smoke check — both read the current
-           registry per-plan so they should ride along
-           naturally, but verify.
-       (4) Eval impact: audit #73 plot 4 (sense-action count)
-           is the direct indicator.  Expect a per-run sense
-           count drop on find-and-tray-stack; re-run plot 4
-           post-fix.
-
-Related:
-       #71 [DONE 2026-05-12 (later)] — refresh OBJECT AABBs
-            on sense.  Sharper OBJECT AABBs sharpen per-ray
-            hit classification.
-       #72 [DONE 2026-05-12 (later)] — two-slab shadow carve.
-            Sharper shadow AABBs reduce false ray-in-region
-            hits in the multi-shadow aggregate.
-       #76 [DONE 2026-05-14] — sense_found_target registers
-            an OBJECT boxel for the discovered target.  This
-            issue extends the same path to OTHER shadows the
-            ray bundle informed.
-       #73 [DONE 2026-05-14] — eval plot 4 is the direct
-            success metric for this issue.
 
 
 ================================================================================
@@ -1007,12 +880,10 @@ TIER labels.  Full bodies of closed issues are in git history
 (git log --grep="audit: mark #N") and the "RESOLVED / DONE ISSUES" section of
 archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 5 items (full bodies above):
+OPEN — 4 items (full bodies above):
   #77  TIER 1 — anytime compactness sweep: success rate vs. wall-clock
        time budget with finer semantic boxels (IPC-style cumulative-
        solved curve).
-  #78  TIER 2 — sense should update belief for every shadow the ray
-       bundle crosses, not just the queried one.
   #93  TIER 1 — sweep_anytime full-sweep findings (2700/2700 cells);
        headline data for #77 Step 5 / eval-chapter writeup.
   #97  TIER 1 — design a fine-resolution-discriminating scene
@@ -1070,7 +941,8 @@ CLOSED (one-line; full detail in git / archive):
   Older (#1-#60 era): bodies removed in the 2026-05-12 slim — see git log.
 
 DEFERRED (bodies in archive/CODEBASE_AUDIT_DEFERRED.txt):
-  #2, #14, #42, #47, #51 (earlier);  #50, #57, #59, #61, #65 (2026-05-12).
+  #2, #14, #42, #47, #51 (earlier);  #50, #57, #59, #61, #65 (2026-05-12);
+  #78 (2026-05-20).
 WONTFIX / merged / removed:  #6, #11, #12, #13, #30.
 RELOCATED:  #66 -> TAMPURA_PLAN.md (Plan A done on main; Plan C pending on
   branch audit-64-tampura-binary-grid).
