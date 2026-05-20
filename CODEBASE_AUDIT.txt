@@ -699,156 +699,147 @@ Related:
 
 
 ================================================================================
-#93. ANYTIME SWEEP STATUS — SWEEP_ANYTIME ~94% COMPLETE; KEY FINDINGS FROM PARTIAL DATA (#77 IN PROGRESS)
+#93. ANYTIME SWEEP STATUS — SWEEP_ANYTIME 2700/2700 COMPLETE; FULL-SWEEP FINDINGS FOR #77 STEP 5
 ================================================================================
-Status:   OPEN.  Filed 2026-05-20 from an independent re-parse of
-          eval_results/sweep_anytime/.  The sweep is the #77
-          SCALABILITY_VS_TIME run (2700 planned cells); it has not
-          finished.  This issue is the bridge from the partial data
-          to #77 Step 4/5: it records what the data is, what is
-          missing, and what the data already shows so the next
-          worker does not re-derive it.
-Priority: TIER 1 — directly gates the eval-chapter results
-          (#77 Step 5).  Not a code defect itself; tracks the data
-          state and feeds #94/#95/#96.
-Where:    eval_results/sweep_anytime/{matrix.json, cells/,
-          plots_preliminary/}; preview parser at
-          eval_results/sweep_anytime/preview_plots.py.
-Depends:  #77 Steps 3a/3b [DONE].  Blocks #77 Step 4 (#94
-          implementation) and Step 5 (eval-chapter writeup).
-Effort:   0 days — documentation only.  The listed sub-actions
-          (#94 plot, #95 cell-tag, #96 env bug, plus completing
-          the sweep) are tracked separately.
+Status:   OPEN.  Sweep completed 2026-05-20; aggregated.csv and
+          canonical plots refreshed.  This issue is the bridge
+          from the full data to #77 Step 5 (eval-chapter writeup).
+Priority: TIER 1 — gates the eval-chapter results (#77 Step 5).
+          Not a code defect; tracks the data and feeds the writeup.
+Where:    eval_results/sweep_anytime/{aggregated.csv,
+          aggregated.jsonl, summary_table.md, *.png}.
+Depends:  #77 Steps 3a/3b [DONE], #94 [DONE 2026-05-20].  Blocks
+          #77 Step 5 and is the data input for thesis_audit.md
+          #140.
+Effort:   0 days — documentation only.  #95 (cell-tag misnaming)
+          and #96 (interpreter pin) are tracked separately.
 
-What:  Sweep run state (refreshed 2026-05-20 by re-parsing every
-       cells/*/timing_summary.json with an independent script;
-       outputs in eval_results/sweep_anytime/plots_preliminary/.
-       Supersedes the 2026-05-19 reading at 82% coverage; older
-       numbers preserved only in git history of this file):
-       - 2547 cell directories on disk vs 2700 planned in
-         matrix.json (~94.3%); newest cell timing_summary
-         written 2026-05-20 06:07 — sweep is still running.
-       - 2545 cells parsed; 1 empty dir
-         (occ4_tgt3_hid0_seed25_stack_uc0_semantic).
-       - 169 cells have the failure-stub schema (no run_config):
-         115 hit the 1800 s wall-clock timeout, 54 produced no
-         summary; 5 of the 54 are an environment bug (#96), not
-         planner failures.  no_summary count unchanged since
-         2026-05-19 — no new env crashes overnight.
-       - Missing planned cells (~155): all stack/uniform — the
-         block is now 145/300 (was 0/300 on 2026-05-19); stack/
-         semantic and stack/mbs0.05 are now complete at 300/300
-         each; holding and find-and-tray-stack remain fully
-         present (300/300 per config).
-       - Overall success 1061/2545 = 41.7% (was 42.0% at 82%
-         coverage — slight drop driven by the new stack/uniform
-         and stack-height-4 failures filling in: replan_limit
-         jumped 80 -> 227, planner_failed 999 -> 1043).
+What:  Sweep state (2026-05-20, FULL):
+       - 2700/2700 cells executed; aggregated.csv (2700 rows) and
+         aggregated.jsonl produced.
+       - Overall success 1074/2700 = 39.8%.
+       - Exit-reason mix:
+             success            1074
+             planner_failed     1177
+             replan_limit        238
+             timeout             111
+             no_summary           55  (5 of these are #96 env
+                                       crashes, not planner
+                                       failures — re-run 05-20)
+             physics_mismatch     30
+             drop_failed          14
+             all_searched          1
 
-       Three planner configurations the matrix produced
-       (axis: baseline x min_boxel_size): semantic (auto cell,
-       min_boxel_size=null), semantic+mbs0.05 (baseline=semantic,
-       min_boxel_size=0.05), uniform (baseline=uniform).
-       semantic+mbs0.05 is a full arm of 900 cells; its result
-       must be reported alongside semantic in #77 Step 5.
+       Three planner configurations (axis: baseline x
+       min_boxel_size): semantic (auto cell, min_boxel_size=null),
+       semantic+mbs0.05 (baseline=semantic, mbs=0.05), uniform
+       (baseline=uniform).  Cell counts: 900 / 899 / 901 — 1
+       missing f-a-t-s/mbs0.05 cell, 1 extra stack/uniform cell
+       (minor hygiene noise; does not affect headlines).
 
-       Per-variant headline numbers (refreshed 2026-05-20):
-       - Uniform still collapses on find-and-tray-stack:
-         4/300 success (1.3%) vs ~40% semantic.  ~10x boxel
-         inflation (326-329 vs 35-45 semantic) and ~10x init-
-         state fact inflation (2356-3365 vs 278-559).  Median
-         planning time on solved runs ~28-35 s vs ~3-7 s for
-         semantic.  Robust across the 2026-05-19/05-20 deltas.
-       - semantic vs semantic+mbs0.05 is, on the now full stack
-         data, STILL a null result.  stack: identical seed-for-
-         seed at 184/300 each (vs 172/207 each on 2026-05-19);
-         holding 42.3% vs 46.3% (unchanged); find-and-tray-
-         stack 39.7% vs 32.3% (mbs0.05 still worse).  #77's
-         headline "finer-resolution wins under a fixed budget"
-         is NOT supported even now that all stack_height=4
-         cells are in.  The taller-stack-cells hedge from the
-         2026-05-19 reading did NOT shift the picture.  This
-         is the strongest single finding against the #77
-         hypothesis so far.
-       - NEW (stack/uniform 145/300 partial): on stack, uniform
-         shows a HIGHER raw success rate than semantic so far —
-         107/145 = 73.8% vs semantic 184/300 = 61.3% — at the
-         cost of mean 1341 boxels (vs 27.8), mean 11187 init
-         facts (vs 312), and 18 s vs 1 s median planning time.
-         The anytime curve makes the trade-off literal: under
-         ~15 s budget semantic + mbs0.05 dominate (sharp rise
-         to ~61%), uniform doesn't begin until ~25 s, then
-         climbs to ~73% by ~100 s.  Comparison is PARTIAL
-         (uniform 145/300) and stack_height is mixed; do not
-         promote to "uniform wins on stack" until (i) the
-         stack/uniform block is complete and (ii) cells are
-         split by stack_height per #95.  If the finding
-         survives both, it complicates the "uniform doesn't
-         scale" story for the chapter.
-       - NEW (stack difficulty by height): semantic stack
-         dropped from 83% (occ2/3 only, n=207, stack_height
-         2/3) on 2026-05-19 to 61.3% (full occ2/3/4, n=300,
-         stack_height 2/3/4) on 2026-05-20.  The ~93 newly
-         added height-4 cells contributed roughly 12 successes
-         (~13% on height-4 alone) — large difficulty jump at
-         stack_height=4.  Tied to #95; the chapter must report
-         stack results sliced by stack_height, not by the
-         misleading occ token.
-       - Stack-goal "n_occluders" axis is still degenerate
-         (#95); the new occ4 stack cells confirm it
-         (run_config n_occluders=0, n_targets=4,
-         stack_height=4).
+       Per (goal, arm) headline (median over solved cells where
+       applicable):
 
-       Six preliminary plots regenerated into
-       eval_results/sweep_anytime/plots_preliminary/
-       (success_rate_by_variant_goal.png,
-        planning_time_by_variant_goal.png,
-        boxel_count_breakdown.png,
-        init_state_facts_by_variant_goal.png,
-        failure_modes.png,
-        anytime_curves.png)
-       plus preliminary_per_cell.csv and preliminary_summary.csv.
-       Title bars on the regenerated PNGs still read "PARTIAL
-       ~82%" — script title strings are hard-coded; cosmetic,
-       data inside is the refreshed set.  Still preliminary;
-       regenerate again after the stack/uniform block completes
-       and after #94/#95/#96 land.  The anytime_curves.png is
-       the prototype for #77 Step 4 (lift it into
-       eval_plotter.py via #94).
+         goal                | arm              | success    | rate  | med plan | med boxels | med facts
+         --------------------|------------------|------------|-------|----------|------------|----------
+         holding             | semantic         | 127/300    | 42.3% |   2.96 s |     35     |    276
+         holding             | semantic+mbs0.05 | 139/300    | 46.3% |   2.61 s |     34     |    277
+         holding             | uniform          | 100/300    | 33.3% |  28.55 s |    313     |   2210
+         find-and-tray-stack | semantic         | 119/299    | 39.8% |   7.29 s |     42     |    482
+         find-and-tray-stack | semantic+mbs0.05 |  99/300    | 33.0% |   7.37 s |     41     |    475
+         find-and-tray-stack | uniform          |   4/300    |  1.3% |  39.55 s |    315     |   3264
+         stack               | semantic         | 184/300    | 61.3% |   1.12 s |     28     |    296
+         stack               | semantic+mbs0.05 | 184/300    | 61.3% |   1.12 s |     28     |    296
+         stack               | uniform          | 118/301    | 39.2% |  21.80 s |   1340     |  11267
 
-Fix:   Three sub-actions, tracked separately:
-       (a) Finish the sweep — run the remaining ~155 stack/
-           uniform cells (was 485 on 2026-05-19; stack/semantic
-           and stack/mbs0.05 are now complete).
-       (b) Implement plot_solved_vs_time in eval_plotter.py —
-           #94 (#77 Step 4).
-       (c) Fix #96 and re-run the 5 numpy-ModuleNotFoundError
-           cells; they are not planner failures.
-       Once (a) and (b) land, re-derive the aggregate, then #77
-       Step 5 / the eval-chapter writeup.
+       Headline findings:
+       - semantic vs semantic+mbs0.05 is a NULL RESULT on the
+         full sweep.  Stack: identical 184/300 each, seed-for-
+         seed.  Holding: 127 vs 139 — mbs0.05 slightly better
+         (within seed noise).  Find-and-tray-stack: 119 vs 99 —
+         mbs0.05 noticeably worse.  Net: the #77 hypothesis
+         "finer resolution wins under a fixed time budget" is
+         unsupported at the current scene scales.  This is the
+         strongest single finding against #77 and the motivator
+         for thesis #140 / CODEBASE #97 (fine-resolution-
+         discriminating scene).
+       - Uniform collapses on find-and-tray-stack: 4/300 = 1.3%
+         vs semantic 39.8%.  ~7x boxel inflation (315 vs 42
+         median) and ~7x init-state inflation (3264 vs 482).
+         Robust across the run.
+       - Uniform on stack: 118/301 = 39.2% — LOWER than semantic
+         61.3%.  REVERSES the 2026-05-19 partial-data reading
+         (107/145 = 73.8%) — that was an artifact of which
+         seeds had completed first.  Trade-off on the full data:
+         uniform pays ~50x boxel inflation (1340 vs 28 median)
+         and ~38x init-state inflation (11267 vs 296) for a 22
+         percentage-point success drop.  Clean support for the
+         "uniform doesn't scale" thesis story.
+       - Uniform on holding: 33.3% — succeeds but at ~10x median
+         planning time (28.55 s vs 2.96 s) and ~8x init-state
+         facts (2210 vs 276).  Semantic wins on rate AND speed.
+       - Stack difficulty grows sharply with stack_height (via
+         the #95-misnamed occluder token: run_config records
+         stack_height in the n_occluders matrix slot).  The
+         chapter must slice stack results by run_config.stack_-
+         height, not by the cell-name occ token.
+       - TAMPURA wall-clock comparison (find-and-tray-stack, the
+         closest TAMPURA analogue): semantic 14.2 s median
+         (n=218) vs TAMPURA 57 s mean (n=20, Table II) — ~4x
+         speedup.  THESIS_NOTES §21 framing applies.
+
+       Canonical plots regenerated 2026-05-20 in
+       eval_results/sweep_anytime/: solved_vs_time.png (now
+       extends to the documented 1800 s wall-clock cap — see
+       Fix #94 follow-up), success_rate_vs_n_occluders__*.png
+       (3 panels), planning_time_vs_n_occluders__*.png,
+       boxel_count_breakdown__*.png, init_state_facts_vs_n_-
+       occluders__*.png, sense_action_count_vs_n_occluders__*.png,
+       boxel_volume_histogram__*.png, boxel_evolution_per_-
+       replan__*.png, per_call_planning_time__*.png,
+       wallclock_vs_planning__*.png, plan_count_vs_n_occluders__-
+       stack.png, plan_count_distribution.png, failure_modes.png
+       (colour-collision fixed per #94), tampura_wallclock_-
+       comparison.png (annotation no longer clipped per #94),
+       plus summary_table.md / summary_table_aggregate.csv /
+       summary_table_per_occluders.csv.
+
+Fix:   Sub-actions:
+       (a) Finish the sweep — DONE 2026-05-20.
+       (b) plot_solved_vs_time in eval_plotter.py — DONE
+           (#94 closed; 1800 s cap-extension landed as a
+           follow-up 2026-05-20).
+       (c) #96 numpy env bug: 5 affected cells re-ran 2026-05-20
+           with real outcomes (1 success, 2 planner_failed, 1
+           timeout, 1 PDDLStream domain.pddl race — new env
+           wrinkle, separate from numpy).  The numpy fail-fast
+           guard in test_full_pipeline.py and the env probe in
+           eval_runner.py main() are in place.  #96 stays open
+           only for the broader interpreter-pin question.
+       Remaining: #77 Step 5 (eval-chapter writeup) consumes
+       the numbers above.  thesis_audit.md #140 (eval-design
+       gap) is the thesis-side mirror.
 
 Care:
-       (1) Numbers above are from the PARTIAL sweep (~94%
-           coverage; only stack/uniform still filling).  These
-           findings are robust across the 2026-05-19/05-20
-           deltas: uniform collapses on f-a-t-s; semantic-vs-
-           mbs0.05 is a null result on the full stack data;
-           stack difficulty grows sharply with stack_height;
-           #95 cell-tag degeneracy.  The new uniform-on-stack
-           apparent advantage is NOT yet robust — wait for
-           (a) full data + (b) #95 stack-height slicing.
-       (2) preview_plots.py is a scratch parser, not production
-           code.  Once #94 lifts plot_solved_vs_time into
-           eval_plotter.py, decide whether to keep
-           preview_plots.py (handy for partial-data spot
-           checks) or remove it.
+       (1) Numbers above are FINAL (2700/2700 cells).  Re-derive
+           only if cells are added or recomputed.  Older
+           partial-data readings preserved only in git history
+           of this file.
+       (2) preview_plots.py (eval_results/sweep_anytime/) is a
+           scratch parser kept for partial-data spot checks; now
+           that the canonical pipeline is producing the same
+           plots end-to-end, it can be removed in the next
+           sweep cleanup.
 
 Related:
-       #77 [OPEN, TIER 1] — the parent anytime sweep.  Closes
-            #77 Steps 4 and 5 alongside.
-       #94 — implement plot_solved_vs_time.
-       #95 — stack-scene cell-tag misnaming.
-       #96 — sweep cell numpy ModuleNotFoundError env bug.
+       #77 [OPEN, TIER 1] — parent anytime sweep; Step 5
+            (eval-chapter writeup) consumes these numbers.
+       #95 — stack-scene cell-tag misnaming (still open).
+       #96 — sweep cell numpy ModuleNotFoundError env bug
+            (rerun done; interpreter-pin work outstanding).
+       thesis_audit.md #140 — eval-design gap; the null
+            semantic-vs-mbs0.05 finding is the chapter writeup
+            material.
 
 
 ================================================================================

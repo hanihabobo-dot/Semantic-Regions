@@ -9,7 +9,7 @@
 | holding | semantic | 600 | 266 | 44.3% | 7.59 | 2.50 | 303 | 35.0 |
 | holding | uniform | 300 | 100 | 33.3% | 50.35 | 2.07 | 2356 | 326.0 |
 | stack | semantic | 600 | 368 | 61.3% | 1.23 | 1.19 | 312 | 27.8 |
-| stack | uniform | 222 | 117 | 52.7% | 22.16 | 1.03 | 11454 | 1340.5 |
+| stack | uniform | 301 | 118 | 39.2% | 23.84 | 1.04 | 12097 | 1339.9 |
 
 ## Per-occluder breakdown
 
@@ -32,4 +32,4 @@ Note: stack-scene cells log `n_occluders=0` because stack_scene has no occluders
 | stack | semantic | 0 | 589 | 368 | 62.5% | 1.23 | 1.19 | 312 | 27.8 |
 | stack | semantic | 3 | 2 | 0 | 0.0% | — | — | — | — |
 | stack | semantic | 4 | 9 | 0 | 0.0% | — | — | — | — |
-| stack | uniform | 0 | 222 | 117 | 52.7% | 22.16 | 1.03 | 11454 | 1340.5 |
+| stack | uniform | 0 | 301 | 118 | 39.2% | 23.84 | 1.04 | 12097 | 1339.9 |
