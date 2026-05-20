@@ -58,6 +58,12 @@ Contents of this file:
     efficiency optimisation; today's pipeline works correctly, the change
     only reduces sense-action count.  Deferred per user direction — not
     pursued for thesis completion.  Full body preserved verbatim below.
+  - DEFERRED (#97, 2026-05-20): design a fine-resolution-discriminating scene.
+    TIER 1 research item; would test the #77 hypothesis on a geometry where
+    leaf size could matter.  Deferred per user direction — not pursued for
+    thesis completion.  The null finding on existing scenes is already
+    disclosed honestly in EVAL_SUMMARY.md §4.3, satisfying #97 Care(3).
+    Full body preserved verbatim below.
 
 ================================================================================
 56. DEAD COMPUTATION — POINT CLOUD AND NEIGHBORS NEVER USED  [PARTIALLY DONE, DEFERRED]
@@ -1729,6 +1735,134 @@ Related:
             ray bundle informed.
        #73 [DONE 2026-05-14] — eval plot 4 is the direct
             success metric for this issue.
+
+
+================================================================================
+#97. DESIGN A FINE-RESOLUTION DISCRIMINATING SCENE — DEMONSTRATE WHERE mbs0.05 / FINER PARTITION ACTUALLY HELPS
+================================================================================
+Archived: 2026-05-20 — deferred per user direction.  TIER 1
+          research item; not pursued for thesis completion.  The
+          null finding on the existing scenes is disclosed
+          honestly in EVAL_SUMMARY.md §4.3 ("the audit-#77
+          hypothesis is not supported on the scenes the eval
+          actually exercises"), which satisfies #97 Care(3) ("both
+          findings stand").  Re-open by reviving the scene design
+          below and reinstating the SCALABILITY_VS_TIME
+          sub-matrix.  Pre-existing body preserved verbatim
+          below.
+Status:   OPEN.  Filed 2026-05-20 in response to #93's finding
+          that semantic and semantic+mbs0.05 are statistically
+          indistinguishable on the current sweep — the
+          headline #77 "finer resolution wins under a fixed
+          time budget" hypothesis is unsupported on the
+          scenes the eval actually exercises.
+Priority: TIER 1 — gates #77's headline claim and feeds the
+          thesis evaluation-design discussion
+          (thesis_audit.md #140).
+Where:    test_full_pipeline.py scene builders +
+          boxel_env.py; collect_eval_corpus.py for the new
+          scene's corpus; MATRIX_PRESETS in eval_runner.py
+          for the sub-matrix that exercises it.
+Depends:  #93 (null-result finding); #77 (parent anytime
+          sweep).
+Effort:   3-5 days for design + scene implementation +
+          corpus probe + a smoke sub-sweep, before
+          re-running at corpus scale.
+
+What:  #93 shows semantic and semantic+mbs0.05 are
+       indistinguishable on every goal: stack identical
+       seed-for-seed at 184/300 each; holding 42.3% vs
+       46.3% (within seed noise); find-and-tray-stack
+       39.7% vs 32.3% (mbs0.05 actually WORSE).  The
+       0.05 m leaf floor does not change outcomes because
+       - objects are ~4 cm cubes;
+       - semantic's auto_cell floor (audit #67) is
+         ~6-9 cm (largest object's footprint + 1 cm) and
+         dominates the merged partition;
+       - CellMerger collapses same-label free-space into
+         large boxels regardless of leaf size;
+       - OBJECT and SHADOW boxels are per-object and
+         never touched by --min-boxel-size.
+       The current scenes therefore do NOT exercise the
+       regime in which a sub-auto_cell leaf could matter.
+       #77's hypothesis is not necessarily wrong — the
+       eval does not test it.
+
+Fix:   Design and implement at least one task / scene
+       where ONLY a finer-than-auto_cell free-space
+       partition can solve the problem.  Candidate
+       patterns:
+
+       (a) Narrow-corridor reach — two large occluders
+           forming a sub-auto_cell-width gap with a target
+           reachable only by routing the arm through the
+           gap.  Coarse partition cannot represent the
+           corridor as free; finer partition can.
+       (b) Sub-cell pocket placement — place an object
+           into a slot whose entry is smaller than the
+           largest object's footprint (a notched tray).
+           Coarse cells reject the placement; fine cells
+           admit it.
+       (c) Sub-cell hidden target — a hidden target whose
+           shadow is smaller than auto_cell, lodged
+           between two occluders.  Coarse partition cannot
+           isolate the shadow from the occluders for
+           sensing.
+       (d) Dense small-occluder shelf — many sub-auto_cell
+           occluders; reasoning about reach and visibility
+           requires fine free-space partition.
+
+       Steps (recommend (a) for the first pass — it has
+       the cleanest reach vs visibility trade-off):
+       Step 1 — pick one pattern.
+       Step 2 — implement the scene builder + register it
+                in test_full_pipeline.py's scene dispatch.
+       Step 3 — extend collect_eval_corpus.py with a
+                probe for the new scene; produce a small
+                corpus (e.g. 50 seeds).
+       Step 4 — add a SCALABILITY_VS_TIME sub-matrix using
+                the new scene at the {auto, 5 cm}
+                resolution axis already swept.
+       Step 5 — smoke sub-sweep (~50 seeds).  Verify
+                discrimination: semantic-auto should fail
+                or be slow, semantic+mbs0.05 should
+                succeed, uniform should fail (auto-clamped
+                per #66).
+       Step 6 — once discrimination is shown, expand to
+                full corpus and re-run.
+
+Care:
+       (1) The discriminating scene must be HONEST: a
+           realistic manipulation task, not a contrived
+           needle-threading toy.  Reviewers reject
+           artificial geometry built only to embarrass
+           the baseline.
+       (2) For the comparison to mean anything, uniform
+           must genuinely fail (or be very slow) on the
+           new scene.  If uniform can solve it at its
+           auto_cell, the test is not isolating
+           resolution.  Likewise semantic-auto must fail —
+           if both auto-config planners solve it, mbs0.05
+           still adds nothing.
+       (3) #93's null result on the current scenes must
+           remain in the chapter even if Step 5 succeeds.
+           The story is: "in the regime our scenes
+           exercise, leaf floor is irrelevant; in this
+           new scene it is decisive."  Both findings
+           stand.
+       (4) Match the new scene's max-plan-time to the
+           rest of the sweep (1800 s) for fair anytime
+           curve comparison.
+
+Related:
+       #77 [OPEN, TIER 1] — the parent anytime sweep;
+            this scene is what its hypothesis actually
+            requires.
+       #93 — null result that prompted this issue.
+       #95 — stack-scene cell-tag misnaming (the new
+            scene must not repeat it).
+       thesis_audit.md #140 — the mirror evaluation-
+            design issue on the thesis side.
 
 
 ################################################################################
