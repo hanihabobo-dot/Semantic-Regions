@@ -1,0 +1,123 @@
+Boxel Test Environment initialized successfully!
+Camera position: [ 0.1 -0.8  0.7]
+Camera target: [0.1 0.  0.5]
+Occluders: 4 (box, box, box, box)
+Targets:   5 (box, box, box, box, box)
+Objects in scene: ['plane', 'table', 'robot', 'tray', 'red_object', 'green_object', 'orange_object', 'blue_object', 'cyan_object', 'purple_object', 'yellow_object', 'red_object_2', 'green_object_2']
+============================================================
+FULL PIPELINE: PDDLStream + Replanning
+============================================================
+
+--- Run configuration ---
+  scene              = random-pairs
+  n_occluders        = 4
+  n_targets          = 5
+  n_hidden           = 4
+  n_extra_distractors = 1
+  n_objects          = 3
+  seed               = 304
+  goal               = find-and-tray-stack
+  stack_height       = 2
+  unit_costs         = False
+  baseline           = uniform
+  uniform_cell_size  = 0.05
+  min_boxel_size     = None
+  gui                = False
+  boxel_viz          = True
+  show_free          = False
+  log_level          = quiet
+
+--- Phase 1: Environment Setup ---
+Boxel Test Environment initialized successfully!
+Camera position: [ 0.1 -0.8  0.7]
+Camera target: [0.1 0.  0.5]
+Occluders: 4 (box, box, box, box)
+Targets:   5 (box, box, box, box, box)
+Objects in scene: ['plane', 'table', 'robot', 'tray', 'red_object', 'green_object', 'orange_object', 'blue_object', 'cyan_object', 'purple_object', 'yellow_object', 'red_object_2', 'green_object_2']
+  [audit-66/67] Effective minimum boxel size: 0.098 m (largest object AABB 0.088 m + 0.01 m headroom).
+  Hidden-target guarantee OK: 4/6 hidden (requested >= 4, seed=304).
+Robot ID: 2
+
+--- Phase 2: Calculating Boxels ---
+  Calculated 317 boxels
+
+--- Phase 3: Creating BoxelRegistry ---
+Saved 317 boxels to boxel_data.json
+  317 boxels, 14 shadows, 6 occluders
+
+--- Phase 4: Hidden Object Scenario ---
+  2-cube tray tower: green_object_2 (on tray) + purple_object (on green_object_2)
+  Find-and-tray-stack goal: ('and', ('on', 'green_object_2', 'tray'), ('on', 'purple_object', 'green_object_2'))
+  Tray: tray
+  Shadow blockers (audit #78):
+    shadow_of_blue_object__00 blocked by: ['blue_object']
+    shadow_of_blue_object__01 blocked by: ['blue_object']
+    shadow_of_green_object__00 blocked by: ['green_object']
+    shadow_of_green_object__01 blocked by: ['green_object_2']
+    shadow_of_green_object__02 blocked by: ['green_object_2', 'red_object']
+    shadow_of_green_object__03 blocked by: ['green_object']
+    shadow_of_green_object_2__00 blocked by: ['green_object_2']
+    shadow_of_green_object_2__01 blocked by: ['orange_object']
+    shadow_of_green_object_2__02 blocked by: ['green_object_2']
+    shadow_of_orange_object__00 blocked by: ['orange_object']
+    shadow_of_orange_object__01 blocked by: ['orange_object']
+    shadow_of_red_object__00 blocked by: ['orange_object', 'red_object']
+    shadow_of_red_object__01 blocked by: ['red_object']
+    shadow_of_red_object__02 blocked by: ['orange_object']
+  Boxel->PyBullet mapping: 6 objects
+
+--- Phase 5: Planning with Replanning ---
+  Exported initial problem to /mnt/c/Users/HaniAlassiriAlhabbou/git/Semantic_Boxels/pddl/problem_debug.pddl
+
+=== PLAN #1 ===
+Tray-stack progress: {} (unknown shadows: 14)
+  [#76-diag] init facts: 3710 total, by predicate: {'boxel_fits': 1788, 'obj_at_boxel_KIF': 613, 'blocks_view_at': 598, 'Boxel': 318, 'is_free_space': 297, 'on_surface': 41, 'is_shadow': 14, 'Obj': 9, 'on_table': 7, 'clear': 7, 'obj_at_boxel': 7, 'is_object': 6, 'is_tray': 1, 'handempty': 1, 'Config': 1, 'obj_pose_known': 1, 'at_config': 1}
+  [#76-diag] goal: ('and', ('on', 'green_object_2', 'tray'), ('on', 'purple_object', 'green_object_2'))
+  [#76-diag] held_obj=None, max_time=1800.0s, verbose=False
+  [#76-diag] boxel_fits per obj: {'blue_object': 297, 'green_object': 297, 'green_object_2': 299, 'orange_object': 297, 'purple_object': 301, 'red_object': 297}
+  [#76-diag] shadows (14 total, 0 view-clear NOW): ['shadow_of_green_object__01(blockers=1)', 'shadow_of_green_object_2__02(blockers=1)', 'shadow_of_green_object_2__01(blockers=1)', 'shadow_of_green_object__02(blockers=2)', 'shadow_of_red_object__01(blockers=1)', 'shadow_of_green_object__03(blockers=1)', 'shadow_of_blue_object__01(blockers=1)', 'shadow_of_orange_object__01(blockers=1)', 'shadow_of_red_object__00(blockers=2)', 'shadow_of_blue_object__00(blockers=1)', 'shadow_of_orange_object__00(blockers=1)', 'shadow_of_green_object_2__00(blockers=1)', 'shadow_of_red_object__02(blockers=1)', 'shadow_of_green_object__00(blockers=1)']
+  [#76-diag] sense_options per obj (view-clear AND fits AND not-KIF): {'blue_object': [], 'green_object': [], 'green_object_2': [], 'orange_object': [], 'purple_object': [], 'red_object': [], 'tray': []}
+  [#76-diag] obj_at_boxel per obj: {'blue_object': ['blue_object'], 'green_object': ['green_object'], 'green_object_2': ['green_object_2', 'green_object_2'], 'orange_object': ['orange_object'], 'purple_object': [], 'red_object': ['red_object'], 'tray': ['tray']}
+
+Iteration: 1 | Complexity: 0 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 3704 | Eager Calls: 0 | Cost: inf | Search Time: 0.003 | Sample Time: 0.000 | Total Time: 0.003
+Attempt: 1 | Results: 0 | Depth: 0 | Success: False | Time: 0.293
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 0 to 1
+
+Iteration: 2 | Complexity: 1 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 3704 | Eager Calls: 0 | Cost: inf | Search Time: 0.301 | Sample Time: 0.000 | Total Time: 0.301
+Attempt: 1 | Results: 8 | Depth: 0 | Success: False | Time: 0.283
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 1 to 2
+
+Iteration: 3 | Complexity: 2 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 3704 | Eager Calls: 0 | Cost: inf | Search Time: 0.588 | Sample Time: 0.000 | Total Time: 0.588
+Attempt: 1 | Results: 2276 | Depth: 0 | Success: False | Time: 0.908
+Stream plan (inf, 0, inf): None
+Action plan (inf, inf): None
+No plan: increasing complexity from 2 to 3
+
+Iteration: 4 | Complexity: 3 | Skeletons: 0 | Skeleton Queue: 0 | Disabled: 0 | Evaluations: 3704 | Eager Calls: 0 | Cost: inf | Search Time: 1.501 | Sample Time: 0.000 | Total Time: 1.501
+Attempt: 1 | Results: 2284 | Depth: 0 | Success: False | Time: 35.285
+Stream plan (inf, 0, inf): False
+Action plan (inf, inf): False
+Summary: {complexity: 3, cost: inf, evaluations: 3704, iterations: 4, length: inf, run_time: 36.790, sample_time: 0.000, search_time: 36.790, skeletons: 0, solutions: 0, solved: False, timeout: False}
+  [#76-diag] outcome=no_plan, elapsed=36.858s, plan_len=0, cost=inf
+  [timing] planner.plan() #1: 38.903s (cumulative 38.903s)
+ERROR: No plan found!
+
+============================================================
+FAILED: Planner returned no plan (14 unsearched shadows remaining)
+  Plans executed: 1
+
+--- Planning timing summary ---
+  Total plan() calls       : 1
+  Cumulative planning time : 38.903s
+  Average per call         : 38.903s
+  Per-call (s)             : [38.903]
+  Timing summary written to logs/run_2026-05-19_18-18-51/timing_summary.json
+============================================================
+
+--- STDERR ---
+pybullet build time: Jan 29 2025 23:16:28
+[random-pairs+find-and-tray-stack] auto-bumping --n-extra-distractors from 0 to 1: the goal needs at least one visible target on top of the K hidden ones.
