@@ -171,12 +171,11 @@ STATUS (2026-05-20)
 The pre-evaluation correctness chain, the evaluation framework (#9 runner +
 #10 uniform-voxelization baseline), the eval-chapter figures (#73), the
 gripper-handoff correctness chain (#75-#85), and the README/wiki doc sweep
-(#63) are all DONE.  Seven issues remain open: the two pre-existing
-#77 / #78, plus five eval-data-review issues (#93, #95, #96, #97, #98)
-filed 2026-05-20 from a partial re-parse of eval_results/sweep_anytime/
-— including #97
-(fine-resolution-discriminating scene) and its symmetric counterpart #98
-(coarse-end resolution sweep), both motivated by #93's finding that
+(#63) are all DONE.  Six issues remain open: the two pre-existing
+#77 / #78, plus four eval-data-review issues (#93, #95, #97, #98) filed
+2026-05-20 from the re-parse of eval_results/sweep_anytime/ — including
+#97 (fine-resolution-discriminating scene) and its symmetric counterpart
+#98 (coarse-end resolution sweep), both motivated by #93's finding that
 semantic+mbs0.05 is indistinguishable from semantic at the current scene
 scales.  See the SUMMARY block at the bottom of this file for the tiered
 list and the full closed / deferred / wontfix breakdown.  Closed-issue
@@ -812,10 +811,15 @@ Fix:   Sub-actions:
        (c) #96 numpy env bug: 5 affected cells re-ran 2026-05-20
            with real outcomes (1 success, 2 planner_failed, 1
            timeout, 1 PDDLStream domain.pddl race — new env
-           wrinkle, separate from numpy).  The numpy fail-fast
-           guard in test_full_pipeline.py and the env probe in
-           eval_runner.py main() are in place.  #96 stays open
-           only for the broader interpreter-pin question.
+           wrinkle, separate from numpy).  Numpy fail-fast guard
+           in test_full_pipeline.py and env probe in
+           eval_runner.py main() are in place; argv[0] uses
+           absolute sys.executable so the bad-PATH failure mode
+           cannot recur silently.  Care(3) sanity scan
+           (scripts/_audit96_scan_no_summary.py) confirms 0/55
+           remaining no_summary cells are silent numpy crashes
+           (all are real planner-side failures).  #96 closed
+           2026-05-20.
        Remaining: #77 Step 5 (eval-chapter writeup) consumes
        the numbers above.  thesis_audit.md #140 (eval-design
        gap) is the thesis-side mirror.
@@ -835,8 +839,8 @@ Related:
        #77 [OPEN, TIER 1] — parent anytime sweep; Step 5
             (eval-chapter writeup) consumes these numbers.
        #95 — stack-scene cell-tag misnaming (still open).
-       #96 — sweep cell numpy ModuleNotFoundError env bug
-            (rerun done; interpreter-pin work outstanding).
+       #96 [DONE 2026-05-20] — numpy env bug; interpreter pin in
+            place, 5 cells re-run, Care(3) scan clean.
        thesis_audit.md #140 — eval-design gap; the null
             semantic-vs-mbs0.05 finding is the chapter writeup
             material.
@@ -914,83 +918,6 @@ Related:
        #77 — the sweep that surfaced this.
        #93 — sweep-state findings.
        #9 [DONE] — original eval_runner / cell_tag.
-
-
-================================================================================
-#96. SWEEP CELL SUBPROCESS — numpy ModuleNotFoundError IN 5 CELLS (ENVIRONMENT BUG, NOT PLANNER FAILURE)
-================================================================================
-Status:   OPEN.  Filed 2026-05-20 from the #93 sweep review.
-Priority: TIER 2 — pollutes 5 cells of the sweep with bogus
-          "failures" and shows the eval harness can launch a
-          subprocess without its dependencies.  Cheap to fix;
-          should be done before the sweep completes so re-runs
-          aren't tainted.
-Where:    eval_runner.py::run_cell (the subprocess.run that
-          launches test_full_pipeline.py); the launcher /
-          interpreter selection (PowerShell run_eval wrapper
-          documented in CODEBASE POLICY at the top of this
-          file).
-Depends:  none.
-Effort:   0.5-1 day, plus re-running 5 cells after the fix.
-
-What:  Five cells under eval_results/sweep_anytime/cells/ have
-       a 228-byte stdout.log whose entire content is
-       "ModuleNotFoundError: No module named 'numpy'" — the
-       subprocess started without numpy, never reached
-       planning, and the harness wrote a no_summary failure
-       stub.  Verified example:
-       randpairs_occ2_seed69_find-and-tray-stack_uc0_semantic/
-       stdout.log; its traceback shows the Windows path
-       "C:\Users\HaniAlassiriAlhabbou\git\Semantic_Boxels\test_-
-       full_pipeline.py", indicating the subprocess started
-       under an interpreter (likely a native Windows python
-       via PATH) that lacks numpy, instead of the wsl_env
-       python that has it.
-
-       Why this matters: exit_reason="no_summary" cells count
-       as failures in success-rate aggregates.  Five of them
-       are environment failures, not planner failures, and
-       skew the headline numbers and any per-config split that
-       includes them.
-
-Fix:   Step 1 — reproduce the trigger.  The traceback's
-       Windows path suggests subprocess.run inherited a PATH
-       where python resolved to C:\Python312 instead of
-       wsl_env.  Re-run one cell from a clean shell, log the
-       resolved sys.executable.
-       Step 2 — make run_cell explicit.  eval_runner.py:271
-       already uses sys.executable; the regression must come
-       from the calling shell setting sys.executable
-       elsewhere.  Either pin via executable= /env= on
-       subprocess.run, or assert sys.executable resolves to a
-       wsl_env path inside main() and bail otherwise.
-       Step 3 — fail-fast guard.  Add an import-time check at
-       the very top of test_full_pipeline.py:
-         try: import numpy
-         except ImportError:
-             sys.stderr.write("eval misconfigured: numpy
-             missing from interpreter <sys.executable>\n");
-             sys.exit(2)
-       so a future env regression aborts with a clear message
-       instead of writing a silent no_summary stub.
-       Step 4 — re-run the 5 affected cells once the launcher
-       is fixed; re-aggregate.
-
-Care:
-       (1) Per CODEBASE POLICY "WSL VIRTUAL ENVIRONMENT — DO
-           NOT DELETE", wsl_env/ must be present.  The 5
-           cells were not a deletion problem; the venv exists.
-           The issue is interpreter selection per subprocess.
-       (2) After Step 4 the sweep aggregate must be re-
-           computed; the 5 cells flip from failure to whatever
-           the planner actually does on those seeds.
-       (3) Worth a sanity check that the OTHER 49 no_summary
-           cells aren't the same env bug.  If they are, the
-           sweep success rate moves materially.
-
-Related:
-       #77 — the sweep affected.
-       #93 — sweep status flags the 5 cells.
 
 
 ================================================================================
@@ -1250,19 +1177,17 @@ TIER labels.  Full bodies of closed issues are in git history
 (git log --grep="audit: mark #N") and the "RESOLVED / DONE ISSUES" section of
 archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 7 items (full bodies above):
+OPEN — 6 items (full bodies above):
   #77  TIER 1 — anytime compactness sweep: success rate vs. wall-clock
        time budget with finer semantic boxels (IPC-style cumulative-
        solved curve).
   #78  TIER 2 — sense should update belief for every shadow the ray
        bundle crosses, not just the queried one.
-  #93  TIER 1 — sweep_anytime status / findings (#77 partial data,
-       ~94% of cells done; bridges to #77 Steps 4 and 5).
+  #93  TIER 1 — sweep_anytime full-sweep findings (2700/2700 cells);
+       headline data for #77 Step 5 / eval-chapter writeup.
   #95  TIER 3 — stack-scene cell-tag misnaming: occN/tgtN tokens
        don't match run_config (stack scene reinterprets occ as
        stack_height).
-  #96  TIER 2 — 5 sweep cells crashed with ModuleNotFoundError:
-       numpy (subprocess env bug, not planner failure).
   #97  TIER 1 — design a fine-resolution-discriminating scene
        (narrow corridor / sub-cell pocket / etc.) so semantic+mbs0.05
        has somewhere to actually win; #93 shows current scenes give
@@ -1273,6 +1198,9 @@ OPEN — 7 items (full bodies above):
   TIER 0: zero open items.
 
 CLOSED (one-line; full detail in git / archive):
+  #96  [2026-05-20] numpy env-bug interpreter pin: main() probe +
+       absolute-path sys.executable in argv[0]; 5 cells re-ran;
+       Care(3) verified clean (scripts/_audit96_scan_no_summary.py).
   #94  [2026-05-20] plot_solved_vs_time + TAMPURA annotation +
        EXIT_REASON_COLOUR (eval_plotter.py).
   #63  [2026-05-19] README + wiki final doc sweep.
