@@ -166,15 +166,21 @@ If you find yourself walking the list lowest-first, stop and re-sort by TIER.
 
 
 ================================================================================
-STATUS (2026-05-19)
+STATUS (2026-05-20)
 ================================================================================
 The pre-evaluation correctness chain, the evaluation framework (#9 runner +
 #10 uniform-voxelization baseline), the eval-chapter figures (#73), the
 gripper-handoff correctness chain (#75-#85), and the README/wiki doc sweep
-(#63) are all DONE.  Two issues remain open — see the SUMMARY block at the
-bottom of this file for the tiered list and the full closed / deferred /
-wontfix breakdown.  Closed-issue detail lives in git history
-(git log --grep="audit: mark #N") and archive/CODEBASE_AUDIT_DEFERRED.txt.
+(#63) are all DONE.  Eight issues remain open: the two pre-existing
+#77 / #78, plus six eval-data-review issues (#93-#98) filed 2026-05-20
+from a partial re-parse of eval_results/sweep_anytime/ — including #97
+(fine-resolution-discriminating scene) and its symmetric counterpart #98
+(coarse-end resolution sweep), both motivated by #93's finding that
+semantic+mbs0.05 is indistinguishable from semantic at the current scene
+scales.  See the SUMMARY block at the bottom of this file for the tiered
+list and the full closed / deferred / wontfix breakdown.  Closed-issue
+detail lives in git history (git log --grep="audit: mark #N") and
+archive/CODEBASE_AUDIT_DEFERRED.txt.
 
 ================================================================================
 FOR LATER
@@ -692,19 +698,696 @@ Related:
 
 
 ================================================================================
-SUMMARY — STATUS (updated 2026-05-19)
+#93. ANYTIME SWEEP STATUS — SWEEP_ANYTIME ~94% COMPLETE; KEY FINDINGS FROM PARTIAL DATA (#77 IN PROGRESS)
+================================================================================
+Status:   OPEN.  Filed 2026-05-20 from an independent re-parse of
+          eval_results/sweep_anytime/.  The sweep is the #77
+          SCALABILITY_VS_TIME run (2700 planned cells); it has not
+          finished.  This issue is the bridge from the partial data
+          to #77 Step 4/5: it records what the data is, what is
+          missing, and what the data already shows so the next
+          worker does not re-derive it.
+Priority: TIER 1 — directly gates the eval-chapter results
+          (#77 Step 5).  Not a code defect itself; tracks the data
+          state and feeds #94/#95/#96.
+Where:    eval_results/sweep_anytime/{matrix.json, cells/,
+          plots_preliminary/}; preview parser at
+          eval_results/sweep_anytime/preview_plots.py.
+Depends:  #77 Steps 3a/3b [DONE].  Blocks #77 Step 4 (#94
+          implementation) and Step 5 (eval-chapter writeup).
+Effort:   0 days — documentation only.  The listed sub-actions
+          (#94 plot, #95 cell-tag, #96 env bug, plus completing
+          the sweep) are tracked separately.
+
+What:  Sweep run state (refreshed 2026-05-20 by re-parsing every
+       cells/*/timing_summary.json with an independent script;
+       outputs in eval_results/sweep_anytime/plots_preliminary/.
+       Supersedes the 2026-05-19 reading at 82% coverage; older
+       numbers preserved only in git history of this file):
+       - 2547 cell directories on disk vs 2700 planned in
+         matrix.json (~94.3%); newest cell timing_summary
+         written 2026-05-20 06:07 — sweep is still running.
+       - 2545 cells parsed; 1 empty dir
+         (occ4_tgt3_hid0_seed25_stack_uc0_semantic).
+       - 169 cells have the failure-stub schema (no run_config):
+         115 hit the 1800 s wall-clock timeout, 54 produced no
+         summary; 5 of the 54 are an environment bug (#96), not
+         planner failures.  no_summary count unchanged since
+         2026-05-19 — no new env crashes overnight.
+       - Missing planned cells (~155): all stack/uniform — the
+         block is now 145/300 (was 0/300 on 2026-05-19); stack/
+         semantic and stack/mbs0.05 are now complete at 300/300
+         each; holding and find-and-tray-stack remain fully
+         present (300/300 per config).
+       - Overall success 1061/2545 = 41.7% (was 42.0% at 82%
+         coverage — slight drop driven by the new stack/uniform
+         and stack-height-4 failures filling in: replan_limit
+         jumped 80 -> 227, planner_failed 999 -> 1043).
+
+       Three planner configurations the matrix produced
+       (axis: baseline x min_boxel_size): semantic (auto cell,
+       min_boxel_size=null), semantic+mbs0.05 (baseline=semantic,
+       min_boxel_size=0.05), uniform (baseline=uniform).
+       semantic+mbs0.05 is a full arm of 900 cells; its result
+       must be reported alongside semantic in #77 Step 5.
+
+       Per-variant headline numbers (refreshed 2026-05-20):
+       - Uniform still collapses on find-and-tray-stack:
+         4/300 success (1.3%) vs ~40% semantic.  ~10x boxel
+         inflation (326-329 vs 35-45 semantic) and ~10x init-
+         state fact inflation (2356-3365 vs 278-559).  Median
+         planning time on solved runs ~28-35 s vs ~3-7 s for
+         semantic.  Robust across the 2026-05-19/05-20 deltas.
+       - semantic vs semantic+mbs0.05 is, on the now full stack
+         data, STILL a null result.  stack: identical seed-for-
+         seed at 184/300 each (vs 172/207 each on 2026-05-19);
+         holding 42.3% vs 46.3% (unchanged); find-and-tray-
+         stack 39.7% vs 32.3% (mbs0.05 still worse).  #77's
+         headline "finer-resolution wins under a fixed budget"
+         is NOT supported even now that all stack_height=4
+         cells are in.  The taller-stack-cells hedge from the
+         2026-05-19 reading did NOT shift the picture.  This
+         is the strongest single finding against the #77
+         hypothesis so far.
+       - NEW (stack/uniform 145/300 partial): on stack, uniform
+         shows a HIGHER raw success rate than semantic so far —
+         107/145 = 73.8% vs semantic 184/300 = 61.3% — at the
+         cost of mean 1341 boxels (vs 27.8), mean 11187 init
+         facts (vs 312), and 18 s vs 1 s median planning time.
+         The anytime curve makes the trade-off literal: under
+         ~15 s budget semantic + mbs0.05 dominate (sharp rise
+         to ~61%), uniform doesn't begin until ~25 s, then
+         climbs to ~73% by ~100 s.  Comparison is PARTIAL
+         (uniform 145/300) and stack_height is mixed; do not
+         promote to "uniform wins on stack" until (i) the
+         stack/uniform block is complete and (ii) cells are
+         split by stack_height per #95.  If the finding
+         survives both, it complicates the "uniform doesn't
+         scale" story for the chapter.
+       - NEW (stack difficulty by height): semantic stack
+         dropped from 83% (occ2/3 only, n=207, stack_height
+         2/3) on 2026-05-19 to 61.3% (full occ2/3/4, n=300,
+         stack_height 2/3/4) on 2026-05-20.  The ~93 newly
+         added height-4 cells contributed roughly 12 successes
+         (~13% on height-4 alone) — large difficulty jump at
+         stack_height=4.  Tied to #95; the chapter must report
+         stack results sliced by stack_height, not by the
+         misleading occ token.
+       - Stack-goal "n_occluders" axis is still degenerate
+         (#95); the new occ4 stack cells confirm it
+         (run_config n_occluders=0, n_targets=4,
+         stack_height=4).
+
+       Six preliminary plots regenerated into
+       eval_results/sweep_anytime/plots_preliminary/
+       (success_rate_by_variant_goal.png,
+        planning_time_by_variant_goal.png,
+        boxel_count_breakdown.png,
+        init_state_facts_by_variant_goal.png,
+        failure_modes.png,
+        anytime_curves.png)
+       plus preliminary_per_cell.csv and preliminary_summary.csv.
+       Title bars on the regenerated PNGs still read "PARTIAL
+       ~82%" — script title strings are hard-coded; cosmetic,
+       data inside is the refreshed set.  Still preliminary;
+       regenerate again after the stack/uniform block completes
+       and after #94/#95/#96 land.  The anytime_curves.png is
+       the prototype for #77 Step 4 (lift it into
+       eval_plotter.py via #94).
+
+Fix:   Three sub-actions, tracked separately:
+       (a) Finish the sweep — run the remaining ~155 stack/
+           uniform cells (was 485 on 2026-05-19; stack/semantic
+           and stack/mbs0.05 are now complete).
+       (b) Implement plot_solved_vs_time in eval_plotter.py —
+           #94 (#77 Step 4).
+       (c) Fix #96 and re-run the 5 numpy-ModuleNotFoundError
+           cells; they are not planner failures.
+       Once (a) and (b) land, re-derive the aggregate, then #77
+       Step 5 / the eval-chapter writeup.
+
+Care:
+       (1) Numbers above are from the PARTIAL sweep (~94%
+           coverage; only stack/uniform still filling).  These
+           findings are robust across the 2026-05-19/05-20
+           deltas: uniform collapses on f-a-t-s; semantic-vs-
+           mbs0.05 is a null result on the full stack data;
+           stack difficulty grows sharply with stack_height;
+           #95 cell-tag degeneracy.  The new uniform-on-stack
+           apparent advantage is NOT yet robust — wait for
+           (a) full data + (b) #95 stack-height slicing.
+       (2) preview_plots.py is a scratch parser, not production
+           code.  Once #94 lifts plot_solved_vs_time into
+           eval_plotter.py, decide whether to keep
+           preview_plots.py (handy for partial-data spot
+           checks) or remove it.
+
+Related:
+       #77 [OPEN, TIER 1] — the parent anytime sweep.  Closes
+            #77 Steps 4 and 5 alongside.
+       #94 — implement plot_solved_vs_time.
+       #95 — stack-scene cell-tag misnaming.
+       #96 — sweep cell numpy ModuleNotFoundError env bug.
+
+
+================================================================================
+#94. PLOT_SOLVED_VS_TIME — IMPLEMENT IPC-STYLE CUMULATIVE-SOLVE CURVE IN eval_plotter.py (#77 STEP 4) + TWO COSMETIC PLOTTER DEFECTS
+================================================================================
+Status:   OPEN.  Filed 2026-05-20.  #77 Step 4 was opened
+          2026-05-14 but never closed; eval_plotter.py has no
+          function for the curve (verified 2026-05-19: grep
+          for anytime / cumulative / IPC / solved -> no
+          matches).  Two cosmetic defects in existing plotter
+          figures, surfaced during the same review, are folded
+          in below since they fix in the same code area.
+Priority: TIER 1 — gates the eval-chapter anytime subsection.
+          Without this plot the "scalability-vs-time" sweep's
+          headline figure does not exist.  The two cosmetic
+          defects are TIER 3 on their own but worth bundling.
+Where:    eval_plotter.py — new plot_solved_vs_time helper;
+          wired into both main dispatch paths (default and
+          random-pairs).  Existing helpers to fix in the same
+          pass: plot_tampura_wallclock_comparison (clipped
+          annotation), plot_failure_modes (exit_reason colour
+          collision).
+Depends:  #77 Step 3b [DONE], #93 (data parseable, schema
+          known).
+Effort:   ~0.5 day.  Working prototype already exists at
+          eval_results/sweep_anytime/preview_plots.py::plot_-
+          anytime — adopt as the starting point.  +0.5 day
+          for the two cosmetic fixes.
+
+What:  The plot is cumulative fraction of instances solved as
+       a step function of wall_clock_s, one line per
+       (baseline, min_boxel_size).  Read wall_clock_s and
+       success from aggregated.csv; for each (baseline,
+       min_boxel_size, goal) group, sort successful
+       wall_clock_s ascending and step.  Denominator = ALL
+       cells in the group (success + failure), so the
+       right-hand asymptote equals the success rate.  Split by
+       goal into a 1xK panel (matches the existing #73
+       per-goal dispatch).
+
+       Two figure defects to fix in the same pass:
+       (a) tampura_wallclock_comparison.png clips its
+           "57.0 s (n=20)" annotation — the error bar reaches
+           ~95 s but the y-limit is set tight to the bar
+           height, cutting off the label.
+       (b) failure_modes.png assigns identical green to
+           "success" and "planner_failed" — the legend lists
+           both but the bars are visually indistinguishable
+           because tab10's default cycle lands planner_failed
+           on the same green that success is pinned to.
+
+Fix:   Step 1 — implement plot_solved_vs_time in
+       eval_plotter.py:
+         - x: wall-clock budget (s, log scale).
+         - y: instances solved (% of all cells in the group).
+         - one line per (baseline, min_boxel_size).
+         - one panel per goal.
+         - prototype: eval_results/sweep_anytime/preview_-
+           plots.py::plot_anytime — lift its body, swap the
+           dict access for the aggregated.csv row schema.
+       Step 2 — call the helper from main() in the
+       random-pairs and default dispatch paths.  Detect the
+       SCALABILITY_VS_TIME preset (presence of non-null
+       min_boxel_size in any row, or the matrix.json
+       "preset" field) so the plot only emits when the sweep
+       actually swept time/resolution.
+       Step 3 — caption text: state the 1800 s per-episode
+       wall-clock cap and the denominator definition.
+       Step 4 — fix the clipped TAMPURA annotation: after
+       drawing the error bar, set ax.set_ylim(top=max_y *
+       1.15) where max_y includes the error-bar extent, OR
+       place the annotation above the bar top (not the
+       error-bar top).
+       Step 5 — define EXIT_REASON_COLOUR in eval_plotter.py
+       with non-colliding entries (success=green,
+       planner_failed=dark red, timeout=darker red, etc.) and
+       have plot_failure_modes pull from that map instead of
+       falling back to tab10.  preview_plots.py uses such a
+       map — borrow it.
+       Step 6 — regenerate affected sweep figures
+       (sweep_2026-05-12_22-31-58_random-pairs has the
+       offending PNGs).
+
+Care:
+       (1) wall_clock_s is None on degraded-schema cells; skip
+           those (they are success=False so they don't
+           contribute to "solved", but make sure they DO count
+           in the denominator).
+       (2) Log-x axis can't show 0; clip left bound to
+           min(wall_clock_s).
+       (3) Once #93(a) lands and stack/uniform exists, the
+           stack panel gains a uniform line.  The prototype
+           currently has only semantic vs mbs0.05 for stack.
+       (4) The exit_reason colour map must be exhaustive over
+           the actual enum (success, planner_failed,
+           replan_limit, timeout, no_summary, physics_mismatch,
+           drop_failed, all_searched) so a future new reason
+           doesn't silently re-collide.
+
+Related:
+       #77 Step 4 — this issue executes it.
+       #93 — partial-data status; this plot must run cleanly on
+            partial data so the chapter can iterate.
+       #73 [DONE 2026-05-14] — the per-goal dispatch
+            infrastructure this builds on; introduced the two
+            cosmetic defects in plot_failure_modes and
+            plot_tampura_wallclock_comparison.
+
+
+================================================================================
+#95. STACK-SCENE CELL-TAG MISNAMING — occN/tgtN TOKENS DON'T MATCH run_config
+================================================================================
+Status:   OPEN.  Filed 2026-05-20 from the #93 sweep review.
+Priority: TIER 3 — data-hygiene / interpretability.  Doesn't
+          affect correctness; affects the eval chapter's
+          ability to plot stack scalability honestly and makes
+          per-cell debug confusing.
+Where:    eval_runner.py::cell_tag (the stack branch of the
+          tag formatter) and the MATRIX_PRESETS reuse of
+          n_occluders as the stack-height axis (around the
+          SCALABILITY_VS_TIME definition).
+Depends:  none.
+Effort:   0.5-1 day.
+
+What:  SCALABILITY_VS_TIME matrix sweeps n_occluders ∈ {2,3,4}.
+       For the random-pairs goals (holding, find-and-tray-
+       stack) this is honest — run_config.n_occluders matches
+       the cell-name occ token.  For the stack goal it is not:
+       verified, the occ2 stack cell -> run_config
+       n_occluders=0, n_targets=3, stack_height=2; the occ4
+       stack cell -> n_occluders=0, n_targets=4, stack_height=4.
+       The stack scene ignores the matrix occluder value and
+       re-interprets the swept value as stack height.  The
+       cell-name occ{N}/tgt{N} tokens then no longer correspond
+       to anything in the run.
+
+       Consequence:
+       - Per-cell inspection: opening
+         occ4_tgt3_hid0_..._stack_..._semantic and finding
+         n_occluders=0 / n_targets=4 in run_config is
+         confusing.
+       - Aggregation: a naive group-by occ-from-cell-name
+         aggregates DIFFERENT stack difficulties together
+         (stack_height 2 vs 4) — gives wrong scalability
+         conclusions.
+       - The thesis chapter's "success vs n_occluders" curve
+         cannot include the stack goal; it varies stack height
+         instead.
+
+Fix:   Option A (minimal, recommended first): in eval_plotter
+       (and any downstream parser) read difficulty from
+       run_config — stack_height for stack cells, n_occluders
+       for the random-pairs goals.  Update plot captions to say
+       which axis is shown.  Document the difficulty axis per
+       scene in the eval-chapter writeup.
+       Option B (renaming, more invasive): extend cell_tag to
+       use scene-relevant tokens (stack_h{N}_ for stack cells;
+       random-pairs already uses randpairs_occ{N}_).  Avoids
+       legacy-name confusion but breaks any existing tooling
+       that parses cell names.
+       Option C: A in the short term, B in the next sweep
+       generation.
+
+Care:
+       (1) preview_plots.py (#93) currently buckets stack as
+           one group without slicing by stack_height.  A
+           proper §5 plot needs the per-stack-height
+           breakdown — gate on Option A.
+       (2) MATRIX_PRESETS for SCALABILITY_VS_TIME keeps
+           n_occluders as the axis NAME even when the stack
+           scene re-interprets it.  Add a comment at the
+           preset definition so the next reader does not
+           conclude it is an actual occluder sweep on stack.
+       (3) Already-aggregated.csv from prior sweeps has the
+           same naming; aggregations re-run after Option A
+           will reclassify stack rows by stack_height.
+
+Related:
+       #77 — the sweep that surfaced this.
+       #93 — sweep-state findings.
+       #9 [DONE] — original eval_runner / cell_tag.
+
+
+================================================================================
+#96. SWEEP CELL SUBPROCESS — numpy ModuleNotFoundError IN 5 CELLS (ENVIRONMENT BUG, NOT PLANNER FAILURE)
+================================================================================
+Status:   OPEN.  Filed 2026-05-20 from the #93 sweep review.
+Priority: TIER 2 — pollutes 5 cells of the sweep with bogus
+          "failures" and shows the eval harness can launch a
+          subprocess without its dependencies.  Cheap to fix;
+          should be done before the sweep completes so re-runs
+          aren't tainted.
+Where:    eval_runner.py::run_cell (the subprocess.run that
+          launches test_full_pipeline.py); the launcher /
+          interpreter selection (PowerShell run_eval wrapper
+          documented in CODEBASE POLICY at the top of this
+          file).
+Depends:  none.
+Effort:   0.5-1 day, plus re-running 5 cells after the fix.
+
+What:  Five cells under eval_results/sweep_anytime/cells/ have
+       a 228-byte stdout.log whose entire content is
+       "ModuleNotFoundError: No module named 'numpy'" — the
+       subprocess started without numpy, never reached
+       planning, and the harness wrote a no_summary failure
+       stub.  Verified example:
+       randpairs_occ2_seed69_find-and-tray-stack_uc0_semantic/
+       stdout.log; its traceback shows the Windows path
+       "C:\Users\HaniAlassiriAlhabbou\git\Semantic_Boxels\test_-
+       full_pipeline.py", indicating the subprocess started
+       under an interpreter (likely a native Windows python
+       via PATH) that lacks numpy, instead of the wsl_env
+       python that has it.
+
+       Why this matters: exit_reason="no_summary" cells count
+       as failures in success-rate aggregates.  Five of them
+       are environment failures, not planner failures, and
+       skew the headline numbers and any per-config split that
+       includes them.
+
+Fix:   Step 1 — reproduce the trigger.  The traceback's
+       Windows path suggests subprocess.run inherited a PATH
+       where python resolved to C:\Python312 instead of
+       wsl_env.  Re-run one cell from a clean shell, log the
+       resolved sys.executable.
+       Step 2 — make run_cell explicit.  eval_runner.py:271
+       already uses sys.executable; the regression must come
+       from the calling shell setting sys.executable
+       elsewhere.  Either pin via executable= /env= on
+       subprocess.run, or assert sys.executable resolves to a
+       wsl_env path inside main() and bail otherwise.
+       Step 3 — fail-fast guard.  Add an import-time check at
+       the very top of test_full_pipeline.py:
+         try: import numpy
+         except ImportError:
+             sys.stderr.write("eval misconfigured: numpy
+             missing from interpreter <sys.executable>\n");
+             sys.exit(2)
+       so a future env regression aborts with a clear message
+       instead of writing a silent no_summary stub.
+       Step 4 — re-run the 5 affected cells once the launcher
+       is fixed; re-aggregate.
+
+Care:
+       (1) Per CODEBASE POLICY "WSL VIRTUAL ENVIRONMENT — DO
+           NOT DELETE", wsl_env/ must be present.  The 5
+           cells were not a deletion problem; the venv exists.
+           The issue is interpreter selection per subprocess.
+       (2) After Step 4 the sweep aggregate must be re-
+           computed; the 5 cells flip from failure to whatever
+           the planner actually does on those seeds.
+       (3) Worth a sanity check that the OTHER 49 no_summary
+           cells aren't the same env bug.  If they are, the
+           sweep success rate moves materially.
+
+Related:
+       #77 — the sweep affected.
+       #93 — sweep status flags the 5 cells.
+
+
+================================================================================
+#97. DESIGN A FINE-RESOLUTION DISCRIMINATING SCENE — DEMONSTRATE WHERE mbs0.05 / FINER PARTITION ACTUALLY HELPS
+================================================================================
+Status:   OPEN.  Filed 2026-05-20 in response to #93's finding
+          that semantic and semantic+mbs0.05 are statistically
+          indistinguishable on the current sweep — the
+          headline #77 "finer resolution wins under a fixed
+          time budget" hypothesis is unsupported on the
+          scenes the eval actually exercises.
+Priority: TIER 1 — gates #77's headline claim and feeds the
+          thesis evaluation-design discussion
+          (thesis_audit.md #140).
+Where:    test_full_pipeline.py scene builders +
+          boxel_env.py; collect_eval_corpus.py for the new
+          scene's corpus; MATRIX_PRESETS in eval_runner.py
+          for the sub-matrix that exercises it.
+Depends:  #93 (null-result finding); #77 (parent anytime
+          sweep).
+Effort:   3-5 days for design + scene implementation +
+          corpus probe + a smoke sub-sweep, before
+          re-running at corpus scale.
+
+What:  #93 shows semantic and semantic+mbs0.05 are
+       indistinguishable on every goal: stack identical
+       seed-for-seed at 184/300 each; holding 42.3% vs
+       46.3% (within seed noise); find-and-tray-stack
+       39.7% vs 32.3% (mbs0.05 actually WORSE).  The
+       0.05 m leaf floor does not change outcomes because
+       - objects are ~4 cm cubes;
+       - semantic's auto_cell floor (audit #67) is
+         ~6-9 cm (largest object's footprint + 1 cm) and
+         dominates the merged partition;
+       - CellMerger collapses same-label free-space into
+         large boxels regardless of leaf size;
+       - OBJECT and SHADOW boxels are per-object and
+         never touched by --min-boxel-size.
+       The current scenes therefore do NOT exercise the
+       regime in which a sub-auto_cell leaf could matter.
+       #77's hypothesis is not necessarily wrong — the
+       eval does not test it.
+
+Fix:   Design and implement at least one task / scene
+       where ONLY a finer-than-auto_cell free-space
+       partition can solve the problem.  Candidate
+       patterns:
+
+       (a) Narrow-corridor reach — two large occluders
+           forming a sub-auto_cell-width gap with a target
+           reachable only by routing the arm through the
+           gap.  Coarse partition cannot represent the
+           corridor as free; finer partition can.
+       (b) Sub-cell pocket placement — place an object
+           into a slot whose entry is smaller than the
+           largest object's footprint (a notched tray).
+           Coarse cells reject the placement; fine cells
+           admit it.
+       (c) Sub-cell hidden target — a hidden target whose
+           shadow is smaller than auto_cell, lodged
+           between two occluders.  Coarse partition cannot
+           isolate the shadow from the occluders for
+           sensing.
+       (d) Dense small-occluder shelf — many sub-auto_cell
+           occluders; reasoning about reach and visibility
+           requires fine free-space partition.
+
+       Steps (recommend (a) for the first pass — it has
+       the cleanest reach vs visibility trade-off):
+       Step 1 — pick one pattern.
+       Step 2 — implement the scene builder + register it
+                in test_full_pipeline.py's scene dispatch.
+       Step 3 — extend collect_eval_corpus.py with a
+                probe for the new scene; produce a small
+                corpus (e.g. 50 seeds).
+       Step 4 — add a SCALABILITY_VS_TIME sub-matrix using
+                the new scene at the {auto, 5 cm}
+                resolution axis already swept.
+       Step 5 — smoke sub-sweep (~50 seeds).  Verify
+                discrimination: semantic-auto should fail
+                or be slow, semantic+mbs0.05 should
+                succeed, uniform should fail (auto-clamped
+                per #66).
+       Step 6 — once discrimination is shown, expand to
+                full corpus and re-run.
+
+Care:
+       (1) The discriminating scene must be HONEST: a
+           realistic manipulation task, not a contrived
+           needle-threading toy.  Reviewers reject
+           artificial geometry built only to embarrass
+           the baseline.
+       (2) For the comparison to mean anything, uniform
+           must genuinely fail (or be very slow) on the
+           new scene.  If uniform can solve it at its
+           auto_cell, the test is not isolating
+           resolution.  Likewise semantic-auto must fail —
+           if both auto-config planners solve it, mbs0.05
+           still adds nothing.
+       (3) #93's null result on the current scenes must
+           remain in the chapter even if Step 5 succeeds.
+           The story is: "in the regime our scenes
+           exercise, leaf floor is irrelevant; in this
+           new scene it is decisive."  Both findings
+           stand.
+       (4) Match the new scene's max-plan-time to the
+           rest of the sweep (1800 s) for fair anytime
+           curve comparison.
+
+Related:
+       #77 [OPEN, TIER 1] — the parent anytime sweep;
+            this scene is what its hypothesis actually
+            requires.
+       #93 — null result that prompted this issue.
+       #95 — stack-scene cell-tag misnaming (the new
+            scene must not repeat it).
+       thesis_audit.md #140 — the mirror evaluation-
+            design issue on the thesis side.
+
+
+================================================================================
+#98. COARSER-THAN-AUTO_CELL FOLLOW-UP SWEEP — CHARACTERISE THE RESOLUTION AXIS ABOVE auto_cell
+================================================================================
+Status:   OPEN.  Filed 2026-05-20 as the symmetric counterpart of
+          #97.  #93's null finding (semantic == semantic+mbs0.05
+          at this scene scale) established that auto_cell is the
+          binding constraint on the FINE end.  This issue probes
+          the opposite direction — what happens when
+          min_boxel_size is held strictly ABOVE auto_cell (1.5x,
+          2x).
+Priority: TIER 2 — informational; characterises the resolution-
+          vs-success curve and feeds the Discussion (thesis #125
+          / #140).  Not blocking the main #77 anytime claim, but
+          gives the chapter a defensible "we swept resolution in
+          both directions" story.
+Where:    eval_runner.py MATRIX_PRESETS — extend
+          SCALABILITY_VS_TIME's min_boxel_size axis (or sibling
+          preset SCALABILITY_VS_RESOLUTION) with two coarse
+          points.  test_full_pipeline.py effective_cell logic
+          already supports mbs > auto_cell verbatim post-#77
+          step 3a (the clamp was lifted in both directions).
+Depends:  #77 step 3a [DONE]; #93 (the null finding this is the
+          dual of); #95 (stack cell-tag misnaming, so stack rows
+          stay interpretable).
+Effort:   1-2 days for matrix extension + smoke sub-sweep +
+          full re-run + plotter check.  Corpus is reusable
+          (still random-pairs + stack scenes, same seeds).
+
+What:  #97 asks "engineer a scene where FINER than auto_cell
+       wins."  This is the dual: as min_boxel_size grows ABOVE
+       auto_cell, at what point does coarser representation
+       start to hurt?  Today the sweep covers two points (auto,
+       and mbs=0.05 which falls AT or below auto_cell for these
+       scenes); neither exercises the coarse end of the curve.
+
+       Hypothesis: success rate falls and per-call planning
+       time falls as min_boxel_size grows past auto_cell ---
+       fewer free-space boxels means the planner has fewer
+       atoms to reason over (cheap planning) but loses the
+       representational fidelity needed for reach corridors,
+       placement targets, and shadow disambiguation (harder
+       to find a plan, more plans may not exist).  The cross-
+       over is what the sweep reveals.
+
+       Expected reading (random-pairs auto_cell ~ 9 cm; stack
+       auto_cell ~ 6 cm):
+       - auto_cell                — current baseline (#93:
+                                    semantic 61% stack /
+                                    42% holding / 40% f-a-t-s).
+       - 1.5x auto_cell           — coarse but still finer than
+                                    the largest object.
+                                    Plausible: modest success
+                                    drop, modest speed-up.
+       - 2.0x auto_cell           — approaches the uniform-cell
+                                    scale.  Might match
+                                    uniform's success on stack
+                                    (~65%) but with semantic's
+                                    object/shadow boxels intact,
+                                    so init-facts stay an order
+                                    of magnitude below uniform.
+
+Fix:   Steps:
+       Step 1 — add the coarse-end axis to SCALABILITY_VS_TIME.
+                Two new min_boxel_size points (1.5x and 2.0x
+                auto_cell) per scene.  Because auto_cell varies
+                per scene, either:
+                  (a) compute the multiplier inside test_full_-
+                      pipeline.py from a CLI flag like --mbs-
+                      ratio 1.5; or
+                  (b) hard-code per-scene numerics in the
+                      matrix sub-matrices: random-pairs
+                      {0.135, 0.18} m, stack {0.09, 0.12} m
+                      (or whatever the measured auto_cell is at
+                      the time of the sweep).
+                (b) is simpler in code and easier to audit; (a)
+                is cleaner if the scene set grows.
+       Step 2 — smoke sub-sweep (5 seeds per cell, ~120 cells)
+                to verify the mbs > auto_cell path runs.
+                Confirm run_config.effective_min_boxel_size
+                shows the requested coarse value verbatim and
+                CellMerger doesn't accidentally fold every
+                free-space cell into one giant boxel.
+       Step 3 — full corpus sweep (100 seeds) once smoke is
+                clean.
+       Step 4 — eval_plotter: solved_vs_time.png already groups
+                by (baseline, min_boxel_size), so new lines
+                appear automatically.  Confirm the per-goal
+                legend stays readable with 4-5 series; if not,
+                consider a colour gradient over the semantic mbs
+                values (auto = blue, 1.5x = light orange, 2x =
+                dark orange) keeping uniform gray.
+       Step 5 — chapter writeup: the resolution-vs-success
+                curve at FOUR points (mbs<<auto via #97,
+                mbs==auto, 1.5x, 2x) characterises where
+                semantic's adaptive partition gains and loses.
+                Even if #97 doesn't land, this issue alone gives
+                the chapter a resolution-axis sweep.
+
+Care:
+       (1) auto_cell varies per scene (~6 cm stack, ~9 cm
+           random-pairs).  A single matrix-level mbs constant
+           means the effective multiplier differs across
+           scenes.  Either accept that and document, or use
+           per-scene presets / a --mbs-ratio flag.
+       (2) The audit-#77 step 3a clamp lift was tested
+           primarily at SMALLER-than-auto values.  Smoke must
+           also verify the larger end: that the free-space
+           octree does subdivide above auto_cell, that
+           CellMerger respects label boundaries, and that
+           planner streams can still ground reach / place /
+           sense at coarser cells.  No code change anticipated,
+           but the path is less exercised.
+       (3) If 1.5x and 2x produce the same success / planning
+           time as auto, the resolution axis is flat above
+           auto_cell at this scene scale — itself a finding.
+           Report it and stop the sweep there rather than
+           expanding the axis further.
+       (4) The coarse-end variant cells inherit #95's stack-
+           cell-tag misnaming.  Aggregate stack rows by
+           stack_height (run_config), not by the occ token.
+
+Related:
+       #77 [OPEN, TIER 1] — parent anytime sweep; this is the
+            symmetric counterpart to step 3b's resolution axis.
+       #93 — null result that motivated the dual axis.
+       #97 — fine-end discriminating scene; this issue is the
+            coarse-end probe.
+       thesis_audit.md #140 — broader eval-design gap; this
+            issue's data feeds the same discussion.
+
+
+================================================================================
+SUMMARY — STATUS (updated 2026-05-20)
 ================================================================================
 Issue numbers are chronological (discovery order), NOT priority — follow the
 TIER labels.  Full bodies of closed issues are in git history
 (git log --grep="audit: mark #N") and the "RESOLVED / DONE ISSUES" section of
 archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 2 items (full bodies above):
+OPEN — 8 items (full bodies above):
   #77  TIER 1 — anytime compactness sweep: success rate vs. wall-clock
        time budget with finer semantic boxels (IPC-style cumulative-
        solved curve).
   #78  TIER 2 — sense should update belief for every shadow the ray
        bundle crosses, not just the queried one.
+  #93  TIER 1 — sweep_anytime status / findings (#77 partial data,
+       ~94% of cells done; bridges to #77 Steps 4 and 5).
+  #94  TIER 1 — implement plot_solved_vs_time (#77 Step 4) + fix two
+       cosmetic eval_plotter defects (clipped TAMPURA annotation,
+       success/planner_failed colour collision).
+  #95  TIER 3 — stack-scene cell-tag misnaming: occN/tgtN tokens
+       don't match run_config (stack scene reinterprets occ as
+       stack_height).
+  #96  TIER 2 — 5 sweep cells crashed with ModuleNotFoundError:
+       numpy (subprocess env bug, not planner failure).
+  #97  TIER 1 — design a fine-resolution-discriminating scene
+       (narrow corridor / sub-cell pocket / etc.) so semantic+mbs0.05
+       has somewhere to actually win; #93 shows current scenes give
+       a null result.
+  #98  TIER 2 — coarse-end resolution sweep: sweep min_boxel_size
+       to 1.5x and 2x auto_cell (the symmetric counterpart of #97
+       for the above-auto direction).
   TIER 0: zero open items.
 
 CLOSED (one-line; full detail in git / archive):
