@@ -99,19 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#93  [T2 · Deviation] [THESIS]  §5.1/§5.2 scalability "size of the workspace" — no such axis
-================================================================================
-Where: §5.1 evaluation.tex:9; §5.2 evaluation.tex:19
-What:  §5.1: "We will vary the number of occluders and the complexity of the
-       scene"; §5.2: scalability tested by "increasing the number of objects,
-       occluders, or the size of the workspace." eval_runner.py varies
-       n_occluders, n_targets, seed, goal, baseline, min_boxel_size — there is
-       no workspace-size axis; the workspace bounds are hardcoded.
-Fix:   Drop "size of the workspace." State scalability is measured against
-       occluder count and target count (the actual swept axes).
-Refs:  CODEBASE_AUDIT.txt #9; THESIS_NOTES §13
-
-================================================================================
 #94  [T2 · Deviation] [THESIS]  §5.3 calls the Uniform Voxelization baseline "fine-grained"
 ================================================================================
 Where: §5.3 — evaluation.tex:25
@@ -529,13 +516,13 @@ Refs:  CODEBASE_AUDIT.txt #77 #93 #97
 OPEN ISSUES
 ================================================================================
 
-29 issues remain open. Each issue's header carries its tier (T0-T3) and
+28 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§5 Evaluation:   #93 #94 #95 #96 #97 #98 #99 #100 #101 #102 #103 #104
-                 #105 #106 #107 #108 #109 #110 #111
+§5 Evaluation:   #94 #95 #96 #97 #98 #99 #100 #101 #102 #103 #104 #105
+                 #106 #107 #108 #109 #110 #111
 Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138 #140
 
 Gating: the §5 issues (#87-#111) are subsumed by the #121 evaluation rewrite;
