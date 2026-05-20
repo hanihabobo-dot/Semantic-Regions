@@ -169,19 +169,6 @@ Fix:   Recast the abstract for the thesis: what was built (the Boxel
 Refs:  #1 #2 #3 #4 #5 #6 #7; #126
 
 ================================================================================
-#128  [Structural] [THESIS]  §1 needs a Contributions list and a thesis chapter outline
-================================================================================
-Where: §1 — introduction.tex:24
-What:  §1 has no explicit contributions list, and its closing paragraph ("This
-       proposal is structured as follows: Section~... ") is a proposal outline
-       naming the proposal's five sections.
-Fix:   Add an explicit "Contributions of this thesis" list (bulleted or
-       numbered). Replace the "This proposal is structured as follows"
-       paragraph with a thesis outline matching the final chapter structure
-       (including the new Implementation, Results, and Discussion chapters).
-Refs:  #121 #122 #125 #129
-
-================================================================================
 #130  [Build] [THESIS]  Thesis front and back matter is missing
 ================================================================================
 Where: main.tex; resources/title.tex; resources/acronyms.tex; sections/appendix.tex
@@ -245,15 +232,15 @@ Refs:  CODEBASE_AUDIT.txt #77 #93 #97
 OPEN ISSUES
 ================================================================================
 
-7 issues remain open. Each issue's header carries its tier (T0-T3) and
+6 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Structural:      #121 #125 #126 #127 #128 #130 #140
+Structural:      #121 #125 #126 #127 #130 #140
 
 Gating: #121/#125/#127/#140 depend on the eval sweep being final;
-#126/#128/#130 are now unblocked (the i6 thesis template has been
-obtained and the proposal-template content has been migrated into
-thesis/). All §5 sentence-level polish issues (#87-#111) have been
-resolved and removed; their structural successor is #121.
+#126/#130 are now unblocked (the i6 thesis template has been obtained
+and the proposal-template content has been migrated into thesis/).
+All §5 sentence-level polish issues (#87-#111) have been resolved and
+removed; their structural successor is #121.
