@@ -1124,6 +1124,15 @@ def plot_solved_vs_time(grouped: Dict[tuple, tuple],
             print(f"  {key}: solved={len(solved)}/{n_total}")
         return None
 
+    # --max-plan-time default (run_logger.py:504) — the per-cell budget
+    # cap.  Extend each cumulative-solved curve out to this point so
+    # the plateau past the last success is visible; no new cells solve
+    # after their last success time, so the rate stays flat out to
+    # CAP_S.  Without this extension the curve appears to "end" at the
+    # last success time, which under-states the budget the failed
+    # cells actually consumed.
+    CAP_S = 1800.0
+
     by_goal: Dict[str, Dict[tuple, tuple]] = defaultdict(dict)
     for (goal, baseline, mbs), payload in grouped.items():
         if goal is None:
@@ -1159,9 +1168,11 @@ def plot_solved_vs_time(grouped: Dict[tuple, tuple],
                 ax.plot([], [], color=color, label=label)
                 continue
             ys = [(i + 1) / n_total * 100 for i in range(len(solved))]
-            ax.step([solved[0]] + solved, [0] + ys, where="post",
-                    color=color, label=label)
+            ax.step([solved[0]] + solved + [CAP_S],
+                    [0] + ys + [ys[-1]],
+                    where="post", color=color, label=label)
         ax.set_xscale("log")
+        ax.set_xlim(right=CAP_S)
         ax.set_xlabel("wall-clock budget (s, log)")
         ax.set_title(goal)
         ax.grid(True, alpha=0.3)
