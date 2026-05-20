@@ -269,48 +269,27 @@ Fix:   One figure: a representative hidden-object scene with the boxel
        143036.png.
 Refs:  introduction.tex:5-21
 
-================================================================================
-#155  [Thesis] [THESIS]  Curate screenshots into thesis/graphics/sim/ with stable names
-================================================================================
-Where: thesis/graphics/sim screen shots/ (current dir name has a space ---
-       a LaTeX hazard); thesis/graphics/sim/ (proposed)
-What:  #146-#154 will reference 8-10 screenshots by filename. Using the
-       raw "Screenshot 2026-MM-DD HHMMSS.png" names in \includegraphics
-       is fragile: the directory name contains a space, and the
-       timestamps are not self-documenting in source. A small one-time
-       curation --- copy the picked screenshots to thesis/graphics/sim/
-       with stable names (scene_hidden_target.png, partition_semantic.png,
-       partition_uniform.png, sense_targeting_shadow.png,
-       sense_fail_retry3.png, task_stack.png, task_tray.png,
-       overhead_camera_inset.png, etc.) --- pays off immediately.
-Fix:   Curate the final picks; copy with stable filenames into
-       thesis/graphics/sim/. Optionally crop the IDE chrome (taskbars,
-       editor side panels, window borders) for thesis-grade figures.
-       Also remove the stray browser screenshot 2026-04-20 160547.png
-       (demo.emson.cloud, unrelated) from the source folder.
-Refs:  #146-#154
-
 
 ================================================================================
 OPEN ISSUES
 ================================================================================
 
-11 issues remain open. Each issue's header carries its tier (T0-T3) and
+10 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Structural:      #126
-Figure placement: #146 #147 #148 #149 #150 #151 #152 #153 #154 #155
+Figure placement: #146 #147 #148 #149 #150 #151 #152 #153 #154
 
-Gating: #141-#145, #130, and #156 done --- all eval-write-up content
-(Results, Discussion, abstract + conclusion closure) is in thesis/, the
-chapters are clear of internal file-path and hardware-spec clutter, and
-the front/back matter (submission date, PDDL appendix) is in place.
-#125, #140, #121, #127 were closed jointly. #126 (document-wide
-forward-voice conversion) is left open as a final verification pass
-since the chapters individually are already retrospective. The §5
-sentence-level polish issues (#87-#111) were resolved earlier in the
-audit walkthrough. Figure-placement issues #146-#154 are all gated by
-#155 (screenshot curation); #155 is independent and can be done in any
-order against the others.
+Gating: #141-#145, #130, #155, and #156 done --- all eval-write-up
+content (Results, Discussion, abstract + conclusion closure) is in
+thesis/, the chapters are clear of internal file-path and hardware-spec
+clutter, the front/back matter (submission date, PDDL appendix) is in
+place, and curated screenshots are in thesis/graphics/sim/. #125, #140,
+#121, #127 were closed jointly. #126 (document-wide forward-voice
+conversion) is left open as a final verification pass since the
+chapters individually are already retrospective. The §5 sentence-level
+polish issues (#87-#111) were resolved earlier in the audit
+walkthrough. Figure-placement issues #146-#154 can now be done in any
+order (their gate, #155, has landed).
