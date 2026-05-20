@@ -99,43 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#96  [T3 · Deviation] [THESIS]  §5.1 names only the "hidden object" task; the code ships three goal modes
-================================================================================
-Where: §5.1 — evaluation.tex:9
-What:  §5.1 names only the "hidden object" scenario. run_logger.py's --goal has
-       choices holding / stack / find-and-tray-stack, and eval_runner.py sweeps
-       all three.
-Fix:   List all three evaluated goal modes; note holding is the primary
-       narrative task and stack/tray-stack add goal diversity.
-Refs:  THESIS_NOTES §9; CODEBASE_AUDIT.txt #49
-
-================================================================================
-#97  [T3 · Deviation] [THESIS]  §5.2 "metrics similar to those used for TAMPURA" — only partial overlap
-================================================================================
-Where: §5.2 — evaluation.tex:14
-What:  §5.2: "...we plan to adopt evaluation metrics similar to those used for
-       TAMPURA." Success rate and planning time align with TAMPURA; the actually
-       plotted metrics also include boxel counts, init-state fact counts, and
-       replan-count distributions — boxel-specific, not TAMPURA metrics.
-Fix:   "We adopt success rate and planning time, which permit comparison with
-       TAMPURA's reported numbers, alongside boxel-specific compactness
-       metrics."
-Refs:  THESIS_NOTES §21.2; CODEBASE_AUDIT.txt #73
-
-================================================================================
-#98  [T3 · Deviation] [THESIS]  §5.1 environment is hedged ("such as PyBullet", "e.g., a Franka Emika Panda arm")
-================================================================================
-Where: §5.1 — evaluation.tex:8
-What:  "We will use a physics-based simulation environment, such as PyBullet,
-       with a multi-degree-of-freedom robotic manipulator (e.g., a Franka Emika
-       Panda arm)." PyBullet is the actual and only simulator; the robot is
-       definitively the 7-DOF Franka Panda (hardcoded Panda link indices,
-       self-collision pairs).
-Fix:   For the thesis, state these as fact: the environment is PyBullet and the
-       manipulator is the 7-DOF Franka Emika Panda.
-Refs:  THESIS_NOTES §13
-
-================================================================================
 #99  [T2 · Style] [POLISH]  §5 opener is boilerplate
 ================================================================================
 Where: §5 — evaluation.tex:5
@@ -487,13 +450,13 @@ Refs:  CODEBASE_AUDIT.txt #77 #93 #97
 OPEN ISSUES
 ================================================================================
 
-26 issues remain open. Each issue's header carries its tier (T0-T3) and
+23 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§5 Evaluation:   #96 #97 #98 #99 #100 #101 #102 #103 #104 #105 #106 #107
-                 #108 #109 #110 #111
+§5 Evaluation:   #99 #100 #101 #102 #103 #104 #105 #106 #107 #108 #109 #110
+                 #111
 Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138 #140
 
 Gating: the §5 issues (#87-#111) are subsumed by the #121 evaluation rewrite;
