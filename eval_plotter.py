@@ -689,10 +689,15 @@ def plot_boxel_evolution_per_replan(
                    "shadow": "SHADOW",
                    "free_space": "FREE_SPACE"}
 
+    # Audit #99 polish — drop sharey: uniform's free-space line at
+    # ~1300 boxels (stack) / ~330 (random-pairs) squashes the
+    # semantic/mbs0.05 panels (max ~30-50) into an unreadable strip
+    # at the bottom.  Per-panel y-axis lets each variant's evolution
+    # be visible at its own scale.
     fig, axes = plt.subplots(
         1, len(variants),
         figsize=(5 * len(variants), 4),
-        sharey=True, squeeze=False,
+        squeeze=False,
     )
     axes = axes[0]
     for ax, variant in zip(axes, variants):
@@ -1665,6 +1670,16 @@ def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
     ax.set_title(title)
     if ylim:
         ax.set_ylim(*ylim)
+    else:
+        # Audit #99 polish — counts / times can't be negative.  Without
+        # this clamp matplotlib auto-pads the y-range below 0 (visible
+        # on sense_action_count, init_state_facts, plan_count: the +/-
+        # 1-std bands appeared to dip into negative territory next to
+        # the x-axis), which read as "the data sometimes goes below 0"
+        # when it never does.  Lower band values are already clipped at
+        # 0 in _plot() above; this just stops the AXIS PADDING from
+        # showing the empty negative region.
+        ax.set_ylim(bottom=0)
     ax.grid(True, alpha=0.3)
     ax.legend()
     fig.tight_layout()
