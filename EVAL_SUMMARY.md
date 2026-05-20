@@ -462,17 +462,21 @@ summary_table_per_occluders.csv
 
 ### Related audit issues
 
-- **#77** [OPEN, TIER 1] — parent anytime sweep; this file's data
-  is the substrate for Step 5 (eval-chapter writeup).
-- **#93** [OPEN, TIER 1] — sweep status / findings (compact form
-  of § 3 above).
+- **#77** [CLOSED 2026-05-20] — parent anytime sweep; this file IS
+  the Step 5 writeup substrate.  Chapter writeup itself lands in
+  thesis #121.
+- **#93** [CLOSED 2026-05-20] — full-sweep findings; this file's
+  § 3 / § 4 are the canonical record.
 - **#94** [CLOSED] — landed `plot_solved_vs_time` + TAMPURA bar.
 - **#95** [CLOSED] — `_row_difficulty` so stack rows index by
   stack_height instead of n_occluders.
 - **#96** [CLOSED] — numpy ModuleNotFoundError interpreter pin;
   affected 5 cells, re-ran clean.
-- **#97** [OPEN, TIER 1] — design a fine-resolution-discriminating
-  scene so § 4.3's null result has an honest test of the hypothesis.
+- **#97** [DEFERRED 2026-05-20, archive] — design a
+  fine-resolution-discriminating scene.  Null finding on existing
+  scenes (§ 4.3) is the honest disclosure that satisfies #97
+  Care(3); the scene-design work is not pursued for thesis
+  completion.
 - **#98** [OPEN, TIER 2] — coarse-end resolution sweep.
 - **#99** [CLOSED] — variant-keyed plotter (every figure in § 2
   reflects the post-#99 layout).
