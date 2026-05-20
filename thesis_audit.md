@@ -238,43 +238,6 @@ they subsume the relevant parts of #121, #125, and the eval-anchored bits
 of #126/#127 --- once all five land, those umbrellas can be removed.
 
 ================================================================================
-#142  [Thesis] [THESIS]  Write the "Experimental Setup" section of Results as built
-================================================================================
-Where: thesis/chapters/results.tex --- the current "Experimental Setup"
-       \section is forward-looking ("we will vary the number of occluders").
-What:  The setup must report what was actually run: hardware, # seeds, time
-       budget per call, sweep grid (variants x goals x n_occluders), time
-       budget anytime tracks, seed-pairing across variants, what was
-       excluded from the analysis, software versions. None of this is in
-       the text yet; the prose is proposal voice.
-Fix:   Rewrite the section in past/present indicative. Document the
-       hardware, the exact sweep grid as run (3 goals x N variants x
-       n_occluders in {...}; M seeds each; T-second anytime budget), the
-       semantic / semantic+mbs0.05 / uniform / TAMPURA-published variants,
-       what was held fixed across seed pairs, software versions, and the
-       single excluded condition if any. Resolves the procedure part of
-       #121 and the results.tex pieces of #126.
-Refs:  #121 #126 #141; THESIS_NOTES sweep_anytime
-
-================================================================================
-#143  [Thesis] [THESIS]  Write the "Results" section with figures, tables, and numbers
-================================================================================
-Where: thesis/chapters/results.tex --- new section between Experimental
-       Setup and Baselines.
-What:  results.tex contains no actual numbers, figures, or tables. The
-       PNGs exist in eval_results/sweep_anytime/; the prose that interprets
-       them does not.
-Fix:   Add a Results section that embeds the headline plots
-       (success_rate_vs_n_occluders, planning_time_vs_n_occluders,
-       boxel_count_breakdown, init_state_facts_vs_n_occluders,
-       solved_vs_time, tampura_wallclock_comparison, failure_modes) as
-       figures, with one-paragraph commentary on each. Add a headline-
-       numbers table --- success rate and median planning time per goal x
-       variant. Carry over the #141 lessons. Resolves the results part of
-       #121.
-Refs:  #121 #140 #141 #142; eval_results/sweep_anytime/
-
-================================================================================
 #144  [Thesis] [THESIS]  Write the Discussion chapter content
 ================================================================================
 Where: thesis/chapters/discussion.tex --- replace the lorem ipsum placeholder
@@ -483,20 +446,21 @@ Refs:  #146-#154
 OPEN ISSUES
 ================================================================================
 
-20 issues remain open. Each issue's header carries its tier (T0-T3) and
+18 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Structural:      #121 #125 #126 #127 #130 #140 #142 #143 #144 #145
+Structural:      #121 #125 #126 #127 #130 #140 #144 #145
 Figure placement: #146 #147 #148 #149 #150 #151 #152 #153 #154 #155
 
-Gating: #141 done --- notes/PLOT_LESSONS.md is the data backbone for
-#142-#145. #142 is now the first concrete step (unblocked); #143-#145
-chain off it. #130's remaining items (real submission date, appendix
-decision) are independent and need user input. #121/#125/#127 are
-umbrellas that #142-#145 subdivide; remove them after all four land.
-The §5 sentence-level polish issues (#87-#111) were resolved earlier
-in the audit walkthrough. Figure-placement issues #146-#154 are all
-gated by #155 (screenshot curation); #155 is independent and can be
-done in any order against the others.
+Gating: #141 #142 #143 done --- the Experimental Setup rewrite and the
+Results section (headline table + 8 figures) are in thesis/. #144 is
+now next; #145 chains off it. #130's remaining items (real submission
+date, appendix decision) are independent and need user input.
+#121/#125/#127 are umbrellas that #142-#145 subdivide; remove them
+after #144 and #145 also land. The §5 sentence-level polish issues
+(#87-#111) were resolved earlier in the audit walkthrough.
+Figure-placement issues #146-#154 are all gated by #155 (screenshot
+curation); #155 is independent and can be done in any order against
+the others.
