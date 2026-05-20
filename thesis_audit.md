@@ -99,65 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#103  [T2 · Style] [POLISH]  §5.3 — "empirically demonstrate whether"
-================================================================================
-Where: §5.3 — evaluation.tex:29
-What:  "The goal of this evaluation is to empirically demonstrate whether our
-       proposed framework offers a scalable and effective solution..."
-       "demonstrate whether" is awkward (you demonstrate THAT, you TEST
-       whether); abstract padding stacked.
-Fix:   "This evaluation tests whether the framework scales and performs well on
-       TAMP under partial observability, especially on tasks that require
-       reasoning about occlusions and information gathering."
-
-================================================================================
-#104  [T1 · Over-claim] [THESIS]  §5.4 conclusion is written as a finished paper
-================================================================================
-Where: §5.4 — evaluation.tex:32, 34
-What:  The conclusion of a forward-looking PROPOSAL uses completed-work past
-       tense and the wrong noun: "This paper presented a novel approach...",
-       "As demonstrated, this enables the robot to reason about what it
-       knows...". Nothing has been presented or demonstrated; it is a proposal,
-       and it is a thesis proposal, not a "paper."
-Fix:   In the thesis, §5.4 becomes the real Conclusion: KEEP the completed-work
-       voice, but back every claim with actual results. "As demonstrated" must
-       point to the §121 results chapter; "This paper" becomes "This thesis".
-       Do NOT downgrade §5.4 to proposal voice ("This proposal has outlined")
-       — that moves the document away from being a thesis. (The soften-to-
-       "outlines" option would apply only if the proposal were ever revised AS
-       a proposal, which is not the goal here.)
-Note:  Fix text corrected 2026-05-17 — the original fix steered §5.4 toward
-       proposal voice, which contradicts the proposal-to-thesis goal. See #126.
-
-================================================================================
-#105  [T3 · Style] [NOW]  §5.4 heading is lowercase "conclusion"
-================================================================================
-Where: §5.4 — evaluation.tex:31
-What:  "\subsection{conclusion}" — lowercase, while every other heading is
-       title-case.
-Fix:   "\subsection{Conclusion}"
-
-================================================================================
-#106  [T2 · Style] [POLISH]  §5.4 — "seamlessly combine"
-================================================================================
-Where: §5.4 — evaluation.tex:34
-What:  "...plans that seamlessly combine information-gathering and manipulation
-       actions." "Seamlessly" is a marketing intensifier with no technical
-       meaning.
-Fix:   "...plans that interleave information-gathering and manipulation
-       actions."
-
-================================================================================
-#107  [T2 · Style] [POLISH]  §5.4 — "paves the way for" cliché + inflated closing
-================================================================================
-Where: §5.4 — evaluation.tex:36
-What:  "...this work paves the way for more autonomous and capable robotic
-       systems that can operate effectively in the complexities of the real
-       world." Stacked generic boilerplate that could end any robotics paper.
-Fix:   "...this work aims to make TAMP practical in environments where the robot
-       starts out only partially aware of its surroundings."
-
-================================================================================
 #108  [T2 · Style] [POLISH]  §5.4 — "reason effectively about"
 ================================================================================
 Where: §5.4 — evaluation.tex:32
@@ -410,12 +351,12 @@ Refs:  CODEBASE_AUDIT.txt #77 #93 #97
 OPEN ISSUES
 ================================================================================
 
-19 issues remain open. Each issue's header carries its tier (T0-T3) and
+14 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§5 Evaluation:   #103 #104 #105 #106 #107 #108 #109 #110 #111
+§5 Evaluation:   #108 #109 #110 #111
 Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138 #140
 
 Gating: the §5 issues (#87-#111) are subsumed by the #121 evaluation rewrite;
