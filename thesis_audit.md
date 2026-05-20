@@ -138,53 +138,6 @@ recropped or substituted. Aside: thesis/graphics/sim screen shots/Screenshot
 should be removed from this folder.
 
 ================================================================================
-#146  [Thesis] [THESIS]  Real-sim companion to the Boxelization schematic
-================================================================================
-Where: methods.tex:17-22 (fig:boxelization)
-What:  The boxelization figure is a four-panel schematic. Nowhere in the
-       methods chapter does the reader see the partition applied to a real
-       PyBullet scene --- object AABBs over real cubes and red shadow
-       wireframes labeled by object. A real-scene companion makes the
-       abstraction concrete and shows that the cyan/red boxes are not
-       imaginary.
-Fix:   Add a one-panel figure (or fourth subpanel of fig:boxelization)
-       showing a single sim screenshot with visible object boxels and
-       labeled shadow wireframes. Candidates: Screenshot 2026-04-26
-       143036.png; 2026-04-22 121333.png; 2026-04-26 142916.png. Pick the
-       clearest label visibility.
-Refs:  methods.tex:17-22
-
-================================================================================
-#147  [Thesis] [THESIS]  Visual contrast: semantic vs uniform partition
-================================================================================
-Where: methods.tex end of Adaptive Semantic Discretization section, or
-       results.tex line 25 (Uniform Voxelization baseline)
-What:  The thesis claims the uniform baseline yields many more cells than
-       the semantic partition. Only the quantitative plots show this; no
-       figure lets the reader SEE "thousands of cyan cells" vs "a small
-       labelled set" in one image.
-Fix:   Two-panel figure on matching scenes/angles: (a) semantic partition
-       and (b) uniform voxel grid. Candidates (a): 2026-04-26 143036.png,
-       2026-04-22 121333.png. Candidates (b): 2026-05-09 113613.png,
-       113951.png, 115027.png, 115755.png, 120308.png, 134715.png.
-Refs:  methods.tex (Recursive Partitioning paragraph); results.tex:25;
-       CODEBASE_AUDIT.txt #93 #97
-
-================================================================================
-#148  [Thesis] [THESIS]  Sense action targeting a shadow
-================================================================================
-Where: methods.tex:89-111 (sense action subsection)
-What:  The sense action is given as PDDL and prose only. Several shots
-       have the action-log overlay visible (e.g. "Sensing shadow of green
-       object") and labeled red shadow wireframes, making (view_clear ?r)
-       and the targeted region concrete.
-Fix:   One figure with a labeled shadow shot. Caption maps the visible
-       overlay to the symbolic action. Candidates: 2026-04-23 145402.png
-       ("Sensing shadow of green object" caption visible), 2026-04-26
-       145847.png, 2026-04-28 091354.png, 2026-05-02 105108.png.
-Refs:  methods.tex:89-111 (lst:pddl_sense_k_literal)
-
-================================================================================
 #149  [Thesis] [THESIS]  Optimistic-sense -> reactive-replan cycle figure
 ================================================================================
 Where: methods.tex:107-109 (optimistic + replanning paragraph)
@@ -274,22 +227,23 @@ Refs:  introduction.tex:5-21
 OPEN ISSUES
 ================================================================================
 
-10 issues remain open. Each issue's header carries its tier (T0-T3) and
+7 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Structural:      #126
-Figure placement: #146 #147 #148 #149 #150 #151 #152 #153 #154
+Figure placement: #149 #150 #151 #152 #153 #154
 
-Gating: #141-#145, #130, #155, and #156 done --- all eval-write-up
+Gating: #141-#148, #130, #155, and #156 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
 thesis/, the chapters are clear of internal file-path and hardware-spec
 clutter, the front/back matter (submission date, PDDL appendix) is in
-place, and curated screenshots are in thesis/graphics/sim/. #125, #140,
-#121, #127 were closed jointly. #126 (document-wide forward-voice
-conversion) is left open as a final verification pass since the
-chapters individually are already retrospective. The §5 sentence-level
-polish issues (#87-#111) were resolved earlier in the audit
-walkthrough. Figure-placement issues #146-#154 can now be done in any
-order (their gate, #155, has landed).
+place, curated screenshots are in thesis/graphics/sim/, and the first
+three sim figures (boxelization companion, semantic vs uniform, sense
+action) are inserted in methods.tex. #125, #140, #121, #127 were closed
+jointly. #126 (document-wide forward-voice conversion) is left open as
+a final verification pass since the chapters individually are already
+retrospective. The §5 sentence-level polish issues (#87-#111) were
+resolved earlier in the audit walkthrough. Figure-placement issues
+#149-#154 are unblocked and can be done in any order.
