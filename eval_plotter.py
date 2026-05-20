@@ -1105,14 +1105,18 @@ def group_solved_vs_time(rows: List[dict]
 
 def plot_solved_vs_time(grouped: Dict[tuple, tuple],
                         title: str,
-                        out_path: Path) -> Optional[Path]:
+                        out_path: Path,
+                        log_x: bool = True) -> Optional[Path]:
     """IPC-style cumulative-solve-rate-vs-wall-clock-budget curve
     (audit #94 / #77 step 4).  One subplot per goal; one line per
     (baseline, min_boxel_size).
 
     Y: percentage of cells in the (goal, variant) group solved within
-    the wall-clock budget on X.  X: wall-clock budget in seconds, log
-    scale.  Denominator is ALL cells (success + failure), so the
+    the wall-clock budget on X.  X: wall-clock budget in seconds; log
+    scale by default (the curves span ~3 orders of magnitude — log
+    keeps the early-time inflection points readable), linear when
+    ``log_x=False`` (emphasises absolute seconds against the budget
+    cap).  Denominator is ALL cells (success + failure), so the
     plateau on the right equals the group's overall success rate.
     """
     if not HAVE_MPL:
@@ -1171,9 +1175,13 @@ def plot_solved_vs_time(grouped: Dict[tuple, tuple],
             ax.step([solved[0]] + solved + [CAP_S],
                     [0] + ys + [ys[-1]],
                     where="post", color=color, label=label)
-        ax.set_xscale("log")
-        ax.set_xlim(right=CAP_S)
-        ax.set_xlabel("wall-clock budget (s, log)")
+        if log_x:
+            ax.set_xscale("log")
+            ax.set_xlim(right=CAP_S)
+            ax.set_xlabel("wall-clock budget (s, log)")
+        else:
+            ax.set_xlim(0, CAP_S)
+            ax.set_xlabel("wall-clock budget (s)")
         ax.set_title(goal)
         ax.grid(True, alpha=0.3)
         ax.legend(loc="lower right", fontsize=8)
@@ -1671,11 +1679,19 @@ def main(argv=None) -> int:
         # Audit #94 (#77 step 4): IPC-style anytime curve.  No-op if
         # the sweep does not vary min_boxel_size (SCALABILITY_VS_TIME).
         if _has_anytime_axis(all_rows):
+            grouped_anytime = group_solved_vs_time(all_rows)
             plot_solved_vs_time(
-                group_solved_vs_time(all_rows),
+                grouped_anytime,
                 title="Cumulative solve rate vs wall-clock budget "
                       "(anytime / #77)",
                 out_path=out_dir / "solved_vs_time.png",
+            )
+            plot_solved_vs_time(
+                grouped_anytime,
+                title="Cumulative solve rate vs wall-clock budget "
+                      "(anytime / #77, linear)",
+                out_path=out_dir / "solved_vs_time_linear.png",
+                log_x=False,
             )
         write_summary_table(all_rows, out_dir)
         return 0
@@ -1889,11 +1905,19 @@ def main(argv=None) -> int:
     # Audit #94 (#77 step 4): IPC-style anytime curve.  No-op if the
     # sweep does not vary min_boxel_size (SCALABILITY_VS_TIME).
     if _has_anytime_axis(all_rows):
+        grouped_anytime = group_solved_vs_time(all_rows)
         plot_solved_vs_time(
-            group_solved_vs_time(all_rows),
+            grouped_anytime,
             title="Cumulative solve rate vs wall-clock budget "
                   "(anytime / #77)",
             out_path=out_dir / "solved_vs_time.png",
+        )
+        plot_solved_vs_time(
+            grouped_anytime,
+            title="Cumulative solve rate vs wall-clock budget "
+                  "(anytime / #77, linear)",
+            out_path=out_dir / "solved_vs_time_linear.png",
+            log_x=False,
         )
     # Audit #73 — tabular summary alongside the plots (markdown +
     # 2 CSVs).  Aggregate by (goal, baseline) + per-occluder breakdown.
