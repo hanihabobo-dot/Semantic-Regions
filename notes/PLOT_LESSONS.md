@@ -19,6 +19,58 @@ Variants:
 Skipped: `_pre_fix_99/` (archived snapshot), `plots_preliminary/` (early
 consolidation, superseded).
 
+**Canonical numerical reference:** `eval_results/sweep_anytime/summary_table.md`
+holds the aggregate + per-difficulty table emitted by the eval pipeline.
+Use it for every number quoted in the thesis. The notes below cite the plots
+qualitatively and quote the summary's numbers where precision matters; where
+a plot's in-figure annotation differs from the summary (`plan_count`
+means are the main example), the summary is canonical because it aggregates
+over the full per-(goal, variant) cell set, not just cells with non-null
+fields.
+
+
+## Canonical headline numbers (from `summary_table.md`)
+
+Aggregate over all difficulties:
+
+| goal | variant | n | success | rate | mean plan_time (s) | mean init_facts | mean total_boxels |
+|---|---|---:|---:|---:|---:|---:|---:|
+| find-and-tray-stack | semantic | 299 | 119 | 39.8 % | 28.37 | 557 | 45.0 |
+| find-and-tray-stack | semantic+mbs0.05 | 300 | 99 | 33.0 % | 21.49 | 558 | 45.0 |
+| find-and-tray-stack | uniform | 300 | 4 | 1.3 % | 156.10 | 3365 | 329.1 |
+| holding | semantic | 300 | 127 | 42.3 % | 7.78 | 304 | 35.1 |
+| holding | semantic+mbs0.05 | 300 | 139 | 46.3 % | 7.42 | 303 | 35.0 |
+| holding | uniform | 300 | 100 | 33.3 % | 50.35 | 2356 | 326.0 |
+| stack | semantic | 300 | 184 | 61.3 % | 1.23 | 312 | 27.8 |
+| stack | semantic+mbs0.05 | 300 | 184 | 61.3 % | 1.23 | 312 | 27.8 |
+| stack | uniform | 301 | 118 | 39.2 % | 23.84 | 12 097 | 1 339.9 |
+
+Per-difficulty stack heights (the steepest scaling axis):
+
+| variant | h=2 | h=3 | h=4 |
+|---|---:|---:|---:|
+| semantic | 97.0 % @ 1.15 s | 74.0 % @ 1.25 s | 13.0 % @ 1.77 s |
+| semantic+mbs0.05 | 97.0 % @ 1.13 s | 74.0 % @ 1.29 s | 13.0 % @ 1.63 s |
+| uniform | 97.0 % @ 20.08 s | 20.2 % @ 32.20 s | 1.0 % @ 220.54 s |
+
+Per-difficulty `n_occluders` on holding:
+
+| variant | 2 | 3 | 4 |
+|---|---:|---:|---:|
+| semantic | 41 % @ 2.00 s | 39 % @ 4.91 s | 47 % @ 15.19 s |
+| semantic+mbs0.05 | 47 % @ 1.82 s | 44 % @ 6.80 s | 48 % @ 13.46 s |
+| uniform | 33 % @ 21.24 s | 36 % @ 48.90 s | 31 % @ 83.04 s |
+
+Per-difficulty `n_occluders` on find-and-tray-stack:
+
+| variant | 2 | 3 | 4 |
+|---|---:|---:|---:|
+| semantic | 39.4 % @ 14.93 s | 38.0 % @ 51.57 s | 42.0 % @ 19.88 s |
+| semantic+mbs0.05 | 40.0 % @ 5.10 s | 31.0 % @ 16.14 s | 28.0 % @ 50.81 s |
+| uniform | 2.0 % @ 25.77 s | 1.0 % @ 39.55 s | 1.0 % @ 533.31 s |
+
+(Planning times are `mean plan_time` from the summary — success-only.)
+
 
 ## Cross-goal plots
 
