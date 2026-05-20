@@ -13,6 +13,12 @@ Slimmed: 2026-05-19 - full bodies of DONE issues #63, #75, #76, #79-#85
          ISSUES" section); the verbose ROADMAP and SUMMARY closed-issue
          detail collapsed to one-liners.  Only the 2 open issues (#77,
          #78) keep full bodies in this file.
+Slimmed: 2026-05-20 - #77 body collapsed Step 0-3b implementation
+         history (~110 lines of as-built notes) to one-line per-step
+         status entries now that the sweep is complete and the
+         hypothesis has been reframed by #93's full data; #96 closed
+         (interpreter pin in place, Care(3) scan clean); #93 body
+         refreshed for the 2700/2700 cell aggregate.
 
 Deferred/background/resolved: archive/CODEBASE_AUDIT_DEFERRED.txt
 
@@ -142,7 +148,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #77 (PICK UP NEXT), #78                                       #
+#  OPEN ISSUES — #77 #78 #93 #95 #97 #98                                       #
 #                                                                              #
 ################################################################################
 
@@ -296,275 +302,99 @@ FOR LATER
 #77. ANYTIME COMPACTNESS SWEEP — SUCCESS RATE VS TIME BUDGET (SEMANTIC GAINS FROM FINER BOXELS)
 ================================================================================
 Status:   OPEN.  Raised 2026-05-14 by user during eval-chapter
-          analysis: "interesting is to plot success rate in
-          semantic when using smaller boxels.  To keep this
-          experiment runnable, I chose a minimum boxel size that
-          is the same in both baselines to make this more
-          comparable when it came to waiting times.  But if we
-          keep the time constant we can then look what was more
-          successful.  Then we can plot a graph where x is time
-          in seconds and y the number of problem instances
-          solved."
-          Supervisor methodology constraint added 2026-05-14
-          (user-relayed): valid inter-algorithm comparisons
-          require a FIXED CORPUS of pre-vetted test scenes
-          (target N = 100), each verified to build and load
-          cleanly, then run with deterministic seeds across
-          every algorithm / configuration.  Independent per-
-          cell seed randomization (the current eval style)
-          breaks the comparison guarantee.  Reshapes Fix
-          Step 3 — seeds become a fixed corpus, not an
-          inline [0..4] range — and adds a Step 0 corpus-
-          collection precondition.
-Priority: TIER 1 — promotable to TIER 0 if the curve becomes a
-          headline thesis figure.  Strengthens the eval-chapter
-          comparison from "same resolution, faster" to "same
-          time budget, more instances solved with finer
-          resolution."  This is the IPC-style anytime curve
-          readers of planning papers expect.
-Where:    eval_runner.py — new SCALABILITY_VS_TIME matrix
-          preset OR new `--min-boxel-size` axis on
-          RANDOM_PAIRS_MATRIX (single sweep at the largest
-          time budget; post-process for shorter budgets).
-          eval_plotter.py — new plot_solved_vs_time helper:
-          step-function cumulative-solved vs wall_clock_s,
-          one line per (baseline, min_boxel_size).
-          test_full_pipeline.py / pddlstream_planner.py —
-          verify PDDLStream's `max_time` kwarg is honoured;
-          if not, plumb --time-budget end-to-end.
-          boxel_env.py — semantic min-boxel-size knob (today
-          set by `[audit-66/67] Effective minimum boxel size`
-          gate at scene init).  Expose as --min-boxel-size.
-Depends:  #73 [DONE 2026-05-14] (eval-figures infrastructure)
-          — re-uses aggregated.csv shape, per-goal dispatch,
-          summary table writer.  #73's TIER A/B/C plots
-          stabilised the plotter dispatch this issue extends.
-Effort:   2-3 days for corpus collection + matrix + plotter
-          on top of #73's now-stable plotter infrastructure.
-          +1 day if planner-side time-
-          budget plumbing is missing.  Largest cost is sweep
-          wall-clock — at 100 fixed seeds (vs the original 5)
-          the matrix is 20x larger; budget several days of
-          headless runtime, or trim axes (start with 2 sizes
-          and 1 goal, expand after first pass lands).
+          analysis.  Infrastructure complete; Step 5 (chapter
+          writeup) is the only remaining work, and the data has
+          forced a reframing — see What/Fix.
+Priority: TIER 1.  Drives the eval chapter's anytime story.
+Where:    Step 5 is in proposal-template/sections/evaluation.tex
+          via the #121 structural rewrite (thesis_audit.md).
+Depends:  Steps 0-4 all done (see Fix); #93 [OPEN] holds the
+          full-sweep findings; #94 [DONE] supplies the
+          plot_solved_vs_time helper.
+Effort:   Step 5 is writeup-only and lands inside #121.
 
-What:  The current eval pegs semantic's minimum boxel size at
-       5 cm to match uniform's cell size, so per-call planning
-       times are roughly comparable.  Fair-comparison decision,
-       but it throws away semantic's key advantage: adaptive
-       partitioning lets semantic use finer FREE_SPACE boxels
-       (1-2 cm) without the atom-count explosion uniform would
-       suffer at the same resolution.  Current eval supports
-       "semantic is faster at equal resolution"; the proposed
-       experiment supports the stronger "semantic is more
-       capable at equal time budget" claim.
+What:  The original hypothesis: "semantic can leverage finer
+       FREE_SPACE boxels within a fixed time budget without the
+       atom-count blow-up uniform suffers."  The 2700-cell sweep
+       (#93) does NOT support this on the scenes the eval
+       actually exercises: semantic vs semantic+mbs0.05 is
+       statistically indistinguishable (stack identical
+       seed-for-seed; holding +12 cells; f-a-t-s -20 cells).
+       What the sweep DOES show is the symmetric story —
+       uniform's atom-count blow-up bites at every scale: ~7x
+       boxel / ~7x init-fact inflation on f-a-t-s, ~50x boxels /
+       ~38x init facts on stack, ~10x on holding, with a 22 pp
+       success drop on stack and a 1.3% collapse on f-a-t-s.
+       The IPC-style cumulative-solve curve (solved_vs_time.png,
+       log + linear) is the headline plot.
 
-       Proposed experiment: fix a generous per-cell wall-clock
-       budget (e.g., 300 s), sweep the semantic min-boxel knob
-       (e.g., {5 cm, 3 cm, 2 cm, 1 cm}) at the largest budget,
-       run uniform at its forced 5 cm only.  Plot cumulative
-       solved instances as a step function over wall_clock_s.
-       Each (baseline, min_boxel) is a separate line.  X axis:
-       wall-clock seconds.  Y axis: # instances solved.  At a
-       60-s budget mark the reader can read off "semantic-2cm
-       solves 12 / uniform-5cm solves 3"; at 300 s the lines
-       plateau.
-
-       This is the standard IPC cumulative-solved curve — its
-       presence is one of the things a planning paper is
-       expected to show.
-
-Fix:   ONE FEATURE BRANCH, multi-commit:
-
-       Step 0 [DONE 2026-05-15] — eval corpus (supervisor methodology
-       constraint, 2026-05-14).  collect_eval_corpus.py (initial commit
-       38834ee; parallel-probe + stack-height rewrite 1a4ca47, branch
-       audit-77-anytime-sweep) probes BoxelTestEnv(gui=False) across 9
-       configs covering every cell the Step 3 matrix will exercise:
-       random-pairs × n_occluders ∈ {2,3,4} × (extra_distractors,
-       tray) ∈ {(0,off), (1,on)} for holding / find-and-tray-stack,
-       plus stack × n_objects ∈ {3,4,5} for the multi-height stack
-       sweep.  Probes run in parallel via ProcessPoolExecutor; catches
-       "Could not place" and "audit #70" RuntimeError.  Drop-truncation
-       behaviour removed in commit 7aaf798 — ALL seeds passing every
-       config are kept (--n-corpus is now a soft progress target,
-       not a cap).  Sister change in boxel_env.py (commit 521458d,
-       refined a5f3420): hidden-target placer attempt budget 800 ->
-       4000 per audit #77 — empirical pass rate 33.7% on a 600-
-       candidate build, marginal over 800 (~30%); remaining rejections
-       are structural (occluder layouts leave no feasible shadow
-       region under reach + table + spacing constraints), not
-       budget-bound.  Artefact eval_corpus.json (renamed from
-       eval_corpus_100.json in commit fdc2cf5) landed in commit
-       fdc2cf5 (202 seeds, 600 candidates probed, 5400 probe runs,
-       20 min wall on 4 workers; seeds: 0, 2, 4, 15, 16, 19, 20, 25,
-       28, 34, ..., 599).  GATED Steps 3-5 — without a shared
-       corpus, cross-algorithm comparisons are invalid per
-       supervisor direction.
-
-       Step 1 [DONE — pre-satisfied by audit #76 plumbing].
-       PDDLStream's max_time reaches planner.plan() via
-       --max-plan-time (run_logger.py:504, default 1800 s);
-       test_full_pipeline.py:995/1064 forward it; pddlstream_-
-       planner.py:737 hands it to solve().  Budget exhaustion
-       returns plan=None which the dispatcher classifies as
-       exit_reason="planner_failed" (test_full_pipeline.py:
-       1086-1089) and falls through to report_run_outcome ->
-       timing_summary.json (test_full_pipeline.py:1601,
-       run_logger.py:347).  No additional planner-side
-       plumbing required for #77; smoke-check left as a
-       runtime sanity step during the Step 3 matrix sweep
-       (low --max-plan-time on one cell confirms the abort
-       path end-to-end).
-
-       Step 2 [DONE 2026-05-15 (later) — commit 521cf39].
-       --min-boxel-size CLI knob added in run_logger.py
-       (default 0.05 m so existing runs are unchanged); threaded
-       through test_full_pipeline.main()'s effective_cell logic
-       so the SEMANTIC baseline floor is max(min_boxel_size,
-       auto_cell) while the UNIFORM baseline keeps max(uniform_-
-       cell_size, auto_cell) — the audit-#66 placement invariant
-       stays intact for both.  A new "[audit-77] ... held at
-       auto_cell" console line announces the clamp ONLY when
-       the user explicitly went finer than uniform_cell_size
-       AND the value falls below auto_cell (suppressed at default
-       so log output is bit-identical to pre-#77 runs).  run_-
-       config snapshot grew by one field (min_boxel_size) which
-       lands in timing_summary.json automatically; aggregated.csv
-       gains a column on the next eval sweep.  CellMerger has no
-       size cap (verified) — no change needed there.  Caveat for
-       Step 3: with auto_cell as the floor, --min-boxel-size 0.01
-       is a no-op on the default scene (auto_cell ~ 0.085 m
-       wins).  Sweep cells must either drop auto_cell explicitly
-       or use a scene with smaller objects to exercise the fine
-       end of the resolution axis.  py_compile clean; smoke-
-       checks confirm default suppressed / explicit fires.
-
-       Step 3a [DONE 2026-05-16 — commit 782a29c].  Lift the
-       audit-#67 auto_cell clamp for the SEMANTIC baseline.
-       effective_cell was max(min_boxel_size, auto_cell); with
-       auto_cell ~0.16 m for occluder scenes / ~0.06 m for
-       stack, every proposed sweep size (0.05/0.03/0.02/0.01 m)
-       was clamped away — the resolution axis was a silent
-       no-op.  Fix: --min-boxel-size default 0.05 -> None;
-       unset keeps the #67 clamp (existing #9/#10 runs byte-
-       identical), an explicit value is used raw and may go
-       below auto_cell.  Uniform untouched — every uniform cell
-       is min-size, so a sub-occluder cell makes boxel_fits
-       ungroundable (audit #66).  run_config also gains
-       effective_min_boxel_size (the resolution actually used)
-       so timing_summary.json / aggregated.csv record it.
-       run_logger.py + test_full_pipeline.py; py_compile clean.
-
-       Step 3b [DONE 2026-05-16 — commits 6b92ab5, fa91957].
-       SCALABILITY_VS_TIME preset added to eval_runner.py — SEMANTIC
-       runs at 2 resolution points: "current" (min_boxel_size=None ->
-       per-scene auto_cell, ~0.16 m occluder / ~0.06 m stack) and an
-       explicit 5 cm; UNIFORM runs once per scene as the baseline
-       point (hard-clamped to auto_cell by audit #66 — one feasible
-       resolution, so no size axis).  cell_to_argv emits
-       --min-boxel-size and, for the stack sub-tier, --stack-height
-       from the reused n_occluders axis; cell_tag gains an _mbs suffix
-       so size variants don't collide on one directory.  100 corpus
-       seeds -> 2700 cells (1800 semantic + 900 uniform); py_compile +
-       --dry-run clean.  Resolution axis was {0.1,0.05,0.03,0.02,0.01}
-       in 6b92ab5, narrowed to {current, 5 cm} per user in fa91957.
-       As-built notes supersede the planning text below where they
-       differ.
-
-       Step 3b plan — new matrix preset.  REVISED 2026-05-14 per
-       Step 0: seeds come from eval_corpus_100.json (100 pre-
-       vetted scenes), NOT an inline [0..4] range.  Start
-       narrow on the remaining axes:
-         min_boxel_size  in {0.05, 0.03, 0.02, 0.01}  (semantic only)
-         baseline       in {semantic, uniform}      (uniform fixed at 5cm)
-         seed           : 100 seeds from eval_corpus_100.json
-         goal           in {holding, find-and-tray-stack, stack}
-         n_occluders    in {2, 3, 4}                (random-pairs);
-                                                    stack subtier ignored
-         time_budget    : single large value (e.g., 300 s)
-       Cell count: 4 sizes x 100 seeds x 3 goals x 3 n_occ x
-       2 baselines = 7200 cells (was 360 at 5 seeds).  At the
-       current 17 s/cell average that's ~34 h wall-clock;
-       budget headless multi-day runtime and/or trim the size
-       axis (e.g., start with {0.05, 0.02} only, expand after
-       the first pass is in hand).  Single-budget run;
-       cumulative-solved curves at shorter budgets are post-
-       processed from wall_clock_s.
-
-       Step 4 — plot_solved_vs_time helper.  Reads
-       aggregated.csv, groups by (baseline, min_boxel_size),
-       sorts by wall_clock_s, emits step-function lines.
-       Per-goal panels (mirrors plot 1's layout).
-
-       Step 5 — eval-chapter writeup pairing with plot 1 /
-       plot 2: "semantic uses fewer boxels at coarse
-       resolution AND can leverage finer resolution within a
-       fixed time budget."  This is the closing argument for
-       the compactness pillar.
+Fix:   Steps 0-4 all done; Step 5 is the eval-chapter writeup.
+       Step 0 [DONE 2026-05-15] — eval_corpus.json (202 seeds);
+              collect_eval_corpus.py + boxel_env hidden-target
+              placer budget bump.
+       Step 1 [DONE — pre-satisfied by audit #76 plumbing] —
+              --max-plan-time reaches planner.plan() through
+              run_logger / test_full_pipeline / pddlstream_planner.
+       Step 2 [DONE 2026-05-15, commit 521cf39] — --min-boxel-size
+              CLI knob, threaded through effective_cell logic;
+              run_config + aggregated.csv carry the value.
+       Step 3a [DONE 2026-05-16, commit 782a29c] — lifted the
+              audit-#67 auto_cell clamp for SEMANTIC when
+              --min-boxel-size is set explicitly.
+       Step 3b [DONE 2026-05-16, commits 6b92ab5/fa91957] —
+              SCALABILITY_VS_TIME preset (100 corpus seeds x
+              {auto, 5 cm} x 3 goals x 3 occ counts x
+              {semantic, uniform} = 2700 cells).  cell_tag _mbs
+              suffix; stack sub-tier reuses n_occluders axis as
+              stack_height (the misnaming is #95).
+       Step 4 [DONE 2026-05-20, #94 + follow-up] —
+              plot_solved_vs_time in eval_plotter.py: per-goal
+              panels, step-function curves, log + linear
+              variants, 1800 s cap extension.
+       Step 5 [OPEN, deferred to #121] — eval-chapter writeup
+              pairs solved_vs_time with the boxel-count / init-
+              fact compactness plots and the TAMPURA wall-clock
+              bar.  Lead with the null result on finer
+              resolution honestly; the chapter's positive story
+              is the compactness asymmetry between semantic and
+              uniform.  thesis_audit.md #140 and CODEBASE #97
+              (fine-resolution-discriminating scene) are the
+              follow-ups.
 
 Care:
-       (1) min_boxel_size only affects FREE_SPACE granularity
-           in semantic; OBJECT and SHADOW boxels are still
-           per-object.  Document in the plot caption so
-           reviewers don't conflate this with overall
-           grid resolution.
-       (2) Uniform CAN go finer than 5 cm in principle
-           (just change cell_size), but #66 surfaced
-           place-fits failures when uniform_cell_size <
-           occluder_size.  Optionally include uniform-3cm /
-           uniform-2cm to show the atom-count explosion and
-           the #66 failure mode together — strengthens the
-           "uniform doesn't scale to fine resolution" point.
-       (3) Per-cell wall-clock budget enforcement matters
-           for the curve quality.  If PDDLStream's
-           max_time is honoured but the surrounding
-           pipeline (PyBullet init, scene build, execution)
-           runs unbounded, the plot's X axis becomes
-           dominated by sim setup.  Smoke-check Step 1.
-       (4) Re-running the matrix at different time
-           budgets is expensive.  Better: run ONCE at the
-           largest budget, record wall_clock_s per cell,
-           plot cumulative-solved at any X threshold by
-           post-processing.  No re-runs needed for the
-           anytime curve.
-       (5) Compactness pillar story upgrade: pair the
-           anytime curve with the existing boxel-count
-           breakdown + init-state-facts plots so the
-           reader sees both the resource argument
-           (compactness) and the outcome argument
-           (capability under budget).
-       (6) Supervisor methodology (2026-05-14, user-relayed):
-           cross-algorithm comparisons are only valid against a
-           fixed pre-vetted scene corpus, not independently-
-           randomized per-cell seeds.  Step 0 is the corpus
-           collection precondition; commit eval_corpus_100.json
-           as the canonical seed list for THIS issue AND any
-           future inter-algorithm comparison (TAMPURA, LW1,
-           POMDP baselines).  Without a shared corpus the
-           anytime curve compares algorithms on different
-           problem distributions and the comparison claim
-           collapses.
+       (1) min_boxel_size only affects FREE_SPACE granularity in
+           semantic; OBJECT and SHADOW are per-object and ignore
+           it.  Note this in the chapter caption so readers do
+           not conflate "min boxel size" with "overall grid
+           resolution" — the partial-knob nature is part of why
+           the null result reads the way it does (see CODEBASE
+           #97 design rationale).
+       (2) Uniform CAN go finer than 5 cm in principle, but
+           audit #66 surfaced place-fits failures when
+           uniform_cell_size < occluder_size.  Uniform stays
+           pinned to auto_cell ~ largest visible AABB + 1 cm
+           in this sweep.
+       (3) Cross-algorithm comparisons require the shared
+           eval_corpus.json (supervisor methodology, 2026-05-14).
+           TAMPURA/LW1/POMDP baselines, if added, MUST reuse
+           this corpus or the comparison breaks.
 
 Related:
-       #73 [DONE 2026-05-14] — eval-chapter figures backlog.
-            This is a new TIER A plot (compactness pillar's
-            capability corollary) that #73 didn't enumerate;
-            conceptually "plot 12."
-       #74 — placeholder (unfiled): uniform 0/15 success
-            on find-and-tray-stack.  This issue's curve
-            directly visualises that gap on a time-budget
-            axis (at any budget, uniform-5cm stays at 0
-            while semantic-finer climbs).
-       #76 — planner returns no plan; the time-budget
-            sweep would disambiguate "ran out of time"
-            from "concluded no plan exists" by separating
-            wall_clock_s from max_complexity.
-       #66 — relocated to TAMPURA_PLAN.md.  Auto-tune
-            uniform cell-size to largest visible AABB +
-            1 cm.  If uniform is included at fine
-            resolution, #66's place-fits failure mode
-            appears in the curve.
+       #93 [OPEN, TIER 1] — full-sweep numbers and headline
+            findings; the writeup input.
+       #94 [DONE 2026-05-20] — plot_solved_vs_time + cosmetic
+            plotter fixes.
+       #95 [OPEN, TIER 3] — stack cell-tag misnaming; chapter
+            must slice stack by run_config.stack_height.
+       #97 [OPEN, TIER 1] — design a fine-resolution-
+            discriminating scene; necessary follow-up given the
+            null result.
+       #98 [OPEN, TIER 2] — coarse-end resolution sweep; the
+            symmetric counterpart to #97.
+       #66 — uniform cell-size auto-tune (in TAMPURA_PLAN.md);
+            why uniform cannot run finer than auto_cell here.
+       thesis_audit.md #140 — thesis-side mirror of the null
+            result and discriminating-scene plan.
 
 
 ================================================================================
