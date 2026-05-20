@@ -106,23 +106,6 @@ scale grades proposal defects) and are all disposition [THESIS]. For the
 upgrade these come FIRST: a thesis cannot exist without #121-#123.
 
 ================================================================================
-#121  [Structural] [THESIS]  §5 "Evaluation Plan" must become an "Evaluation / Results" chapter
-================================================================================
-Where: §5 — evaluation.tex (whole section); main.tex:24
-What:  §5 is a forward-looking PLAN — "we will conduct", "we will vary", "we
-       plan to adopt", "If feasible, we will compare". A thesis needs a results
-       chapter: the experimental setup as executed, the actual results (tables
-       and plots from the eval sweep in eval_results/sweep_anytime/), and their
-       analysis. Issues #87-#103 patch individual §5 sentences; none of them
-       restructures the section. This issue owns that restructure.
-Fix:   Rewrite §5 as a completed Evaluation chapter: (1) Experimental Setup as
-       built; (2) Results — success rate, planning time, boxel/fact counts,
-       replan counts, the semantic-vs-uniform comparison, the TAMPURA bar
-       chart; (3) hand interpretation to #125. Resolve #87-#103 inside this
-       rewrite, not as 17 isolated sentence edits.
-Refs:  #87-#103; #125; THESIS_NOTES §21; eval_results/sweep_anytime/
-
-================================================================================
 #126  [Structural] [THESIS]  Document-wide framing conversion — forward-looking to retrospective
 ================================================================================
 Where: whole document
@@ -140,20 +123,6 @@ Fix:   One document-wide pass: convert completed work to past/present voice;
 Refs:  #1 #16 #104; #127 #128
 
 ================================================================================
-#127  [Structural] [THESIS]  Abstract must be recast as a thesis abstract
-================================================================================
-Where: Abstract — abstract.tex
-What:  The abstract is a proposal abstract: "This research proposal outlines a
-       plan to ...", "The proposed methodology ...", "The expected contribution
-       is ...". A thesis abstract states what was built and what the evaluation
-       found. Issues #1-#7 only tighten the wording of the proposal abstract.
-Fix:   Recast the abstract for the thesis: what was built (the Boxel
-       abstraction + the PDDLStream POD-TAMP integration), how it was
-       evaluated, and the key results. Apply the #1-#7 wording fixes within
-       this recast rather than separately.
-Refs:  #1 #2 #3 #4 #5 #6 #7; #126
-
-================================================================================
 #130  [Build] [THESIS]  Thesis front and back matter is missing
 ================================================================================
 Where: main.tex; resources/title.tex; resources/acronyms.tex; sections/appendix.tex
@@ -168,34 +137,6 @@ Fix:   Add what an RWTH Master's thesis requires: a declaration of authorship
        already exists). Decide the appendix content (e.g. the full PDDL domain,
        parameter tables, extra plots) or remove the commented-out stub.
 Refs:  main.tex:10,26-27; #117 #129
-
-
-################################################################################
-#  ISSUES — ADDED 2026-05-20  (EVAL WRITE-UP)
-################################################################################
-
-The sweep in eval_results/sweep_anytime/ is ~94% complete (CODEBASE_AUDIT.txt
-#93). These issues take the raw data and turn it into chapters. Together
-they subsume the relevant parts of #121, #125, and the eval-anchored bits
-of #126/#127 --- once all five land, those umbrellas can be removed.
-
-================================================================================
-#145  [Thesis] [THESIS]  Close out Conclusion and Abstract with eval-supported claims
-================================================================================
-Where: thesis/chapters/conclusion.tex (above the Future Work section);
-       thesis/chapters/abstract.tex.
-What:  Both chapters currently state contributions without referring to the
-       actual eval outcomes. The abstract claims the framework "scales
-       better than uniform voxelization" with no number attached; the
-       conclusion says "Future work will focus on..." without first
-       summarizing what the demonstrated work showed.
-Fix:   Update the conclusion to summarize the demonstrated contribution
-       with the #143 headline numbers (semantic vs uniform; the TAMPURA
-       architectural finding; the mbs0.05 null result). Rewrite the
-       abstract per #127 with 1-2 sentences of headline results. Closes the
-       remaining proposal-voice items of #126/#127 in these chapters.
-Refs:  #126 #127 #143 #144
-
 
 ################################################################################
 #  ISSUES --- ADDED 2026-05-20  (SIM-SCREENSHOT FIGURE PLACEMENT)
@@ -370,22 +311,22 @@ Refs:  #146-#154
 OPEN ISSUES
 ================================================================================
 
-15 issues remain open. Each issue's header carries its tier (T0-T3) and
+12 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Structural:      #121 #126 #127 #130 #145
+Structural:      #126 #130
 Figure placement: #146 #147 #148 #149 #150 #151 #152 #153 #154 #155
 
-Gating: #141 #142 #143 #144 #156 done --- chapters are clear of internal
-file-path / hardware-spec clutter and the Results + Discussion content
-is in thesis/. #145 (conclusion + abstract eval-anchored closure) is
-next; #125 and #140 are resolved jointly with #144. #130's remaining
-items (real submission date, appendix decision) are independent and
-need user input. #121 and #127 are umbrellas that #142-#145 subdivide;
-remove them after #145 lands. The §5 sentence-level polish issues
-(#87-#111) were resolved earlier in the audit walkthrough.
-Figure-placement issues #146-#154 are all gated by #155 (screenshot
-curation); #155 is independent and can be done in any order against
-the others.
+Gating: #141-#145 and #156 done --- all eval-write-up content (Results,
+Discussion, abstract + conclusion closure) is in thesis/, and the
+chapters are clear of internal file-path and hardware-spec clutter.
+#125, #140, #121, #127 were closed jointly. #130's remaining items
+(real submission date, appendix decision) need user input. #126
+(document-wide forward-voice conversion) is left open as a final
+verification pass since the chapters individually are already
+retrospective. The §5 sentence-level polish issues (#87-#111) were
+resolved earlier in the audit walkthrough. Figure-placement issues
+#146-#154 are all gated by #155 (screenshot curation); #155 is
+independent and can be done in any order against the others.
