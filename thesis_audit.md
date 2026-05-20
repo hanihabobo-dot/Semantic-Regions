@@ -99,27 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#99  [T2 · Style] [POLISH]  §5 opener is boilerplate
-================================================================================
-Where: §5 — evaluation.tex:5
-What:  "To validate our proposed framework, we will conduct a series of
-       experiments in a simulated robotic manipulation environment." The most
-       interchangeable possible opening for an evaluation section.
-Fix:   "We evaluate the framework in a simulated robotic manipulation
-       environment, described below."
-
-================================================================================
-#102  [T2 · Style] [POLISH]  §5.2 — "This will be a key metric for evaluating the tractability"
-================================================================================
-Where: §5.2 — evaluation.tex:17
-What:  "Planning Time: The wall-clock time required for the planner to find a
-       solution. This will be a key metric for evaluating the tractability of
-       our approach." States the self-evident.
-Fix:   Delete the second sentence, or make it carry weight: "Planning Time: the
-       wall-clock time the planner needs to find a solution — the central
-       measure of whether the adaptive abstraction scales."
-
-================================================================================
 #103  [T2 · Style] [POLISH]  §5.3 — "empirically demonstrate whether"
 ================================================================================
 Where: §5.3 — evaluation.tex:29
@@ -431,12 +410,12 @@ Refs:  CODEBASE_AUDIT.txt #77 #93 #97
 OPEN ISSUES
 ================================================================================
 
-21 issues remain open. Each issue's header carries its tier (T0-T3) and
+19 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§5 Evaluation:   #99 #102 #103 #104 #105 #106 #107 #108 #109 #110 #111
+§5 Evaluation:   #103 #104 #105 #106 #107 #108 #109 #110 #111
 Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138 #140
 
 Gating: the §5 issues (#87-#111) are subsumed by the #121 evaluation rewrite;
