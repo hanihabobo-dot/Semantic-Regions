@@ -238,24 +238,6 @@ they subsume the relevant parts of #121, #125, and the eval-anchored bits
 of #126/#127 --- once all five land, those umbrellas can be removed.
 
 ================================================================================
-#141  [Eval] [THESIS]  Read every sweep plot and write per-plot lessons
-================================================================================
-Where: eval_results/sweep_anytime/ --- 24 per-goal plots (3 goals x 8 types)
-       plus 5 cross-goal plots (failure_modes, plan_count_distribution,
-       tampura_wallclock_comparison, solved_vs_time, solved_vs_time_linear);
-       new notes/PLOT_LESSONS.md.
-What:  Plot interpretation currently lives in the author's head and scattered
-       notes. Without a consolidated record, #142-#145 risk writing claims
-       the data does not actually support, or missing claims it does.
-Fix:   Walk through each plot in eval_results/sweep_anytime/ (skip the
-       _pre_fix_99/ archive and plots_preliminary/). Write notes/
-       PLOT_LESSONS.md with one short paragraph per plot stating: what it
-       shows, the headline number or pattern, and which thesis claim it
-       supports or undermines. Cross-check the mbs0.05-null finding (#140)
-       against the actual curves rather than relying on summary stats.
-Refs:  #121 #125 #140 #142 #143 #144 #145; CODEBASE_AUDIT.txt #93
-
-================================================================================
 #142  [Thesis] [THESIS]  Write the "Experimental Setup" section of Results as built
 ================================================================================
 Where: thesis/chapters/results.tex --- the current "Experimental Setup"
@@ -332,17 +314,17 @@ Refs:  #126 #127 #143 #144
 OPEN ISSUES
 ================================================================================
 
-11 issues remain open. Each issue's header carries its tier (T0-T3) and
+10 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Structural:      #121 #125 #126 #127 #130 #140 #141 #142 #143 #144 #145
+Structural:      #121 #125 #126 #127 #130 #140 #142 #143 #144 #145
 
-Gating: #141 is the first concrete step and is unblocked --- walking the
-plots produces the data backbone for #142-#145. #142-#145 then chain off
-#141 in order. #130's remaining items (real submission date, appendix
+Gating: #141 done --- notes/PLOT_LESSONS.md is the data backbone for
+#142-#145. #142 is now the first concrete step (unblocked); #143-#145
+chain off it. #130's remaining items (real submission date, appendix
 decision) are independent and need user input. #121/#125/#127 are
-umbrellas that #141-#145 subdivide; remove them after all five land.
+umbrellas that #142-#145 subdivide; remove them after all four land.
 The §5 sentence-level polish issues (#87-#111) were resolved earlier
 in the audit walkthrough.
