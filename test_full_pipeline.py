@@ -55,7 +55,22 @@ PDDLSTREAM_PATH = os.environ.get(
 if os.path.exists(PDDLSTREAM_PATH):
     sys.path.insert(0, PDDLSTREAM_PATH)
 
-import numpy as np
+# Audit #96 — fail-fast if the subprocess interpreter lacks numpy.
+# Without this guard a missing-numpy environment crashes with a plain
+# ModuleNotFoundError, the eval runner sees returncode 1, and the cell
+# ends up with exit_reason="no_summary" — indistinguishable from a
+# planner failure.  Explicit sys.exit(2) lands as crash_exit2 in the
+# cell's timing_summary.json, making env misconfiguration loud.
+try:
+    import numpy as np
+except ImportError:
+    sys.stderr.write(
+        f"[test_full_pipeline] eval misconfigured: numpy missing from "
+        f"interpreter {sys.executable}\n"
+        f"Run under the wsl_env Python (source wsl_env/bin/activate, "
+        f"or invoke via scripts/_run_in_wsl.sh).\n"
+    )
+    sys.exit(2)
 import pybullet as p
 
 from boxel_env import (BoxelTestEnv, SceneConfig,

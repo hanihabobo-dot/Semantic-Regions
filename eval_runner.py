@@ -587,6 +587,27 @@ def main(argv=None):
             print(f"  {cell_tag(c)}")
         return 0
 
+    # Audit #96 — verify the subprocess interpreter can import the
+    # eval's core deps before spawning thousands of subprocesses that
+    # all fail.  The 2026-05-19 sweep had 5 cells crash with "No module
+    # named 'numpy'" because eval_runner.py had been launched with a
+    # Python (e.g. native Windows) that lacks the wsl_env packages.
+    probe = subprocess.run(
+        [sys.executable, "-c", "import numpy, pybullet"],
+        capture_output=True, text=True,
+    )
+    if probe.returncode != 0:
+        print(f"[runner] FATAL: subprocess interpreter "
+              f"{sys.executable} cannot import numpy/pybullet.",
+              file=sys.stderr)
+        print(f"[runner] launch via wsl bash scripts/_run_in_wsl.sh "
+              f"eval_runner.py ... to use the wsl_env Python.",
+              file=sys.stderr)
+        if probe.stderr.strip():
+            print(f"[runner] probe stderr:\n{probe.stderr.rstrip()}",
+                  file=sys.stderr)
+        return 2
+
     sweep_dir = args.output or (
         Path("eval_results")
         / f"sweep_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{args.matrix}"
