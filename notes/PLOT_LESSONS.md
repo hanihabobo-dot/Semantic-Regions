@@ -71,6 +71,20 @@ Per-difficulty `n_occluders` on find-and-tray-stack:
 
 (Planning times are `mean plan_time` from the summary — success-only.)
 
+### Verification against raw data (2026-05-20)
+
+Independently recomputed from `eval_results/sweep_anytime/aggregated.csv`
+(2700 rows) with PowerShell `Import-Csv` + `Group-Object`:
+
+- **Aggregate `n_cells`, `success`, `success_rate`, `mean plan_time` (success-only):** all match `summary_table.md` exactly across every (goal, variant) row.
+- **Per-difficulty success counts on holding (n_occluders) and find-and-tray-stack (n_occluders):** match exactly.
+- **Per-difficulty success counts on stack (stack_height):** counts match (97 / 74 / 13 semantic; 97 / 20 / 1 uniform).
+- **`mean init_facts` and `mean plan_count`** in `summary_table.md` are computed over **cells with non-null values** as denominator, not over all `n_cells`. 166 / 2700 cells (~6 %) have null `n_init_state_facts` — mostly early timeouts that never produced a snapshot. When that filter is applied the means match exactly; without it (treating nulls as zero) the means come out 5-15 % lower. The summary's denominator is the right one to quote, but the table doesn't say so explicitly. *Footnote when citing these in the thesis.*
+- **Stack per-height denominators in `summary_table.md` use the planned 100 cells per height** while the raw data has 5 + 6 = 11 stack rows with an empty `stack_height` field (all failures). This biases the per-height success rates upward by ≤0.7 pp (e.g. summary says 74.0 % at h=3, raw is 74/99 = 74.7 %). Negligible for narrative but worth noting if exact rates are quoted.
+- **Stack uniform `n_cells = 301`** rather than 300 — one extra cell with `stack_height` blank (success=False). One stray run, doesn't affect anything.
+
+Bottom line: the summary table is trustworthy for everything cited above; the denominator convention for `mean init_facts` / `mean plan_count` is the only non-obvious thing and should be flagged in #142–#143 when those numbers are quoted in prose.
+
 
 ## Cross-goal plots
 
