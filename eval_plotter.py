@@ -640,13 +640,14 @@ def plot_boxel_volume_histogram(
         hi = lo + 1.0
     bins = [10 ** (lo + (hi - lo) * i / 30) for i in range(31)]
 
-    # Per-panel y-axis: uniform's ~50k-count free-space spike used to
-    # dominate a shared-y plot and flatten the semantic distribution
-    # visually.  sharex is preserved so the log-volume bins align
-    # across panels.
+    # Shared X and Y across the per-variant panels so the reader
+    # compares OBJECT / SHADOW / FREE_SPACE distributions on the same
+    # log-volume bins and the same log-count scale.  With audit-#99
+    # log-y the uniform free-space spike (~10^5) and the semantic
+    # tails (~10^0) both fit comfortably in one shared range.
     fig, axes = plt.subplots(1, len(variants),
                              figsize=(5 * len(variants), 4.5),
-                             sharex=True)
+                             sharex=True, sharey=True)
     if len(variants) == 1:
         axes = [axes]
     for ax, variant in zip(axes, variants):
@@ -743,15 +744,14 @@ def plot_boxel_evolution_per_replan(
                    "shadow": "SHADOW",
                    "free_space": "FREE_SPACE"}
 
-    # Audit #99 polish — drop sharey: uniform's free-space line at
-    # ~1300 boxels (stack) / ~330 (random-pairs) squashes the
-    # semantic/mbs0.05 panels (max ~30-50) into an unreadable strip
-    # at the bottom.  Per-panel y-axis lets each variant's evolution
-    # be visible at its own scale.
+    # Shared X and Y across the per-variant panels for cross-variant
+    # comparison.  Uniform's free-space line (~1300 stack / ~330
+    # random-pairs) sets the y-range; the semantic / mbs panels read
+    # along the bottom and the size gap is the point of the plot.
     fig, axes = plt.subplots(
         1, len(variants),
         figsize=(5 * len(variants), 4),
-        squeeze=False,
+        sharex=True, sharey=True, squeeze=False,
     )
     axes = axes[0]
     for ax, variant in zip(axes, variants):
@@ -1270,7 +1270,7 @@ def plot_solved_vs_time(grouped: Dict[tuple, tuple],
 
     fig, axes = plt.subplots(1, len(goals),
                               figsize=(5 * len(goals), 4.6),
-                              sharey=True)
+                              sharex=True, sharey=True)
     if len(goals) == 1:
         axes = [axes]
 
@@ -1936,21 +1936,10 @@ def main(argv=None) -> int:
             main_label_suffix=main_label_suffix,
             baseline_label_suffix=baseline_label_suffix,
         )
-        plot_metric(
-            group_metric(g_rows, series=series_key,
-                         metric="plan_count", success_only=True),
-            title=f"Plan count (replans) vs scene size (success-only){title_suffix}",
-            ylabel="mean plan_count",
-            out_path=out_dir / f"plan_count_vs_n_occluders{suffix}.png",
-            baseline_grouped=(group_metric(g_baseline, series=series_key,
-                                           metric="plan_count",
-                                           success_only=True)
-                              if g_baseline else None),
-            series_label=series_label,
-            xlabel=x_label,
-            main_label_suffix=main_label_suffix,
-            baseline_label_suffix=baseline_label_suffix,
-        )
+        # plan_count_vs_n_occluders dropped 2026-05-20 per user
+        # direction (low-interest metric; the per-(goal, variant)
+        # histogram in plan_count_distribution.png covers replan
+        # distribution at a finer grain).
         # Audit #73 TIER A plot 1: boxel-count breakdown (OBJECT /
         # SHADOW / FREE_SPACE stacked, semantic-vs-uniform side-by-
         # side).  Compactness pillar's headline figure.  No-op on
@@ -1989,29 +1978,8 @@ def main(argv=None) -> int:
             main_label_suffix=main_label_suffix,
             baseline_label_suffix=baseline_label_suffix,
         )
-        # Audit #73 TIER B plot 4: sense-action count vs n_occluders.
-        # Counts every sense executed (any outcome) across all
-        # replans, so include failed runs — they may still have done
-        # many senses before exiting (the audit body explicitly notes
-        # uniform vs semantic should show ~equal counts if the shadow
-        # set is identical; a divergence is itself a finding).  No-op
-        # on pre-#73-step-3(c) sweeps (n_sense_actions column absent).
-        plot_metric(
-            group_metric(g_rows, series=series_key,
-                         metric="n_sense_actions",
-                         success_only=False),
-            title=f"Sense-action count vs scene size{title_suffix}",
-            ylabel="mean n_sense_actions",
-            out_path=out_dir / f"sense_action_count_vs_n_occluders{suffix}.png",
-            baseline_grouped=(group_metric(g_baseline, series=series_key,
-                                           metric="n_sense_actions",
-                                           success_only=False)
-                              if g_baseline else None),
-            series_label=series_label,
-            xlabel=x_label,
-            main_label_suffix=main_label_suffix,
-            baseline_label_suffix=baseline_label_suffix,
-        )
+        # sense_action_count_vs_n_occluders dropped 2026-05-20 per
+        # user direction (low-interest metric for the eval chapter).
         # Audit #73 TIER A plot 3: boxel-volume histogram (semantic
         # vs uniform).  Heterogeneity proof — semantic shows a wide
         # spread, uniform a narrow spike near cell_size³.  Reads
