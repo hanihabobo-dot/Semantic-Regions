@@ -310,16 +310,186 @@ Fix:   Update the conclusion to summarize the demonstrated contribution
 Refs:  #126 #127 #143 #144
 
 
+################################################################################
+#  ISSUES --- ADDED 2026-05-20  (SIM-SCREENSHOT FIGURE PLACEMENT)
+################################################################################
+
+60 PyBullet screenshots sit unused in thesis/graphics/sim screen shots/.
+The thesis currently contains only two figures (Boxelization.png schematic,
+octmap_illustration.png in background). Methods, Results, and Discussion
+have no sim screenshots. These issues identify concrete places where one
+screenshot would make a concept, algorithm, or shortcoming visible that is
+currently described in prose only. The image filenames named below are
+candidates from thesis/graphics/sim screen shots/; final picks may be
+recropped or substituted. Aside: thesis/graphics/sim screen shots/Screenshot
+2026-04-20 160547.png is a stray browser screenshot (demo.emson.cloud) and
+should be removed from this folder.
+
+================================================================================
+#146  [Thesis] [THESIS]  Real-sim companion to the Boxelization schematic
+================================================================================
+Where: methods.tex:17-22 (fig:boxelization)
+What:  The boxelization figure is a four-panel schematic. Nowhere in the
+       methods chapter does the reader see the partition applied to a real
+       PyBullet scene --- object AABBs over real cubes and red shadow
+       wireframes labeled by object. A real-scene companion makes the
+       abstraction concrete and shows that the cyan/red boxes are not
+       imaginary.
+Fix:   Add a one-panel figure (or fourth subpanel of fig:boxelization)
+       showing a single sim screenshot with visible object boxels and
+       labeled shadow wireframes. Candidates: Screenshot 2026-04-26
+       143036.png; 2026-04-22 121333.png; 2026-04-26 142916.png. Pick the
+       clearest label visibility.
+Refs:  methods.tex:17-22
+
+================================================================================
+#147  [Thesis] [THESIS]  Visual contrast: semantic vs uniform partition
+================================================================================
+Where: methods.tex end of Adaptive Semantic Discretization section, or
+       results.tex line 25 (Uniform Voxelization baseline)
+What:  The thesis claims the uniform baseline yields many more cells than
+       the semantic partition. Only the quantitative plots show this; no
+       figure lets the reader SEE "thousands of cyan cells" vs "a small
+       labelled set" in one image.
+Fix:   Two-panel figure on matching scenes/angles: (a) semantic partition
+       and (b) uniform voxel grid. Candidates (a): 2026-04-26 143036.png,
+       2026-04-22 121333.png. Candidates (b): 2026-05-09 113613.png,
+       113951.png, 115027.png, 115755.png, 120308.png, 134715.png.
+Refs:  methods.tex (Recursive Partitioning paragraph); results.tex:25;
+       CODEBASE_AUDIT.txt #93 #97
+
+================================================================================
+#148  [Thesis] [THESIS]  Sense action targeting a shadow
+================================================================================
+Where: methods.tex:89-111 (sense action subsection)
+What:  The sense action is given as PDDL and prose only. Several shots
+       have the action-log overlay visible (e.g. "Sensing shadow of green
+       object") and labeled red shadow wireframes, making (view_clear ?r)
+       and the targeted region concrete.
+Fix:   One figure with a labeled shadow shot. Caption maps the visible
+       overlay to the symbolic action. Candidates: 2026-04-23 145402.png
+       ("Sensing shadow of green object" caption visible), 2026-04-26
+       145847.png, 2026-04-28 091354.png, 2026-05-02 105108.png.
+Refs:  methods.tex:89-111 (lst:pddl_sense_k_literal)
+
+================================================================================
+#149  [Thesis] [THESIS]  Optimistic-sense -> reactive-replan cycle figure
+================================================================================
+Where: methods.tex:107-109 (optimistic + replanning paragraph)
+What:  The architectural choice "optimistic effect + replan when execution
+       disagrees" is central but currently invisible. Screenshot 2026-05-12
+       135205.png catches the exact moment: action log reads "sense
+       shadow_of_purple_object --- target not here".
+Fix:   Embed that screenshot. Caption ties the visible "target not here"
+       log line to: (i) the optimistic add-effect, (ii) the execution-time
+       rejection, (iii) the replan with the shadow now marked empty.
+       Candidates: 2026-05-12 135205.png; 2026-05-15 200153.png;
+       2026-05-15 202947.png.
+Refs:  methods.tex:107-109
+
+================================================================================
+#150  [Thesis] [THESIS]  Three-strike give-up limitation figure
+================================================================================
+Where: discussion.tex:70-80 (Planning paragraph, "still-blocked three
+       times in succession")
+What:  The unsound shortcut where a shadow is marked empty after three
+       still-blocked sensing attempts is described in prose. Screenshot
+       2026-05-15 200153.png shows "retry 3/3" in the action log --- the
+       exact loop event the text describes.
+Fix:   Include the "retry 3/3" screenshot under the Limitations Planning
+       paragraph. Caption: the visible retry counter is the moment the
+       loop hits the bounded give-up and the shadow gets marked empty
+       without ever being directly observed. Candidates: 2026-05-15
+       200153.png.
+Refs:  discussion.tex:70-80; methods.tex:109
+
+================================================================================
+#151  [Thesis] [THESIS]  Experimental Setup: one figure per task variant
+================================================================================
+Where: results.tex:6-11 (Experimental Setup, task bullet)
+What:  Three goals are evaluated --- holding (hidden-object), stack,
+       find-and-tray-stack --- and the reader is told what they are in one
+       sentence each. No figure shows what they look like.
+Fix:   A three-panel fig:eval_tasks. Candidates:
+         (a) holding: 2026-04-22 121333.png or 2026-04-26 143036.png
+         (b) stack:   2026-05-11 171834.png or 171855.png
+         (c) tray:    2026-05-15 110407.png, 110411.png, or 191212.png
+Refs:  results.tex:9; methods.tex:53 (sense-plan-act loop)
+
+================================================================================
+#152  [Thesis] [THESIS]  n_occluders scalability composite
+================================================================================
+Where: results.tex:19-20 (Scalability bullet), alongside the
+       planning_time_vs_n_occluders plot referenced in #143
+What:  The plot conveys planning time as a curve but the reader has no
+       visual sense of what "more occluders" means in the scene.
+Fix:   A three-panel figure: low / medium / high n_occluders.
+       Candidates: 2026-05-11 171834.png (light); 2026-05-12 121849.png
+       (moderate); 2026-05-15 185934.png (heavy).
+Refs:  results.tex:19; #143; eval_results/sweep_anytime/
+
+================================================================================
+#153  [Thesis] [THESIS]  Overhead-camera RGB+depth inset figure
+================================================================================
+Where: results.tex:10 (Perception bullet) or discussion.tex:22-34
+       (Perception paragraph)
+What:  Almost every sim shot has corner insets labeled "Synthetic Camera
+       RGB data" and "Synthetic Camera Depth data". This is the fixed
+       overhead camera the perception bullet describes. Including it
+       lets the reader see what a future learned detector would consume,
+       and what the oracle bypasses by reading ground-truth poses.
+Fix:   Crop one RGB+depth inset (or include a whole-scene shot with the
+       inset visible) as fig:overhead_camera. Caption: oracle reads
+       ground truth; depth/RGB show the input a future learned detector
+       could use. Candidates: 2026-04-26 142916.png; 2026-05-02 105108.png.
+Refs:  results.tex:10; discussion.tex:22-34
+
+================================================================================
+#154  [Thesis] [THESIS]  Introduction hero figure
+================================================================================
+Where: introduction.tex (after the opening paragraph, around line 5-10)
+What:  The introduction has no figure. A "what does the problem look
+       like" hero shot would anchor the reader in the actual scene the
+       thesis works in: robot arm, cluttered table, hidden target, and a
+       preview of the boxel overlay.
+Fix:   One figure: a representative hidden-object scene with the boxel
+       overlay visible. Candidates: 2026-04-22 121333.png or 2026-04-26
+       143036.png.
+Refs:  introduction.tex:5-21
+
+================================================================================
+#155  [Thesis] [THESIS]  Curate screenshots into thesis/graphics/sim/ with stable names
+================================================================================
+Where: thesis/graphics/sim screen shots/ (current dir name has a space ---
+       a LaTeX hazard); thesis/graphics/sim/ (proposed)
+What:  #146-#154 will reference 8-10 screenshots by filename. Using the
+       raw "Screenshot 2026-MM-DD HHMMSS.png" names in \includegraphics
+       is fragile: the directory name contains a space, and the
+       timestamps are not self-documenting in source. A small one-time
+       curation --- copy the picked screenshots to thesis/graphics/sim/
+       with stable names (scene_hidden_target.png, partition_semantic.png,
+       partition_uniform.png, sense_targeting_shadow.png,
+       sense_fail_retry3.png, task_stack.png, task_tray.png,
+       overhead_camera_inset.png, etc.) --- pays off immediately.
+Fix:   Curate the final picks; copy with stable filenames into
+       thesis/graphics/sim/. Optionally crop the IDE chrome (taskbars,
+       editor side panels, window borders) for thesis-grade figures.
+       Also remove the stray browser screenshot 2026-04-20 160547.png
+       (demo.emson.cloud, unrelated) from the source folder.
+Refs:  #146-#154
+
+
 ================================================================================
 OPEN ISSUES
 ================================================================================
 
-10 issues remain open. Each issue's header carries its tier (T0-T3) and
+20 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Structural:      #121 #125 #126 #127 #130 #140 #142 #143 #144 #145
+Figure placement: #146 #147 #148 #149 #150 #151 #152 #153 #154 #155
 
 Gating: #141 done --- notes/PLOT_LESSONS.md is the data backbone for
 #142-#145. #142 is now the first concrete step (unblocked); #143-#145
@@ -327,4 +497,6 @@ chain off it. #130's remaining items (real submission date, appendix
 decision) are independent and need user input. #121/#125/#127 are
 umbrellas that #142-#145 subdivide; remove them after all four land.
 The §5 sentence-level polish issues (#87-#111) were resolved earlier
-in the audit walkthrough.
+in the audit walkthrough. Figure-placement issues #146-#154 are all
+gated by #155 (screenshot curation); #155 is independent and can be
+done in any order against the others.
