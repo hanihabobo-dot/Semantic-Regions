@@ -123,21 +123,6 @@ Fix:   Rewrite §5 as a completed Evaluation chapter: (1) Experimental Setup as
 Refs:  #87-#103; #125; THESIS_NOTES §21; eval_results/sweep_anytime/
 
 ================================================================================
-#125  [Structural] [THESIS]  No Discussion of results
-================================================================================
-Where: new section (may be folded into the #121 Evaluation chapter)
-What:  A thesis interprets its results; a proposal has none to interpret. There
-       is no discussion of why the semantic partition beats (or does not beat)
-       the uniform baseline, what the TAMPURA comparison shows, or where the
-       approach breaks down.
-Fix:   Add a Discussion that interprets the #121 results: semantic vs uniform
-       free-space partitioning; the TAMPURA comparison framed architecturally
-       (offline Learn-Model vs online stream sampling — THESIS_NOTES §21 — not
-       a hardware comparison); and the observed failure modes. May be a
-       subsection of the Evaluation chapter or a standalone chapter.
-Refs:  #121; THESIS_NOTES §21
-
-================================================================================
 #126  [Structural] [THESIS]  Document-wide framing conversion — forward-looking to retrospective
 ================================================================================
 Where: whole document
@@ -186,49 +171,6 @@ Refs:  main.tex:10,26-27; #117 #129
 
 
 ################################################################################
-#  ISSUES — ADDED 2026-05-20  (EVAL-DESIGN GAP FROM SWEEP DATA)
-################################################################################
-
-================================================================================
-#140  [Structural] [THESIS]  §5 needs a fine-resolution-discriminating scene (or honest null disclosure)
-================================================================================
-Where: §5 evaluation.tex (Experimental Setup + Baselines);
-       CODEBASE_AUDIT.txt #97.
-What:  The sweep data (CODEBASE_AUDIT.txt #93, refreshed
-       2026-05-20 at ~94% coverage) shows semantic and
-       semantic+mbs0.05 are statistically indistinguishable on
-       every goal: stack identical seed-for-seed at 184/300
-       each; holding 42.3% vs 46.3% (within seed noise);
-       find-and-tray-stack 39.7% vs 32.3% (mbs0.05 actually
-       worse).  The thesis therefore cannot honestly claim
-       "finer resolution wins under a fixed time budget" on
-       this data --- at the scene scales tested, the 0.05 m
-       leaf floor does not change outcomes because auto_cell
-       (~6-9 cm, the largest object's footprint) is the
-       binding constraint.
-Fix:   One of, ideally both:
-       (a) Add a scene / task to the eval that ONLY finer
-           resolution can solve --- see CODEBASE_AUDIT.txt #97
-           for design candidates (narrow-corridor reach,
-           sub-cell pocket placement, sub-cell hidden target,
-           dense small-occluder shelf).  Then report a real
-           positive result.
-       (b) Disclose the null result honestly in the Results
-           + Discussion: at the scene scales tested, the
-           5 cm leaf floor does not change outcomes because
-           auto_cell is the binding constraint.  This is a
-           characterisation of the regime, not a negative for
-           the method.
-       Most honest: BOTH.  Implement (a) for a positive
-       finding on a scene that discriminates; report (b) on
-       the original scenes as a regime-characterisation
-       finding.  The chapter then says where mbs0.05 helps
-       and where it does not, instead of overclaiming or
-       hand-waving.
-Refs:  CODEBASE_AUDIT.txt #77 #93 #97
-
-
-################################################################################
 #  ISSUES — ADDED 2026-05-20  (EVAL WRITE-UP)
 ################################################################################
 
@@ -236,24 +178,6 @@ The sweep in eval_results/sweep_anytime/ is ~94% complete (CODEBASE_AUDIT.txt
 #93). These issues take the raw data and turn it into chapters. Together
 they subsume the relevant parts of #121, #125, and the eval-anchored bits
 of #126/#127 --- once all five land, those umbrellas can be removed.
-
-================================================================================
-#144  [Thesis] [THESIS]  Write the Discussion chapter content
-================================================================================
-Where: thesis/chapters/discussion.tex --- replace the lorem ipsum placeholder
-       above the Limitations section.
-What:  The Discussion chapter has no interpretive content yet. The
-       Limitations subsection is in place, but the chapter has to actually
-       discuss results: where semantic beats / matches / loses to uniform;
-       what the TAMPURA bar shows architecturally (offline Learn-Model vs
-       online stream sampling --- THESIS_NOTES sec.21, NOT a hardware
-       comparison); failure-mode patterns from the failure_modes plot; the
-       mbs0.05 null finding (#140); threats to validity.
-Fix:   Write the discussion content from #141 + #143. Frame the TAMPURA
-       comparison architecturally per THESIS_NOTES sec.21. Address mbs0.05
-       honestly per #140(b). Leave the existing Limitations section
-       in place. Resolves #125.
-Refs:  #125 #140 #141 #143; THESIS_NOTES sec.21
 
 ================================================================================
 #145  [Thesis] [THESIS]  Close out Conclusion and Abstract with eval-supported claims
@@ -446,20 +370,20 @@ Refs:  #146-#154
 OPEN ISSUES
 ================================================================================
 
-18 issues remain open. Each issue's header carries its tier (T0-T3) and
+15 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Structural:      #121 #125 #126 #127 #130 #140 #144 #145
+Structural:      #121 #126 #127 #130 #145
 Figure placement: #146 #147 #148 #149 #150 #151 #152 #153 #154 #155
 
-Gating: #141 #142 #143 done --- the Experimental Setup rewrite and the
-Results section (headline table + 8 figures) are in thesis/. #144 is
-now next; #145 chains off it. #130's remaining items (real submission
-date, appendix decision) are independent and need user input.
-#121/#125/#127 are umbrellas that #142-#145 subdivide; remove them
-after #144 and #145 also land. The §5 sentence-level polish issues
+Gating: #141 #142 #143 #144 done --- Results chapter + Discussion are in
+thesis/. #145 (conclusion + abstract eval-anchored closure) is next;
+#125 and #140 are resolved jointly with #144. #130's remaining items
+(real submission date, appendix decision) are independent and need
+user input. #121 and #127 are umbrellas that #142-#145 subdivide;
+remove them after #145 lands. The §5 sentence-level polish issues
 (#87-#111) were resolved earlier in the audit walkthrough.
 Figure-placement issues #146-#154 are all gated by #155 (screenshot
 curation); #155 is independent and can be done in any order against
