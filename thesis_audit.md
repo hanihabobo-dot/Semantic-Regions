@@ -99,20 +99,6 @@ STYLE STANDARD (T2 Style issues)
 ################################################################################
 
 ================================================================================
-#94  [T2 · Deviation] [THESIS]  §5.3 calls the Uniform Voxelization baseline "fine-grained"
-================================================================================
-Where: §5.3 — evaluation.tex:25
-What:  §5.3: "Uniform Voxelization: A version of our planner that uses a
-       fine-grained, uniform voxel grid..." The uniform baseline cannot run
-       fine-grained: a cell finer than the largest object breaks placement, so
-       audit #66 auto-tunes cell_size to ~17 cm for the default scene — coarser
-       than the semantic free-space octree leaf (35 mm).
-Fix:   Drop "fine-grained." Describe the uniform baseline as a static uniform
-       grid whose cell size is auto-set to the largest object's footprint (a
-       correctness constraint) — itself a finding about uniform grids.
-Refs:  THESIS_NOTES §21.4; CODEBASE_AUDIT.txt #66
-
-================================================================================
 #95  [T2 · Deviation] [THESIS]  §5.3/§1 imply the uniform baseline voxelizes belief; it only swaps free-space
 ================================================================================
 Where: §5.3 evaluation.tex:25; §1 introduction.tex:18
@@ -516,13 +502,13 @@ Refs:  CODEBASE_AUDIT.txt #77 #93 #97
 OPEN ISSUES
 ================================================================================
 
-28 issues remain open. Each issue's header carries its tier (T0-T3) and
+27 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-§5 Evaluation:   #94 #95 #96 #97 #98 #99 #100 #101 #102 #103 #104 #105
-                 #106 #107 #108 #109 #110 #111
+§5 Evaluation:   #95 #96 #97 #98 #99 #100 #101 #102 #103 #104 #105 #106
+                 #107 #108 #109 #110 #111
 Structural:      #121 #125 #126 #127 #128 #130 #136 #137 #138 #140
 
 Gating: the §5 issues (#87-#111) are subsumed by the #121 evaluation rewrite;
