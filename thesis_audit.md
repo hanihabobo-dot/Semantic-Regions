@@ -95,52 +95,6 @@ STYLE STANDARD (T2 Style issues)
 
 
 ################################################################################
-#  ISSUES — PROSE CLEANUP                           (added 2026-05-20, top priority)
-################################################################################
-
-The chapters produced by #142-#144 expose internal repo paths and host
-hardware specs in the prose. A thesis reader has access to neither: the
-"citations" to eval_results/* and notes/* are dead links, and the host
-machine's spec sheet reads as a benchmark report rather than a thesis
-Setup. This is the highest-priority cleanup; address it before #145.
-
-================================================================================
-#156  [Prose] [THESIS]  Strip internal file-path and hardware-spec clutter from thesis prose
-================================================================================
-Where: thesis/chapters/results.tex (Setup, Metrics, Baselines, Results,
-       tab:headline caption, fig:tampura caption);
-       thesis/chapters/discussion.tex (TAMPURA section).
-What:  The chapters cite internal repo paths
-       (eval_results/sweep_anytime/matrix.json, aggregated.csv,
-       summary_table.md, notes/PLOT_LESSONS.md, notes/THESIS_NOTES.md §21)
-       as if they were citations, and the Experimental Setup section
-       includes a Hardware paragraph (Ryzen 7 PRO 7730U, Windows 11,
-       core/thread/clock specs) that reads as a benchmark report.
-       Neither belongs in a thesis: the reader has no access to the
-       lab's notes/ or eval_results/ tree, and the host machine's spec
-       sheet is not a thesis-grade citation.
-Fix:   1. Delete the Hardware paragraph in Experimental Setup
-          (results.tex:26).
-       2. Strip all notes/THESIS_NOTES.md §21 and notes/PLOT_LESSONS.md
-          references from results.tex and discussion.tex. If a pointer
-          is still needed, replace with an in-thesis cross-reference
-          (e.g. \cref{sec:disc-tampura}); otherwise drop.
-       3. Strip eval_results/sweep_anytime/matrix.json, aggregated.csv,
-          and summary_table.md mentions from results.tex (sec:setup,
-          sec:metrics, tab:headline caption, planning-time prose).
-       4. The hardware-comparison sentences (results.tex:152;
-          discussion.tex:76-85) serve the TAMPURA architectural argument
-          --- author's choice whether to keep them (grounds the
-          "speed delta is not a hardware story" claim) or trim them
-          (cleaner narrative). The Setup Hardware paragraph is a clear
-          delete; these are not.
-       5. Keep \cite{curtis2024partially} (a real paper); only strip
-          internal repo / notes references.
-Refs:  results.tex:20, 26, 28, 41, 51, 79, 128, 152, 157;
-       discussion.tex:76-85, 105-106
-
-
-################################################################################
 #  ISSUES — THESIS CONVERSION (STRUCTURAL)          (added 2026-05-17)
 ################################################################################
 
@@ -416,21 +370,18 @@ Refs:  #146-#154
 OPEN ISSUES
 ================================================================================
 
-16 issues remain open. Each issue's header carries its tier (T0-T3) and
+15 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Structural:      #121 #126 #127 #130 #145
-Prose cleanup:   #156
 Figure placement: #146 #147 #148 #149 #150 #151 #152 #153 #154 #155
 
-Priority: #156 (strip internal file-path / hardware-spec clutter from
-the thesis prose) is the top item --- address before #145.
-
-Gating: #141 #142 #143 #144 done --- Results chapter + Discussion are in
-thesis/. After #156, #145 (conclusion + abstract eval-anchored closure)
-follows. #125 and #140 are resolved jointly with #144. #130's remaining
+Gating: #141 #142 #143 #144 #156 done --- chapters are clear of internal
+file-path / hardware-spec clutter and the Results + Discussion content
+is in thesis/. #145 (conclusion + abstract eval-anchored closure) is
+next; #125 and #140 are resolved jointly with #144. #130's remaining
 items (real submission date, appendix decision) are independent and
 need user input. #121 and #127 are umbrellas that #142-#145 subdivide;
 remove them after #145 lands. The §5 sentence-level polish issues
