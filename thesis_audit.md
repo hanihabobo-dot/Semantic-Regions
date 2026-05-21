@@ -178,6 +178,35 @@ Fix:   One figure: a representative hidden-object scene with the boxel
        143036.png.
 Refs:  introduction.tex:5-21
 
+################################################################################
+#  ISSUE --- ADDED 2026-05-21  (CITATION CORRECTNESS, RELATED WORK)
+################################################################################
+
+================================================================================
+#157  [T0] [NOW] [DONE]  Misattributed belief-representation claim in related work
+================================================================================
+Where: thesis/chapters/related-work.tex:12 (sec. POMDP-based TAMP Solutions).
+       Was duplicated in proposal-template/sections/related_work.tex:12;
+       proposal-template/ deleted 2026-05-21, so only the thesis copy remains.
+What:  "Implementations often resort to particle filters over dense voxel
+       grids to approximate these continuous belief states
+       \cite{curtis2024partially, gothoskar2023bayes3d}, which does not scale
+       well to large environments." Inaccurate on both citations:
+       - TAMPURA (curtis2024partially): its voxel grid (find_dice, 15 mm) is a
+         VISIBILITY/occupancy belief, not a pose belief; placement is
+         continuous SE(3)-pose sampling; planning is a learned abstract MDP
+         solved with LAO* --- not a particle filter over voxels.
+       - Bayes3D (gothoskar2023bayes3d): a 3D-scene PERCEPTION system, not a
+         POMDP-TAMP planner. It does GPU-accelerated coarse-to-fine sequential
+         Monte Carlo (so "particle filter" fits Bayes3D, but not "voxel grid",
+         and it does not belong under "POMDP-based TAMP Solutions").
+Fix:   Replaced with an accurate per-system description (TAMPURA visibility
+       grid + continuous-pose sampling; Bayes3D as SMC perception). The genuine
+       first sentence (continuous-pose belief is a challenge) was kept.
+       thesis/ commit "Fix #157"; clean latexmk build (58 pp).
+Refs:  thesis/chapters/related-work.tex:12; references.bib curtis2024partially,
+       gothoskar2023bayes3d
+
 
 ================================================================================
 OPEN ISSUES
