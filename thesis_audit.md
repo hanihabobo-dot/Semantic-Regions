@@ -126,62 +126,6 @@ Fix:   One document-wide pass: convert completed work to past/present voice;
 Refs:  #1 #16 #104; #127 #128
 
 ################################################################################
-#  ISSUES --- ADDED 2026-05-20  (SIM-SCREENSHOT FIGURE PLACEMENT)
-################################################################################
-
-60 PyBullet screenshots sit unused in thesis/graphics/sim screen shots/.
-The thesis currently contains only two figures (Boxelization.png schematic,
-octmap_illustration.png in background). Methods, Results, and Discussion
-have no sim screenshots. These issues identify concrete places where one
-screenshot would make a concept, algorithm, or shortcoming visible that is
-currently described in prose only. The image filenames named below are
-candidates from thesis/graphics/sim screen shots/; final picks may be
-recropped or substituted. Aside: thesis/graphics/sim screen shots/Screenshot
-2026-04-20 160547.png is a stray browser screenshot (demo.emson.cloud) and
-should be removed from this folder.
-
-================================================================================
-#152  [Thesis] [THESIS]  n_occluders scalability composite
-================================================================================
-Where: results.tex:19-20 (Scalability bullet), alongside the
-       planning_time_vs_n_occluders plot referenced in #143
-What:  The plot conveys planning time as a curve but the reader has no
-       visual sense of what "more occluders" means in the scene.
-Fix:   A three-panel figure: low / medium / high n_occluders.
-       Candidates: 2026-05-11 171834.png (light); 2026-05-12 121849.png
-       (moderate); 2026-05-15 185934.png (heavy).
-Refs:  results.tex:19; #143; eval_results/sweep_anytime/
-
-================================================================================
-#153  [Thesis] [THESIS]  Overhead-camera RGB+depth inset figure
-================================================================================
-Where: results.tex:10 (Perception bullet) or discussion.tex:22-34
-       (Perception paragraph)
-What:  Almost every sim shot has corner insets labeled "Synthetic Camera
-       RGB data" and "Synthetic Camera Depth data". This is the fixed
-       overhead camera the perception bullet describes. Including it
-       lets the reader see what a future learned detector would consume,
-       and what the oracle bypasses by reading ground-truth poses.
-Fix:   Crop one RGB+depth inset (or include a whole-scene shot with the
-       inset visible) as fig:overhead_camera. Caption: oracle reads
-       ground truth; depth/RGB show the input a future learned detector
-       could use. Candidates: 2026-04-26 142916.png; 2026-05-02 105108.png.
-Refs:  results.tex:10; discussion.tex:22-34
-
-================================================================================
-#154  [Thesis] [THESIS]  Introduction hero figure
-================================================================================
-Where: introduction.tex (after the opening paragraph, around line 5-10)
-What:  The introduction has no figure. A "what does the problem look
-       like" hero shot would anchor the reader in the actual scene the
-       thesis works in: robot arm, cluttered table, hidden target, and a
-       preview of the boxel overlay.
-Fix:   One figure: a representative hidden-object scene with the boxel
-       overlay visible. Candidates: 2026-04-22 121333.png or 2026-04-26
-       143036.png.
-Refs:  introduction.tex:5-21
-
-################################################################################
 #  ISSUE --- ADDED 2026-05-21  (CITATION CORRECTNESS, RELATED WORK)
 ################################################################################
 
@@ -244,25 +188,23 @@ Fix:   Added one sentence: both planners single-threaded; TAMPURA's CPU has a
 OPEN ISSUES
 ================================================================================
 
-4 issues remain open. Each issue's header carries its tier (T0-T3) and
+1 issue remains open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Structural:      #126
-Figure placement: #152 #153 #154
 
-Gating: #141-#151, #130, #155, and #156 done --- all eval-write-up
+Gating: #141-#156 and #130 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
 thesis/, the chapters are clear of internal file-path and hardware-spec
 clutter, the front/back matter (submission date, PDDL appendix) is in
-place, curated screenshots are in thesis/graphics/sim/, and six sim
+place, curated screenshots are in thesis/graphics/sim/, and nine sim
 figures (boxelization companion, semantic vs uniform, sense action,
-replan cycle, three-strike give-up, task triptych) are inserted across
-methods/results/discussion. #125, #140, #121, #127 were closed jointly.
+replan cycle, three-strike give-up, task triptych, n_occluders composite,
+overhead-camera inset, introduction hero) are inserted across
+introduction/methods/results/discussion. #125, #140, #121, #127 were closed jointly.
 #126 (document-wide forward-voice conversion) is left open as a final
 verification pass since the chapters individually are already
 retrospective. The §5 sentence-level polish issues (#87-#111) were
-resolved earlier in the audit walkthrough. Figure-placement issues
-#152-#154 remain (n_occluders composite, overhead-camera inset,
-introduction hero).
+resolved earlier in the audit walkthrough.
