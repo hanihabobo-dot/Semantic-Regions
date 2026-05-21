@@ -174,3 +174,50 @@ Related: #50 — planner perf investigation.  Plan A's cell-size
               first, OR rebase audit-64 after the rename, to
               avoid identifier-collision merge noise.
 
+
+================================================================================
+ITEMS ADDED 2026-05-21 (working-session comparison & hybrid ideas)
+================================================================================
+From a 2026-05-21 session reading TAMPURA's actual source. All "FOR LATER"
+unless the supervisor reprioritises (empirical comparison is post-thesis per
+2026-05-06). Verified facts this session: TAMPURA uses SymK (not FastDownward)
++ LAO*; placement is view-blind continuous sampling (placement_sample, no
+visibility check); find_dice hides the die UNDER ONE CUP among 1-5 cups
+(single-layer occlusion, env_generator.py); voxels are a dict, never planner
+predicates.
+
+C1. HARDWARE-MATCH TAMPURA'S NUMBER (cheapest, ~1-2 days, highest value/effort).
+    Stand up tampura + tampura_environments and run find_dice on OUR 8-core CPU;
+    record per-episode wall-clock. Converts the thesis bar's 57+-38 s from
+    "their 20-core Xeon" to "our hardware", killing the hardware caveat in
+    fig:tampura / #159. No integration -- just run their released code. Risk:
+    dependency/version rot + the Windows checkout block (their repo commits a
+    `*`-named file -> build on WSL/Linux). find_dice's goal (hold a hidden die +
+    at-home) ~= our `holding` task, so it's the right comparator.
+
+C2. RUN OURS ON THEIR SCENE (moderate). Extract the find_dice PyBullet scene
+    (cups + hidden die; env_generator.py), point our pipeline at it, define
+    shadows over their occluders, re-tune hardcoded constants. Reuses our whole
+    planner. Easier than the reverse (theirs-on-ours), because TAMPURA's cost is
+    its controller/abstraction formalism, paid regardless of scene.
+
+C3. TAMPURA x BOXEL HYBRID (research idea -- test or implement?). TAMPURA's
+    voxels only *compute the probability* that look flips known-pose(die); a
+    voxel need not be 15 mm. So: COARSE voxels could cover large visibility
+    regions cheaply, while boxels go FINER than 15 mm only where object/occlusion
+    structure demands it -- a multi-resolution space belief (coarse
+    occupancy/visibility grid for the "could-be-here" support + adaptive boxels
+    for place-grounding and symbolic occlusion). Prototype and measure (cells,
+    planning time, success) vs pure-semantic and pure-uniform. Open question:
+    does the hybrid beat both?
+
+C4. KEEP TAMPURA SOURCE LOCAL FOR REFERENCE (comparison hygiene). Planner repo
+    cloned at ../tampura; tampura_environments cloned but only find_dice +
+    voxel_utils checked out (Windows-illegal `rrt*.png` blocks full checkout --
+    use WSL/Linux or a fork that renames it). For the comparison, keep the
+    planner-side definitions we cite -- look/pick/place controllers
+    (find_dice/env.py), MDP solver (solvers/mdp_solver.py, lao_star.py), SymK
+    glue (solvers/symk.py, policies/{tampura_policy,contingent_policy}.py,
+    policy_search.py). Read any file without a full checkout via
+    `git -C ../tampura_environments show HEAD:<path>`.
+
