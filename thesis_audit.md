@@ -210,6 +210,35 @@ Fix:   Replaced with an accurate per-system description (TAMPURA visibility
 Refs:  thesis/chapters/related-work.tex:12; references.bib curtis2024partially,
        gothoskar2023bayes3d
 
+################################################################################
+#  ISSUES --- ADDED 2026-05-21  (TAMPURA-COMPARISON FRAMING, DISCUSSION)
+################################################################################
+Surfaced during a full audit of every TAMPURA mention in the thesis
+(prompted 2026-05-21). The audit found the thesis text already accurate and
+well-hedged --- #157 was the only outright error. These two are
+tightening/disclosure refinements, not corrections of wrong claims.
+
+================================================================================
+#158  [T3] [POLISH] [DONE]  "task family" overstated comparability (discussion)
+================================================================================
+Where: thesis/chapters/discussion.tex (Architectural comparison with TAMPURA).
+What:  "competitive ... on this task family" implied find-and-tray-stack and
+       TAMPURA's Partial Observability are the same family.
+Fix:   -> "on the closest analogous task", matching the abstract/results hedge.
+       thesis/ commit "Fix #158"; clean latexmk build.
+
+================================================================================
+#159  [T2] [THESIS] [DONE]  Undisclosed hardware-comparison direction (discussion)
+================================================================================
+Where: thesis/chapters/discussion.tex (Threats to validity, "TAMPURA via
+       published numbers").
+What:  Thesis said the comparison is "not a hardware benchmark" but never stated
+       which way the hardware tilts.
+Fix:   Added one sentence: both planners single-threaded; TAMPURA's CPU has a
+       marginally higher base clock (2.5 vs 2.0 GHz), so the hardware gap, if
+       anything, favours TAMPURA. Avoids the 20-vs-8-core framing (moot under
+       single-threading). thesis/ commit "Fix #159"; clean latexmk build.
+
 
 ================================================================================
 OPEN ISSUES
