@@ -2,7 +2,7 @@
 THESIS AUDIT — OPEN ISSUES
 ================================================================================
 Date:   2026-05-16
-Target: the Master-thesis proposal in proposal-template/ ("main.pdf", 20 pages),
+Target: the Master thesis in thesis/ ("main.pdf", ~58 pages),
         "Semantic Partitioning for Partially Observable Deterministic Task and
         Motion Planning."
 Method: six parallel review passes —
@@ -20,7 +20,7 @@ Method: six parallel review passes —
 This file is the thesis counterpart of CODEBASE_AUDIT.txt. Work it with the
 /workflow skill — see its "Working a LaTeX / thesis audit" section: one issue
 per turn, before/after preview, explicit approval, `latexmk main.tex` recompile
-after each fix, an individual commit in the proposal-template/ repo, then mark
+after each fix, an individual commit in the thesis/ repo, then mark
 the issue [DONE] here.
 
 
@@ -42,13 +42,16 @@ THESIS_NOTES.md IS CANONICAL FOR ACCEPTED SIMPLIFICATIONS
    to match) but is lower-risk — the author already knows. A deviation NOT in
    THESIS_NOTES is the dangerous kind; those are flagged "(undisclosed)".
 
-SECTION -> SOURCE FILE  (all paths under proposal-template/)
-   Abstract         sections/abstract.tex
-   §1 Introduction  sections/introduction.tex
-   §2 Background    sections/background.tex
-   §3 Related Work  sections/related_work.tex
-   §4 Approach      sections/approach.tex
-   §5 Evaluation    sections/evaluation.tex
+SECTION -> SOURCE FILE  (all paths under thesis/)
+   Abstract         chapters/abstract.tex
+   §1 Introduction  chapters/introduction.tex
+   §2 Background    chapters/background.tex
+   §3 Related Work  chapters/related-work.tex
+   §4 Methods       chapters/methods.tex
+   §5 Results       chapters/results.tex
+   §6 Discussion    chapters/discussion.tex
+   §7 Conclusion    chapters/conclusion.tex
+   Appendix         chapters/appendix.tex
    References       resources/references.bib
 
 TIERS
