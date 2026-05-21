@@ -690,8 +690,19 @@ outer probabilistic plan (LAO*):
 | Cross-episode model reuse | "No mention" of cross-episode caching in the paper | Same — `_build_init` re-emits all static facts every call (audit #50 candidate fix) |
 
 The asymmetry is *when the geometry cost is paid*, not the search
-engine itself (FastDownward is shared by both).  TAMPURA front-loads
-the sampling cost; PDDLStream pays it per replan.
+engine itself.  TAMPURA front-loads the sampling cost; PDDLStream pays
+it per replan.
+
+**Implementation note (verified 2026-05-21 in the cloned repo).** The
+paper's Algorithm 2 names `FastDownward`, but the *released code* uses
+**SymK** — a Fast Downward-derived symbolic *top-k* planner
+(`tampura/solvers/symk.py`, `policies/contingent_policy.py`,
+`policy_search.py`; built from `third_party/symk`; there is no standalone
+FastDownward in the repo). So what is shared with our PDDLStream side is
+the Fast Downward *lineage / SAS+ translator*, **not** the search
+strategy: SymK does symbolic top-k search, PDDLStream uses FD heuristic
+search. Do not claim an "identical search engine" — the honest claim is
+that the symbolic search is cheap in both and is not the bottleneck.
 
 ### 21.4 Voxel grid resolution comparison
 
