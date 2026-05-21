@@ -183,17 +183,93 @@ Fix:   Added one sentence: both planners single-threaded; TAMPURA's CPU has a
        anything, favours TAMPURA. Avoids the 20-vs-8-core framing (moot under
        single-threading). thesis/ commit "Fix #159"; clean latexmk build.
 
+################################################################################
+#  ISSUES --- ADDED 2026-05-21  (TAMPURA ENGINE, RELATED WORK, CONTRIBUTION)
+################################################################################
+Surfaced in the 2026-05-21 working session (TAMPURA code dive + a related-work /
+contribution discussion). #160 is a factual error; #161-#162 are the structural
+gaps the author flagged as the thesis's weakest points. All OPEN.
+
+================================================================================
+#160  [T0] [NOW]  TAMPURA's planner is SymK + LAO*, not FastDownward
+================================================================================
+Where: thesis/chapters/discussion.tex:83-84; also notes/THESIS_NOTES.md sec 21.3.
+What:  Both state "Both systems use FastDownward as the inner determinised
+       planner, so the difference is not the search engine." Verified false in
+       TAMPURA's source (git/tampura): determinised planning uses SymK --- a
+       Fast Downward-derived symbolic top-k planner (contingent_policy.py ->
+       symk_search/symk_translate; setup.py builds third_party/symk) --- and
+       LAO* (solvers/lao_star.py) solves the MDP. The search engines DO differ
+       (FD heuristic search vs SymK symbolic top-k); only the PDDL->SAS+
+       translation layer is shared. (Our side does use FastDownward via
+       PDDLStream --- confirm before finalising the rewrite.)
+Fix:   Rewrite the sentence (we use FastDownward via PDDLStream; TAMPURA uses
+       SymK; symbolic search is cheap in both, so the salient difference is WHEN
+       geometry sampling is paid) and fix the same false claim in THESIS_NOTES
+       sec 21.3.
+Refs:  discussion.tex:83-84; THESIS_NOTES sec 21.3; git/tampura sources.
+
+================================================================================
+#161  [T2] [THESIS]  Related Work is thin --- enrich from emails and pdfs/SOURCES.md
+================================================================================
+Where: thesis/chapters/related-work.tex (whole chapter, ~40 lines).
+What:  Covers TAMPURA, pan2024task, ma2025task, zhao2025seeing, bai2025learning,
+       OctoMap, Shah CRs --- but OMITS the thesis's own lineage. Key gaps (all
+       catalogued in emails and pdfs/SOURCES.md, which tags each work's bib key
+       or marks it absent):
+       - Belief-space TAMP: Kaelbling & Lozano-Perez 2013 (foundational; NOT in
+         bib) and Garrett et al. 2020 "Online Replanning in Belief Space"
+         (SS-Replan; NOT in bib). SS-Replan is the CLOSEST precedent to this
+         thesis's optimistic-determinise-and-replan loop --- must be positioned.
+       - POD / translation lineage the thesis BUILDS ON: LW1 (bonet2014flexible,
+         in bib but never discussed), CLG (albore2009), K-replanner (bonet2011),
+         PO-PRP (Muise et al. 2014, NOT in bib).
+       - TAMP foundations: PDDLStream (garrett2018, the framework we build on)
+         and the TAMP survey (garrett2021) --- in bib, not discussed.
+       - Recent POD-TAMP: CoCo-TAMP (Kim et al. 2026, LLM state estimation; NOT
+         in bib); Contingent TAMP for HRI (2020; NOT in bib).
+       - Supervisors' work: Plan2Pose (Swoboda & Hofmann 2026; NOT in bib).
+Fix:   Add a belief-space-TAMP + POD-translation-lineage subsection; DISCUSS
+       (not just \cite) works already in bib; add the missing relevant ones to
+       references.bib; close with a research-gap paragraph that sets up #162.
+Refs:  related-work.tex; emails and pdfs/SOURCES.md; references.bib.
+
+================================================================================
+#162  [T1] [THESIS]  Contribution / motivation under-justified
+================================================================================
+Where: introduction.tex (contribution statement), related-work.tex framing,
+       discussion.tex / conclusion.tex.
+What:  The contribution is not foregrounded; the semantic-vs-uniform evaluation
+       reads as "two variants of my own system," underselling the idea. The real
+       contribution is a REPRESENTATION: Boxels make occlusion/visibility
+       FIRST-CLASS SYMBOLIC planning state in a POD (knowledge-literal) TAMP
+       planner --- promoting occluded volume to enumerable SHADOW regions the
+       planner branches over. The 2026-05-21 TAMPURA code dive supports the
+       novelty: TAMPURA keeps occlusion SUB-symbolic (find_dice look_effects_fn
+       uses a voxel dict only to weight one predicate's success probability),
+       whereas this thesis lifts it into symbolic state (POD, not POMDP).
+       semantic-vs-uniform is the ABLATION that isolates the adaptive structure,
+       not the contribution.
+Fix:   Add an explicit contribution statement (intro) + research-gap paragraph
+       (end of related work); position against the POMDP (TAMPURA) and reactive/
+       replanning (SS-Replan, pan2024task) paradigms; reframe the eval as
+       ablation-of-a-representation, not "beats baselines." Honest scope:
+       representation/architecture contribution under oracle perception, not a
+       benchmark win. Depends on #161 (novelty needs the survey).
+Refs:  introduction.tex; related-work.tex; discussion.tex; conclusion.tex.
+
 
 ================================================================================
 OPEN ISSUES
 ================================================================================
 
-1 issue remains open. Each issue's header carries its tier (T0-T3) and
+4 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Structural:      #126
+Related work & framing: #160 #161 #162  (added 2026-05-21)
 
 Gating: #141-#156 and #130 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
