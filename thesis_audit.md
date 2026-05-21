@@ -191,7 +191,7 @@ contribution discussion). #160 is a factual error; #161-#162 are the structural
 gaps the author flagged as the thesis's weakest points. All OPEN.
 
 ================================================================================
-#160  [T0] [NOW]  TAMPURA's planner is SymK + LAO*, not FastDownward
+#160  [T0->T3] [NOW] [DONE]  TAMPURA's determinised planner: SymK (code) / FastDownward (paper)
 ================================================================================
 Where: thesis/chapters/discussion.tex:83-84; also notes/THESIS_NOTES.md sec 21.3.
 What:  Both state "Both systems use FastDownward as the inner determinised
@@ -208,6 +208,11 @@ Fix:   Rewrite the sentence (we use FastDownward via PDDLStream; TAMPURA uses
        geometry sampling is paid) and fix the same false claim in THESIS_NOTES
        sec 21.3.
 Refs:  discussion.tex:83-84; THESIS_NOTES sec 21.3; git/tampura sources.
+Done (2026-05-21): NOT a clean error -- the paper's Algorithm 2 literally
+       names FastDownward; only the released CODE uses SymK (FD-derived top-k).
+       Reworded discussion.tex (thesis commit "Fix #160", clean build) and added
+       an implementation note to THESIS_NOTES sec 21.3, rather than asserting the
+       thesis was wrong. Effective tier ~T3 (precision), not T0.
 
 ================================================================================
 #161  [T2] [THESIS]  Related Work is thin --- enrich from emails and pdfs/SOURCES.md
@@ -300,19 +305,59 @@ Fix:   Disclose as a methods design-choice / limitation, and add a comment in th
        compensate for the lack of probabilistic action selection.
 Refs:  pddl/domain_pddlstream.pddl:302; thesis methods/limitations; #163(2).
 
+================================================================================
+#165  [T1] [THESIS]  Defend "space is part of the planning" as the headline
+================================================================================
+Where: introduction.tex (thesis statement) + related-work.tex + discussion.tex.
+What:  The crispest framing of the contribution: we make SPACE part of the
+       planning state. We promote the hidden volume to symbolic regions (SHADOW
+       boxels) the planner branches over, whereas TAMPURA keeps the volume
+       sub-symbolic and collapses it into one predicate's success probability
+       (verified: find_dice look_effects_fn). That is the concrete, defensible
+       POD-vs-POMDP distinction. State it as the headline and DEFEND why it
+       matters: inspectable & plannable occlusion; uncertainty without
+       probabilities; the planner can deliberately clear/avoid view-blocking
+       (TAMPURA places view-blind -- placement_sample has no visibility check).
+Fix:   Add the headline contribution sentence (intro) + a "why this matters"
+       defense (related work / discussion). Unifying thesis of #162 and #163.
+Refs:  introduction.tex; related-work.tex; discussion.tex; #162; #163.
+
+================================================================================
+#166  [T2] [THESIS]  Real novelty / related-work search -- who else is near us?
+================================================================================
+Where: related-work.tex + references.bib (feeds #161).
+What:  Before claiming novelty, run a genuine literature search for prior work
+       overlapping our specific combination -- not just the papers on hand. Find
+       out whether anyone has:
+       - used KNOWLEDGE LITERALS / KIF-style state (POD; Kp / K-not-p) WITH
+         PDDLStream or TAMP;
+       - done PARTIALLY OBSERVABLE DETERMINISTIC (POD) planning in a TAMP /
+         manipulation setting;
+       - represented OCCLUSION / shadow regions as first-class SYMBOLIC planning
+         state (object-centric, not a voxel/occupancy grid);
+       - anything else doing essentially what we do.
+       This substantiates-or-tempers the novelty claim AND shows "where we
+       shine." A thin survey is itself a threat to the contribution (#162):
+       cannot claim novel without showing what exists.
+Fix:   Targeted search (Scholar / Semantic Scholar / dblp; cite-chains from LW1,
+       PDDLStream, TAMPURA, SS-Replan, the Bonet/Geffner POD line). Record hits
+       in references.bib; fold into the #161 enrichment; flag any work that
+       overlaps our core claim so we can position against it honestly.
+Refs:  related-work.tex; references.bib; #161; #162.
+
 
 ================================================================================
 OPEN ISSUES
 ================================================================================
 
-6 issues remain open. Each issue's header carries its tier (T0-T3) and
+7 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Structural:      #126
-Related work & framing: #160 #161 #162  (added 2026-05-21)
-Why-ours-is-better & caveats: #163 (TOP PRIORITY) #164  (added 2026-05-21)
+Related work & framing: #161 #162 #166  (#160 DONE 2026-05-21)
+Why-ours-is-better & caveats: #163 (TOP PRIORITY) #164 #165  (added 2026-05-21)
 
 Gating: #141-#156 and #130 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
