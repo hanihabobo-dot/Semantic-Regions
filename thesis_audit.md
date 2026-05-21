@@ -138,50 +138,6 @@ recropped or substituted. Aside: thesis/graphics/sim screen shots/Screenshot
 should be removed from this folder.
 
 ================================================================================
-#149  [Thesis] [THESIS]  Optimistic-sense -> reactive-replan cycle figure
-================================================================================
-Where: methods.tex:107-109 (optimistic + replanning paragraph)
-What:  The architectural choice "optimistic effect + replan when execution
-       disagrees" is central but currently invisible. Screenshot 2026-05-12
-       135205.png catches the exact moment: action log reads "sense
-       shadow_of_purple_object --- target not here".
-Fix:   Embed that screenshot. Caption ties the visible "target not here"
-       log line to: (i) the optimistic add-effect, (ii) the execution-time
-       rejection, (iii) the replan with the shadow now marked empty.
-       Candidates: 2026-05-12 135205.png; 2026-05-15 200153.png;
-       2026-05-15 202947.png.
-Refs:  methods.tex:107-109
-
-================================================================================
-#150  [Thesis] [THESIS]  Three-strike give-up limitation figure
-================================================================================
-Where: discussion.tex:70-80 (Planning paragraph, "still-blocked three
-       times in succession")
-What:  The unsound shortcut where a shadow is marked empty after three
-       still-blocked sensing attempts is described in prose. Screenshot
-       2026-05-15 200153.png shows "retry 3/3" in the action log --- the
-       exact loop event the text describes.
-Fix:   Include the "retry 3/3" screenshot under the Limitations Planning
-       paragraph. Caption: the visible retry counter is the moment the
-       loop hits the bounded give-up and the shadow gets marked empty
-       without ever being directly observed. Candidates: 2026-05-15
-       200153.png.
-Refs:  discussion.tex:70-80; methods.tex:109
-
-================================================================================
-#151  [Thesis] [THESIS]  Experimental Setup: one figure per task variant
-================================================================================
-Where: results.tex:6-11 (Experimental Setup, task bullet)
-What:  Three goals are evaluated --- holding (hidden-object), stack,
-       find-and-tray-stack --- and the reader is told what they are in one
-       sentence each. No figure shows what they look like.
-Fix:   A three-panel fig:eval_tasks. Candidates:
-         (a) holding: 2026-04-22 121333.png or 2026-04-26 143036.png
-         (b) stack:   2026-05-11 171834.png or 171855.png
-         (c) tray:    2026-05-15 110407.png, 110411.png, or 191212.png
-Refs:  results.tex:9; methods.tex:53 (sense-plan-act loop)
-
-================================================================================
 #152  [Thesis] [THESIS]  n_occluders scalability composite
 ================================================================================
 Where: results.tex:19-20 (Scalability bullet), alongside the
@@ -227,23 +183,25 @@ Refs:  introduction.tex:5-21
 OPEN ISSUES
 ================================================================================
 
-7 issues remain open. Each issue's header carries its tier (T0-T3) and
+4 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Structural:      #126
-Figure placement: #149 #150 #151 #152 #153 #154
+Figure placement: #152 #153 #154
 
-Gating: #141-#148, #130, #155, and #156 done --- all eval-write-up
+Gating: #141-#151, #130, #155, and #156 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
 thesis/, the chapters are clear of internal file-path and hardware-spec
 clutter, the front/back matter (submission date, PDDL appendix) is in
-place, curated screenshots are in thesis/graphics/sim/, and the first
-three sim figures (boxelization companion, semantic vs uniform, sense
-action) are inserted in methods.tex. #125, #140, #121, #127 were closed
-jointly. #126 (document-wide forward-voice conversion) is left open as
-a final verification pass since the chapters individually are already
+place, curated screenshots are in thesis/graphics/sim/, and six sim
+figures (boxelization companion, semantic vs uniform, sense action,
+replan cycle, three-strike give-up, task triptych) are inserted across
+methods/results/discussion. #125, #140, #121, #127 were closed jointly.
+#126 (document-wide forward-voice conversion) is left open as a final
+verification pass since the chapters individually are already
 retrospective. The §5 sentence-level polish issues (#87-#111) were
 resolved earlier in the audit walkthrough. Figure-placement issues
-#149-#154 are unblocked and can be done in any order.
+#152-#154 remain (n_occluders composite, overhead-camera inset,
+introduction hero).
