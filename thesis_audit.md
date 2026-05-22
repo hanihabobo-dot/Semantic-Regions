@@ -98,146 +98,11 @@ STYLE STANDARD (T2 Style issues)
 
 
 ################################################################################
-#  ISSUES — THESIS CONVERSION (STRUCTURAL)          (added 2026-05-17)
-################################################################################
-
-These ten issues are NOT defects of the proposal — as a forward-looking
-proposal it is correct. They are the structural, document-level work the
-proposal-to-thesis upgrade requires, and which the sentence-by-sentence audit
-of #1-#120 never captured. They sit outside the T0-T3 severity scale (that
-scale grades proposal defects) and are all disposition [THESIS]. For the
-upgrade these come FIRST: a thesis cannot exist without #121-#123.
-
-================================================================================
-#126  [Structural] [THESIS]  Document-wide framing conversion — forward-looking to retrospective
-================================================================================
-Where: whole document
-What:  The entire document is written as a proposal: forward-looking tense
-       ("we will", "we propose", "we plan to", "the expected result", "the
-       expected contribution") and proposal self-reference ("This research
-       proposal", "This proposal is structured as follows", "This project",
-       "This paper"). A thesis is retrospective. Issues #1, #16, #104 are
-       isolated instances of this; #126 is the systematic pass.
-Fix:   One document-wide pass: convert completed work to past/present voice;
-       "this proposal / this project / this paper" -> "this thesis / this
-       work". Do this AFTER the chapters exist (#121-#125) so the tense matches
-       reality. Note: #104's fix text was corrected 2026-05-17 — do not regress
-       §5.4 to proposal voice.
-Refs:  #1 #16 #104; #127 #128
-
-################################################################################
-#  ISSUE --- ADDED 2026-05-21  (CITATION CORRECTNESS, RELATED WORK)
-################################################################################
-
-================================================================================
-#157  [T0] [NOW] [DONE]  Misattributed belief-representation claim in related work
-================================================================================
-Where: thesis/chapters/related-work.tex:12 (sec. POMDP-based TAMP Solutions).
-       Was duplicated in proposal-template/sections/related_work.tex:12;
-       proposal-template/ deleted 2026-05-21, so only the thesis copy remains.
-What:  "Implementations often resort to particle filters over dense voxel
-       grids to approximate these continuous belief states
-       \cite{curtis2024partially, gothoskar2023bayes3d}, which does not scale
-       well to large environments." Inaccurate on both citations:
-       - TAMPURA (curtis2024partially): its voxel grid (find_dice, 15 mm) is a
-         VISIBILITY/occupancy belief, not a pose belief; placement is
-         continuous SE(3)-pose sampling; planning is a learned abstract MDP
-         solved with LAO* --- not a particle filter over voxels.
-       - Bayes3D (gothoskar2023bayes3d): a 3D-scene PERCEPTION system, not a
-         POMDP-TAMP planner. It does GPU-accelerated coarse-to-fine sequential
-         Monte Carlo (so "particle filter" fits Bayes3D, but not "voxel grid",
-         and it does not belong under "POMDP-based TAMP Solutions").
-Fix:   Replaced with an accurate per-system description (TAMPURA visibility
-       grid + continuous-pose sampling; Bayes3D as SMC perception). The genuine
-       first sentence (continuous-pose belief is a challenge) was kept.
-       thesis/ commit "Fix #157"; clean latexmk build (58 pp).
-Refs:  thesis/chapters/related-work.tex:12; references.bib curtis2024partially,
-       gothoskar2023bayes3d
-
-################################################################################
-#  ISSUES --- ADDED 2026-05-21  (TAMPURA-COMPARISON FRAMING, DISCUSSION)
-################################################################################
-Surfaced during a full audit of every TAMPURA mention in the thesis
-(prompted 2026-05-21). The audit found the thesis text already accurate and
-well-hedged --- #157 was the only outright error. These two are
-tightening/disclosure refinements, not corrections of wrong claims.
-
-================================================================================
-#158  [T3] [POLISH] [DONE]  "task family" overstated comparability (discussion)
-================================================================================
-Where: thesis/chapters/discussion.tex (Architectural comparison with TAMPURA).
-What:  "competitive ... on this task family" implied find-and-tray-stack and
-       TAMPURA's Partial Observability are the same family.
-Fix:   -> "on the closest analogous task", matching the abstract/results hedge.
-       thesis/ commit "Fix #158"; clean latexmk build.
-
-================================================================================
-#159  [T2] [THESIS] [DONE]  Undisclosed hardware-comparison direction (discussion)
-================================================================================
-Where: thesis/chapters/discussion.tex (Threats to validity, "TAMPURA via
-       published numbers").
-What:  Thesis said the comparison is "not a hardware benchmark" but never stated
-       which way the hardware tilts.
-Fix:   Added one sentence: both planners single-threaded; TAMPURA's CPU has a
-       marginally higher base clock (2.5 vs 2.0 GHz), so the hardware gap, if
-       anything, favours TAMPURA. Avoids the 20-vs-8-core framing (moot under
-       single-threading). thesis/ commit "Fix #159"; clean latexmk build.
-
-################################################################################
 #  ISSUES --- ADDED 2026-05-21  (TAMPURA ENGINE, RELATED WORK, CONTRIBUTION)
 ################################################################################
 Surfaced in the 2026-05-21 working session (TAMPURA code dive + a related-work /
-contribution discussion). #160 is a factual error; #161-#162 are the structural
-gaps the author flagged as the thesis's weakest points. All OPEN.
-
-================================================================================
-#160  [T0->T3] [NOW] [DONE]  TAMPURA's determinised planner: SymK (code) / FastDownward (paper)
-================================================================================
-Where: thesis/chapters/discussion.tex:83-84; also notes/THESIS_NOTES.md sec 21.3.
-What:  Both state "Both systems use FastDownward as the inner determinised
-       planner, so the difference is not the search engine." Verified false in
-       TAMPURA's source (git/tampura): determinised planning uses SymK --- a
-       Fast Downward-derived symbolic top-k planner (contingent_policy.py ->
-       symk_search/symk_translate; setup.py builds third_party/symk) --- and
-       LAO* (solvers/lao_star.py) solves the MDP. The search engines DO differ
-       (FD heuristic search vs SymK symbolic top-k); only the PDDL->SAS+
-       translation layer is shared. (Our side does use FastDownward via
-       PDDLStream --- confirm before finalising the rewrite.)
-Fix:   Rewrite the sentence (we use FastDownward via PDDLStream; TAMPURA uses
-       SymK; symbolic search is cheap in both, so the salient difference is WHEN
-       geometry sampling is paid) and fix the same false claim in THESIS_NOTES
-       sec 21.3.
-Refs:  discussion.tex:83-84; THESIS_NOTES sec 21.3; git/tampura sources.
-Done (2026-05-21): NOT a clean error -- the paper's Algorithm 2 literally
-       names FastDownward; only the released CODE uses SymK (FD-derived top-k).
-       Reworded discussion.tex (thesis commit "Fix #160", clean build) and added
-       an implementation note to THESIS_NOTES sec 21.3, rather than asserting the
-       thesis was wrong. Effective tier ~T3 (precision), not T0.
-
-================================================================================
-#161  [T2] [THESIS] [DONE]  Related Work is thin --- enrich from emails and pdfs/SOURCES.md
-================================================================================
-Where: thesis/chapters/related-work.tex (whole chapter, ~40 lines).
-What:  Covers TAMPURA, pan2024task, ma2025task, zhao2025seeing, bai2025learning,
-       OctoMap, Shah CRs --- but OMITS the thesis's own lineage. Key gaps (all
-       catalogued in emails and pdfs/SOURCES.md, which tags each work's bib key
-       or marks it absent):
-       - Belief-space TAMP: Kaelbling & Lozano-Perez 2013 (foundational; NOT in
-         bib) and Garrett et al. 2020 "Online Replanning in Belief Space"
-         (SS-Replan; NOT in bib). SS-Replan is the CLOSEST precedent to this
-         thesis's optimistic-determinise-and-replan loop --- must be positioned.
-       - POD / translation lineage the thesis BUILDS ON: LW1 (bonet2014flexible,
-         in bib but never discussed), CLG (albore2009), K-replanner (bonet2011),
-         PO-PRP (Muise et al. 2014, NOT in bib).
-       - TAMP foundations: PDDLStream (garrett2018, the framework we build on)
-         and the TAMP survey (garrett2021) --- in bib, not discussed.
-       - Recent POD-TAMP: CoCo-TAMP (Kim et al. 2026, LLM state estimation; NOT
-         in bib); Contingent TAMP for HRI (2020; NOT in bib).
-       - Supervisors' work: Plan2Pose (Swoboda & Hofmann 2026; NOT in bib).
-Fix:   Add a belief-space-TAMP + POD-translation-lineage subsection; DISCUSS
-       (not just \cite) works already in bib; add the missing relevant ones to
-       references.bib; close with a research-gap paragraph that sets up #162.
-Refs:  related-work.tex; emails and pdfs/SOURCES.md; references.bib.
+contribution discussion). These are the structural
+gaps the author flagged as the thesis's weakest points.
 
 ================================================================================
 #162  [T1] [THESIS]  Contribution / motivation under-justified
@@ -412,13 +277,12 @@ Refs:  background.tex:85; methods.tex:63; discussion.tex:257-261; belief.py;
 OPEN ISSUES
 ================================================================================
 
-7 issues remain open. Each issue's header carries its tier (T0-T3) and
+6 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Structural:      #126
-Related work & framing: #162 #166 #167  (#160, #161 DONE)
+Related work & framing: #162 #166 #167
 Why-ours-is-better & caveats: #163 (TOP PRIORITY) #164 #165  (added 2026-05-21)
 
 Gating: #141-#156 and #130 done --- all eval-write-up
@@ -430,7 +294,6 @@ figures (boxelization companion, semantic vs uniform, sense action,
 replan cycle, three-strike give-up, task triptych, n_occluders composite,
 overhead-camera inset, introduction hero) are inserted across
 introduction/methods/results/discussion. #125, #140, #121, #127 were closed jointly.
-#126 (document-wide forward-voice conversion) is left open as a final
-verification pass since the chapters individually are already
-retrospective. The §5 sentence-level polish issues (#87-#111) were
+#126 (document-wide forward-voice conversion) was verified and closed: the
+chapters are already retrospective throughout, so no source change was needed. The §5 sentence-level polish issues (#87-#111) were
 resolved earlier in the audit walkthrough.
