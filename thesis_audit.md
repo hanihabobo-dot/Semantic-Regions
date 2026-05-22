@@ -129,33 +129,6 @@ Fix:   Add an explicit contribution statement (intro) + research-gap paragraph
 Refs:  introduction.tex; related-work.tex; discussion.tex; conclusion.tex.
 
 ================================================================================
-#163  [T1] [THESIS]  *** TOP PRIORITY *** State explicitly WHY our approach is better
-================================================================================
-Where: thesis/chapters/related-work.tex (the "why ours differs" contrasts) and
-       discussion.tex. Complements #162; this one lists the concrete advantages.
-What:  Related work hints at differences but never states the ADVANTAGES plainly.
-       Make these three explicit as the "this is why our approach is better" case:
-       (1) OCCLUSION IS FIRST-CLASS, INSPECTABLE SYMBOLIC STATE. Both systems
-           gather information --- "we do info-gathering" is NOT the edge. The edge
-           is the REPRESENTATION: our planner reasons over named, human-inspectable
-           regions (observed vs occluded SHADOW boxels); TAMPURA's spatial belief
-           is a voxel grid + an opaque, learned statistical effect model that is
-           hard to inspect.
-       (2) WE REASON ABOUT UNCERTAINTY WITHOUT PROBABILITIES. POD knowledge-literals
-           (obj_at_boxel_KIF, view_clear) capture known/unknown deterministically;
-           no per-controller probability estimation, no offline model-learning.
-           (_build_init re-emits symbolic facts every replan; no probabilities.)
-       (3) NO MDP MACHINERY. A lightweight deterministic PDDL planning layer (POD
-           style) instead of TAMPURA's learn-a-sparse-MDP + LAO* stack --- simpler,
-           and no learned abstraction to mis-estimate (see #162 "assumes its
-           abstraction").
-Fix:   Add an explicit "advantages" paragraph to related work; echo in discussion.
-       Pair each advantage with its honest cost (oracle perception; no risk-
-       weighting; relies on replanning). NOTE: still need a fair empirical way to
-       compare the two --- eval design belongs in CODEBASE_AUDIT.txt, not here.
-Refs:  related-work.tex; discussion.tex; #162; #160.
-
-================================================================================
 #164  [T2] [THESIS]  Disclose the stack-cost caveat (stack costs 2x other actions)
 ================================================================================
 Where: thesis methods/limitations + pddl/domain_pddlstream.pddl:302.
@@ -277,13 +250,13 @@ Refs:  background.tex:85; methods.tex:63; discussion.tex:257-261; belief.py;
 OPEN ISSUES
 ================================================================================
 
-6 issues remain open. Each issue's header carries its tier (T0-T3) and
+5 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Related work & framing: #162 #166 #167
-Why-ours-is-better & caveats: #163 (TOP PRIORITY) #164 #165  (added 2026-05-21)
+Why-ours-is-better & caveats: #164 #165  (added 2026-05-21)
 
 Gating: #141-#156 and #130 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
