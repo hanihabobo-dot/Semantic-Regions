@@ -215,7 +215,7 @@ Done (2026-05-21): NOT a clean error -- the paper's Algorithm 2 literally
        thesis was wrong. Effective tier ~T3 (precision), not T0.
 
 ================================================================================
-#161  [T2] [THESIS]  Related Work is thin --- enrich from emails and pdfs/SOURCES.md
+#161  [T2] [THESIS] [DONE]  Related Work is thin --- enrich from emails and pdfs/SOURCES.md
 ================================================================================
 Where: thesis/chapters/related-work.tex (whole chapter, ~40 lines).
 What:  Covers TAMPURA, pan2024task, ma2025task, zhao2025seeing, bai2025learning,
@@ -345,6 +345,68 @@ Fix:   Targeted search (Scholar / Semantic Scholar / dblp; cite-chains from LW1,
        overlaps our core claim so we can position against it honestly.
 Refs:  related-work.tex; references.bib; #161; #162.
 
+################################################################################
+#  ISSUE --- ADDED 2026-05-22  (LW1 POSITIONING, MODEL-VS-METHOD)
+################################################################################
+Surfaced 2026-05-22 working session (re-read the LW1 paper + emails and
+pdfs/SOURCES.md, then a model-vs-method discussion). This is the SUBSTANCE of
+the LW1 comparison that #161 ("LW1 in bib but never discussed") only asks to
+add. OPEN.
+
+================================================================================
+#167  [T2] [THESIS]  Position LW1 precisely: same compile-to-classical idea, but determinise-and-replan, not contingent solving
+================================================================================
+Where: thesis/chapters/related-work.tex (POD-lineage subsection added by #161);
+       methods.tex:63 (K-literal compile-to-classical); discussion.tex:257-261
+       (optimistic sense + reactive replanning); background.tex:85 (LW1 cite).
+What:  The thesis builds on LW1 (bonet2014flexible) --- the K-literal / linear
+       translation of a partially observable problem into classical planning ---
+       and already uses its core idea (obj_at_boxel_KIF Know-If fluents), but
+       never states the precise relationship, risking the implication that it
+       "does LW1 / POD planning." Separate MODEL from METHOD:
+       - MODEL: ours is POD --- deterministic dynamics, noiseless sensing,
+         uncertainty only in the initial location of the hidden object, resolved
+         by sensing. Geffner's "POMDP of a special type" (Master's thesis on POD
+         TAMP.txt). NOT POMDP (no probabilities), NOT FOND/POND (no nondet
+         effects). Same model class LW1 targets.
+       - METHOD: we do NOT solve it the way LW1 does. LW1 tracks belief soundly
+         (X(P) progression + unit resolution), selects actions via H(P), and is
+         complete for width-1. We instead OPTIMISTICALLY DETERMINISE the sensing
+         (assume target found), plan a classical plan, execute until an
+         observation contradicts belief, then REPLAN (belief.py shadow_status ---
+         the determinise-and-replan / K-replanner school, not contingent/
+         belief-space solving).
+       LAYER (the key clarification): LW1 is NOT a peer of FastDownward --- it is
+       a POD->classical COMPILER that itself calls a classical engine (FF). The
+       component LW1 would replace is our hand-written Know-If/sense PDDL
+       encoding, not the inner search. So "use LW1" = swap our hand-rolled
+       translation for LW1's, while STILL needing PDDLStream for geometry and
+       making LW1's translation re-run against PDDLStream's per-iteration
+       re-grounding --- large integration cost, little gain. -> keep LW1 as named
+       lineage + method contrast; do NOT add it as a code dependency.
+       Do NOT repeat two tempting-but-wrong anti-LW1 arguments:
+         (a) "LW1 can't do continuous geometry" --- a non-distinction:
+             FastDownward can't either; geometry lives in the PDDLStream streams.
+         (b) "LW1 reintroduces the voxel blowup" --- false: the blowup is a
+             property of the DISCRETISATION (uniform grid vs Boxels), independent
+             of the planner; LW1 on the Boxel partition has the same small cell
+             count.
+       The one substantive distinction that survives is WIDTH: LW1's width-1
+       completeness is the right lens for when our optimism is safe --- width-1
+       occlusion (single hidden target, independent shadows) is effectively
+       complete under determinise-and-replan; interacting occluders exceed
+       width-1 and degrade it to sound-but-heuristic.
+Fix:   (1) related-work: in the POD-lineage subsection (#161), state the
+       model-vs-method split and position ours as compile-to-classical (LW1/CLG/
+       K-replanner) solved by optimistic determinisation + replanning (closest
+       precedent SS-Replan, #161). (2) methods: one sentence --- we adopt LW1's
+       K-literal translation but solve by determinise-and-replan, not contingent
+       solving. (3) discussion: state the width-1 boundary as the guarantee
+       envelope. Do NOT integrate cp2fsc-and-replanner as code.
+Refs:  background.tex:85; methods.tex:63; discussion.tex:257-261; belief.py;
+       emails and pdfs/SOURCES.md sec 3.6 + PDF #1; bonet2014flexible,
+       albore2009translation, bonet2011planning; #161 #162 #163 #165 #166.
+
 
 ================================================================================
 OPEN ISSUES
@@ -356,7 +418,7 @@ from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Structural:      #126
-Related work & framing: #161 #162 #166  (#160 DONE 2026-05-21)
+Related work & framing: #162 #166 #167  (#160, #161 DONE)
 Why-ours-is-better & caveats: #163 (TOP PRIORITY) #164 #165  (added 2026-05-21)
 
 Gating: #141-#156 and #130 done --- all eval-write-up
