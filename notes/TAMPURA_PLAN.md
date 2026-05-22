@@ -221,3 +221,21 @@ C4. KEEP TAMPURA SOURCE LOCAL FOR REFERENCE (comparison hygiene). Planner repo
     policy_search.py). Read any file without a full checkout via
     `git -C ../tampura_environments show HEAD:<path>`.
 
+C5. NESTED-OCCLUSION TEST (our distinguishing experiment -- "this is our test").
+    Multi-blocker / nested occlusion is where first-class symbolic occlusion
+    should pay off: view_clear(?region) = is_shadow AND NOT view_blocked, and
+    view_blocked is true if ANY object blocks the corridor -- so a region
+    blocked by several objects forces the planner to clear ALL of them before
+    sensing, and a sense that reveals a new occluder spawns a new SHADOW + a
+    re-partition (peeling nested layers). TAMPURA does NOT exercise this:
+    find_dice hides the die under ONE cup (single-layer; env_generator.py), its
+    `look` is keyed on a single occluder, and the location belief collapses to
+    one binary predicate -- deep nesting would stress its learned model.
+    DO: build scenes with 2-3 NESTED occluders (target behind A behind B...);
+    run semantic vs uniform (and, if C1/C2 land, TAMPURA); measure success /
+    plan length / #discovered-occluders / replans. Expected story: ours peels
+    nested layers deliberately; uniform/TAMPURA-style approaches degrade. The
+    cleanest demonstration of the contribution (#163/#165) -- stronger than the
+    semantic-vs-uniform compactness result. FIRST confirm our scene generator
+    can actually PRODUCE nested occlusion (capability vs demonstration).
+
