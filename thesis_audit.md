@@ -221,18 +221,61 @@ Refs:  background.tex:85; methods.tex:63; discussion.tex:257-261; belief.py;
        emails and pdfs/SOURCES.md sec 3.6 + PDF #1; bonet2014flexible,
        albore2009translation, bonet2011planning; #161 #162 #163 #165 #166.
 
+################################################################################
+#  ISSUE --- ADDED 2026-05-23  (FIGURES / CAPTIONS REVIEW)
+################################################################################
+Surfaced 2026-05-23: the figures need a dedicated pass. Several either do not
+show what their caption / surrounding text claims, or are not the clearest
+illustration of the concept. Go through them ONE BY ONE. OPEN.
+
+================================================================================
+#168  [T1] [THESIS]  Figures/captions review --- go through every figure one by one
+================================================================================
+Where: every \includegraphics in the thesis --- schematic diagrams, simulator
+       screenshots, and results plots. Inventory by source file:
+       - introduction.tex: fig:intro-hero (sim/scene_hidden_target.png)
+       - methods.tex: fig:boxelization (Boxelization.png, schematic),
+         fig:boxelization-real (sim/boxelization_real.png),
+         fig:partition-semantic + fig:partition-uniform,
+         fig:sense-action (sim/sense_targeting_shadow.png),
+         fig:replan-cycle (sim/replan_cycle.png)
+       - background.tex: fig:octmap_illustration (octmap_illustration.png)
+       - discussion.tex: fig:retry-giveup (sim/sense_fail_retry3.png)
+       - results.tex: results plots + composites (success rate, planning
+         time, boxel counts, failure modes, TAMPURA, n_occluders, task
+         triptych, overhead-camera inset)
+What:  Two failure modes, triaged per figure:
+       (1) MISREPRESENTS --- the image does not show what its caption or the
+           surrounding text claims (labelled element absent, wrong scene, shows
+           a different mechanism). Materially misdescribes the system: T0/T1,
+           must be fixed (recapture, relabel, or correct the caption).
+       (2) SUBOPTIMAL --- accurate but not the clearest illustration (cluttered,
+           low contrast, bad crop/angle, key element too small). T2/T3; replace
+           with a better shot or annotate.
+       Inspect each image VISUALLY (read the PNG) against its caption and the
+       paragraph that cites it; do not trust the caption text alone.
+Fix:   One-by-one walkthrough, each figure its own commit. Per figure: read the
+       image, compare to caption + referencing text, decide keep / recaption /
+       re-annotate / recapture. If regenerating, ADD a new image --- never
+       overwrite an existing one, and keep the old one regenerable. Keep
+       \includegraphics paths as sim/<name>.png; no internal repo paths in
+       captions.
+Refs:  introduction.tex; methods.tex; background.tex; results.tex;
+       discussion.tex; thesis/graphics/sim/.
+
 
 ================================================================================
 OPEN ISSUES
 ================================================================================
 
-4 issues remain open. Each issue's header carries its tier (T0-T3) and
+5 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Related work & framing: #166 #167
 Why-ours-is-better & caveats: #164 #165  (added 2026-05-21)
+Figures: #168  (added 2026-05-23)
 
 Gating: #141-#156 and #130 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
