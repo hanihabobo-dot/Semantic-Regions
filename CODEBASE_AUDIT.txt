@@ -316,6 +316,12 @@ Status:   OPEN.  Filed 2026-05-20 as the symmetric counterpart of
           the opposite direction — what happens when
           min_boxel_size is held strictly ABOVE auto_cell (1.5x,
           2x).
+          SWEEP COMPLETE 2026-05-22 — 1800 cells,
+          SCALABILITY_VS_RESOLUTION preset (commit 66a26ed), run
+          on the 100-seed audit-#77 corpus.  See RESULT below.
+          Remaining: merge cells into sweep_anytime + combined
+          4-point resolution plot (Step 4), chapter writeup
+          (Step 5, owned by thesis #121).
 Priority: TIER 2 — informational; characterises the resolution-
           vs-success curve and feeds the Discussion (thesis #125
           / #140).  Not blocking the main #77 anytime claim, but
@@ -367,42 +373,77 @@ What:  #97 asks "engineer a scene where FINER than auto_cell
                                     so init-facts stay an order
                                     of magnitude below uniform.
 
+RESULT (2026-05-22 — coarse-end sweep, 1800 cells, semantic only):
+       Success rate per (goal, min_boxel_size) against the #93
+       auto_cell baseline (median plan time / median total boxels
+       / median init-state facts in parentheses):
+
+         goal                 auto_cell (#93)   1.5x auto         2.0x auto
+         holding              42.3%             40.3% (0.135 m)   45.7% (0.18 m)
+         find-and-tray-stack  39.8%             35.3% (0.135 m)   35.3% (0.18 m)
+         stack                61.3%             61.3% (0.09 m)    61.3% (0.12 m)
+
+       Partition shrinks 30-40% as mbs grows (median boxels:
+       holding 35->20, f-a-t-s 42->25, stack 28->22; init facts
+       fall similarly: holding ~276->173, f-a-t-s ~482->290,
+       stack ~296->251) and planning is marginally faster.
+
+       FINDING: the resolution axis is essentially FLAT above
+       auto_cell at these scene scales.  Coarsening to 1.5x and
+       even 2x auto_cell does NOT degrade success materially —
+       holding flat within seed noise, find-and-tray-stack a mild
+       ~4 pp drop, stack IDENTICAL seed-for-seed (184/300 at
+       every point).  The expected "coarser hurts" cross-over
+       (Hypothesis above) does NOT appear in the 1x-2x range.
+       This realises Care(3): the axis is flat — report and stop
+       rather than extending it.
+
+       Combined with #93's below-auto null result (mbs0.05 ==
+       auto), the complete picture: the adaptive partition is
+       INSENSITIVE to the leaf-size knob across a ~4x range
+       (0.05 m -> 0.18 m on random-pairs).  auto_cell is not a
+       tuned magic number; it sits in a flat-optimal plateau, so
+       the audit-#67 heuristic (largest visible AABB + 1 cm) is a
+       robust default.  This is a positive robustness finding for
+       the method and belongs in the Discussion (thesis #125 /
+       #140), not just a negative.
+
+       Data: eval_results/sweep_2026-05-20_13-38-28_scalability-
+       vs-resolution/{aggregated.csv, aggregated.jsonl};
+       per-(goal,mbs) summary via scripts/_audit98_summary.py.
+
 Fix:   Steps:
-       Step 1 — add the coarse-end axis to SCALABILITY_VS_TIME.
-                Two new min_boxel_size points (1.5x and 2.0x
-                auto_cell) per scene.  Because auto_cell varies
-                per scene, either:
-                  (a) compute the multiplier inside test_full_-
-                      pipeline.py from a CLI flag like --mbs-
-                      ratio 1.5; or
-                  (b) hard-code per-scene numerics in the
-                      matrix sub-matrices: random-pairs
-                      {0.135, 0.18} m, stack {0.09, 0.12} m
-                      (or whatever the measured auto_cell is at
-                      the time of the sweep).
-                (b) is simpler in code and easier to audit; (a)
-                is cleaner if the scene set grows.
-       Step 2 — smoke sub-sweep (5 seeds per cell, ~120 cells)
-                to verify the mbs > auto_cell path runs.
-                Confirm run_config.effective_min_boxel_size
-                shows the requested coarse value verbatim and
-                CellMerger doesn't accidentally fold every
-                free-space cell into one giant boxel.
-       Step 3 — full corpus sweep (100 seeds) once smoke is
-                clean.
-       Step 4 — eval_plotter: solved_vs_time.png already groups
-                by (baseline, min_boxel_size), so new lines
-                appear automatically.  Confirm the per-goal
-                legend stays readable with 4-5 series; if not,
-                consider a colour gradient over the semantic mbs
-                values (auto = blue, 1.5x = light orange, 2x =
-                dark orange) keeping uniform gray.
-       Step 5 — chapter writeup: the resolution-vs-success
-                curve at FOUR points (mbs<<auto via #97,
-                mbs==auto, 1.5x, 2x) characterises where
-                semantic's adaptive partition gains and loses.
-                Even if #97 doesn't land, this issue alone gives
-                the chapter a resolution-axis sweep.
+       Step 1 [DONE 2026-05-20, commit 66a26ed] — added the
+                SCALABILITY_VS_RESOLUTION sibling preset using
+                option (b) per-scene numerics: random-pairs
+                {0.135, 0.18} m, stack {0.09, 0.12} m; semantic
+                only (uniform clamped to auto_cell by #66).
+                1800 cells.
+       Step 2 [DONE 2026-05-20] — single-cell smoke
+                (random-pairs holding seed=0 mbs=0.18):
+                effective_min_boxel_size recorded as 0.18
+                verbatim (clamp-lift from #77 step 3a works in
+                BOTH directions); partition collapsed to 11
+                boxels / 79 facts without crash; CellMerger did
+                not fold everything into one giant boxel.
+       Step 3 [DONE 2026-05-22] — full 100-seed corpus sweep
+                (1800 cells).  See RESULT above.
+       Step 4 [TODO] — merge the 1800 cells into
+                eval_results/sweep_anytime/cells (distinct mbs
+                tags, no collision) and re-aggregate + re-plot
+                so solved_vs_time / boxel_count_breakdown show
+                the full 4-point resolution curve per goal
+                (mbs0.05 / auto / 1.5x / 2x).  The #99
+                variant-key plotter handles the extra series
+                automatically; confirm the legend stays
+                readable (4-5 lines).
+       Step 5 [TODO, owned by thesis #121] — chapter writeup:
+                the resolution-vs-success curve characterises
+                where the adaptive partition gains and loses.
+                Headline is the RESULT finding (flat plateau
+                around auto_cell).  #97 (the sub-auto
+                discriminating scene) was deferred, so the
+                curve is 4 points, not 5.
 
 Care:
        (1) auto_cell varies per scene (~6 cm stack, ~9 cm
