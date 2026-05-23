@@ -139,50 +139,18 @@ Fix:   One-by-one walkthrough, each figure its own commit. Per figure: read the
 Refs:  introduction.tex; methods.tex; background.tex; results.tex;
        discussion.tex; thesis/graphics/sim/.
 
-################################################################################
-#  ISSUES --- ADDED 2026-05-23  (CITATION CONTENT ACCURACY --- HOW WE DESCRIBE CITED PAPERS)
-################################################################################
-Surfaced 2026-05-23: a content-level citation audit --- each related-work /
-background claim checked against the ACTUAL paper (TAMPURA also against its
-released code). Bibliographic metadata was corrected separately in
-references.bib (thesis-repo commit ddba33f); the metadata is now right. The
-issues below are MISREADINGS of what the cited papers say --- the description,
-not the citation, is wrong. OPEN.
-
-================================================================================
-#173  [T3] [NOW] [PARTIAL 2026-05-23: (a) J->K and (c) arXiv-v2 pin done; (b) results.tex:108 Table-II remains -- figures agent]  TAMPURA citation precision: "J plans" symbol + Table II attribution
-================================================================================
-Where: discussion.tex (Learn-Model / sparse-MDP sentence, "...by running J
-       deterministic FastDownward plans"); results.tex:108 (Table II numbers).
-What:  (a) In TAMPURA Algorithm 2 the per-iteration determinised-plan count is K
-       (loop k=1..K); J is the controller-SIMULATION count (Algorithm 3). "J
-       deterministic FastDownward plans" should be K. (b) results.tex:108 cites
-       "Partial Observability: 57 +/- 38 s, 20 trials" --- correct as TAMPURA's own
-       (Bayes-Optimistic + LAO*) config on the PO task (Task C), but Table II lists
-       ~8 method-rows for that task (e.g. 72 +/- 38 is the eps-greedy variant);
-       tighten the attribution. (c) the arXiv v2 HTML is a rough draft (author TODO
-       notes, broken Figure/Table LABEL refs) --- pin the arXiv version when citing
-       algorithm/table numbers.
-Fix:   "J" -> "K" (or restate without the symbol); attribute 57+/-38 to TAMPURA's
-       own config on the PO task; pin the cited arXiv version.
-Refs:  discussion.tex; results.tex:108; curtis2024partially.
-
-
 ================================================================================
 OPEN ISSUES
 ================================================================================
 
-After the 2026-05-23 prose + citation-accuracy pass, 1 issue is fully open and
-1 is partial. Each issue's header carries its tier (T0-T3) and disposition.
-The eight issues resolved in that pass (#164 #166 #167 #169 #170 #171 #172 #174)
+After the 2026-05-23 prose + citation-accuracy pass, 1 issue remains open.
+Each issue's header carries its tier (T0-T3) and disposition.
+The nine issues resolved in that pass (#164 #166 #167 #169 #170 #171 #172 #173 #174)
 have been removed; see `git log --grep="Fix #"` (thesis repo) and
 `git log --grep="audit:"` (this repo) for their record.
 
 OPEN:
   Figures: #168  (every figure one-by-one; figures agent)
-PARTIAL:
-  #173  (a) "J"->"K" in discussion.tex and (c) arXiv-v2 pin in references.bib
-        landed; (b) results.tex:108 Table-II attribution remains --- figures agent.
 
 Gating: #141-#156 and #130 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
