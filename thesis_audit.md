@@ -105,30 +105,6 @@ contribution discussion). These are the structural
 gaps the author flagged as the thesis's weakest points.
 
 ================================================================================
-#162  [T1] [THESIS]  Contribution / motivation under-justified
-================================================================================
-Where: introduction.tex (contribution statement), related-work.tex framing,
-       discussion.tex / conclusion.tex.
-What:  The contribution is not foregrounded; the semantic-vs-uniform evaluation
-       reads as "two variants of my own system," underselling the idea. The real
-       contribution is a REPRESENTATION: Boxels make occlusion/visibility
-       FIRST-CLASS SYMBOLIC planning state in a POD (knowledge-literal) TAMP
-       planner --- promoting occluded volume to enumerable SHADOW regions the
-       planner branches over. The 2026-05-21 TAMPURA code dive supports the
-       novelty: TAMPURA keeps occlusion SUB-symbolic (find_dice look_effects_fn
-       uses a voxel dict only to weight one predicate's success probability),
-       whereas this thesis lifts it into symbolic state (POD, not POMDP).
-       semantic-vs-uniform is the ABLATION that isolates the adaptive structure,
-       not the contribution.
-Fix:   Add an explicit contribution statement (intro) + research-gap paragraph
-       (end of related work); position against the POMDP (TAMPURA) and reactive/
-       replanning (SS-Replan, pan2024task) paradigms; reframe the eval as
-       ablation-of-a-representation, not "beats baselines." Honest scope:
-       representation/architecture contribution under oracle perception, not a
-       benchmark win. Depends on #161 (novelty needs the survey).
-Refs:  introduction.tex; related-work.tex; discussion.tex; conclusion.tex.
-
-================================================================================
 #164  [T2] [THESIS]  Disclose the stack-cost caveat (stack costs 2x other actions)
 ================================================================================
 Where: thesis methods/limitations + pddl/domain_pddlstream.pddl:302.
@@ -250,12 +226,12 @@ Refs:  background.tex:85; methods.tex:63; discussion.tex:257-261; belief.py;
 OPEN ISSUES
 ================================================================================
 
-5 issues remain open. Each issue's header carries its tier (T0-T3) and
+4 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
-Related work & framing: #162 #166 #167
+Related work & framing: #166 #167
 Why-ours-is-better & caveats: #164 #165  (added 2026-05-21)
 
 Gating: #141-#156 and #130 done --- all eval-write-up
