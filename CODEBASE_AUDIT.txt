@@ -154,7 +154,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #98                                                           #
+#  OPEN ISSUES — #98 #100 #101                                                 #
 #                                                                              #
 ################################################################################
 
@@ -183,8 +183,11 @@ STATUS (2026-05-20)
 The pre-evaluation correctness chain, the evaluation framework (#9 runner +
 #10 uniform-voxelization baseline), the eval-chapter figures (#73), the
 gripper-handoff correctness chain (#75-#85), and the README/wiki doc sweep
-(#63) are all DONE.  One issue remains open: #98 (TIER 2 coarse-end
-resolution sweep — characterise min_boxel_size above auto_cell).
+(#63) are all DONE.  Three issues remain open, all TIER 2/3 follow-ups
+to the coarse-end resolution sweep: #98 (sweep DONE 2026-05-22, RESULT
+recorded — resolution axis flat above auto_cell), #100 (merge the
+1800 coarse cells into sweep_anytime + combined 4-point plot), and
+#101 (eval-chapter resolution-axis writeup, thesis #121 territory).
 Closed 2026-05-20: #77 (anytime sweep infrastructure; chapter writeup
 owned by thesis #121 + EVAL_SUMMARY.md), #93 (full-sweep findings
 published to EVAL_SUMMARY.md), #94 (plot_solved_vs_time), #95
@@ -428,22 +431,13 @@ Fix:   Steps:
                 not fold everything into one giant boxel.
        Step 3 [DONE 2026-05-22] — full 100-seed corpus sweep
                 (1800 cells).  See RESULT above.
-       Step 4 [TODO] — merge the 1800 cells into
-                eval_results/sweep_anytime/cells (distinct mbs
-                tags, no collision) and re-aggregate + re-plot
-                so solved_vs_time / boxel_count_breakdown show
-                the full 4-point resolution curve per goal
-                (mbs0.05 / auto / 1.5x / 2x).  The #99
-                variant-key plotter handles the extra series
-                automatically; confirm the legend stays
-                readable (4-5 lines).
-       Step 5 [TODO, owned by thesis #121] — chapter writeup:
-                the resolution-vs-success curve characterises
-                where the adaptive partition gains and loses.
-                Headline is the RESULT finding (flat plateau
-                around auto_cell).  #97 (the sub-auto
-                discriminating scene) was deferred, so the
-                curve is 4 points, not 5.
+       The two remaining integration steps were split into their
+       own issues 2026-05-22 (the sweep-and-characterise job that
+       #98 owns is complete; the RESULT above is the deliverable):
+       Step 4 -> #100 — merge the 1800 cells into sweep_anytime +
+                combined 4-point resolution plot.
+       Step 5 -> #101 — eval-chapter resolution-axis writeup
+                (thesis #121 territory).
 
 Care:
        (1) auto_cell varies per scene (~6 cm stack, ~9 cm
@@ -479,6 +473,140 @@ Related:
 
 
 ================================================================================
+#100. MERGE COARSE-END SWEEP INTO sweep_anytime + COMBINED 4-POINT RESOLUTION PLOT
+================================================================================
+Status:   OPEN.  Filed 2026-05-22, split out of #98 Step 4.  The
+          #98 coarse-end sweep is complete and aggregated in its
+          own dir (eval_results/sweep_2026-05-20_13-38-28_-
+          scalability-vs-resolution/); this issue integrates it
+          with the existing sweep_anytime data so the chapter has
+          a single combined resolution curve.
+Priority: TIER 3 — data-integration / figure-generation.  No new
+          data; no correctness risk.  The finding (#98 RESULT) is
+          already locked in; this only produces the combined
+          figure.
+Where:    eval_results/sweep_anytime/cells/ (merge target);
+          eval_runner.aggregate(); eval_plotter.py (re-plot).
+Depends:  #98 [data done]; #99 [DONE] variant-key plotter (handles
+          the extra mbs series automatically).
+Effort:   ~0.5 day, mostly aggregate + plot wall-clock.
+
+What:  #98 ran SCALABILITY_VS_RESOLUTION (1800 cells, mbs in
+       {0.135, 0.18} random-pairs / {0.09, 0.12} stack) into a
+       separate sweep dir.  sweep_anytime holds the original 2700
+       cells (mbs in {auto=None, 0.05} + uniform).  The two share
+       the same 100-seed corpus and the same cell-tag scheme, and
+       the new mbs tags (_mbs0.135 / _mbs0.18 / _mbs0.09 /
+       _mbs0.12) do not collide with the existing tags.  Merging
+       gives the chapter one dataset with the FULL resolution
+       axis per goal: mbs0.05 / auto / 1.5x / 2x (4 points;
+       #97's sub-auto 5th point was deferred).
+
+Fix:   Step 1 — copy the 1800 cell dirs from
+                sweep_2026-05-20_13-38-28_scalability-vs-resolution/
+                cells/ into sweep_anytime/cells/ (no overwrite —
+                tags are distinct).
+       Step 2 — re-run eval_runner.aggregate(Path('eval_results/
+                sweep_anytime')) -> refreshed aggregated.csv
+                (2700 + 1800 = 4500 rows).
+       Step 3 — re-run eval_plotter.py on the merged
+                aggregated.csv.  The #99 variant-key grouper emits
+                a line per (variant, mbs); confirm the per-goal
+                legend stays readable with the extra series
+                (random-pairs goals gain 0.135 / 0.18; stack gains
+                0.09 / 0.12).  If 5-6 lines crowd the legend, use
+                the colour-gradient suggestion from #98 Step 4
+                (auto = blue, finer = green-ish, coarser =
+                orange-ish, uniform = gray).
+       Step 4 — visually check the regenerated PNGs (per
+                feedback_plot_regeneration: read before commit);
+                update EVAL_SUMMARY.md plot catalogue + add the
+                resolution-axis finding (#98 RESULT) as a new
+                section.
+       Step 5 — commit the merged data + plots; the matrix.json
+                in sweep_anytime records SCALABILITY_VS_TIME only,
+                so add a note that the dir now also holds the
+                SCALABILITY_VS_RESOLUTION cells.
+
+Care:
+       (1) matrix.json in sweep_anytime will under-report the
+           cell set after the merge (it lists the 2700 SVT cells,
+           not the 1800 SVR cells).  Either regenerate it as a
+           union or add a sibling matrix_resolution.json so the
+           provenance is not lost.
+       (2) The merge is one-way; keep the standalone
+           sweep_2026-05-20_..._scalability-vs-resolution/ dir as
+           the untouched source of record in case the merge needs
+           redoing.
+       (3) Stack rows still carry the #95 cell-tag misnaming;
+           the post-#95 _row_difficulty plotter already handles
+           it, but any ad-hoc parse must slice stack by
+           stack_height, not the occ token.
+
+Related:
+       #98 — the coarse-end sweep this integrates; RESULT recorded.
+       #99 [DONE] — variant-key plotter that makes the combined
+            plot work without code change.
+       #101 — the chapter writeup that consumes the combined plot.
+
+
+================================================================================
+#101. EVAL-CHAPTER RESOLUTION-AXIS WRITEUP (thesis #121 territory)
+================================================================================
+Status:   OPEN.  Filed 2026-05-22, split out of #98 Step 5.
+          Tracking issue on the CODEBASE side; the actual prose
+          lands in the thesis Evaluation chapter (thesis_audit.md
+          #121).
+Priority: TIER 3 — writeup, not code.  Listed here so the
+          resolution-axis story is not lost between the codebase
+          data (#98/#100) and the thesis chapter (#121).
+Where:    proposal-template/sections/evaluation.tex via the #121
+          structural rewrite; figure from #100.
+Depends:  #100 (combined 4-point plot); #98 (RESULT finding);
+          thesis_audit.md #121 (the chapter rewrite that owns the
+          prose); thesis_audit.md #125 / #140 (Discussion).
+Effort:   folds into the #121 chapter writeup; no standalone code.
+
+What:  The eval chapter needs a short resolution-axis subsection
+       built on the #98 finding: the adaptive partition is
+       insensitive to the min_boxel_size knob across a ~4x range
+       (0.05 -> 0.18 m random-pairs), so auto_cell is a robust
+       default rather than a tuned constant.  Pairs the combined
+       4-point curve (#100) with the #93 below-auto null result
+       to tell the full "we swept resolution in both directions"
+       story.
+
+Fix:   Inside the #121 Evaluation chapter rewrite, add a
+       resolution-axis paragraph + the #100 figure:
+       - state the auto_cell heuristic (#67: largest visible
+         AABB + 1 cm);
+       - report the flat plateau (1x / 1.5x / 2x indistinguishable
+         on stack, near-flat on holding / f-a-t-s);
+       - tie to the compactness pillar: coarsening shrinks the
+         partition 30-40% with no success cost, reinforcing that
+         semantic's advantage is structural, not resolution-tuned;
+       - hand the "why flat" interpretation to the Discussion
+         (#125): CellMerger collapses same-label leaves regardless
+         of leaf size, so leaf size only matters when sub-cell
+         geometry forces a split (#97's deferred discriminating
+         scene).
+
+Care:
+       (1) This is thesis prose; do NOT duplicate it as code.
+           When thesis #121 lands, this issue closes alongside.
+       (2) Keep the #93 null result and the #98 flat-plateau
+           result BOTH in the chapter — they are the two halves
+           of the resolution-insensitivity story.
+
+Related:
+       #98 — the coarse-end finding.
+       #100 — the combined figure this writeup cites.
+       thesis_audit.md #121 — the chapter rewrite that owns the
+            prose.
+       thesis_audit.md #125 / #140 — Discussion / eval-design gap.
+
+
+================================================================================
 SUMMARY — STATUS (updated 2026-05-20)
 ================================================================================
 Issue numbers are chronological (discovery order), NOT priority — follow the
@@ -486,10 +614,14 @@ TIER labels.  Full bodies of closed issues are in git history
 (git log --grep="audit: mark #N") and the "RESOLVED / DONE ISSUES" section of
 archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 1 item (full body above):
-  #98  TIER 2 — coarse-end resolution sweep: sweep min_boxel_size
-       to 1.5x and 2x auto_cell (the symmetric counterpart of #97
-       for the above-auto direction).
+OPEN — 3 items (full bodies above):
+  #98  TIER 2 — coarse-end resolution sweep DONE; RESULT recorded
+       (resolution axis flat above auto_cell — auto_cell is a
+       robust plateau).  Integration follow-ups split to #100/#101.
+  #100 TIER 3 — merge the 1800 coarse-end cells into sweep_anytime
+       + combined 4-point resolution plot (#98 Step 4).
+  #101 TIER 3 — eval-chapter resolution-axis writeup; thesis #121
+       territory (#98 Step 5).
   TIER 0/1: zero open items.
 
 CLOSED (one-line; full detail in git / archive):
