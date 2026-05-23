@@ -120,23 +120,6 @@ Fix:   Disclose as a methods design-choice / limitation, and add a comment in th
 Refs:  pddl/domain_pddlstream.pddl:302; thesis methods/limitations; #163(2).
 
 ================================================================================
-#165  [T1] [THESIS]  Defend "space is part of the planning" as the headline
-================================================================================
-Where: introduction.tex (thesis statement) + related-work.tex + discussion.tex.
-What:  The crispest framing of the contribution: we make SPACE part of the
-       planning state. We promote the hidden volume to symbolic regions (SHADOW
-       boxels) the planner branches over, whereas TAMPURA keeps the volume
-       sub-symbolic and collapses it into one predicate's success probability
-       (verified: find_dice look_effects_fn). That is the concrete, defensible
-       POD-vs-POMDP distinction. State it as the headline and DEFEND why it
-       matters: inspectable & plannable occlusion; uncertainty without
-       probabilities; the planner can deliberately clear/avoid view-blocking
-       (TAMPURA places view-blind -- placement_sample has no visibility check).
-Fix:   Add the headline contribution sentence (intro) + a "why this matters"
-       defense (related work / discussion). Unifying thesis of #162 and #163.
-Refs:  introduction.tex; related-work.tex; discussion.tex; #162; #163.
-
-================================================================================
 #166  [T2] [THESIS]  Real novelty / related-work search -- who else is near us?
 ================================================================================
 Where: related-work.tex + references.bib (feeds #161).
@@ -268,13 +251,13 @@ Refs:  introduction.tex; methods.tex; background.tex; results.tex;
 OPEN ISSUES
 ================================================================================
 
-5 issues remain open. Each issue's header carries its tier (T0-T3) and
+4 issues remain open. Each issue's header carries its tier (T0-T3) and
 disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
 from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
 mark"` for their record.
 
 Related work & framing: #166 #167
-Why-ours-is-better & caveats: #164 #165  (added 2026-05-21)
+Why-ours-is-better & caveats: #164  (added 2026-05-21)
 Figures: #168  (added 2026-05-23)
 
 Gating: #141-#156 and #130 done --- all eval-write-up
