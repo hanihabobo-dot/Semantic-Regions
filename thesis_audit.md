@@ -98,113 +98,6 @@ STYLE STANDARD (T2 Style issues)
 
 
 ################################################################################
-#  ISSUES --- ADDED 2026-05-21  (TAMPURA ENGINE, RELATED WORK, CONTRIBUTION)
-################################################################################
-Surfaced in the 2026-05-21 working session (TAMPURA code dive + a related-work /
-contribution discussion). These are the structural
-gaps the author flagged as the thesis's weakest points.
-
-================================================================================
-#164  [T2] [THESIS]  Disclose the stack-cost caveat (stack costs 2x other actions)
-================================================================================
-Where: thesis methods/limitations + pddl/domain_pddlstream.pddl:302.
-What:  The PDDL domain gives `stack` cost 2 while sense/move/pick/place all cost 1
-       (verified: domain_pddlstream.pddl:302 `(increase (total-cost) 2)` vs `1`
-       elsewhere). This is a deliberate, undisclosed nudge: a deterministic cost
-       penalty that discourages stacking which would obstruct the camera view ---
-       a workaround for the planner's inability to reason about action ORDER /
-       outcome likelihood (it minimises cost; it does not weigh probabilities).
-Fix:   Disclose as a methods design-choice / limitation, and add a comment in the
-       domain explaining the rationale. Frame honestly: a hand-tuned cost to
-       compensate for the lack of probabilistic action selection.
-Refs:  pddl/domain_pddlstream.pddl:302; thesis methods/limitations; #163(2).
-
-================================================================================
-#166  [T2] [THESIS]  Real novelty / related-work search -- who else is near us?
-================================================================================
-Where: related-work.tex + references.bib (feeds #161).
-What:  Before claiming novelty, run a genuine literature search for prior work
-       overlapping our specific combination -- not just the papers on hand. Find
-       out whether anyone has:
-       - used KNOWLEDGE LITERALS / KIF-style state (POD; Kp / K-not-p) WITH
-         PDDLStream or TAMP;
-       - done PARTIALLY OBSERVABLE DETERMINISTIC (POD) planning in a TAMP /
-         manipulation setting;
-       - represented OCCLUSION / shadow regions as first-class SYMBOLIC planning
-         state (object-centric, not a voxel/occupancy grid);
-       - anything else doing essentially what we do.
-       This substantiates-or-tempers the novelty claim AND shows "where we
-       shine." A thin survey is itself a threat to the contribution (#162):
-       cannot claim novel without showing what exists.
-Fix:   Targeted search (Scholar / Semantic Scholar / dblp; cite-chains from LW1,
-       PDDLStream, TAMPURA, SS-Replan, the Bonet/Geffner POD line). Record hits
-       in references.bib; fold into the #161 enrichment; flag any work that
-       overlaps our core claim so we can position against it honestly.
-Refs:  related-work.tex; references.bib; #161; #162.
-
-################################################################################
-#  ISSUE --- ADDED 2026-05-22  (LW1 POSITIONING, MODEL-VS-METHOD)
-################################################################################
-Surfaced 2026-05-22 working session (re-read the LW1 paper + emails and
-pdfs/SOURCES.md, then a model-vs-method discussion). This is the SUBSTANCE of
-the LW1 comparison that #161 ("LW1 in bib but never discussed") only asks to
-add. OPEN.
-
-================================================================================
-#167  [T2] [THESIS]  Position LW1 precisely: same compile-to-classical idea, but determinise-and-replan, not contingent solving
-================================================================================
-Where: thesis/chapters/related-work.tex (POD-lineage subsection added by #161);
-       methods.tex:63 (K-literal compile-to-classical); discussion.tex:257-261
-       (optimistic sense + reactive replanning); background.tex:85 (LW1 cite).
-What:  The thesis builds on LW1 (bonet2014flexible) --- the K-literal / linear
-       translation of a partially observable problem into classical planning ---
-       and already uses its core idea (obj_at_boxel_KIF Know-If fluents), but
-       never states the precise relationship, risking the implication that it
-       "does LW1 / POD planning." Separate MODEL from METHOD:
-       - MODEL: ours is POD --- deterministic dynamics, noiseless sensing,
-         uncertainty only in the initial location of the hidden object, resolved
-         by sensing. Geffner's "POMDP of a special type" (Master's thesis on POD
-         TAMP.txt). NOT POMDP (no probabilities), NOT FOND/POND (no nondet
-         effects). Same model class LW1 targets.
-       - METHOD: we do NOT solve it the way LW1 does. LW1 tracks belief soundly
-         (X(P) progression + unit resolution), selects actions via H(P), and is
-         complete for width-1. We instead OPTIMISTICALLY DETERMINISE the sensing
-         (assume target found), plan a classical plan, execute until an
-         observation contradicts belief, then REPLAN (belief.py shadow_status ---
-         the determinise-and-replan / K-replanner school, not contingent/
-         belief-space solving).
-       LAYER (the key clarification): LW1 is NOT a peer of FastDownward --- it is
-       a POD->classical COMPILER that itself calls a classical engine (FF). The
-       component LW1 would replace is our hand-written Know-If/sense PDDL
-       encoding, not the inner search. So "use LW1" = swap our hand-rolled
-       translation for LW1's, while STILL needing PDDLStream for geometry and
-       making LW1's translation re-run against PDDLStream's per-iteration
-       re-grounding --- large integration cost, little gain. -> keep LW1 as named
-       lineage + method contrast; do NOT add it as a code dependency.
-       Do NOT repeat two tempting-but-wrong anti-LW1 arguments:
-         (a) "LW1 can't do continuous geometry" --- a non-distinction:
-             FastDownward can't either; geometry lives in the PDDLStream streams.
-         (b) "LW1 reintroduces the voxel blowup" --- false: the blowup is a
-             property of the DISCRETISATION (uniform grid vs Boxels), independent
-             of the planner; LW1 on the Boxel partition has the same small cell
-             count.
-       The one substantive distinction that survives is WIDTH: LW1's width-1
-       completeness is the right lens for when our optimism is safe --- width-1
-       occlusion (single hidden target, independent shadows) is effectively
-       complete under determinise-and-replan; interacting occluders exceed
-       width-1 and degrade it to sound-but-heuristic.
-Fix:   (1) related-work: in the POD-lineage subsection (#161), state the
-       model-vs-method split and position ours as compile-to-classical (LW1/CLG/
-       K-replanner) solved by optimistic determinisation + replanning (closest
-       precedent SS-Replan, #161). (2) methods: one sentence --- we adopt LW1's
-       K-literal translation but solve by determinise-and-replan, not contingent
-       solving. (3) discussion: state the width-1 boundary as the guarantee
-       envelope. Do NOT integrate cp2fsc-and-replanner as code.
-Refs:  background.tex:85; methods.tex:63; discussion.tex:257-261; belief.py;
-       emails and pdfs/SOURCES.md sec 3.6 + PDF #1; bonet2014flexible,
-       albore2009translation, bonet2011planning; #161 #162 #163 #165 #166.
-
-################################################################################
 #  ISSUE --- ADDED 2026-05-23  (FIGURES / CAPTIONS REVIEW)
 ################################################################################
 Surfaced 2026-05-23: the figures need a dedicated pass. Several either do not
@@ -246,19 +139,50 @@ Fix:   One-by-one walkthrough, each figure its own commit. Per figure: read the
 Refs:  introduction.tex; methods.tex; background.tex; results.tex;
        discussion.tex; thesis/graphics/sim/.
 
+################################################################################
+#  ISSUES --- ADDED 2026-05-23  (CITATION CONTENT ACCURACY --- HOW WE DESCRIBE CITED PAPERS)
+################################################################################
+Surfaced 2026-05-23: a content-level citation audit --- each related-work /
+background claim checked against the ACTUAL paper (TAMPURA also against its
+released code). Bibliographic metadata was corrected separately in
+references.bib (thesis-repo commit ddba33f); the metadata is now right. The
+issues below are MISREADINGS of what the cited papers say --- the description,
+not the citation, is wrong. OPEN.
+
+================================================================================
+#173  [T3] [NOW] [PARTIAL 2026-05-23: (a) J->K and (c) arXiv-v2 pin done; (b) results.tex:108 Table-II remains -- figures agent]  TAMPURA citation precision: "J plans" symbol + Table II attribution
+================================================================================
+Where: discussion.tex (Learn-Model / sparse-MDP sentence, "...by running J
+       deterministic FastDownward plans"); results.tex:108 (Table II numbers).
+What:  (a) In TAMPURA Algorithm 2 the per-iteration determinised-plan count is K
+       (loop k=1..K); J is the controller-SIMULATION count (Algorithm 3). "J
+       deterministic FastDownward plans" should be K. (b) results.tex:108 cites
+       "Partial Observability: 57 +/- 38 s, 20 trials" --- correct as TAMPURA's own
+       (Bayes-Optimistic + LAO*) config on the PO task (Task C), but Table II lists
+       ~8 method-rows for that task (e.g. 72 +/- 38 is the eps-greedy variant);
+       tighten the attribution. (c) the arXiv v2 HTML is a rough draft (author TODO
+       notes, broken Figure/Table LABEL refs) --- pin the arXiv version when citing
+       algorithm/table numbers.
+Fix:   "J" -> "K" (or restate without the symbol); attribute 57+/-38 to TAMPURA's
+       own config on the PO task; pin the cited arXiv version.
+Refs:  discussion.tex; results.tex:108; curtis2024partially.
+
 
 ================================================================================
 OPEN ISSUES
 ================================================================================
 
-4 issues remain open. Each issue's header carries its tier (T0-T3) and
-disposition ([NOW] / [THESIS] / [POLISH]). Resolved issues have been removed
-from this file --- see `git log --grep="Fix #"` and `git log --grep="audit:
-mark"` for their record.
+After the 2026-05-23 prose + citation-accuracy pass, 1 issue is fully open and
+1 is partial. Each issue's header carries its tier (T0-T3) and disposition.
+The eight issues resolved in that pass (#164 #166 #167 #169 #170 #171 #172 #174)
+have been removed; see `git log --grep="Fix #"` (thesis repo) and
+`git log --grep="audit:"` (this repo) for their record.
 
-Related work & framing: #166 #167
-Why-ours-is-better & caveats: #164  (added 2026-05-21)
-Figures: #168  (added 2026-05-23)
+OPEN:
+  Figures: #168  (every figure one-by-one; figures agent)
+PARTIAL:
+  #173  (a) "J"->"K" in discussion.tex and (c) arXiv-v2 pin in references.bib
+        landed; (b) results.tex:108 Table-II attribution remains --- figures agent.
 
 Gating: #141-#156 and #130 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
