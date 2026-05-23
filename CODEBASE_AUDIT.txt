@@ -154,7 +154,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #98 #100 #101                                                 #
+#  OPEN ISSUES — #98 #100 #101 #102                                            #
 #                                                                              #
 ################################################################################
 
@@ -607,14 +607,100 @@ Related:
 
 
 ================================================================================
-SUMMARY — STATUS (updated 2026-05-20)
+#102. SHADOW SPLIT INTO TWO SLABS PER OCCLUDER — REVISIT THE #72 TWO-SLAB CARVE
+================================================================================
+Status:   OPEN.  Filed 2026-05-23 from a GUI run (scene=default,
+          seed=0; logs/run_2026-05-23_15-35-34).  NO CODE CHANGE
+          YET — observation, cause, and tradeoff recorded for a
+          decision.
+Priority: TIER 2 — representation / clarity.  The planner runs
+          fine; this is about whether the shadow representation
+          should show one region per occluder or two, and it
+          feeds the thesis figure review (thesis_audit.md #168).
+Where:    shadow_calculator.py calculate_shadow_boxel, "Step 2.5:
+          Two-slab lateral tightening (audit #72)" (~lines
+          182-227); slab naming with __NN suffix in boxel_env.py
+          (~1399-1428).
+
+What:  Every occluder now shows TWO shadow boxels, not one — a
+       near slab (cube-bordering) and a far slab.  In the
+       seed=0 default scene this is the duplicated labels in the
+       GUI: shadow_of_blue_object, shadow_of_green_object,
+       shadow_of_orange_object each appear twice — one slab just
+       behind the occluder, one further back where a hidden
+       object could sit.  Reported as wrong; the ask is to go
+       back to ONE big shadow per occluder.
+
+       WHY / WHEN it changed:  audit #72 "option C two-slab carve"
+       (commit 6e3e8dd "Fix #72: two-slab carve to remove shadow
+       lateral overhang", DONE 2026-05-12; filed 3fbd6bc).  Before
+       #72 each occluder cast a single shadow AABB (full
+       s_min/s_max).  #72 splits it along the camera-depth axis
+       (dom_axis) at the midpoint:
+         - NEAR slab: clamped to the occluder's lateral (non-Z)
+           extent so it no longer overhangs;
+         - FAR slab: keeps the full hit-point spread where the
+           camera frustum has actually widened.
+       (Step 3 depth/obstacle splitting can divide further.)
+
+       WHY #72 did it:  rays from the occluder's 4 back corners
+       diverge outward from the camera, so a single shadow AABB
+       overhangs the occluder's back face by ~7-10 cm on the
+       camera-facing sides (wireframe "ears" beside the cube).
+       The code comment cites the original motivating run:
+       seed 779694423, random-pairs.
+
+       THE TRADEOFF (this is a decision, not a clean revert):
+       collapsing back to one shadow boxel REINTRODUCES exactly
+       the ~7-10 cm lateral overhang #72 removed, unless the
+       single slab is laterally clamped — but clamping the whole
+       shadow to the occluder footprint drops the genuinely-
+       occluded far region where the frustum widens.  Options:
+         (a) revert #72 — one shadow AABB per occluder, accept
+             the lateral overhang (what was asked);
+         (b) one slab, laterally clamped at all depths — tighter
+             but under-covers the true far shadow;
+         (c) keep the two-slab carve and instead fix the FIGURES
+             (thesis #168) so the split reads clearly.
+
+Fix:   NO CODE CHANGE in this pass — record only.  When actioned,
+       the change is localized to shadow_calculator.py Step 2.5
+       (collapse near+far back into the single s_min/s_max AABB
+       for option (a)).  Re-run scene=default seed=0 and confirm
+       one shadow boxel per occluder; re-shoot the affected #168
+       figures.
+
+Care:
+       (1) methods.tex currently DESCRIBES depth-splitting as
+           intended ("one or more shadow Boxels, split by depth");
+           reverting #72 makes that text partly stale —
+           reconcile if (a)/(b) is chosen.
+       (2) Two-slab interacts with compute_shadow_blockers and
+           per-slab sense raycasting; collapsing to one slab
+           changes how many (blocks_view_at) atoms / sense
+           targets emit.
+       (3) Behaviour is deterministic — every occluder gets two
+           slabs regardless of seed; seed=0 is just a concrete
+           repro (the screenshot run).
+
+Related:
+       #72 [DONE 2026-05-12] — the two-slab carve this revisits
+            (commit 6e3e8dd; git log --grep="#72").
+       thesis_audit.md #168 — figure/caption review (the shadow
+            figures that look wrong are this behaviour).
+       THESIS_NOTES.md §8 — stale shadow geometry after occluder
+            relocation (adjacent shadow-representation caveat).
+
+
+================================================================================
+SUMMARY — STATUS (updated 2026-05-23)
 ================================================================================
 Issue numbers are chronological (discovery order), NOT priority — follow the
 TIER labels.  Full bodies of closed issues are in git history
 (git log --grep="audit: mark #N") and the "RESOLVED / DONE ISSUES" section of
 archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 3 items (full bodies above):
+OPEN — 4 items (full bodies above):
   #98  TIER 2 — coarse-end resolution sweep DONE; RESULT recorded
        (resolution axis flat above auto_cell — auto_cell is a
        robust plateau).  Integration follow-ups split to #100/#101.
@@ -622,6 +708,10 @@ OPEN — 3 items (full bodies above):
        + combined 4-point resolution plot (#98 Step 4).
   #101 TIER 3 — eval-chapter resolution-axis writeup; thesis #121
        territory (#98 Step 5).
+  #102 TIER 2 — shadow two-slab carve (#72) splits every occluder's
+       shadow into near+far slabs (2 boxels/occluder); ask is one
+       shadow per occluder.  No code change yet — cause + overhang
+       tradeoff recorded; repro scene=default seed=0.
   TIER 0/1: zero open items.
 
 CLOSED (one-line; full detail in git / archive):
