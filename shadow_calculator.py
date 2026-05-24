@@ -63,7 +63,16 @@ class ShadowCalculator:
         cam_pos = self.camera_position
         obj_center = obj_boxel.center
         obj_extent = obj_boxel.extent
-        
+
+        # audit #103: only an object resting on the support surface casts a
+        # shadow.  One held in the gripper — or left mid-air by a failed /
+        # partial place — sits above the table and has no stable hidden
+        # region behind it, so it must not spawn shadows.  (The +0.01 m
+        # margin matches the on_surface contact tolerance the boxel
+        # producers use.)
+        if obj_center[2] - obj_extent[2] > self.table_surface_height + 0.01:
+            return []
+
         # --- Step 1: Determine Shadow Start (Back Face) ---
         # Direction from camera to object center
         cam_to_obj = obj_center - cam_pos
