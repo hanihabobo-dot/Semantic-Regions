@@ -87,8 +87,17 @@ def _row_variant(r: dict) -> str:
 # Unknown variants (e.g. future mbs values) fall back to matplotlib's
 # default colour cycle via the .get() callers.
 _VARIANT_COLOUR = {
-    "semantic":         "#1f77b4",   # blue
-    "semantic+mbs0.05": "#ff7f0e",   # orange
+    "semantic":         "#1f77b4",   # blue   (auto_cell)
+    "semantic+mbs0.05": "#ff7f0e",   # orange (sub-auto, #77)
+    # Audit #100 — coarse-end resolution variants (#98 sweep) need
+    # explicit colours, else they fall back to matplotlib's default
+    # cycle (blue, orange) and collide with semantic / mbs0.05.
+    # 1.5x auto_cell -> green, 2x auto_cell -> red, per goal:
+    # random-pairs {0.135, 0.18}, stack {0.09, 0.12}.
+    "semantic+mbs0.135": "#2ca02c",  # green  (random-pairs 1.5x)
+    "semantic+mbs0.18":  "#d62728",  # red    (random-pairs 2x)
+    "semantic+mbs0.09":  "#2ca02c",  # green  (stack 1.5x)
+    "semantic+mbs0.12":  "#d62728",  # red    (stack 2x)
     "uniform":          "#7f7f7f",   # grey
 }
 
@@ -1279,7 +1288,11 @@ def plot_solved_vs_time(grouped: Dict[tuple, tuple],
             return ("uniform", "#7f7f7f")
         if mbs is None:
             return ("semantic", "#1f77b4")
-        return (f"semantic+mbs{mbs}", "#ff7f0e")
+        # Audit #100 — consult the shared _VARIANT_COLOUR map so the
+        # coarse-end mbs arms get the same distinct colours here as in
+        # the line plots (was: every mbs arm hardcoded to one orange).
+        label = f"semantic+mbs{mbs}"
+        return (label, _VARIANT_COLOUR.get(label, "#ff7f0e"))
 
     for ax, goal in zip(axes, goals):
         for (baseline, mbs), (n_total, solved) in sorted(
