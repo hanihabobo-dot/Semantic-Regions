@@ -409,6 +409,57 @@ Care:  (1) Switching to holding changes the headline number -- state it
            the contradiction T1 set out to remove.
 
 ================================================================================
+T1 RESEARCH (2026-05-24, pre-edit) -- web-verified findings + user decision
+================================================================================
+Checked gaps (f) and (c/d) against arXiv:2403.10454 (HTML) before editing.
+Two assumptions in the T1 body above were WRONG; two sub-steps are KILLs.
+
+A. TIME-MEASURE MISMATCH (gap f -- the body ASSUMED both sides were
+   per-episode wall-clock; they are NOT).  TAMPURA Table II is PLANNING TIME
+   ONLY.  Caption verbatim: "Average and standard deviation of planning times
+   ... over 20 trials for each combination of environment and method."  So
+   57+-38 s EXCLUDES execution.  OURS (wall_clock_s, eval_runner.py:476) is
+   full per-episode wall-clock INCLUDING PyBullet execution + replanning; our
+   planning-only analogue is total_planning_time_s (holding semantic mean
+   7.78 s).  The cited figure thus compares our full-episode wall-clock to
+   their planning-only time -- different spans.
+   DECISION (user, 2026-05-24): DO BOTH.  Keep the wall-clock bar (informative
+   -- "even WITH execution we are in range") AND add a planning-time bar as
+   the fairer like-for-like vs their planning-only 57 s.  A planning-only
+   comparison favours us MORE (~7.8 s vs 57 s), so wall-clock is the
+   conservative measure -- present both, claim no winner.
+
+B. NO PUBLISHED SUCCESS RATE (gap c/d -- the 2026-05-23 "TAMPURA trades
+   success for speed" direction is UNVERIFIABLE).  TAMPURA reports no success
+   percentage anywhere.  Table I = "Average discounted return (gamma=0.98)";
+   Partial Observability, Bayes Optimistic + LAO* (their method) = 0.63+-0.30
+   -- a discounted return, NOT a success rate.  So there is NO success-rate
+   head-to-head.  Report OURS (holding: semantic 42.3 %, mbs0.05 46.3 %,
+   uniform 33.3 %) and state TAMPURA publishes only a discounted return; do
+   NOT assert who trades success for speed.
+
+C. KILL -- related-work SymK/FD.  related-work.tex has NO SymK / "Fast
+   Downward" / top-k wording (grep); its only TAMPURA mention is continuous-
+   pose sampling + Bayes3D.  Nothing to correct; discussion.tex:84-87 already
+   carries the correct SymK framing.
+
+D. KILL -- THESIS_NOTES "stale proposal-template path".  No "proposal-template"
+   string exists in THESIS_NOTES (grep).  §21.1/§21.2 are already corrected
+   (single-thread framing; "host not at a hardware disadvantage") and §21.2
+   already maps Partial-Obs -> "hidden-target / shadow-search" (the holding
+   analogue).  The stale find-and-tray-stack framing is in MEMORY
+   reference_tampura_perf.md:31, not THESIS_NOTES.  (§21 still gets a holding
+   note per feedback_update_notes.)
+
+E. CONFIRMED -- gap (f) our side.  wall_clock_s = full episode incl
+   execution+replanning (eval_runner.py:432-477), distinct from the smaller
+   total_planning_time_s.  The 14.0 s headline IS median wall_clock_s, n=119.
+
+HOLDING HEADLINE SOURCE (replaces f-a-t-s 14.0 s / n=119): holding semantic
+n_success=127, success 42.3 %, mean_plan_time 7.78 s; median wall_clock_s
+computes on plot regen (expected < 14.0 s).
+
+================================================================================
 T2. RUN OUR HOLDING PIPELINE ON A find_dice-EQUIVALENT SCENE  (post-thesis, gated)
 ================================================================================
 Priority: TIER 2 -- the genuine same-task number (our system solving
