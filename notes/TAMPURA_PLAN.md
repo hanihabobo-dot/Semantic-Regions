@@ -356,6 +356,43 @@ CAPABILITY FEASIBILITY (new -- the 2026-05-23 T2 assumed this away):
        test is a single feasibility run, arguably NOT gated (like the #66
        smoke runs), and de-risks the gated comparison.
 
+SMOKE-TEST RESULT (2026-05-24 -- feasibility CONFIRMED-WITH-CAVEATS; the
+       failure mode is NOT the one this block hypothesized).  Headless WSL,
+       --goal holding --baseline semantic.
+       (1) CAPABILITY EXISTS.  default scene, seed 0, SOLVES in one plan,
+           NO give-up: move->pick(green=occluder)->place(green,free_005)->
+           sense->pick(cyan=hidden target).  The planner DELIBERATELY
+           relocates an occluder to reveal, senses, picks.  So
+           discussion.tex:101's blanket "view-restoration = future work" is
+           OVER-BROAD for single-layer (finding only; prose is thesis-side,
+           do NOT edit under this empirical task).
+       (2) NAIVE single-occluder find_dice-equiv FAILS TO GROUND (not
+           gives up).  --scene random-pairs --n-occluders 1 -> NO PLAN, 0
+           skeletons at complexity 0-3.  ROOT CAUSE (exported problem +
+           code): sense needs (boxel_fits ?o ?region) over the SHADOW
+           (domain:162); for shadows that is gated by
+           test_target_can_hide_in_shadow (pddlstream_planner.py:531-534,
+           streams.py:407), which raycasts the target's 8 AABB corners over
+           a 3x3 grid and emits ONLY if a candidate is FULLY occluded.  A
+           lone small box (0.078 m) casts a shadow whose AABB (0.216 x
+           0.244 m) over-covers the true occlusion cone, so no candidate is
+           fully occluded -> boxel_fits(target,shadow) absent -> sense
+           unsatisfiable -> 0 skeletons.  SCENE-GEOMETRY/preset issue.
+       (3) DECOY OCCLUDER grounds but exposes a 2nd issue.  --scene
+           scalability --n-occluders 2 --n-targets 1 --n-hidden 1, seed 0:
+           GROUNDS + plans the correct pick->place->sense->pick, but
+           EXECUTION collides relocating the occluder into the decoy,
+           drop-verify fails 3x (#75/#80), replans, then stalls in
+           escalating-timeout sampling (#50/#62 slow-planning pathology).
+       VERDICT: T2 NOT plot-only, but the gating risk is DIFFERENT from
+       this block's hypothesis -- not "robust view-restoration dev work",
+       but (a) PRESET DESIGN: occluder sized/placed so the hide-test
+       RELIABLY passes (Care(2) hinted this) AND relocation has
+       collision-free room; (b) robustness vs the known execution-collision
+       + slow-replanning pathology in tight decoy scenes.  "2-4 days if
+       feasible as a preset" still holds; days go to preset geometry + run
+       robustness, not view-restoration.
+
 What:  C2 proposed transplanting TAMPURA's PyBullet scene (concave YCB
        cups + die + Panda + saved grasps) into our pipeline and
        "defining shadows over their occluders".  That is NOT moderate:
