@@ -154,7 +154,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #98 #100 #101 #104                                            #
+#  OPEN ISSUES — #98 #101 #104                                                 #
 #                                                                              #
 ################################################################################
 
@@ -473,84 +473,6 @@ Related:
 
 
 ================================================================================
-#100. MERGE COARSE-END SWEEP INTO sweep_anytime + COMBINED 4-POINT RESOLUTION PLOT
-================================================================================
-Status:   OPEN.  Filed 2026-05-22, split out of #98 Step 4.  The
-          #98 coarse-end sweep is complete and aggregated in its
-          own dir (eval_results/sweep_2026-05-20_13-38-28_-
-          scalability-vs-resolution/); this issue integrates it
-          with the existing sweep_anytime data so the chapter has
-          a single combined resolution curve.
-Priority: TIER 3 — data-integration / figure-generation.  No new
-          data; no correctness risk.  The finding (#98 RESULT) is
-          already locked in; this only produces the combined
-          figure.
-Where:    eval_results/sweep_anytime/cells/ (merge target);
-          eval_runner.aggregate(); eval_plotter.py (re-plot).
-Depends:  #98 [data done]; #99 [DONE] variant-key plotter (handles
-          the extra mbs series automatically).
-Effort:   ~0.5 day, mostly aggregate + plot wall-clock.
-
-What:  #98 ran SCALABILITY_VS_RESOLUTION (1800 cells, mbs in
-       {0.135, 0.18} random-pairs / {0.09, 0.12} stack) into a
-       separate sweep dir.  sweep_anytime holds the original 2700
-       cells (mbs in {auto=None, 0.05} + uniform).  The two share
-       the same 100-seed corpus and the same cell-tag scheme, and
-       the new mbs tags (_mbs0.135 / _mbs0.18 / _mbs0.09 /
-       _mbs0.12) do not collide with the existing tags.  Merging
-       gives the chapter one dataset with the FULL resolution
-       axis per goal: mbs0.05 / auto / 1.5x / 2x (4 points;
-       #97's sub-auto 5th point was deferred).
-
-Fix:   Step 1 — copy the 1800 cell dirs from
-                sweep_2026-05-20_13-38-28_scalability-vs-resolution/
-                cells/ into sweep_anytime/cells/ (no overwrite —
-                tags are distinct).
-       Step 2 — re-run eval_runner.aggregate(Path('eval_results/
-                sweep_anytime')) -> refreshed aggregated.csv
-                (2700 + 1800 = 4500 rows).
-       Step 3 — re-run eval_plotter.py on the merged
-                aggregated.csv.  The #99 variant-key grouper emits
-                a line per (variant, mbs); confirm the per-goal
-                legend stays readable with the extra series
-                (random-pairs goals gain 0.135 / 0.18; stack gains
-                0.09 / 0.12).  If 5-6 lines crowd the legend, use
-                the colour-gradient suggestion from #98 Step 4
-                (auto = blue, finer = green-ish, coarser =
-                orange-ish, uniform = gray).
-       Step 4 — visually check the regenerated PNGs (per
-                feedback_plot_regeneration: read before commit);
-                update EVAL_SUMMARY.md plot catalogue + add the
-                resolution-axis finding (#98 RESULT) as a new
-                section.
-       Step 5 — commit the merged data + plots; the matrix.json
-                in sweep_anytime records SCALABILITY_VS_TIME only,
-                so add a note that the dir now also holds the
-                SCALABILITY_VS_RESOLUTION cells.
-
-Care:
-       (1) matrix.json in sweep_anytime will under-report the
-           cell set after the merge (it lists the 2700 SVT cells,
-           not the 1800 SVR cells).  Either regenerate it as a
-           union or add a sibling matrix_resolution.json so the
-           provenance is not lost.
-       (2) The merge is one-way; keep the standalone
-           sweep_2026-05-20_..._scalability-vs-resolution/ dir as
-           the untouched source of record in case the merge needs
-           redoing.
-       (3) Stack rows still carry the #95 cell-tag misnaming;
-           the post-#95 _row_difficulty plotter already handles
-           it, but any ad-hoc parse must slice stack by
-           stack_height, not the occ token.
-
-Related:
-       #98 — the coarse-end sweep this integrates; RESULT recorded.
-       #99 [DONE] — variant-key plotter that makes the combined
-            plot work without code change.
-       #101 — the chapter writeup that consumes the combined plot.
-
-
-================================================================================
 #101. EVAL-CHAPTER RESOLUTION-AXIS WRITEUP (thesis #121 territory)
 ================================================================================
 Status:   OPEN.  Filed 2026-05-22, split out of #98 Step 5.
@@ -669,12 +591,10 @@ TIER labels.  Full bodies of closed issues are in git history
 (git log --grep="audit: mark #N") and the "RESOLVED / DONE ISSUES" section of
 archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 4 items (full bodies above):
+OPEN — 3 items (full bodies above):
   #98  TIER 2 — coarse-end resolution sweep DONE; RESULT recorded
        (resolution axis flat above auto_cell — auto_cell is a
        robust plateau).  Integration follow-ups split to #100/#101.
-  #100 TIER 3 — merge the 1800 coarse-end cells into sweep_anytime
-       + combined 4-point resolution plot (#98 Step 4).
   #101 TIER 3 — eval-chapter resolution-axis writeup; thesis #121
        territory (#98 Step 5).
   #104 TIER 3 — refresh the plots + data embedded in the thesis PDF
@@ -683,6 +603,15 @@ OPEN — 4 items (full bodies above):
   TIER 0/1: zero open items.
 
 CLOSED (one-line; full detail in git / archive):
+  #100 [2026-05-24] merge coarse-end resolution sweep into sweep_anytime
+       + combined 4-point resolution plot (#98 Step 4): 1800 SVR cells
+       (mbs 1.5x/2x auto_cell) merged into sweep_anytime/cells/
+       (aggregated.csv now 4500 rows); combined plots in the resolution/
+       subdir (kept separate so the #77 anytime figures are not
+       overwritten); eval_plotter gains green(1.5x)/red(2x) variant
+       colours so the 4 resolution arms stay distinct;
+       matrix_resolution.json preserves provenance; EVAL_SUMMARY §2.5 +
+       §4.7.  Finding: resolution axis flat above auto_cell.
   #103 [2026-05-24] mid-air occluders no longer cast shadows
        (shadow_calculator.py): calculate_shadow_boxel skips any object
        whose footprint sits above the support surface (held in the
