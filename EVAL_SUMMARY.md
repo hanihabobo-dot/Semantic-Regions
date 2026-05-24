@@ -13,6 +13,12 @@ plot inline as evidence.
 > audit #96 have already re-run clean and are folded into the 2534.
 > Three planner configurations × three goals × the 100-seed
 > audit-#77 corpus.
+>
+> **Update (2026-05-24, #100).**  The #98 coarse-end resolution sweep
+> (1800 semantic-only cells, mbs = 1.5× / 2× auto_cell) has been merged
+> into `cells/`; `aggregated.csv` now holds 4500 rows.  The merged
+> resolution plots live in `resolution/` (see §2.5, §4.7); the figures
+> in §2.1–§2.4 remain the original 2700-cell anytime story.
 
 ---
 
@@ -180,6 +186,23 @@ caveat from THESIS_NOTES §21.1 carried in the figure caption.
 | `summary_table.md` | Markdown — aggregate by `(goal, variant)` + per-difficulty breakdown |
 | `summary_table_aggregate.csv` | Same aggregate; spreadsheet-friendly |
 | `summary_table_per_occluders.csv` | Same per-difficulty; spreadsheet-friendly |
+
+### 2.5 Resolution-axis plots (`resolution/` subdir, #100)
+
+The #98 coarse-end sweep (1800 semantic-only cells, mbs = 1.5× / 2×
+auto_cell) was merged into this sweep's `cells/` (audit #100), so
+`aggregated.csv` now holds 4500 rows.  Re-plotting in place would
+overwrite the anytime figures above with a busier 5-line layout, so
+the merged plots live in their own subdir,
+`eval_results/sweep_anytime/resolution/`, and §2.1–§2.4 stay the
+canonical #77 three-variant story.
+
+`resolution/` holds the same plot set regenerated from all 4500 cells;
+each per-goal line plot now carries the full resolution axis as
+separate series — random-pairs: `semantic` (auto), `+mbs0.05`,
+`+mbs0.135` (1.5×), `+mbs0.18` (2×), `uniform`; stack: the same with
+`+mbs0.09` / `+mbs0.12`.  Headline figure:
+`resolution/success_rate_vs_n_occluders__<goal>.png` (see §4.7).
 
 ---
 
@@ -383,6 +406,35 @@ the right ballpark — same order of magnitude as a peer-reviewed
 TAMPURA Partial Observability run, with smaller variance over
 seeds.
 
+### 4.7 The resolution axis is flat above auto_cell (#98 / #100)
+
+**Claim.**  Holding `min_boxel_size` strictly ABOVE auto_cell (1.5×,
+2×) does not materially degrade success.  vs the auto_cell baseline:
+holding 42.3% → 40.3% (1.5×) → 45.7% (2×); find-and-tray-stack
+39.8% → 35.3% → 35.3%; stack 61.3% at every point (identical
+seed-for-seed, 184/300).  Partition shrinks 30–40% as mbs grows
+(holding total_boxels 35 → 20, init_facts 304 → 189) and planning is
+marginally faster, but the expected "coarser hurts" cross-over never
+appears in the 1×–2× range.
+
+**Evidence.**
+
+![](eval_results/sweep_anytime/resolution/success_rate_vs_n_occluders__holding.png)
+
+Green (1.5×) and red (2×) track blue (auto) and orange (mbs0.05)
+within seed noise; only grey (uniform) sits apart.  On stack the four
+semantic arms coincide exactly, so they overlay as one line (red on
+top).  `resolution/init_state_facts_vs_n_occluders__*.png` shows the
+partition-shrink (init facts roughly halve from auto to 2×).
+
+**Interpretation.**  With §4.3's below-auto null (mbs0.05 == auto), the
+adaptive partition is INSENSITIVE to the leaf-size knob across a ~4×
+range (0.05 → 0.18 m on random-pairs).  auto_cell is not a tuned magic
+number — it sits in a flat-optimal plateau, so the audit-#67 heuristic
+(largest visible AABB + 1 cm) is a robust default.  Positive
+robustness finding; feeds the Discussion (thesis #125 / #140), eval
+chapter tracked as #101.
+
 ---
 
 ## 5. Caveats and open questions
@@ -393,10 +445,11 @@ seeds.
    resolution wins under fixed budget" is unsupported but not
    refuted.
 
-2. **Coarse-end resolution unexplored (audit #98).**  We've swept
-   `min_boxel_size ∈ {auto, 5 cm}` where 5 cm ≤ auto_cell for both
-   scenes.  The coarse end (1.5×, 2× auto_cell) hasn't been tried.
-   May reveal a sweet-spot or a graceful degradation curve.
+2. **Coarse-end resolution swept and flat (audit #98/#100).**  The
+   coarse end (1.5×, 2× auto_cell) has now been swept (1800 cells,
+   merged here per #100) and is flat — see §4.7.  No sweet-spot or
+   degradation cliff in the 1×–2× range; auto_cell sits in a
+   flat-optimal plateau.
 
 3. **Stack-uniform-h=4 is sample-of-one on planning time
    (533.3 s).**  Only 1 of 100 seeds succeeded.  Mean is meaningless;
@@ -477,6 +530,10 @@ summary_table_per_occluders.csv
   scenes (§ 4.3) is the honest disclosure that satisfies #97
   Care(3); the scene-design work is not pursued for thesis
   completion.
-- **#98** [OPEN, TIER 2] — coarse-end resolution sweep.
+- **#98** [DATA DONE, TIER 2] — coarse-end resolution sweep; RESULT
+  recorded, 1800 cells merged here via #100.  See §4.7.
 - **#99** [CLOSED] — variant-keyed plotter (every figure in § 2
   reflects the post-#99 layout).
+- **#100** [DONE 2026-05-24] — merged #98's coarse-end cells + combined
+  4-point resolution plots (`resolution/` subdir).
+- **#101** [OPEN] — eval-chapter resolution-axis writeup (thesis #121).
