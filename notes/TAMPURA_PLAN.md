@@ -1,37 +1,101 @@
 # TAMPURA Plan / Comparison
 
 Created: 2026-05-12 (later)
+Revised: 2026-05-23 - deep review.  The 2026-05-21 AI-drafted C1-C5
+         items were checked against the actual TAMPURA source
+         (../tampura, ../tampura_environments) and our own code.
+         Several claims were wrong or overstated (see "Corrections").
+         Restructured around ONE goal: a same-task comparison on the
+         missing-dice (find_dice) problem.  Items not serving that
+         goal (old C3 hybrid, C5 nested-occlusion) moved to a marked
+         tail.
 
-This file is the dedicated home for TAMPURA-related issues and the
-TAMPURA comparison plan.  Collected here first, planned afterwards.
+Purpose: dedicated home for TAMPURA-related issues and the find_dice
+         comparison plan.
 
-Background:
-- TAMPURA is Curtis et al. 2024 (find_dice/env.py — voxel-grid belief,
-  continuous-pose placement, offline Learn-Model).
-- Memory notes (see ~/.claude/projects/.../memory/reference_tampura_*.md)
-  capture grid resolution (15 mm visibility belief) and hardware
-  baseline (Xeon Gold 6248, 9 GB, no GPU; 21-129 s/episode).
-- THESIS_NOTES §21 captures the TAMPURA hardware / planning-times
-  contextualisation used in eval-chapter Plot 9 (TAMPURA comparison bar).
+GOAL (scope - read first)
+-------------------------
+We compare ONLY on the missing-dice problem (TAMPURA's find_dice).
+find_dice = a die hidden under one of 1-5 cups; goal = pick up the die
+and return home.  Its task analogue in OUR system is the `holding`
+goal (find a hidden target, pick/hold it) -- NOT find-and-tray-stack.
+Everything below is scoped to producing an honest same-task
+comparison; anything else is out of scope (see the tail).
 
-Currently-open TAMPURA work:
-- #66 (uniform/TAMPURA baselines — place fails when object > cell).
-  Plan A [DONE on main 2026-05-09] (auto-tune cell size); Plan C
-  [PENDING on audit-64-tampura-binary-grid] (continuous-pose place,
-  the actual TAMPURA approach).
+CORRECTIONS (verified against source this review; supersede the
+2026-05-21 claims)
+------------------
+- PLANNER.  TAMPURA uses SymK, which is a TOP-K FORK of Fast Downward
+  (tampura/solvers/symk.py shells out to third_party/symk/
+  fast-downward.py with `--search symk-<dir>(...)`).  So "SymK, not
+  FastDownward" is a false split: SymK enumerates K skeletons via an
+  FD derivative; we use vanilla FD (single plan) inside PDDLStream.
+  Both descend from FD.  (Memory reference_tampura_perf.md says
+  "FastDownward in both systems" -- also imprecise; fix it + the
+  thesis related-work wording.)
+- SINGLE-PROCESS.  TAMPURA's planner is single-process (paper Algs 2
+  & 3 are sequential nested loops; no parallelism).  It ran on a Xeon
+  Gold 6248 but used ONE core.  So the thesis caption "20-core Xeon
+  vs our 8-core" overstates the gap -- the real axis is single-core
+  clock, and the gap is small/uncertain.
+- find_dice MECHANICS (tampura_environments/find_dice/env.py,
+  env_generator.py).  The die is placed AT a cup's XY, under an
+  upside-down cup; a scene is saved only when the die is NOT
+  camera-visible; 1-5 cups, one hides the die, the rest are decoys
+  -- SINGLE-LAYER occlusion.  Goal = holding(die) AND at-home
+  (env.py:1004).  Placement is continuous-pose, view-blind
+  (placement_sample; no visibility check).  The 15 mm voxels live in
+  the belief only -- never planner predicates (the abstract belief
+  emits only known-pose/holding/is-target/moved/at-home).
+- OCCLUSION MODE differs.  find_dice = a cup COVERING the die
+  (containment; revealed by MOVING the cup -- the look action's
+  success depends on moved(occluder)).  Ours = a LATERAL shadow
+  behind a box occluder (shadow_calculator casts AABB shadows from
+  the camera).  This bounds what "same problem" can mean -- see the
+  occlusion-mode caveat below.
+- CHECKOUT STATE.  ../tampura_environments is a sparse checkout; only
+  find_dice is on disk.  panda_utils (pb_utils, panda_env_utils,
+  robot, voxel_utils, placement_sample -- ALL imported by find_dice)
+  is NOT present, so find_dice cannot run as-is.  ("only find_dice +
+  voxel_utils checked out" was wrong: voxel_utils is a module inside
+  panda_utils.)  Read any tracked file without materialising it via
+  `git -C ../tampura_environments show HEAD:<path>`.
+- THESIS LOCATION.  The proposal migrated to thesis/ (see
+  proposal-template_PRE_MIGRATION.pdf).  The comparison lives in
+  thesis/chapters/results.tex `\subsection{Comparison with TAMPURA}`
+  (label subsec:tampura, figure fig:tampura) -- NOT "proposal-template"
+  / "eval-chapter Plot 9".  There is no thesis_audit #159 (the
+  2026-05-21 draft invented it).
+
+GOVERNING GATE (supervisor, 2026-05-06)
+---------------------------------------
+"Comparison with lw1 and tampura only after finishing the thesis if I
+have >= 1 week free."  This gates empirical RUNS (T2, T3 below).  It
+does NOT gate fixing the honesty of the ALREADY-CITED comparison
+(T1) -- that is thesis-now editing of an existing figure/section.
+
+Currently-open TAMPURA work
+---------------------------
+- #66 (place fails when object > cell).  Plan A [DONE on main
+  2026-05-09]; Plan C [PENDING on audit-64-tampura-binary-grid].
+  SCOPE NOTE: #66 Plan C is an INTERNAL uniform-baseline correctness
+  fix (continuous-pose place for the uniform ablation).  It is NOT the
+  find_dice comparison and is not required for it -- the comparison
+  uses our SEMANTIC system.  The #66 body below is UNCHANGED: it is a
+  shared-across-branches artifact (see its own Care note), so it must
+  not be edited on this branch.
+- T1 -- honesty fixes to the cited fig:tampura comparison (thesis-now).
+- T2 -- run our holding pipeline on a find_dice-equivalent scene.
+- T3 -- stand up & run real TAMPURA find_dice on our hardware.
+- CAVEAT -- occlusion-mode mismatch (comparability boundary).
 
 Related (closed, in archive):
-- #10 [DONE 2026-05-08] — uniform voxelization baseline (free-space-
+- #10 [DONE 2026-05-08] -- uniform voxelization baseline (free-space-
   only swap).
-- #64 [DONE 2026-05-08] — TAMPURA-faithful GUI framing.
+- #64 [DONE 2026-05-08] -- TAMPURA-faithful GUI framing.
 
-Related FOR LATER (still in CODEBASE_AUDIT.txt FOR LATER block):
-- "LW1 / TAMPURA empirical comparison" — supervisor direction
-  2026-05-06: only after thesis writing if >=1 week free time.
-
-Next step (NOT NOW): once TAMPURA-related issues are collected here,
-draft a unified TAMPURA plan (Plan C completion + empirical comparison
-scoping + thesis Plot 9 inputs).
+Tail (NOT the find_dice comparison): old C3 (hybrid) and C5 (nested
+occlusion) are preserved at the bottom under their own banner.
 ================================================================================
 #66. UNIFORM/TAMPURA BASELINES — PLACE FAILS WHEN OBJECT > CELL (split fix)
 ================================================================================
@@ -176,30 +240,183 @@ Related: #50 — planner perf investigation.  Plan A's cell-size
 
 
 ================================================================================
-ITEMS ADDED 2026-05-21 (working-session comparison & hybrid ideas)
+COMPARISON ITEMS (restructured 2026-05-23; supersede the 2026-05-21 C1/C2/C4)
 ================================================================================
-From a 2026-05-21 session reading TAMPURA's actual source. All "FOR LATER"
-unless the supervisor reprioritises (empirical comparison is post-thesis per
-2026-05-06). Verified facts this session: TAMPURA uses SymK (not FastDownward)
-+ LAO*; placement is view-blind continuous sampling (placement_sample, no
-visibility check); find_dice hides the die UNDER ONE CUP among 1-5 cups
-(single-layer occlusion, env_generator.py); voxels are a dict, never planner
-predicates.
+Old C1 (run TAMPURA on our HW) -> T3.  Old C2 (run ours on their
+scene) -> T2, re-scoped to task-replication.  Old C4 (keep source
+local) -> folded into T3 prerequisites.  Old C3/C5 -> tail (not the
+comparison).  All factual claims here verified against source this
+review (see CORRECTIONS at top).
 
-C1. HARDWARE-MATCH TAMPURA'S NUMBER (cheapest, ~1-2 days, highest value/effort).
-    Stand up tampura + tampura_environments and run find_dice on OUR 8-core CPU;
-    record per-episode wall-clock. Converts the thesis bar's 57+-38 s from
-    "their 20-core Xeon" to "our hardware", killing the hardware caveat in
-    fig:tampura / #159. No integration -- just run their released code. Risk:
-    dependency/version rot + the Windows checkout block (their repo commits a
-    `*`-named file -> build on WSL/Linux). find_dice's goal (hold a hidden die +
-    at-home) ~= our `holding` task, so it's the right comparator.
+================================================================================
+T1. HONEST-IFY THE CITED fig:tampura COMPARISON  (thesis-now, NOT gated)
+================================================================================
+Priority: TIER 1 of the comparison -- cheapest, highest value, and the
+          only item not blocked by the supervisor gate.  It fixes a
+          comparison the thesis ALREADY makes; needs no TAMPURA run.
+Where:    eval_plotter.py plot_tampura_wallclock_comparison (goal
+          filter ~line 1007; caption ~1073-1078);
+          thesis/chapters/results.tex subsec:tampura (~206-216);
+          thesis/chapters/related-work.tex (SymK/FD wording);
+          thesis/chapters/discussion.tex (architectural framing);
+          THESIS_NOTES §21.1 (hardware caveat; also fix the stale
+          proposal-template path there).
+Depends:  None.  Holding wall-clock already exists in the SAME eval
+          rows the plot reads -- it is one goal-filter away.
 
-C2. RUN OURS ON THEIR SCENE (moderate). Extract the find_dice PyBullet scene
-    (cups + hidden die; env_generator.py), point our pipeline at it, define
-    shadows over their occluders, re-tune hardcoded constants. Reuses our whole
-    planner. Easier than the reverse (theirs-on-ours), because TAMPURA's cost is
-    its controller/abstraction formalism, paid regardless of scene.
+What:  fig:tampura currently compares OUR find-and-tray-stack
+       (median 14.0 s) against TAMPURA's find_dice / Partial-
+       Observability (mean 57+-38 s) and calls find-and-tray-stack
+       "the closest analogue".  It is not: find_dice = find die +
+       pick + home = our `holding` task; find-and-tray-stack does
+       strictly MORE (trays + stacking).  The 2026-05-21 draft's own
+       C1 said find_dice ~ holding, contradicting the figure.  Four
+       honesty gaps:
+       (a) TASK: compares the wrong task (f-a-t-s, not holding).
+       (b) STATISTIC: ours = median + IQR, success-only; theirs =
+           mean +- std over ALL 20 anytime trials.  Mixed statistics.
+       (c) SUCCESS RATE absent: TAMPURA is anytime (trades success for
+           speed).  Wall-clock without success rate is misleading.
+       (d) HARDWARE wording: "20-core Xeon vs 8-core" implies a
+           parallel edge for them; TAMPURA is single-process (1 core).
+       Plus (e) related-work calls SymK "not FastDownward" -- it is an
+       FD top-k fork.
+
+Fix:   - Switch the plot's goal filter to `holding` (or add a holding
+         series alongside f-a-t-s and label both).  Re-derive the
+         delta from holding rows -- it WILL change (holding does less
+         work than f-a-t-s), so do NOT carry over "~4x" / 14.0 s.
+       - Report ours as mean +- std too, or annotate the
+         median-vs-mean and success-only-vs-all-trials mismatch
+         explicitly in caption + THESIS_NOTES.
+       - Add success rate (ours from eval; TAMPURA from Table II) as a
+         second panel/bar or an annotation.
+       - Reword the hardware caveat: single-process on one Xeon core;
+         drop the "20-core" implication.
+       - Correct SymK/FD in related-work (top-k FD fork) + memory
+         reference_tampura_perf.md.
+       - State NO speed winner; keep the architectural framing
+         (offline Learn-Model vs online stream sampling) the thesis
+         already has.
+Effort: ~0.5-1 day, mostly plot + prose + caption.  Re-read the
+        regenerated PNG before commit (feedback_plot_regeneration).
+Care:  (1) Switching to holding changes the headline number -- state
+           it from data, do not reuse 14.0 s / 4x.
+       (2) Keep success-only vs all-trials explicit: TAMPURA's 57 s is
+           over all 20 trials (incl. failures); ours is success-only.
+       (3) THESIS_NOTES §21.1 path is stale (proposal-template) -- fix
+           while there.
+
+================================================================================
+T2. RUN OUR HOLDING PIPELINE ON A find_dice-EQUIVALENT SCENE  (post-thesis, gated)
+================================================================================
+Priority: TIER 2 -- the genuine same-task number (our system solving
+          the missing-dice problem on our hardware).  Gated by the
+          supervisor rule.  Realistic replacement for the 2026-05-21
+          "run ours on their scene" (C2), which understated the work.
+Where:    boxel_env.py scene generators (scalability_scene ~271,
+          random_pairs_scene ~344 already parametrize n_occluders and
+          a hidden count); eval_runner.py MATRIX_PRESETS; --goal
+          holding.
+Depends:  The occlusion-mode caveat (below).  NOT #66 Plan C (that is
+          the uniform ablation, not this).
+
+What:  C2 proposed transplanting TAMPURA's PyBullet scene (concave YCB
+       cups + die + Panda + saved grasps) into our pipeline and
+       "defining shadows over their occluders".  That is NOT moderate:
+       their occlusion is CONTAINMENT (cup over die), ours is LATERAL
+       shadow; concave cups, a different robot, and grasp generation
+       all fight our box-occluder/shadow model.
+       The realistic path replicates the find_dice TASK STRUCTURE in
+       OUR framework: 1 small "die" target, 1-5 box "cup" occluders,
+       single-layer (target hidden by exactly one occluder, the rest
+       decoys), goal = holding.  Our scene generators already take
+       n_occluders and a hidden count, so this is a new PRESET
+       (n_hidden = 1, n_occluders in [1,5], die-sized target), not a
+       transplant.
+
+Fix:   - Add a `find_dice_equiv` scene preset (single hidden die-sized
+         target; 1-5 box occluders; exactly one occluding).
+       - Run --goal holding over seeds; collect wall-clock + success.
+       - Plot vs TAMPURA's published 57+-38 s (and vs T3 if it lands):
+         same task, our hardware.
+Effort: ~2-4 days (preset + smoke + full run + plot).  Gated.
+Care:  (1) Single-layer ONLY -- match find_dice; nested occlusion is a
+           DIFFERENT experiment (tail, old C5).
+       (2) Target ~ a die (~2-4 cm), occluders ~ cup-scale, so
+           auto_cell stays comparable to the default scene.
+       (3) Document the occlusion-mode reinterpretation (caveat).
+
+================================================================================
+T3. STAND UP & RUN REAL TAMPURA find_dice ON OUR HARDWARE  (post-thesis, gated, optional)
+================================================================================
+Priority: TIER 3 -- pins the hardware axis (TAMPURA measured on our HW
+          removes the cross-hardware caveat, making T2-vs-T3 same-task
+          AND same-hardware).  Hardest item, highest bring-up risk.
+          OPTIONAL: if it will not build, the published 57+-38 s stands.
+Where:    ../tampura (planner), ../tampura_environments (find_dice).
+Depends:  T2 (so there is a same-task number to compare against on our
+          HW).
+
+What:  The 2026-05-21 C1 called this "~1-2 days, just run their
+       released code" and "highest value/effort".  Both are wrong:
+       - VALUE: it only addresses the HARDWARE caveat, which is small
+         (TAMPURA is single-process).  The dominant caveat was
+         cross-TASK, fixed by T1/T2 -- so T3 is LOWER value than the
+         draft claimed, not highest.
+       - PREREQUISITES (omitted by C1):
+         * checkout panda_utils + models/srl, not just find_dice
+           (find_dice imports panda_utils for everything).  The fuller
+           checkout is blocked on Windows by an illegal-filename file
+           (`rrt*.png`) -- do it on WSL/Linux or via a renamed fork.
+         * build SymK (third_party/symk -- a Fast Downward C++ build)
+           on WSL/Linux.
+         * saved grasps (GRASP_MODE="saved"), YCB assets, deps
+           (pybullet, scipy, ...).
+Fix:   - Bring up on WSL/Linux; verify find_dice runs headless on the
+         released problems/*.json scenes.
+       - Record per-episode wall-clock + success on our 8-core CPU.
+       - Plot vs T2 (our holding on find_dice-equiv): same task, same
+         hardware.
+       - TIMEBOX (~2 days).  If it does not build, FALL BACK to the
+         published number and document the attempt.
+       - Source hygiene (old C4): keep ../tampura + the find_dice
+         slice local; read any uncheckout file via
+         `git -C ../tampura_environments show HEAD:<path>`.  Cite the
+         planner-side definitions -- look/pick/place controllers
+         (find_dice/env.py), MDP solver (solvers/mdp_solver.py,
+         lao_star.py), SymK glue (solvers/symk.py,
+         policies/{tampura_policy,contingent_policy}.py).
+Effort: days, real risk of not running (version rot).  Gated + optional.
+Care:  (1) find_dice ~ our holding -- pair their find_dice with our
+           holding-on-find_dice-equiv (T2), not f-a-t-s.
+       (2) Single-process: per-core clock is what matters, not cores.
+
+================================================================================
+CAVEAT. OCCLUSION-MODE MISMATCH (comparability boundary for T2/T3)
+================================================================================
+find_dice occludes by CONTAINMENT: the die is placed at a cup's XY,
+under an upside-down cup; the camera cannot see it; it is revealed by
+MOVING the cup (the look action's success depends on moved(occluder)).
+Our system occludes by LATERAL SHADOW: an occluder casts an AABB
+shadow region behind it from the camera viewpoint, and a hidden target
+sits in that shadow (sensed by raycasting, or revealed by relocating
+the occluder).
+Implication: there is no pixel-faithful "same scene" -- a literal
+transplant is geometrically awkward.  The defensible comparison is on
+the TASK ("a die hidden by an occluder; find it, pick it, go home"),
+realised in each system's native occlusion model.  State this boundary
+wherever the comparison appears (results.tex / discussion.tex); it is
+the honest scope of "we compared on find_dice".
+
+================================================================================
+TAIL -- SEPARATE EXPERIMENTS, NOT THE find_dice COMPARISON
+================================================================================
+Kept for the record (moved here 2026-05-23).  Neither is the
+missing-dice comparison: C3 is a research direction; C5 is our OWN
+distinguishing experiment (the OPPOSITE of find_dice -- find_dice is
+single-layer).  The "C1/C2" inside C5 refer to the OLD numbering (now
+T3/T2).  Text preserved verbatim.
 
 C3. TAMPURA x BOXEL HYBRID (research idea -- test or implement?). TAMPURA's
     voxels only *compute the probability* that look flips known-pose(die); a
@@ -210,16 +427,6 @@ C3. TAMPURA x BOXEL HYBRID (research idea -- test or implement?). TAMPURA's
     for place-grounding and symbolic occlusion). Prototype and measure (cells,
     planning time, success) vs pure-semantic and pure-uniform. Open question:
     does the hybrid beat both?
-
-C4. KEEP TAMPURA SOURCE LOCAL FOR REFERENCE (comparison hygiene). Planner repo
-    cloned at ../tampura; tampura_environments cloned but only find_dice +
-    voxel_utils checked out (Windows-illegal `rrt*.png` blocks full checkout --
-    use WSL/Linux or a fork that renames it). For the comparison, keep the
-    planner-side definitions we cite -- look/pick/place controllers
-    (find_dice/env.py), MDP solver (solvers/mdp_solver.py, lao_star.py), SymK
-    glue (solvers/symk.py, policies/{tampura_policy,contingent_policy}.py,
-    policy_search.py). Read any file without a full checkout via
-    `git -C ../tampura_environments show HEAD:<path>`.
 
 C5. NESTED-OCCLUSION TEST (our distinguishing experiment -- "this is our test").
     Multi-blocker / nested occlusion is where first-class symbolic occlusion
