@@ -9,6 +9,14 @@ Revised: 2026-05-23 - deep review.  The 2026-05-21 AI-drafted C1-C5
          missing-dice (find_dice) problem.  Items not serving that
          goal (old C3 hybrid, C5 nested-occlusion) moved to a marked
          tail.
+Revised: 2026-05-24 - second review.  Re-verified every 2026-05-23
+         CORRECTION against source (all accurate -- see "SECOND REVIEW")
+         and did a realism pass.  T1 was missing abstract.tex and the
+         thesis's OWN self-contradiction; the holding==find_dice
+         equivalence and the "TAMPURA trades success for speed" framing
+         were overstated; T2 assumed a move-to-reveal capability the
+         thesis flags as future work; the CAVEAT mis-stated our reveal
+         mechanism.  Expanded T1/T2/CAVEAT accordingly.
 
 Purpose: dedicated home for TAMPURA-related issues and the find_dice
          comparison plan.
@@ -66,6 +74,51 @@ CORRECTIONS (verified against source this review; supersede the
   (label subsec:tampura, figure fig:tampura) -- NOT "proposal-template"
   / "eval-chapter Plot 9".  There is no thesis_audit #159 (the
   2026-05-21 draft invented it).
+
+SECOND REVIEW (2026-05-24) -- verification + realism pass
+---------------------------------------------------------
+VERDICT: the 2026-05-23 CORRECTIONS were re-checked against source and
+are ACCURATE.  Confirmed on disk (real paths nest one level:
+tampura/tampura/..., tampura_environments/tampura_environments/...; the
+shorthand below drops the outer dir, as the rest of this file does):
+  * SymK = top-k FD fork -- solvers/symk.py:69 builds
+    `symk-<dir>(...,plan_selection=...(num_plans=num_skeletons))`
+    shelling out to ../third_party/symk/fast-downward.py.
+  * find_dice goal = holding(die) AND at-home -- env.py:1004 verbatim.
+  * 15 mm voxels stay in the belief -- GRID_RESOLUTION=0.015 (env.py:36);
+    abstract() emits only known-pose/holding/at-grasp/is-target/moved/
+    at-home (env.py:306-321); no predicate is voxel-indexed.
+  * look success depends on moved(occluder) -- env.py:966
+    `depends=[Atom("moved",["?o2"])]` (comment "looking behind ?o2");
+    place sets moved (env.py:955).  Reveal == relocate occluder.
+  * continuous-pose place -- place-sample certifies a pose, env.py:913-919.
+  * 1-5 cups / die-under-a-cup / save-only-when-hidden -- env_generator.py
+    :85, :126-128, :168-180.
+  * single-process -- no multiprocessing/Pool/threading in the planner
+    (only the DQN baseline + the SymK C++ *build* touch cpu_count).
+  * thesis location -- results.tex:206 subsec:tampura; no thesis_audit
+    #159 (grep absent).
+  Minor: "die at cup's XY" is the cup's full pose point
+  (env_generator.py:127, occlusion outcome identical); "view-blind
+  placement_sample" lives in the un-checked-out panda_utils, so it is
+  inferred (and independently asserted by discussion.tex:101), not read.
+
+WHAT THIS PASS ADDS (the 2026-05-23 plan was accurate but optimistic):
+  1. T1 missed abstract.tex (carries the headline) AND the fact that the
+     thesis ALREADY contradicts itself: the figure/abstract/results call
+     find-and-tray-stack "the closest analogue", but discussion.tex:101
+     already calls TAMPURA's Find Die "the closest analogue to our
+     setting".  T1 is contradiction-RESOLUTION.
+  2. holding==find_dice was overstated -- our holding goal is (holding ?o)
+     ONLY; find_dice adds at-home (a final go-home).  And the
+     planning-vs-episode time-measure parity was left unstated.
+  3. The "TAMPURA trades success for speed" direction is UNVERIFIED -- our
+     own holding success is only ~42 %; need TAMPURA's Table II number.
+  4. T2 assumed our system can solve a find_dice-equiv AT ALL; deliberate
+     view-restoration is flagged "future work" (discussion.tex:101) and
+     bounded by a give-up rule.  Feasibility must be smoke-tested first.
+  5. The CAVEAT mis-stated our reveal mechanism (we cannot raycast a
+     view-blocked region; reveal requires relocation, like find_dice).
 
 GOVERNING GATE (supervisor, 2026-05-06)
 ---------------------------------------
@@ -252,60 +305,108 @@ review (see CORRECTIONS at top).
 T1. HONEST-IFY THE CITED fig:tampura COMPARISON  (thesis-now, NOT gated)
 ================================================================================
 Priority: TIER 1 of the comparison -- cheapest, highest value, and the
-          only item not blocked by the supervisor gate.  It fixes a
-          comparison the thesis ALREADY makes; needs no TAMPURA run.
-Where:    eval_plotter.py plot_tampura_wallclock_comparison (goal
-          filter ~line 1007; caption ~1073-1078);
-          thesis/chapters/results.tex subsec:tampura (~206-216);
+          only item not blocked by the supervisor gate.  It fixes (and
+          RESOLVES a self-contradiction in) a comparison the thesis
+          ALREADY makes; needs no TAMPURA run.
+Where:    eval_plotter.py plot_tampura_wallclock_comparison (goal filter
+          line 1007 `r.get("goal") != "find-and-tray-stack"`; caption
+          lines 1073-1078 -- STILL says "20-core Xeon ... ours 8-core");
+          thesis/chapters/results.tex subsec:tampura (209-216: "the
+          closest analogue", 14.0 s, n=119, ~4x);
+          thesis/chapters/abstract.tex (14-17: "closest analogue ...
+          14.0 s vs 57 s" -- THE HEADLINE; MISSED by the 2026-05-23 draft);
+          thesis/chapters/discussion.tex (70-94 still uses 14.0 s on
+          f-a-t-s; 101 ALREADY calls find_dice the closest analogue;
+          158 ALREADY has the single-threaded/clock framing);
           thesis/chapters/related-work.tex (SymK/FD wording);
-          thesis/chapters/discussion.tex (architectural framing);
-          THESIS_NOTES §21.1 (hardware caveat; also fix the stale
+          THESIS_NOTES §21.1 (hardware caveat; fix the stale
           proposal-template path there).
-Depends:  None.  Holding wall-clock already exists in the SAME eval
-          rows the plot reads -- it is one goal-filter away.
+Depends:  None.  Holding wall-clock already exists in the SAME eval rows
+          the plot reads -- VERIFIED: sweep_anytime has holding rows
+          (semantic n_success=127; summary_table_aggregate.csv).  The
+          core fix is changing the line-1007 filter string.
 
-What:  fig:tampura currently compares OUR find-and-tray-stack
-       (median 14.0 s) against TAMPURA's find_dice / Partial-
-       Observability (mean 57+-38 s) and calls find-and-tray-stack
-       "the closest analogue".  It is not: find_dice = find die +
-       pick + home = our `holding` task; find-and-tray-stack does
-       strictly MORE (trays + stacking).  The 2026-05-21 draft's own
-       C1 said find_dice ~ holding, contradicting the figure.  Four
-       honesty gaps:
-       (a) TASK: compares the wrong task (f-a-t-s, not holding).
+What:  THE THESIS CONTRADICTS ITSELF.  fig:tampura + results.tex:209 +
+       abstract.tex:14-17 + discussion.tex:70-94 compare OUR find-and-
+       tray-stack (median 14.0 s, n=119) against TAMPURA find_dice (mean
+       57+-38 s) and call f-a-t-s "the closest analogue".  But
+       discussion.tex:101 ALREADY states the opposite -- TAMPURA's "Find
+       Die ... the closest analogue to our setting" -- and find_dice IS
+       our `holding` task, not f-a-t-s (which adds trays + stacking,
+       strictly more).  So T1 is contradiction-RESOLUTION, and the
+       thesis's own discussion is the justification.  Gaps:
+       (a) TASK: figure/abstract/results compare the wrong task (f-a-t-s);
+           discussion.tex:101 already names the right one (find_dice).
        (b) STATISTIC: ours = median + IQR, success-only; theirs =
            mean +- std over ALL 20 anytime trials.  Mixed statistics.
-       (c) SUCCESS RATE absent: TAMPURA is anytime (trades success for
-           speed).  Wall-clock without success rate is misleading.
-       (d) HARDWARE wording: "20-core Xeon vs 8-core" implies a
-           parallel edge for them; TAMPURA is single-process (1 core).
-       Plus (e) related-work calls SymK "not FastDownward" -- it is an
-       FD top-k fork.
+       (c) SUCCESS RATE absent AND its DIRECTION unverified.  The
+           2026-05-23 draft assumed "TAMPURA trades success for speed"
+           (TAMPURA = lower success) -- but OUR holding success is only
+           ~42 % (semantic) / ~46 % (mbs0.05) / ~33 % (uniform).  If
+           TAMPURA's find_dice success (Table II) is high, WE are the
+           low-success side and "4x faster" misleads the OTHER way.  Pull
+           the actual number; state direction FROM data.
+       (d) HARDWARE: the figure CAPTION still says "20-core Xeon vs
+           8-core" (eval_plotter.py:1076) -- but discussion.tex:158
+           ALREADY has the correct framing (both single-threaded; TAMPURA
+           2.5 vs our 2.0 GHz base clock slightly favours TAMPURA).  So
+           this is a caption/abstract CONSISTENCY fix to match the
+           already-correct discussion, not a fresh correction.
+       (e) SymK: related-work wording only.  discussion.tex:84-87 ALREADY
+           calls SymK "a Fast Downward-derived top-k planner" -- again
+           consistency, not new.
+       (f) TIME MEASURE (new): confirm BOTH numbers are per-episode
+           wall-clock INCLUDING PyBullet execution + replanning, not
+           solve-only.  results.tex:209 says "per-episode wall-clock" and
+           14.0 s is median wall_clock_s -- but the summary table reports
+           a DIFFERENT, smaller mean_plan_time_s (holding semantic 7.78 s);
+           do NOT conflate.  TAMPURA's 57 s is per-episode (memory
+           reference_tampura_perf: 21-129 s/episode).  If the two sides
+           measure different spans the comparison is a category error --
+           check before re-deriving any delta.
+       (g) TASK ASYMMETRY (new): find_dice goal = holding(die) AND at-home
+           (env.py:1004).  OUR holding goal = (holding ?o) ONLY -- the
+           domain has NO home goal predicate (home_config is just the
+           motion rest pose, streams.py:190; goal tuple is ('holding',obj),
+           pddlstream_planner.py:145).  find_dice does strictly MORE (one
+           final go-home).  State "holding ~ find_dice MINUS homing"; do
+           NOT claim exact equivalence.
 
-Fix:   - Switch the plot's goal filter to `holding` (or add a holding
-         series alongside f-a-t-s and label both).  Re-derive the
-         delta from holding rows -- it WILL change (holding does less
-         work than f-a-t-s), so do NOT carry over "~4x" / 14.0 s.
-       - Report ours as mean +- std too, or annotate the
-         median-vs-mean and success-only-vs-all-trials mismatch
-         explicitly in caption + THESIS_NOTES.
-       - Add success rate (ours from eval; TAMPURA from Table II) as a
-         second panel/bar or an annotation.
-       - Reword the hardware caveat: single-process on one Xeon core;
-         drop the "20-core" implication.
-       - Correct SymK/FD in related-work (top-k FD fork) + memory
-         reference_tampura_perf.md.
-       - State NO speed winner; keep the architectural framing
-         (offline Learn-Model vs online stream sampling) the thesis
-         already has.
+Fix:   - Switch the line-1007 goal filter to `holding` (or add a holding
+         series alongside f-a-t-s, labelled).  Re-derive the delta from
+         holding rows; it WILL change (holding < f-a-t-s wall-clock, so
+         the gap likely GROWS in our favour) -- do NOT carry over 14.0 s
+         / "~4x".
+       - Fix abstract.tex:14-17 (the headline) AND results.tex:209 +
+         discussion.tex:70-94 to name `holding` as the analogue, aligning
+         them with discussion.tex:101.
+       - Report ours as mean +- std too, OR annotate the median-vs-mean
+         and success-only-vs-all-trials mismatch in caption + THESIS_NOTES.
+       - Add success rate, BOTH sides (ours from eval ~42 %; TAMPURA from
+         Table II), and state who trades success for speed FROM the data.
+       - Rewrite the figure caption (eval_plotter.py:1076) to drop
+         "20-core"; match discussion.tex:158 (single-threaded; clock
+         slightly favours TAMPURA).
+       - Correct SymK/FD in related-work + memory reference_tampura_perf.md
+         (discussion already correct).
+       - Verify the (f) time-measure parity before trusting any delta.
+       - State NO speed winner; keep the architectural framing (offline
+         Learn-Model vs online stream sampling) the thesis already has.
 Effort: ~0.5-1 day, mostly plot + prose + caption.  Re-read the
         regenerated PNG before commit (feedback_plot_regeneration).
-Care:  (1) Switching to holding changes the headline number -- state
-           it from data, do not reuse 14.0 s / 4x.
-       (2) Keep success-only vs all-trials explicit: TAMPURA's 57 s is
+Care:  (1) Switching to holding changes the headline number -- state it
+           from data; do not reuse 14.0 s / 4x.
+       (2) T1 buys task-TYPE parity, NOT scenario parity: the holding rows
+           are our default/random scenes, NOT find_dice-equiv scenes.  The
+           residual scene-distribution gap is closed only by T2.  Say so;
+           do not over-sell T1 as "same problem".
+       (3) Keep success-only vs all-trials explicit: TAMPURA's 57 s is
            over all 20 trials (incl. failures); ours is success-only.
-       (3) THESIS_NOTES §21.1 path is stale (proposal-template) -- fix
+       (4) THESIS_NOTES §21.1 path is stale (proposal-template) -- fix
            while there.
+       (5) Update abstract + discussion in the SAME pass (memory
+           feedback_update_notes); leaving abstract.tex stale REINTRODUCES
+           the contradiction T1 set out to remove.
 
 ================================================================================
 T2. RUN OUR HOLDING PIPELINE ON A find_dice-EQUIVALENT SCENE  (post-thesis, gated)
@@ -318,8 +419,39 @@ Where:    boxel_env.py scene generators (scalability_scene ~271,
           random_pairs_scene ~344 already parametrize n_occluders and
           a hidden count); eval_runner.py MATRIX_PRESETS; --goal
           holding.
-Depends:  The occlusion-mode caveat (below).  NOT #66 Plan C (that is
-          the uniform ablation, not this).
+Depends:  (1) The occlusion-mode caveat (below).  (2) NOT #66 Plan C
+          (that is the uniform ablation; T2 uses the SEMANTIC system).
+          (3) CAPABILITY FEASIBILITY (new) -- must be smoke-confirmed
+          FIRST.
+
+CAPABILITY FEASIBILITY (new -- the 2026-05-23 T2 assumed this away):
+       find_dice's CORE mechanic is move-the-occluder-to-reveal: the die
+       is invisible until the cup is relocated.  Our reveal is the same
+       STRUCTURALLY (sense needs view_clear; an occluder makes the region
+       view_blocked until relocated -- see CAVEAT), BUT the thesis itself
+       hedges whether we do it deliberately:
+       - discussion.tex:101 calls deliberate view-RESTORATION ("restoring
+         a blocked view by first moving the obstruction") FUTURE WORK, and
+         says the loop "bounds itself with a give-up rule".
+       - that give-up rule fires after 3 "still_blocked" strikes per
+         shadow (test_full_pipeline.py:938; execution.py:1508-1523; audit
+         #78c / #21) -> exit_reason replan_limit / blocked-giveup.
+       - YET holding succeeds ~42 %, and the loop DOES relocate occluders
+         and refresh blocks_view_at on relocation (test_full_pipeline.py
+         :1442-1464).  So single-layer move-to-reveal partly works; the
+         "future work" caveat is either over-broad or refers to harder
+         cases (nested / guaranteed restoration -> tail C5).
+       ACTION: before spending gated run-time, SMOKE-TEST one canonical
+       find_dice-equiv scene (1 die-sized target fully behind exactly one
+       movable box "cup"; --goal holding --baseline semantic).  Confirm
+       the planner CHOOSES to relocate the occluder, then senses, then
+       picks -- i.e. SOLVES rather than gives up.  Reconcile with
+       discussion.tex:101 (and correct that text if it over-claims a
+       limitation we do not actually have).  IF it mostly gives up, T2 is
+       NOT plot-only: it needs robust view-restoration first (dev work) or
+       a re-scoped weaker task -- either changes T2's effort.  The smoke
+       test is a single feasibility run, arguably NOT gated (like the #66
+       smoke runs), and de-risks the gated comparison.
 
 What:  C2 proposed transplanting TAMPURA's PyBullet scene (concave YCB
        cups + die + Panda + saved grasps) into our pipeline and
@@ -335,17 +467,25 @@ What:  C2 proposed transplanting TAMPURA's PyBullet scene (concave YCB
        (n_hidden = 1, n_occluders in [1,5], die-sized target), not a
        transplant.
 
-Fix:   - Add a `find_dice_equiv` scene preset (single hidden die-sized
-         target; 1-5 box occluders; exactly one occluding).
-       - Run --goal holding over seeds; collect wall-clock + success.
+Fix:   - SMOKE-TEST feasibility first (above).
+       - Add a `find_dice_equiv` scene preset (single hidden die-sized
+         target; 1-5 box occluders; exactly one occluding -- and the
+         occluding box must ACTUALLY view-block the target so a relocation
+         is FORCED, else the task is easier than find_dice).
+       - Run --goal holding over >= 20 seeds (match TAMPURA's N=20) for a
+         comparable mean +- std; collect wall-clock AND success.
        - Plot vs TAMPURA's published 57+-38 s (and vs T3 if it lands):
-         same task, our hardware.
-Effort: ~2-4 days (preset + smoke + full run + plot).  Gated.
+         same task, our hardware.  Report success rate BESIDE wall-clock.
+Effort: ~2-4 days IF feasible as a preset (preset + smoke + full run +
+        plot).  MORE if the feasibility smoke test exposes a
+        view-restoration gap.  Gated.
 Care:  (1) Single-layer ONLY -- match find_dice; nested occlusion is a
            DIFFERENT experiment (tail, old C5).
        (2) Target ~ a die (~2-4 cm), occluders ~ cup-scale, so
            auto_cell stays comparable to the default scene.
-       (3) Document the occlusion-mode reinterpretation (caveat).
+       (3) Add a final go-home if matching find_dice's at-home goal
+           exactly (T1 gap g); else note the one-action asymmetry.
+       (4) Document the occlusion-mode reinterpretation (caveat).
 
 ================================================================================
 T3. STAND UP & RUN REAL TAMPURA find_dice ON OUR HARDWARE  (post-thesis, gated, optional)
@@ -395,19 +535,39 @@ Care:  (1) find_dice ~ our holding -- pair their find_dice with our
 ================================================================================
 CAVEAT. OCCLUSION-MODE MISMATCH (comparability boundary for T2/T3)
 ================================================================================
-find_dice occludes by CONTAINMENT: the die is placed at a cup's XY,
+find_dice occludes by CONTAINMENT: the die is placed at a cup's pose,
 under an upside-down cup; the camera cannot see it; it is revealed by
-MOVING the cup (the look action's success depends on moved(occluder)).
-Our system occludes by LATERAL SHADOW: an occluder casts an AABB
-shadow region behind it from the camera viewpoint, and a hidden target
-sits in that shadow (sensed by raycasting, or revealed by relocating
-the occluder).
-Implication: there is no pixel-faithful "same scene" -- a literal
-transplant is geometrically awkward.  The defensible comparison is on
-the TASK ("a die hidden by an occluder; find it, pick it, go home"),
-realised in each system's native occlusion model.  State this boundary
-wherever the comparison appears (results.tex / discussion.tex); it is
-the honest scope of "we compared on find_dice".
+MOVING the cup (look's success depends on moved(occluder), env.py:966).
+Our system occludes by LATERAL SHADOW: an occluder casts an AABB shadow
+region behind it from the camera viewpoint, and a hidden target sits in
+that shadow.
+
+REVEAL MECHANISM -- closer than "mismatch" suggests.  Our camera is FIXED
+(domain_pddlstream.pddl:117 "fixed scene camera") and sense REQUIRES
+view_clear (= is_shadow AND NOT view_blocked; domain:108-111, 161).
+While an occluder sits in the line of sight the region is view_blocked
+and CANNOT be sensed -- we cannot "raycast" a blocked shadow.  Revealing
+the target therefore requires RELOCATING the occluder, exactly as
+find_dice requires moving the cup.  So the planning STRUCTURE (clear
+occluder -> sense -> pick -> [home]) is parallel; only the GEOMETRIC mode
+differs.  (NB: the 2026-05-23 caveat's "sensed by raycasting, or
+relocating" wording was loose -- a view-blocked region is not senseable
+in our domain.)
+
+Residual differences to STATE wherever the comparison appears
+(results.tex / discussion.tex):
+  - mode: lateral shadow (ours) vs containment (find_dice) -- no
+    pixel-faithful "same scene"; a literal transplant is geometrically
+    awkward.
+  - reveal: find_dice's look is PROBABILISTIC in moved(occluder); ours is
+    a HARD view_clear precondition (deterministic).
+  - restoration: ours leans on a give-up rule and flags guaranteed
+    view-restoration as future work (discussion.tex:101) -- the T2
+    feasibility smoke test must confirm this does not block single-layer
+    find_dice (see T2).
+The defensible comparison is on the TASK ("a die hidden by an occluder;
+find it, pick it, go home"), realised in each system's native occlusion
+model.  This is the honest scope of "we compared on find_dice".
 
 ================================================================================
 TAIL -- SEPARATE EXPERIMENTS, NOT THE find_dice COMPARISON
