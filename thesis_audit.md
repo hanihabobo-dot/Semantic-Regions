@@ -163,6 +163,80 @@ Fix:   Reword so depth-splitting reads as conditional --- e.g. "a shadow
 Refs:  methods.tex (thesis/); CODEBASE_AUDIT.txt #102 #103; #168.
 
 ================================================================================
+#176  [T3] [THESIS]  Real discretization-progression figure (PyBullet captures)
+================================================================================
+Where: methods.tex (thesis/) --- a possible companion to the schematic
+       fig:boxelization; captures live under thesis/graphics/sim/raw_captures/.
+What:  In the 2026-05-24 capture session the user grabbed PyBullet GUI frames
+       showing the free-space discretization building up cell-by-cell with the
+       wireframe/grid overlay visible (the offscreen getCameraImage path cannot
+       capture PyBullet debug-draw, so the GUI is required).
+       - UNIFORM progression: raw_captures/"Screenshot 2026-05-24 125056..125436"
+         (~16 frames, fixed viewpoint; the cyan grid fills the workspace step by
+         step).  A strong angled still is kept as capture_partition_uniform_angle.png.
+       - SEMANTIC progression: the session was dominated by uniform-grid angle
+         shots; a clean step-by-step SEMANTIC sequence was NOT clearly captured.
+         (The schematic fig:boxelization (a)-(d) already shows the semantic build.)
+Fix:   Decide: (a) add a real (non-schematic) progression figure to methods.tex
+       --- ~3-4 curated frames per discretization, window chrome cropped, paired
+       with fig:boxelization as "the partition as actually built in PyBullet" ---
+       or (b) drop as redundant with the schematic.  If (a) and a clean SEMANTIC
+       progression is wanted, capture it with tools/render_thesis_figs.py
+       (--baseline semantic, GUI freeze).
+Refs:  methods.tex (fig:boxelization); thesis/graphics/sim/raw_captures/;
+       tools/render_thesis_figs.py; #168.
+
+================================================================================
+#177  [T0] [NOW]  TAMPURA comparison: wrong task cited + self-contradicts on the analogue
+================================================================================
+Where: abstract.tex:14-17 ("closest analogue ... 14.0 s vs 57 s" headline);
+       results.tex:209-216 (subsec:tampura, fig:tampura; "find-and-tray-stack,
+       the closest analogue", 14.0 s, n=119, ~4x); discussion.tex:70-94 (14.0 s
+       on find-and-tray-stack) vs discussion.tex:101 (already calls TAMPURA's
+       Find Die "the closest analogue to our setting"); the plot in
+       eval_plotter.py plot_tampura_wallclock_comparison (goal filter =
+       find-and-tray-stack). TAMPURA = curtis2024partially, Tables I-II.
+What:  The thesis contradicts itself AND compares the wrong task.
+       (1) SELF-CONTRADICTION: abstract/results/discussion:70 call our FIND-AND-
+           TRAY-STACK "the closest analogue" to TAMPURA's Partial Observability
+           (find_dice); but discussion:101 already calls find_dice "the closest
+           analogue to OUR setting". find_dice (find a hidden object, pick it, go
+           home) IS our HOLDING task -- not find-and-tray-stack, which adds trays
+           + stacking (strictly more). The figure/abstract/results compare the
+           wrong, harder task.
+       (2) TIME-MEASURE CATEGORY ERROR: ours (14.0 s) is per-episode WALL-CLOCK
+           incl. PyBullet execution + replanning (eval_runner.py wall_clock_s);
+           TAMPURA's 57+-38 s (Table II) is PLANNING TIME ONLY (table caption:
+           "...planning times..."). Different spans -> the "~4x" delta is not
+           like-for-like. Our planning-only analogue is total_planning_time_s
+           (holding semantic mean 7.78 s).
+       (3) RELIABILITY FRAMING BACKWARDS: no success rate sits beside the time,
+           and TAMPURA is MORE reliable, not less. TAMPURA reports discounted
+           return 0.63+-0.30 (Table I, gamma=0.98) under a binary terminal reward
+           -> success >= 63 %; our holding-semantic success is ~42 %. We are the
+           LESS-reliable side; any "faster/better" reading misleads.
+Fix:   Re-point the figure + abstract:14-17 + results:209 + discussion:70-94 to
+       HOLDING (the find_dice analogue), aligning them with discussion:101;
+       re-derive the number from holding rows (do NOT reuse 14.0 s / "~4x").
+       Show BOTH our wall-clock AND our planning-time vs TAMPURA's planning-only
+       57 s (decided 2026-05-24). State success on both sides (ours ~42 %; TAMPURA
+       >= 63 %, derived) and frame honestly: architectural difference (offline
+       Learn-Model vs online stream sampling), NO speed/quality winner -- we are
+       cheaper-to-plan but less reliable and on a slightly less-constrained task
+       (find_dice goal = holding AND at-home; ours is holding only). Plot:
+       eval_plotter.py plot_tampura_wallclock_comparison -- switch goal filter
+       find-and-tray-stack -> holding, add the planning-time series, drop "20-core"
+       from the caption (the single-threaded framing in discussion:158 and the
+       SymK wording in discussion:84-87 are already correct). Reconcile
+       THESIS_NOTES §21 the same turn. Data in eval_results/sweep_anytime/ --
+       holding rows already exist, no eval RUN needed.
+Refs:  abstract.tex; results.tex (subsec:tampura, fig:tampura); discussion.tex
+       (70-101, 158); eval_plotter.py; eval_runner.py (wall_clock_s);
+       notes/THESIS_NOTES.md §21; curtis2024partially (arXiv:2403.10454, Tables
+       I-II); reference_tampura_perf.md (memory). Was notes/TAMPURA_PLAN.md T1,
+       moved here 2026-05-24.
+
+================================================================================
 OPEN ISSUES
 ================================================================================
 
@@ -176,7 +250,9 @@ have been removed; see `git log --grep="Fix #"` (thesis repo) and
 
 OPEN:
   Figures: #168  (every figure one-by-one; figures agent)
+  Figures: #176  (optional real discretization-progression figure; captures archived)
   Methods: #175  (shadow-splitting prose vs #102/#103 code; prose)
+  Results/Disc: #177  (TAMPURA fig cites wrong task + self-contradiction + time/success framing; prose + plot)
 
 Gating: #141-#156 and #130 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
