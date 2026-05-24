@@ -1,0 +1,230 @@
+% !TEX root = ../main.tex
+
+\chapter{Evaluation}
+\label{ch:results}
+
+This chapter reports the experimental evaluation of the Boxel-based POD-TAMP framework. \Cref{sec:setup} describes the experimental setup as executed. \Cref{sec:metrics} defines the measured quantities. \Cref{sec:baselines} defines the variants compared, including the TAMPURA external reference. The results themselves follow in the remaining sections.
+
+\section{Experimental Setup}
+\label{sec:setup}
+
+\paragraph{Simulator and robot.} All experiments were run inside PyBullet \cite{coumans2021pybullet}, with a 7-DOF Franka Emika Panda as the manipulator on a tabletop.
+
+\paragraph{Goals.} Three goals were evaluated (\cref{fig:eval-tasks}):
+\begin{itemize}
+    \item \texttt{holding}: the robot must end the episode holding a single target object whose initial pose is hidden behind one of a set of occluders. The number of occluders $n_\text{occ}$ is the difficulty axis (2, 3, 4; see \cref{fig:n-occ-scale}).
+    \item \texttt{stack}: the robot must build a stack of cubes to a given height. The stack height $h$ is the difficulty axis (2, 3, 4); cube positions are fully observable.
+    \item \texttt{find-and-tray-stack}: the robot must locate hidden cubes behind occluders and stack them on a tray. The number of occluders $n_\text{occ}$ is the difficulty axis (2, 3, 4).
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[t]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{sim/task_holding.png}
+        \caption{\texttt{holding}}
+        \label{fig:task-holding}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{sim/task_stack.png}
+        \caption{\texttt{stack}}
+        \label{fig:task-stack}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{sim/task_tray.png}
+        \caption{\texttt{find-and-tray-stack}}
+        \label{fig:task-tray}
+    \end{subfigure}
+    \caption{The three evaluated goals. \texttt{holding}: retrieve a single target hidden behind occluders. \texttt{stack}: build a tower of cubes to a target height. \texttt{find-and-tray-stack}: locate hidden cubes and stack them on a tray.}
+    \label{fig:eval-tasks}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[t]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{sim/n_occ_low_real.png}
+        \caption{Low $n_\text{occ}$}
+        \label{fig:n-occ-low}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{sim/n_occ_mid.png}
+        \caption{Medium $n_\text{occ}$}
+        \label{fig:n-occ-mid}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{sim/n_occ_high.png}
+        \caption{High $n_\text{occ}$}
+        \label{fig:n-occ-high}
+    \end{subfigure}
+    \caption{The occluder-count difficulty axis $n_\text{occ}$, shown at low, medium, and high settings. More occluders crowd the target and occlude a larger share of the workspace, so the planner must reason over more shadow Boxels.}
+    \label{fig:n-occ-scale}
+\end{figure}
+
+\paragraph{Scenes and seeds.} Each $(\text{goal}, \text{variant}, \text{difficulty})$ combination was run on 100 random scenes; seeds are paired across the \texttt{semantic} and \texttt{semantic+mbs0.05} variants on the random-pairs scene, so their head-to-head comparison is seed-for-seed. A total of $\approx$2700 cells were executed (3 goals $\times$ 3 variants $\times$ 3 difficulty levels $\times$ 100 seeds, with minor rounding from scheduling).
+
+\paragraph{Perception.} Object detection is performed by an oracle that reads ground-truth object poses from the simulator and uses ray-casts from a fixed overhead camera (\cref{fig:overhead-camera}) to determine which objects, and which Boxels, are visible. The simulator also renders RGB-D images, but they are not processed inside the planning loop. The modelled uncertainty is occlusion uncertainty---which Boxel a hidden object occupies---resolved at run time by the \texttt{sense} action.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{sim/overhead_camera_inset.png}
+    \caption{An evaluation scene observed by the fixed overhead camera, shown here from an oblique simulator viewpoint. Object detection is an oracle that reads ground-truth object poses from the simulator---objects and their occlusion shadows are labelled in the overlay---rather than processing the camera's rendered RGB-D images. A future learned detector would consume those images in place of the oracle, without changing the planning architecture.}
+    \label{fig:overhead-camera}
+\end{figure}
+
+\paragraph{Planning budget.} Each PDDLStream call (initial plan or replan) was given a wall-clock budget of 1800\,s (30 min); a cell terminates with the \texttt{timeout} exit reason if it exhausts this budget. Most successful cells finish in well under a second per call; the budget exists to catch pathological cases rather than as the operating point. The anytime sweep records cumulative solve rate as a function of wall-clock budget, and the curves are essentially flat past $\approx$200\,s.
+
+\paragraph{Software.} PyBullet \cite{coumans2021pybullet}; PDDLStream \cite{garrett2018pddlstream} with the FastDownward classical planner backend; Python 3.10.
+
+\section{Evaluation Metrics}
+\label{sec:metrics}
+
+For each cell we record:
+\begin{itemize}
+    \item \textbf{Success}: whether the robot reached the goal within the planning budget, without exceeding the per-episode replan limit.
+    \item \textbf{Planning time}: total wall-clock time spent inside PDDLStream calls, summed across replans. Wall-clock per cell is effectively equal to planning time; execution, perception, and motion overhead are negligible at the scales evaluated.
+    \item \textbf{Replan count}: how many times the planner was re-invoked in the sense-plan-act loop before terminating.
+    \item \textbf{Representation size}: the Boxel set decomposed into \texttt{OBJECT}, \texttt{SHADOW}, and \texttt{FREE\_SPACE} cells, and the number of grounded facts in PDDLStream's initial state. These two capture the per-cell cost of the partitioning strategy independently of planner choice.
+    \item \textbf{Failure mode}: when a cell does not succeed, an exit reason among \texttt{planner\_failed}, \texttt{timeout}, \texttt{replan\_limit}, \texttt{physics\_mismatch}, \texttt{drop\_failed}, \texttt{no\_summary}, and \texttt{all\_searched}.
+\end{itemize}
+Aggregate means in this chapter are taken either over all $n_\text{cells}$ or, for quantities that are only defined on cells that produced a snapshot (notably mean initial-state facts and mean replan count), over the subset of cells with non-null values. The two denominators differ by $\sim$6\,\% of cells (early timeouts without a recorded state).
+
+\section{Baselines for Comparison}
+\label{sec:baselines}
+
+Three variants of the planner are compared, plus one external reference:
+\begin{enumerate}
+    \item \textbf{semantic} --- the adaptive Boxel partition described in \cref{ch:methods}. Free-space cells are placed only where the workspace is empty; their leaf size is auto-set to the largest object's footprint ($\approx$6--9\,cm), since finer leaves break placement on the table dimensions used here.
+    \item \textbf{semantic+mbs0.05} --- the same adaptive partition but with the free-space leaf-size floor forced to 5\,cm (\texttt{min\_boxel\_size = 0.05}). This is intended to test the effect of a finer free-space leaf floor independently of the semantic structure.
+    \item \textbf{uniform} --- the adaptive partition is replaced by a uniform voxel grid over the workspace; the object and shadow Boxels are unchanged. The cell size is auto-set to the same largest-object-footprint value, since finer cells likewise break placement. This isolates the contribution of the adaptive free-space partition.
+    \item \textbf{TAMPURA} \cite{curtis2024partially} --- a published POMDP-based TAMP framework. Its Table~II reports several model-learning/search configurations on a \textit{Partial Observability} task; we compare against TAMPURA's own primary configuration there---Bayes-Optimistic belief updates with LAO* search---which it reports at 57\,$\pm$\,38\,s over 20 trials (Table~II of \cite{curtis2024partially}, arXiv\,v2), rather than re-running it; the comparison is architectural --- offline Learn-Model vs online stream sampling --- not a hardware benchmark. See \cref{sec:disc-tampura} for the full framing.
+\end{enumerate}
+
+\section{Results}
+\label{sec:results-numbers}
+
+\Cref{tab:headline} reports the aggregate success rate and mean success-only planning time for each $(\text{goal}, \text{variant})$ cell. The semantic and uniform variants differ by an order of magnitude or more in both axes on every goal; \texttt{semantic+mbs0.05} sits within seed noise of \texttt{semantic} on stack, modestly ahead on holding, and modestly behind on find-and-tray-stack.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{llrrr}
+\toprule
+goal & variant & $n_\text{cells}$ & success rate & mean plan time (s) \\
+\midrule
+find-and-tray-stack & semantic         & 299 & 39.8\,\% & 28.37 \\
+find-and-tray-stack & semantic+mbs0.05 & 300 & 33.0\,\% & 21.49 \\
+find-and-tray-stack & uniform          & 300 &  1.3\,\% & 156.10 \\
+\midrule
+holding             & semantic         & 300 & 42.3\,\% & 7.78 \\
+holding             & semantic+mbs0.05 & 300 & 46.3\,\% & 7.42 \\
+holding             & uniform          & 300 & 33.3\,\% & 50.35 \\
+\midrule
+stack               & semantic         & 300 & 61.3\,\% & 1.23 \\
+stack               & semantic+mbs0.05 & 300 & 61.3\,\% & 1.23 \\
+stack               & uniform          & 301 & 39.2\,\% & 23.84 \\
+\bottomrule
+\end{tabular}
+\caption{Headline success rate and mean planning time per $(\text{goal}, \text{variant})$. Planning time is success-only.}
+\label{tab:headline}
+\end{table}
+
+\subsection{Anytime solve rate}
+\label{subsec:anytime}
+
+\Cref{fig:solved-vs-time} plots cumulative solve rate against wall-clock budget on a log axis. Three observations stand out. First, the semantic curves rise to their final value within $\sim$10--30\,s on every goal, and the additional budget out to 1800\,s buys at most a few extra successes; the operating point is the first few minutes, not the long tail. Second, on stack the \texttt{semantic} and \texttt{semantic+mbs0.05} curves overlap exactly --- the 5\,cm leaf floor changes nothing here. Third, the \texttt{uniform} curve is delayed in onset on every goal and tops out lower; on find-and-tray-stack it never gets off the ground (4 solves out of 300).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{solved_vs_time.png}
+    \caption{Cumulative solve rate vs wall-clock budget (log axis) per $(\text{goal}, \text{variant})$. Almost all solves happen within $\sim$200\,s; \texttt{uniform} starts later and plateaus lower on every goal.}
+    \label{fig:solved-vs-time}
+\end{figure}
+
+\subsection{Success rate and scene difficulty}
+\label{subsec:success-rate}
+
+\Cref{fig:success-holding,fig:success-stack,fig:success-fats} show success rate against the difficulty axis for each goal. On holding (\cref{fig:success-holding}), success is roughly flat in $n_\text{occ}\in\{2,3,4\}$: \texttt{semantic} stays at 39--47\,\%, \texttt{semantic+mbs0.05} at 44--48\,\%, \texttt{uniform} at 31--36\,\%. There is no clear scalability degradation in this range, only a $\sim$10\,pp gap between adaptive and uniform partitioning.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{success_rate_vs_n_occluders__holding.png}
+    \caption{Success rate vs $n_\text{occ}$ on the holding goal. Adaptive variants (semantic, semantic+mbs0.05) are within seed noise of each other; uniform sits $\sim$10\,pp lower.}
+    \label{fig:success-holding}
+\end{figure}
+
+On stack (\cref{fig:success-stack}), the difficulty axis is the stack height. All variants solve $h=2$ trivially (97\,\%); semantic and semantic+mbs0.05 degrade gracefully to 74\,\% at $h=3$ and 13\,\% at $h=4$, while uniform collapses from 97\,\% to 20\,\% to 1\,\%. The semantic and semantic+mbs0.05 curves are indistinguishable seed-for-seed.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{success_rate_vs_n_occluders__stack.png}
+    \caption{Success rate vs stack height $h$ on the stack goal. Adaptive variants degrade gracefully; uniform collapses past $h=2$.}
+    \label{fig:success-stack}
+\end{figure}
+
+Find-and-tray-stack (\cref{fig:success-fats}) is the discriminating goal: \texttt{uniform} succeeds on at most 2 out of 100 cells at every difficulty, whereas \texttt{semantic} stays flat around 40\,\%. The \texttt{semantic+mbs0.05} variant degrades with $n_\text{occ}$ (40\,\% $\to$ 31\,\% $\to$ 28\,\%) on this goal, the only case in the sweep where a finer leaf floor visibly hurts.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{success_rate_vs_n_occluders__find-and-tray-stack.png}
+    \caption{Success rate vs $n_\text{occ}$ on the find-and-tray-stack goal. Uniform fails almost entirely; \texttt{semantic+mbs0.05} visibly degrades with $n_\text{occ}$, contrary to its intent.}
+    \label{fig:success-fats}
+\end{figure}
+
+\subsection{Planning time and scene difficulty}
+\label{subsec:planning-time}
+
+\Cref{fig:plantime-holding} shows mean success-only planning time on holding against $n_\text{occ}$. The adaptive variants stay below 20\,s across the range; \texttt{uniform} climbs from 21\,s at $n_\text{occ}=2$ to 83\,s at $n_\text{occ}=4$, four to five times the adaptive cost at each point. Planning times on stack and find-and-tray-stack follow the same pattern (semantic 1--2\,s on stack and $\sim$20--50\,s on FATS; uniform 20--220\,s and 25--533\,s respectively).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{planning_time_vs_n_occluders__holding.png}
+    \caption{Mean success-only planning time vs $n_\text{occ}$ on the holding goal. Adaptive variants scale gracefully; uniform's cost grows much faster.}
+    \label{fig:plantime-holding}
+\end{figure}
+
+\subsection{Representation compactness}
+\label{subsec:compactness}
+
+The cost gap traces back to the size of the representation. \Cref{fig:boxel-count-holding} stacks the OBJECT, SHADOW, and FREE\_SPACE Boxel counts per variant on holding. The adaptive variants produce $\sim$25--43 Boxels total; the uniform variant produces $\sim$300 free-space cells alone. On the stack goal the ratio is steeper (semantic $\sim$25 vs uniform $\sim$1340), and the grounded-fact count scales with it: $\sim$300 facts for the adaptive variants vs 11\,000--14\,000 for uniform across stack heights. Larger init-state $\Rightarrow$ larger PDDL grounding $\Rightarrow$ longer per-call planning time, which is the mechanism behind the timing gap in \cref{fig:plantime-holding}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{boxel_count_breakdown__holding.png}
+    \caption{Mean Boxel count by category, holding goal. Adaptive variants produce an order of magnitude fewer cells than the uniform baseline.}
+    \label{fig:boxel-count-holding}
+\end{figure}
+
+\subsection{Comparison with TAMPURA}
+\label{subsec:tampura}
+
+\Cref{fig:tampura} reports per-episode wall-clock times on the find-and-tray-stack task, the closest analogue to TAMPURA's published \textit{Partial Observability} setting (Table~II of \cite{curtis2024partially}). Our \texttt{semantic} variant achieves a median wall-clock of 14.0\,s (n=119, IQR shown) against TAMPURA's mean 57.0\,$\pm$\,38\,s (n=20), a $\sim$4$\times$ delta. The comparison is architectural --- offline Learn-Model vs online stream sampling --- rather than a benchmark; \cref{ch:discussion} unpacks the framing.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{tampura_wallclock_comparison.png}
+    \caption{Wall-clock per episode on find-and-tray-stack: ours (median + IQR, success-only) against TAMPURA's reported Table~II numbers.}
+    \label{fig:tampura}
+\end{figure}
+
+\subsection{Failure modes}
+\label{subsec:failure-modes}
+
+\Cref{fig:failure-modes} stacks the exit reasons across all 9 $(\text{goal}, \text{variant})$ cells. \texttt{planner\_failed} is the dominant failure mode in every condition; \texttt{replan\_limit} appears predominantly on stack; \texttt{timeout} accounts for a small slice of find-and-tray-stack failures. On find-and-tray-stack the \texttt{uniform} bar is almost entirely \texttt{planner\_failed}, consistent with the 1\,\% success rate.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{failure_modes.png}
+    \caption{Stacked exit-reason breakdown per $(\text{goal}, \text{variant})$. \texttt{planner\_failed} is the dominant failure mode on holding and find-and-tray-stack; on stack the adaptive variants instead fail mainly via \texttt{replan\_limit} (the second-largest slice after success).}
+    \label{fig:failure-modes}
+\end{figure}
+
+The qualitative readings of these figures, together with their architectural implications and threats to validity, are interpreted in \cref{ch:discussion}.

@@ -1,0 +1,39 @@
+% !TEX root = ../main.tex
+
+\chapter{Introduction}
+\label{ch:introduction}
+We want robots that can carry out everyday tasks on their own---fetching an object, clearing a table---tasks that demand both multi-step reasoning and careful physical manipulation. Task and Motion Planning (TAMP) studies how to do exactly this \cite{garrett2018pddlstream, curtis2024partially}.
+TAMP connects a high-level goal (e.g., "fetch the blue cup from the kitchen") to the actual motions the robot must perform to achieve it.
+TAMP combines discrete task planning with continuous motion planning: symbolic planners generate high-level sequences of abstract
+actions—what is known as a task plan. However, symbolic planning alone is insufficient for real-world robotic execution.
+Because the symbolic plan ignores geometry, it can call for actions the robot cannot physically carry out. Specifically, we must determine whether the proposed symbolic actions are feasible within the robot's continuous geometric and kinematic constraints, and if so, identify the concrete parameters required to execute them—such as object poses, grasp configurations, and collision-free trajectories. For instance, a symbolic instruction like (\textit{pick A}) is only viable if
+object A is actually reachable, graspable, and a feasible motion exists to carry out the action.
+
+One widely used framework for this is PDDLStream \cite{garrett2018pddlstream}. PDDLStream extends the classical Planning Domain Definition Language (PDDL) \cite{aeronautiques1998pddl} by incorporating streams—lazily-evaluated, declarative procedures that can interface with external solvers. These streams are capable of generating or validating continuous parameters on demand, allowing the symbolic planner to retrieve geometric or kinematic information only as needed. This simplifies the coupling between high-level symbolic reasoning (what to do) and low-level geometric feasibility (how to do it), making the planning process both flexible and efficient.
+
+However, the original PDDLStream framework assumes full observability and deterministic action outcomes---assumptions that rarely hold in practice. In practice, robots frequently operate under partial observability, due to occlusions, limited sensor coverage, or dynamically changing environments. In such settings, crucial information—such as the location of a target object or the presence of an obstacle—may be unknown at the start, so the robot has to actively look for it while carrying out the task (\cref{fig:intro-hero}).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{sim/scene_hidden_target.png}
+    \caption{A 7-DOF Franka Panda at a cluttered tabletop, where the target object may be hidden behind others and must be located before it can be retrieved. The corner panels are the fixed overhead camera's synthetic RGB (top) and depth (bottom) views.}
+    \label{fig:intro-hero}
+\end{figure}
+
+Addressing this limitation is the central focus of this thesis: extending PDDLStream to operate under partial observability. This includes the ability to represent and reason over belief states that capture uncertainty in continuous spatial variables. Naive representations---such as a uniform voxel grid over 3D space---make the belief space blow up in size and quickly become impractical to plan with. A useful belief representation must therefore be detailed enough to be expressive, yet small enough to plan with quickly.
+The core research question is:
+\textit{How can we formally define and integrate a belief representation based on semantic partitioning into a POD-TAMP framework?}
+The stance of this thesis is simple: \emph{space is part of the planning problem}. Where a hidden object might be, and what blocks the view of it, are not details to be collapsed into a probabilistic occupancy grid but structure the planner should weigh directly. Here, we present a novel approach to discretizing the workspace around the objects the robot detects and the regions they occlude. The unit of this discretization is the Semantic Boxel: a task-relevant, occlusion-aware cuboid, built from objects' known 3D models, that the robot uses to represent its belief. Unlike a dense, uniform discretization, this provides a structured, scalable way to represent and reason about spatial uncertainty.
+
+This thesis develops a system in which a robot, facing uncertainty about object locations, can plan and execute a sequence of information-gathering and manipulation actions. It reasons over abstract beliefs about which Boxels objects might occupy, using PDDLStream to connect this reasoning to continuous motion and manipulation. Sensing is a symbolic action evaluated against a fixed overhead camera, not a viewpoint the robot moves to; and because the underlying planner is classical, partial observability is handled by optimistic sensing with reactive replanning rather than contingent planning---a sensing action is assumed to succeed, and the system replans if execution shows otherwise. The result is a framework that makes planning under spatial uncertainty simpler and more reliable. The approach is demonstrated on tabletop hidden-object retrieval and stacking; the partial-observability mechanism is the contribution, and longer task horizons are a natural extension.
+
+\section{Contributions of this thesis}
+The central contribution is a \emph{representation}: we make occlusion first-class symbolic planning state. Each volume the robot cannot see becomes a named region that a classical, partially observable deterministic (POD) planner reasons over and resolves by sensing, rather than a sub-symbolic spatial belief such as the dense visibility voxel grid of TAMPURA's \emph{Find Die} benchmark, which feeds a learned model of action outcomes~\cite{curtis2024partially}. The three components below deliver this representation; the evaluation correspondingly isolates it by ablation (the same planner on the adaptive partition against a uniform grid), alongside an architectural comparison with TAMPURA, rather than claiming a benchmark win, and is conducted under oracle perception (\cref{sec:limitations}).
+\begin{itemize}
+    \item The \emph{Semantic Boxel} abstraction: an occlusion-aware, object-centric partitioning of the workspace that discretizes only the task-relevant regions---the objects themselves and the volumes they occlude---rather than partitioning all space uniformly.
+    \item A Semantic POD-TAMP model that uses Know-If Fluents over Boxels as a compact belief representation, letting a classical PDDL planner reason about partial observability via optimistic sensing with reactive replanning.
+    \item A PDDLStream realization of this model that combines the discrete Boxel belief with stream-certified continuous geometry, so that information-gathering and manipulation actions interleave within a single planning domain.
+\end{itemize}
+
+\section{Thesis outline}
+\Cref{ch:background} provides essential background on classical planning, reasoning under uncertainty, and the PDDLStream framework that this work builds upon. \Cref{ch:related-work} reviews related work in TAMP under partial observability, belief representation, and adjacent planning paradigms. \Cref{ch:methods} details the methodology, including the formalization of Boxels through adaptive semantic discretization, the Semantic POD-TAMP model, and the PDDLStream integration. \Cref{ch:results} presents the experimental setup, the metrics and baselines, and the headline evaluation results. \Cref{ch:discussion} interprets those results and consolidates the accepted simplifications. \Cref{ch:conclusion} summarizes the contributions and outlines directions for future work.

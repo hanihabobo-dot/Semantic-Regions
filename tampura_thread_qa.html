@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Semantic Boxels vs TAMPURA — Session Q&amp;A</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --ink:#1f2430; --muted:#5b6472;
+    --accent:#4f46e5; --accent-soft:#eef0ff; --line:#e6e8ee;
+    --tl:#0369a1; --tl-bg:#e8f4fc; --take:#15803d; --take-bg:#e9f7ee;
+    --warn:#b45309; --warn-bg:#fdf3e3; --code:#0f172a; --code-bg:#f2f4f8;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:920px;margin:0 auto;padding:32px 20px 80px;}
+  header.hero{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;
+    border-radius:16px;padding:34px 32px;margin-bottom:8px;box-shadow:0 10px 30px rgba(79,70,229,.25);}
+  header.hero h1{margin:0 0 8px;font-size:28px;line-height:1.25;}
+  header.hero p{margin:0;opacity:.92;font-size:15px;}
+  .meta{font-size:13px;opacity:.85;margin-top:14px;}
+  nav.toc{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:20px 24px;margin:22px 0 30px;}
+  nav.toc h2{margin:0 0 12px;font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+  nav.toc ol{margin:0;padding-left:22px;}
+  nav.toc li{margin:5px 0;}
+  nav.toc a{color:var(--accent);text-decoration:none;}
+  nav.toc a:hover{text-decoration:underline;}
+  section.q{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:24px 28px;margin:18px 0;box-shadow:0 1px 2px rgba(0,0,0,.03);}
+  section.q h2{margin:0 0 4px;font-size:21px;color:var(--ink);}
+  .asked{color:var(--muted);font-style:italic;margin:0 0 16px;font-size:15px;
+    border-left:3px solid var(--line);padding-left:12px;}
+  h3{font-size:16px;margin:22px 0 6px;color:var(--ink);}
+  p{margin:10px 0;}
+  .box{border-radius:10px;padding:13px 16px;margin:14px 0;font-size:15px;}
+  .tl{background:var(--tl-bg);border:1px solid #cfe6f7;}
+  .tl b{color:var(--tl);}
+  .take{background:var(--take-bg);border:1px solid #c9ecd6;}
+  .take b{color:var(--take);}
+  .warn{background:var(--warn-bg);border:1px solid #f3dcb3;}
+  .warn b{color:var(--warn);}
+  code{font-family:"SF Mono", "JetBrains Mono",Consolas,Menlo,monospace;
+    background:var(--code-bg);padding:1px 5px;border-radius:5px;font-size:13.5px;color:#3730a3;}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;overflow:auto;margin:12px 0;}
+  pre code{background:none;padding:0;color:var(--code);font-size:13px;line-height:1.5;}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14.5px;}
+  th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top;}
+  th{background:#f0f1f6;font-weight:600;}
+  td.us{background:#f3f7ff;}
+  ul{margin:10px 0;padding-left:22px;}
+  li{margin:5px 0;}
+  .pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;
+    background:var(--accent-soft);color:var(--accent);margin-left:8px;vertical-align:middle;}
+  .toplink{display:block;text-align:right;font-size:12px;margin-top:14px;}
+  .toplink a{color:var(--muted);text-decoration:none;}
+  footer{color:var(--muted);font-size:13px;text-align:center;margin-top:30px;}
+  .glossary dt{font-weight:600;margin-top:12px;}
+  .glossary dd{margin:2px 0 0;color:var(--muted);}
+  .key{font-weight:600;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Semantic Boxels vs. TAMPURA — what we worked out</h1>
+  <p>A plain-language walkthrough of every question explored in this session: how TAMPURA handles space, how it plans, how it differs from your Boxels system, what was wrong in the thesis, and whether the thesis has a real contribution.</p>
+  <div class="meta">Working session · 2026-05-21 · grounded in the thesis source, the codebase, and TAMPURA's own published code.</div>
+</header>
+
+<nav class="toc">
+  <h2>The questions you asked</h2>
+  <ol>
+    <li><a href="#q1">Is that &ldquo;particle filters over voxel grids&rdquo; sentence true?</a></li>
+    <li><a href="#q2">How does TAMPURA deal with space?</a></li>
+    <li><a href="#q3">What is an abstract symbolic MDP, and what is LAO*? Are we better than them?</a></li>
+    <li><a href="#q4">How do we know who&rsquo;s faster? Did we run ours on the same task?</a></li>
+    <li><a href="#q5">Walk me through TAMPURA&rsquo;s decision-making, start to end — and ours alongside.</a></li>
+    <li><a href="#q6">Stage 0 in detail · action vs. controller · pick/place/sense · do they have PDDL actions?</a></li>
+    <li><a href="#q7">Correct all the wrong TAMPURA mentions in the thesis.</a></li>
+    <li><a href="#q8">For an action like place, how does TAMPURA decide where?</a></li>
+    <li><a href="#q9">Is it realistic to run both systems side by side?</a></li>
+    <li><a href="#q10">Are the individual voxels each a predicate/fluent in the belief?</a></li>
+    <li><a href="#q11">What does the <code>look(?o1,?o2,?q)</code> controller look like?</a></li>
+    <li><a href="#q12">Is FastDownward faster than LAO* to begin with?</a></li>
+    <li><a href="#q13">Does this thesis actually add anything important?</a></li>
+    <li><a href="#q14">Does TAMPURA reason about space &amp; shadow regions? What about nested occluders?</a></li>
+    <li><a href="#q15">Have we actually <em>shown</em> the spatial belief scales better?</a></li>
+    <li><a href="#q16">What does &ldquo;TAMPURA assumes its abstraction&rdquo; mean?</a></li>
+    <li><a href="#q17">What does an abstract belief state look like &mdash; is it a matrix?</a></li>
+    <li><a href="#q18">Could TAMPURA solve our find / find-and-stack? What&rsquo;s the adaptation cost?</a></li>
+    <li><a href="#q19">SymK vs FastDownward &mdash; does FastDownward have an MDP inside it?</a></li>
+    <li><a href="#q20">Does TAMPURA have probability-weighted branching on sensing?</a></li>
+    <li><a href="#q21">Are both planners single-threaded?</a></li>
+    <li><a href="#q22">Does TAMPURA&rsquo;s placement avoid re-blocking the view?</a></li>
+    <li><a href="#q23">TAMPURA&rsquo;s accuracy on find_dice &mdash; and our best?</a></li>
+    <li><a href="#outcomes">What changed in the thesis as a result</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+  </ol>
+</nav>
+
+<section class="q" id="q1">
+  <h2>1. Is that sentence true? <span class="pill">issue #157 — fixed</span></h2>
+  <p class="asked">&ldquo;Implementations often resort to particle filters over dense voxel grids to approximate these continuous belief states [TAMPURA, Bayes3D]&hellip;&rdquo; — is this part true?</p>
+  <div class="box warn"><b>No — it was inaccurate</b>, and it&rsquo;s now fixed.</div>
+  <p>The sentence pinned one mechanism — &ldquo;particle filters over dense voxel grids&rdquo; — on two citations that don&rsquo;t actually work that way:</p>
+  <ul>
+    <li><span class="key">TAMPURA</span> does <em>not</em> use a particle filter over voxels for object pose. Its voxel grid is a <b>visibility</b> belief; placement is sampled in continuous pose space; and it plans with a learned abstract MDP solved by LAO* — no particle filter.</li>
+    <li><span class="key">Bayes3D</span> <em>does</em> use sequential Monte Carlo (a particle-filter family), but it is a <b>3D-scene perception</b> system, not a POMDP-TAMP planner — so it doesn&rsquo;t belong under &ldquo;POMDP-based TAMP solutions,&rdquo; and &ldquo;dense voxel grid&rdquo; isn&rsquo;t its scene model.</li>
+  </ul>
+  <p>The kernel of truth (continuous pose belief is hard; dense/sampling-heavy representations scale poorly) is fine — only the specific mechanism + attribution was wrong. The sentence was rewritten to describe each system accurately.</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q2">
+  <h2>2. How does TAMPURA deal with space?</h2>
+  <p class="asked">How does TAMPURA represent and reason about space?</p>
+  <div class="box tl"><b>TL;DR:</b> Three different ways, depending on the job — and none of them is a global place-grid.</div>
+  <ol>
+    <li><b>Planning state — no spatial grid at all.</b> The planner reasons over an <em>abstract, symbolic</em> MDP (logical predicates), not over geometry. Space is abstracted away before planning starts.</li>
+    <li><b>Continuous poses for grounding.</b> Where real geometry matters (placements, grasps), TAMPURA samples continuous SE(3) poses — no discretization, no place lattice.</li>
+    <li><b>A voxel grid only for <u>visibility</u>, only in one task.</b> The <code>find_dice</code> environment uses a 15&nbsp;mm occupancy grid as a belief over <em>what has been seen</em>: voxels start &ldquo;occupied&rdquo; (could-be-hidden-here) and flip to &ldquo;free&rdquo; as rays confirm sight.</li>
+  </ol>
+  <div class="box take"><b>Easy to misread:</b> TAMPURA&rsquo;s voxels are a <b>visibility/occupancy belief</b>, not a place-grounding lattice and not a pose representation. (That confusion is exactly what caused the #157 error.)</div>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q3">
+  <h2>3. Abstract symbolic MDP? LAO*? Are we better?</h2>
+  <p class="asked">What is an abstract symbolic MDP and what is a LAO*? Is there a way in which we are better than them?</p>
+
+  <h3>Abstract symbolic MDP</h3>
+  <p>An <span class="key">MDP</span> (Markov Decision Process) is the standard model for planning under uncertainty: states, actions, transition <em>probabilities</em>, and costs; solving it yields a <em>policy</em> (state &rarr; best action).</p>
+  <ul>
+    <li><b>Symbolic</b> — states are logical predicates (<code>holding(cup)</code>, <code>visible(region)</code>), not raw geometry. Uncertainty is baked into the state (&ldquo;die location unknown&rdquo;), so planning to <em>reduce</em> uncertainty falls out naturally.</li>
+    <li><b>Abstract</b> — a deliberately coarse model. Each controller&rsquo;s possible symbolic outcomes and their probabilities are <em>learned by simulation</em> offline. This collapses an infinite continuous problem into a small, finite MDP.</li>
+  </ul>
+
+  <h3>LAO*</h3>
+  <p><span class="key">LAO*</span> (Hansen &amp; Zilberstein, 2001) is a heuristic search algorithm for solving MDPs whose solutions contain <em>loops</em> (e.g. &ldquo;look again if you didn&rsquo;t find it&rdquo;). It expands only the relevant part of the state space and returns an optimal, contingent, information-gathering policy.</p>
+
+  <h3>Are we better? — honest answer</h3>
+  <table>
+    <tr><th>Where Boxels genuinely win</th><th>Where TAMPURA wins (don&rsquo;t claim otherwise)</th></tr>
+    <tr>
+      <td class="us">
+        <ul>
+          <li><b>Spatial belief scales better</b> — an adaptive, object-centric partition vs. a dense uniform grid.</li>
+          <li><b>Occlusion is first-class, inspectable symbolic state.</b></li>
+          <li><b>No offline per-controller model-learning step.</b></li>
+        </ul>
+      </td>
+      <td>
+        <ul>
+          <li><b>Plan-time speed</b> (offline amortization).</li>
+          <li><b>Real perception</b> — you currently use a ground-truth oracle.</li>
+          <li><b>Maturity</b> — fewer hardcoded constants.</li>
+        </ul>
+      </td>
+    </tr>
+  </table>
+  <div class="box take"><b>Framing:</b> not &ldquo;we&rsquo;re better,&rdquo; but &ldquo;a different point in the design space — a structured, adaptive, inspectable spatial belief, traded against TAMPURA&rsquo;s faster amortized planning.&rdquo;</div>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q4">
+  <h2>4. How do we know who&rsquo;s faster? Same task?</h2>
+  <p class="asked">&ldquo;TAMPURA is faster&rdquo; — how do we know? Did we run ours on the same task?</p>
+  <div class="box warn"><b>No.</b> We never ran TAMPURA, and we never ran our system on a TAMPURA task. There is no head-to-head.</div>
+  <p>The only comparison that exists is a bar chart (<code>plot_tampura_wallclock_comparison</code>): <b>our</b> measured <code>find-and-tray-stack</code> wall-clock (median ≈ 14&nbsp;s) next to TAMPURA&rsquo;s <b>published</b> Partial-Observability number (57&nbsp;±&nbsp;38&nbsp;s, hardcoded from their Table II). It is mismatched on three axes:</p>
+  <ul>
+    <li><b>Different task</b> — find-and-tray-stack vs. their Partial Observability.</li>
+    <li><b>Different hardware</b> — and it favors <em>them</em> (20-core Xeon vs. your 8-core CPU; both single-threaded, their base clock slightly higher).</li>
+    <li><b>Different statistic</b> — median+IQR vs. mean±std.</li>
+  </ul>
+  <div class="box take"><b>Correction made mid-session:</b> an earlier off-hand claim that &ldquo;TAMPURA wins on plan-time speed&rdquo; was retracted — the repo&rsquo;s own numbers actually show <em>ours</em> lower (14&nbsp;s vs 57&nbsp;s), but because it&rsquo;s cross-task/cross-hardware, the honest reading is &ldquo;architectural, not a benchmark&rdquo; — never a speed winner either way.</div>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q5">
+  <h2>5. TAMPURA&rsquo;s decision loop, start to end — and ours alongside</h2>
+  <p class="asked">Take me through their decision-making step by step, and explain in parallel how we do it.</p>
+  <div class="box tl"><b>The one idea to hold onto:</b> both are sense&rarr;plan&rarr;act loops, but <b>TAMPURA reasons about uncertainty <em>inside</em> the planner</b> (a probabilistic policy), while <b>we <em>determinize</em> it</b> and let the <em>outer</em> replan loop absorb the uncertainty.</div>
+  <table>
+    <tr><th>Stage</th><th>TAMPURA</th><th>Ours (Boxels)</th></tr>
+    <tr><td><b>0. Represent belief</b></td><td>Abstract symbolic belief; visibility as a dense voxel grid (in find_dice).</td><td class="us">Adaptive partition into OBJECT / FREE_SPACE / SHADOW boxels; belief = shadow status (&ldquo;unknown&rdquo;).</td></tr>
+    <tr><td><b>1. Build model</b></td><td>Learn-Model: simulate each controller J times to learn stochastic effect probabilities (a sparse MDP).</td><td class="us"><code>_build_init</code> re-emits a PDDL problem every replan; space &amp; visibility become symbolic facts.</td></tr>
+    <tr><td><b>2. Plan</b></td><td>Solve the MDP with LAO* &rarr; a contingent, risk-aware <em>policy</em>.</td><td class="us">PDDLStream + FastDownward &rarr; a single deterministic <em>plan</em>; continuous params sampled online by streams.</td></tr>
+    <tr><td><b>3. Execute</b></td><td>Run the controller the policy selects.</td><td class="us">Dispatch the plan action-by-action in PyBullet; a failure breaks out to replan.</td></tr>
+    <tr><td><b>4. Observe &amp; update</b></td><td>Observe the controller&rsquo;s abstract outcome; transition the belief.</td><td class="us">Raycast a shadow (found / empty / blocked); update belief; re-partition free space.</td></tr>
+    <tr><td><b>5. Loop / stop</b></td><td>Follow / re-solve the policy; anytime termination.</td><td class="us">Replan loop with a 3-strike give-up and a max-replans bound.</td></tr>
+  </table>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q6">
+  <h2>6. Stage 0 detail · action vs. controller · pick/place/sense · PDDL actions?</h2>
+  <p class="asked">Explain Stage 0 in much greater detail; the difference between an action and a controller; how their pick/place/sense differ from ours; and do they even have PDDL actions the planner reasons with?</p>
+
+  <h3>Action vs. controller</h3>
+  <p>A <span class="key">PDDL action</span> is purely symbolic — a name, parameters, preconditions, and add/delete effects. It executes nothing. A <span class="key">controller</span> is an executable, closed-loop skill <em>plus</em> a model of its (often learned, stochastic) effect. TAMPURA <b>fuses</b> the skill and its model into one controller and plans over those. We <b>separate</b> them: hand-written PDDL actions for the planner, plus separate <code>execute_…</code> routines at runtime — and we don&rsquo;t model stochasticity, we replan.</p>
+
+  <h3>Do they have PDDL actions? — yes, but at a different layer</h3>
+  <p>The decision layer is an MDP over <em>controllers</em> (not classical PDDL planning). But to build that MDP, TAMPURA repeatedly constructs optimistic <em>deterministic</em> plans with a classical planner — so a PDDL-style domain is reasoned over underneath. (Which planner? See <a href="#q12">Q12</a> — it&rsquo;s SymK, not FastDownward.)</p>
+
+  <h3>Pick / place / sense</h3>
+  <table>
+    <tr><th></th><th>Ours (PDDL action + routine)</th><th>TAMPURA (controller)</th></tr>
+    <tr><td><b>Pick</b></td><td class="us">Needs symbolic knowledge the object is there; IK from a stream; replan on failure.</td><td>Grasp + IK sampled; success/fail is a <em>learned probability</em>.</td></tr>
+    <tr><td><b>Place</b></td><td class="us"><b>Boxel-indexed</b> — pick a discrete FREE_SPACE region; IK fills the exact pose.</td><td><b>Continuous SE(3) pose</b> sampled directly; no place lattice.</td></tr>
+    <tr><td><b>Sense</b></td><td class="us"><b>Optimistic</b> — the action assumes the target is found; reality (147-ray cast) may differ &rarr; replan.</td><td>Outcome is a <em>learned probability</em>; LAO* <b>branches</b> on found/not-found inside the plan.</td></tr>
+  </table>
+  <div class="box take"><b>Sharpest differences:</b> <b>place</b> = discrete boxel vs. continuous pose; <b>sense</b> = optimistic-then-replan vs. probabilistic branching. But our sense is still <em>first-class</em> — the planner can deliberately &ldquo;move the occluder, then look.&rdquo;</div>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q7">
+  <h2>7. Correct all the wrong TAMPURA mentions <span class="pill">#158, #159 — fixed</span></h2>
+  <p class="asked">Correct all the wrong TAMPURA comparisons and mentions.</p>
+  <div class="box take"><b>Good news:</b> the thesis text was already accurate and carefully hedged. #157 was the only outright error. Two small tightenings were applied:</div>
+  <ul>
+    <li><b>#158</b> — &ldquo;competitive&hellip;on this <em>task family</em>&rdquo; &rarr; &ldquo;on the <em>closest analogous task</em>&rdquo; (find-and-tray-stack and Partial Observability aren&rsquo;t literally the same family).</li>
+    <li><b>#159</b> — added a sentence disclosing that the hardware gap, if anything, favors TAMPURA (single-threaded; their base clock is higher) — so a reader knows the comparison isn&rsquo;t tilted in your favor.</li>
+  </ul>
+  <p>Notably, the thesis already <em>refuses</em> the &ldquo;we beat TAMPURA&rdquo; reading and frames the comparison as architectural — which is correct.</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q8">
+  <h2>8. How does TAMPURA decide <em>where</em> to place?</h2>
+  <p class="asked">For an action like place, how does TAMPURA reason where to place an object?</p>
+  <div class="box tl"><b>TL;DR:</b> It mostly doesn&rsquo;t reason about &ldquo;where&rdquo; symbolically — it delegates &ldquo;where&rdquo; to a continuous sampler and lets the planner see only the outcome.</div>
+  <ul>
+    <li><b>No place lattice.</b> The symbolic <code>place</code> effect is coarse (&ldquo;object down / hand empty&rdquo;) — the planner never picks among discrete regions.</li>
+    <li><b>&ldquo;Where&rdquo; is a continuous sample.</b> <code>placement_sample_fn</code> samples SE(3) poses in the table area and keeps a feasible one.</li>
+    <li><b>The planner only sees the learned outcome</b> (place succeeds with some probability), estimated during Learn-Model.</li>
+  </ul>
+  <p><span class="key">Contrast:</span> for you, &ldquo;where&rdquo; is a <em>symbolic</em> choice (<code>place ?o ?b</code> targets a discrete FREE_SPACE boxel); only then does a stream solve IK for the exact pose inside it.</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q9">
+  <h2>9. Can we realistically run both systems side by side?</h2>
+  <p class="asked">Is it ever realistic to compare our work to TAMPURA? Can we run theirs on our env, ours on theirs, what&rsquo;s easier, how much effort?</p>
+  <div class="box tl"><b>TL;DR:</b> More realistic than most cross-system comparisons (shared substrate), but a full head-to-head is real work — and your notes already scope it as a post-thesis stretch goal.</div>
+  <p><b>Why it&rsquo;s feasible:</b> both are PyBullet tabletop manipulation, both plan single-threaded, and <code>find_dice</code> ≈ your hidden-target task. That alignment is rare.</p>
+  <h3>Effort ladder (cheapest &rarr; most rigorous)</h3>
+  <ol>
+    <li><b>Run <em>their</em> code on <em>your</em> hardware</b> (~1–2 days). No integration — just reproduce <code>find_dice</code> to convert their 57&nbsp;s into a number on your machine. Highest value-per-effort.</li>
+    <li><b>Run ours on their scene</b> (moderate). Reuses your planner; mainly an env adapter + constant re-tuning. <em>Easier of the two integrations.</em></li>
+    <li><b>Run theirs on our env</b> (moderate–high). You must express your task in TAMPURA&rsquo;s controller/abstraction formalism — the expensive part.</li>
+    <li><b>Shared scene, both planners</b> (weeks). The gold standard your discussion already names.</li>
+  </ol>
+  <p><b>Easier direction:</b> ours-on-theirs, because the steep cost of TAMPURA is its formalism (paid regardless of scene).</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q10">
+  <h2>10. Are the voxels individual predicates/fluents?</h2>
+  <p class="asked">Are those individual voxels each a fluent or predicate in the belief? (We cloned TAMPURA and read the code.)</p>
+  <div class="box warn"><b>No.</b> Voxels never enter the symbolic belief at all — proven from their source.</div>
+  <ul>
+    <li><b>The grid is a plain data structure.</b> <code>VoxelGrid</code> stores occupancy in a Python <code>dict</code> (<code>value_from_voxel</code>) — manipulated procedurally, never as logic.</li>
+    <li><b>The symbolic belief has zero voxels.</b> The <code>abstract()</code> method emits only object-level atoms (<code>known-pose</code>, <code>holding</code>, <code>is-target</code>, <code>moved</code>, <code>at-home</code>). No voxel predicate exists.</li>
+    <li><b>Voxels become a <em>probability</em>, not state.</b> In <code>look_effects_fn</code>, the count of newly-visible vs. still-hidden voxels becomes the success/fail probability of the single predicate <code>known-pose(die)</code>.</li>
+  </ul>
+  <div class="box take"><b>This is the crisp POD-vs-POMDP distinction:</b> TAMPURA keeps occlusion <b>sub-symbolic</b> (a voxel grid feeding one predicate&rsquo;s probability); you <b>lift it into symbolic state</b> (enumerable SHADOW regions with knowledge-literals the planner branches over). That is a genuine, defensible difference — and the backbone of your contribution.</div>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q11">
+  <h2>11. What does the <code>look(?o1,?o2,?q)</code> controller look like?</h2>
+  <p class="asked">How does the controller for <code>look(?o1, ?o2, ?q)</code> look?</p>
+  <p>In TAMPURA a controller = a schema that wires together a <b>planning-time model</b> (<code>effects_fn</code>), a <b>real execution</b> (<code>execute_fn</code>), and a <b>stream</b> for the continuous <code>?q</code>. Parameters: look behind occluder <code>?o2</code> for object <code>?o1</code> from camera config <code>?q</code>.</p>
+
+  <h3>The planning-time model — where voxels become a probability</h3>
+<pre><code>def look_effects_fn(action, belief, store):
+    # move arm to look-config ?q, render the camera image
+    new_seen   = belief.get_new_seen_voxels(camera_image)
+    success_count = len(new_seen)                  # voxels this look reveals
+    fail_count    = num_occupied - success_count   # voxels still hidden
+    # two abstract outcomes, weighted by those counts -> outcome probabilities
+    ab_counts = {fail_belief: fail_count, success_belief: success_count}
+    return AbstractBeliefSet(ab_counts, belief_map)   # what LAO* reasons over</code></pre>
+
+  <h3>The real-world controller</h3>
+<pre><code>def look_execute_fn(action, belief, state, store):
+    motion_plan = plan_motion(..., look_conf, ...)   # move the camera there
+    state.apply_sequence([motion_plan])
+    camera_image = state.world.robot.get_image(...)  # take a real image
+    return state, obs_from_camera_image(...)          # feeds belief.update()</code></pre>
+
+  <div class="box take"><b>This is the action-vs-controller split made concrete:</b> a plain PDDL action would only have the symbolic precondition/effect; TAMPURA&rsquo;s controller adds an executable skill <em>and</em> a predictive (simulation-based) model of its stochastic outcome.</div>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q12">
+  <h2>12. Is FastDownward faster than LAO*? <span class="pill">#160 — logged</span></h2>
+  <p class="asked">Is FastDownward faster than LAO* to begin with?</p>
+  <div class="box tl"><b>TL;DR:</b> They solve <em>different</em> problems, so it&rsquo;s not a real race — and checking the code flipped the premise.</div>
+  <ul>
+    <li>A <b>deterministic planner</b> finds a plan; <b>LAO*</b> solves an MDP (a policy over a stochastic model). For a comparable size, the MDP solve is strictly more work — but absolute speed depends on the instance.</li>
+    <li>They&rsquo;re usually <b>layered, not competing</b>: a deterministic planner is a subroutine that builds the model the MDP solver works on.</li>
+  </ul>
+  <div class="box warn"><b>Discovery:</b> TAMPURA does <u>not</u> use FastDownward. Its deterministic planner is <b>SymK</b> (a Fast&nbsp;Downward&ndash;derived <em>symbolic top-k</em> planner), and <b>LAO*</b> solves the MDP. So the thesis line &ldquo;both systems use FastDownward&hellip;the difference is not the search engine&rdquo; is <b>inaccurate</b> — logged as <b>#160</b> for fixing (in <code>discussion.tex</code> and <code>THESIS_NOTES §21.3</code>).</div>
+  <div class="box take"><b>The real point:</b> in neither system is the symbolic solver the bottleneck — <b>geometry sampling</b> is. So &ldquo;FastDownward vs LAO*&rdquo; is the wrong axis; &ldquo;<em>when</em> is sampling paid&rdquo; is the right one.</div>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q13">
+  <h2>13. Does this thesis add anything important? <span class="pill">#161, #162 — logged</span></h2>
+  <p class="asked">I find it hard to justify the point of this thesis. The related work is thin. Convince me it adds something — I just compared two versions of the same thing I&rsquo;ve done.</p>
+  <div class="box tl"><b>The doubt is mostly a <em>framing</em> problem, not a contribution problem.</b></div>
+
+  <h3>&ldquo;Two versions of the same thing&rdquo; is the ablation, not the contribution</h3>
+  <p>Semantic-vs-uniform is the control that shows the adaptive, object-centric structure is load-bearing. Every representation paper runs exactly that comparison. It&rsquo;s the <em>evidence for</em> the idea, not the idea.</p>
+
+  <h3>The actual contribution (and the code proves it&rsquo;s real)</h3>
+  <p>You make <b>occlusion first-class <em>symbolic</em> planning state</b>. We verified against TAMPURA&rsquo;s source that the strongest POMDP-TAMP system keeps occlusion <b>sub-symbolic</b> (a voxel grid that only weights one predicate&rsquo;s probability), whereas your planner promotes occluded volume to <b>enumerable SHADOW regions with knowledge-literals it branches over</b>. That&rsquo;s POD vs POMDP — a genuine architectural difference. Defensible one-liner:</p>
+  <div class="box take">A spatial belief representation that lifts occlusion into first-class symbolic state, letting a deterministic (POD) TAMP planner do deliberate, multi-step information-gathering — move the occluder, then look — without a probabilistic belief-MDP.</div>
+
+  <h3>Why it <em>feels</em> thin (and how to fix it)</h3>
+  <p>Your related work doesn&rsquo;t draw the map around your idea, so your landmark looks like it&rsquo;s floating. It omits the lineage you build on — belief-space TAMP (especially <span class="key">SS-Replan</span>, the closest cousin to your replanning loop) and the POD-translation line (<span class="key">LW1</span>, the planner your approach is based on, isn&rsquo;t even discussed). Fix the map (<b>#161</b>, using the SOURCES file) and the contribution becomes legible — that&rsquo;s most of <b>#162</b>.</p>
+
+  <h3>Honest calibration</h3>
+  <p>A Master&rsquo;s thesis does <b>not</b> need to beat the state of the art. It needs a clear, novel, validated idea with honest scope — and you have all three. Don&rsquo;t frame it as &ldquo;we beat TAMPURA&rdquo; (you can&rsquo;t, given the cross-task/cross-hardware comparison); frame it as a different, validated point in the design space. The real limits (oracle perception; reference-point comparison) are <em>scope statements</em>, not fatal flaws.</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q14">
+  <h2>14. Does TAMPURA reason about space &amp; shadow regions? Nested occluders?</h2>
+  <p class="asked">Doesn&rsquo;t it need to reason about space and shadow regions? What about nested objects &mdash; can it find an object behind a series of nested occluders?</p>
+  <div class="box tl"><b>TL;DR:</b> It reasons about space, but <em>not in the symbolic planner</em>, and it has no &ldquo;shadow region&rdquo; concept. Its benchmark doesn&rsquo;t test nesting.</div>
+  <p>Space lives in two places <em>outside</em> the planner: the visibility voxel grid, and the <code>effects_fn</code> simulation that estimates outcome probabilities. The symbolic planner consumes those probabilities; it never reasons over geometry. And TAMPURA has <b>no shadow-region concept</b> &mdash; that&rsquo;s your boxels. The closest it gets is <code>look(?o1, ?o2, ?q)</code> = &ldquo;look behind object <code>?o2</code>.&rdquo;</p>
+  <p><b>Nested occluders:</b> their <code>find_dice</code> hides the die under <b>one cup</b> (among 1&ndash;5 cups; <code>env_generator.py</code>) &mdash; single-layer, never nested. In principle it <em>could</em> chain (move a cup &rarr; depth image changes &rarr; grid updates), but the abstraction is coarse (one occluder per look; one binary <code>known-pose</code>), and deep nesting is untested. <b>Yours</b> handles nesting by design: <code>view_clear</code> requires clearing <em>all</em> blockers, and a sense that reveals a new occluder spawns a new SHADOW and re-partitions &mdash; peeling layers. That makes nested occlusion a clean distinguishing experiment (logged as TAMPURA_PLAN C5).</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q15">
+  <h2>15. Have we actually <em>shown</em> the spatial belief scales better?</h2>
+  <p class="asked">&ldquo;Spatial belief scales better&rdquo; &mdash; show me one way we&rsquo;ve shown that. (And I mean vs TAMPURA, not uniform.)</p>
+  <div class="box warn"><b>Honest answer:</b> we&rsquo;ve shown <b>compactness</b>, not scaling with environment size. The volume-scaling advantage is an <em>argument</em>, not a demonstrated result.</div>
+  <p>The sweep varies <code>n_occluders</code> {2,3,4} and resolution at a <b>fixed workspace</b>. What it shows: semantic uses ~45 boxels vs uniform&rsquo;s ~330 at the same scenes (~7&times;), staying flat as occluders grow. That&rsquo;s the &ldquo;order of magnitude fewer cells&rdquo; claim &mdash; real and supported.</p>
+  <p>What it does <b>not</b> show: cells/time vs <em>workspace volume</em>. <b>vs TAMPURA</b> specifically: their 15&nbsp;mm visibility grid is O(volume/res&sup3;) so it scales poorly with volume, while ours is O(occluders) &mdash; but that&rsquo;s an <b>asymptotic argument</b>, scoped to their <em>visibility</em> grid (their placement is continuous and immune), and we&rsquo;ve run neither a workspace-size sweep nor TAMPURA itself. To turn the argument into a figure: the workspace-size sweep (vary table side length; plot cells/time/success).</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q16">
+  <h2>16. What does &ldquo;TAMPURA assumes its abstraction&rdquo; mean?</h2>
+  <p class="asked">You said TAMPURA &ldquo;assumes its abstraction&rdquo; &mdash; what does that mean?</p>
+  <p>Its policy is only as good as the <b>learned model</b>. TAMPURA trusts that the J-simulation effect probabilities <em>and</em> its chosen abstraction predicates faithfully capture reality. If the abstraction is too coarse, or the samples unrepresentative, LAO* optimizes against a <em>wrong</em> model and can be confidently suboptimal. You don&rsquo;t have that failure mode &mdash; you replan against the current belief each step (you instead assume the <b>oracle</b>).</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q17">
+  <h2>17. What does an abstract belief state look like &mdash; is it a matrix?</h2>
+  <p class="asked">How does the symbolic belief look? Is it a matrix? Facts plus a likelihood?</p>
+  <div class="box tl"><b>TL;DR:</b> No matrix, no per-fact probability &mdash; it&rsquo;s a <b>set of logical facts (atoms)</b>.</div>
+  <p>TAMPURA&rsquo;s `abstract()` returns e.g. <code>{known-pose(cup1), is-target(die), moved(cup2), at-home}</code>. Probabilities live on the <b>transitions between whole belief-states</b> (P(land in state A) vs P(B)), not on individual facts. Yours is the PDDL state `_build_init` emits (<code>is_shadow</code>, <code>obj_at_boxel_KIF</code>, <code>view_clear</code>, &hellip;) plus a small `BeliefState` dict. The only array-like things in either system are the <em>sub-symbolic</em> substrates (TAMPURA&rsquo;s voxel dict; your raycast grids) &mdash; which the planner never sees.</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q18">
+  <h2>18. Could TAMPURA solve our find / find-and-stack? Adaptation cost?</h2>
+  <p class="asked">What does &ldquo;gridded&rdquo; mean? What gets updated on a reveal? Walk me through TAMPURA solving our find / find-and-stack. Does it have similar tasks? What&rsquo;s the adaptation cost?</p>
+  <ul>
+    <li><b>&ldquo;Gridded&rdquo;</b> = discretized onto a fixed lattice (pick a cell). &ldquo;Sampled, not gridded&rdquo; = continuous (x,y,z) sampled directly.</li>
+    <li><b>On reveal:</b> seen voxels flip occupied&rarr;free in the dict; if the die is hit, its pose is recorded and <code>known-pose(die)</code> enters the belief.</li>
+    <li><b>Find (= your <code>holding</code>):</b> this <em>is</em> <code>find_dice</code> (goal: hold the die + at-home). Loop: build MDP (simulate look-behind-each-cup / pick / place) &rarr; LAO* policy &rarr; execute &rarr; observe &rarr; replan.</li>
+    <li><b>Find-and-tray-stack:</b> <b>not out of the box</b> &mdash; no stack controller or tray; you&rsquo;d add a stack controller + stacking predicates.</li>
+    <li><b>Similar tasks it has:</b> <code>find_dice</code> (&asymp; your holding), plus <code>class_uncertain</code>, <code>puck_slide</code>, <code>slam_collect</code>, <code>tool_use</code>. None do tray-stacking.</li>
+    <li><b>Adaptation cost:</b> running your <em>find</em> &asymp; swap scene + reward (low&ndash;moderate); <em>find-and-tray-stack</em> &asymp; that plus a new stack controller (moderate&ndash;high); plus the one-time cost of standing up TAMPURA.</li>
+  </ul>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q19">
+  <h2>19. SymK vs FastDownward &mdash; does FastDownward have an MDP inside it?</h2>
+  <p class="asked">Are you sure TAMPURA uses FastDownward to build the MDP? Does FastDownward have an MDP inside it &mdash; prove it.</p>
+  <div class="box take"><b>Code-verified:</b> TAMPURA&rsquo;s <em>released code</em> uses <b>SymK</b> (a Fast Downward&ndash;derived top-k planner); its <em>paper&rsquo;s Algorithm 2</em> names FastDownward. And <b>neither planner has an MDP inside it.</b></div>
+  <p>The only &ldquo;downward&rdquo; strings in the repo are inside the bundled SymK; `policy_search.py` (the MDP-builder) imports `symk_search`/`symk_translate`; LAO* lives in a <em>separate</em> module (`solvers/lao_star.py`). FastDownward and SymK are <b>classical, deterministic</b> planners &mdash; no probabilities, no policy. <b>Your system has no MDP at all:</b> the domain has only <code>(increase (total-cost) N)</code> &mdash; costs, not probabilities &mdash; and FastDownward minimizes cost by deterministic search. The MDP is purely TAMPURA&rsquo;s separate outer layer (LAO*). <em>(This refined issue #160 from &ldquo;factual error&rdquo; to a paper-vs-code precision note: the thesis followed the paper.)</em></p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q20">
+  <h2>20. Does TAMPURA have probability-weighted branching on sensing?</h2>
+  <p class="asked">We don&rsquo;t get probability-weighted branching on the sense outcome &mdash; TAMPURA has that, right?</p>
+  <div class="box tl"><b>Yes</b> &mdash; it&rsquo;s their core strength; we trade it away for replanning.</div>
+  <p><code>look_effects_fn</code> returns two outcomes (found / not-found) weighted by voxel counts &rarr; `policy_search` builds the transition model &rarr; LAO* <b>branches</b> on the outcome inside the policy. We instead determinise (optimistic sense) and absorb the uncertainty by replanning.</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q21">
+  <h2>21. Are both planners single-threaded?</h2>
+  <p class="asked">Both single-threaded &mdash; are you sure? I passed numThreads=0 somewhere and it got much faster.</p>
+  <div class="box warn"><b>You&rsquo;re right to push:</b> the <em>search</em> is single-threaded; the <em>raycasting</em> is not.</div>
+  <p><code>execution.py:116</code> is <code>p.rayTestBatch(&hellip;, numThreads=0)</code> &mdash; Bullet uses all cores for the 147-ray sense batch (audit #69), &ldquo;on the planner hot path.&rdquo; So your wall-clock includes <b>multithreaded raycasting</b>. The &ldquo;both planners single-threaded&rdquo; line (#159) is true of the <em>FastDownward search</em> but imprecise for the wall-clock comparison; the hardware direction is murkier than that sentence implies (worth refining).</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q22">
+  <h2>22. Does TAMPURA&rsquo;s placement avoid re-blocking the view?</h2>
+  <p class="asked">Fetch the actual placement sampler &mdash; does it constrain placements to not re-block the view?</p>
+  <div class="box tl"><b>No.</b> <code>placement_sample</code> draws a uniform-random <code>(x, y, yaw)</code> on the table (respecting the object&rsquo;s footprint) and returns it &mdash; no collision check, no visibility check, no re-block avoidance.</div>
+  <p>TAMPURA places occluders <b>view-blind</b> and relies on the learned MDP / replanning to recover if a placement re-occludes. Contrast: your <code>blocks_view_at</code>/<code>view_clear</code> make re-blocking <em>visible to the planner</em>, so it can deliberately avoid or clear it &mdash; another concrete point for the &ldquo;why ours is better&rdquo; argument.</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="q23">
+  <h2>23. TAMPURA&rsquo;s accuracy on find_dice &mdash; and our best?</h2>
+  <p class="asked">What is TAMPURA&rsquo;s accuracy on their find_dice benchmark? Our best is 40, right?</p>
+  <p><b>Our success rates</b> (measured): find-and-tray-stack <b>39.8 %</b> (semantic) / 33.0 % / 1.3 % (uniform); <b>holding</b> 42.3 % / <b>46.3 %</b> / 33.3 %; stack 61.3 % / 61.3 % / 39.2 %. So &ldquo;our best is 40&rdquo; is the <em>find-and-tray-stack</em> number.</p>
+  <div class="box take"><b>Comparator caveat:</b> <code>find_dice</code> is &ldquo;find + retrieve a hidden die,&rdquo; which maps to our <b>holding</b> task (~42&ndash;46 %), <em>not</em> find-and-tray-stack (which adds stacking). So the fair number against find_dice is ~42&ndash;46 %, not 40 %.</div>
+  <p><b>TAMPURA&rsquo;s find_dice success rate</b> is <em>not</em> recorded in our notes (we captured its Table II <em>planning times</em>, not success rates). I won&rsquo;t invent it &mdash; it needs fetching from the paper (arXiv:2403.10454, Table II) or by running their code (TAMPURA_PLAN C1).</p>
+  <div class="toplink"><a href="#top">↑ back to top</a></div>
+</section>
+
+<section class="q" id="outcomes">
+  <h2>What changed in the thesis as a result</h2>
+  <table>
+    <tr><th>#</th><th>Issue</th><th>Status</th></tr>
+    <tr><td>157</td><td>&ldquo;Particle filters over voxel grids&rdquo; misattributed TAMPURA &amp; Bayes3D</td><td>Fixed (rewritten)</td></tr>
+    <tr><td>158</td><td>&ldquo;task family&rdquo; overstated comparability &rarr; &ldquo;closest analogous task&rdquo;</td><td>Fixed</td></tr>
+    <tr><td>159</td><td>Hardware-comparison direction was undisclosed (it favors TAMPURA)</td><td>Fixed</td></tr>
+    <tr><td>160</td><td>Determinised planner: SymK (code) / FastDownward (paper) — not a clean error</td><td>Done</td></tr>
+    <tr><td>161</td><td>Related Work was thin — enriched with belief-space + POD lineage</td><td>Done</td></tr>
+    <tr><td>162</td><td>Contribution under-justified — reframe around first-class symbolic occlusion</td><td>Open</td></tr>
+    <tr><td>163</td><td>State <em>why</em> ours is better (inspectable occlusion; no probabilities; no MDP)</td><td>Open (top priority)</td></tr>
+    <tr><td>164</td><td>Disclose the stack-cost caveat (stack costs 2&times; other actions)</td><td>Open</td></tr>
+    <tr><td>165</td><td>Defend &ldquo;space is part of the planning&rdquo; as the headline contribution</td><td>Open</td></tr>
+    <tr><td>166</td><td>Real novelty / related-work search (KIF+PDDLStream? POD in TAMP? symbolic occlusion?)</td><td>Open</td></tr>
+    <tr><td>167</td><td>Deeper LW1 treatment in related work + methods (user-added)</td><td>Open</td></tr>
+  </table>
+  <p>Fixes #157–#159 were each applied with a clean LaTeX rebuild and an individual commit; #160–#162 are recorded in <code>thesis_audit.md</code> for the next pass. The obsolete <code>proposal-template/</code> directory was also removed (work now lives in <code>thesis/</code>).</p>
+</section>
+
+<section class="q glossary" id="glossary">
+  <h2>Glossary</h2>
+  <dl>
+    <dt>TAMP</dt><dd>Task and Motion Planning — combining symbolic task planning with continuous motion planning.</dd>
+    <dt>POMDP</dt><dd>Partially Observable Markov Decision Process — a probabilistic model of acting under uncertainty; yields a policy.</dd>
+    <dt>POD</dt><dd>Partially Observable <em>Deterministic</em> planning — deterministic actions over knowledge-literals; uncertainty handled by what is <em>known</em>, plus replanning. Your paradigm.</dd>
+    <dt>MDP</dt><dd>Markov Decision Process — states, actions, transition probabilities, costs.</dd>
+    <dt>LAO*</dt><dd>Heuristic search that solves MDPs whose solutions contain loops (Hansen &amp; Zilberstein 2001). TAMPURA&rsquo;s MDP solver.</dd>
+    <dt>FastDownward</dt><dd>A classical (deterministic) planner using heuristic search. Used by your PDDLStream pipeline.</dd>
+    <dt>SymK</dt><dd>A Fast&nbsp;Downward&ndash;derived <em>symbolic top-k</em> planner. TAMPURA&rsquo;s deterministic planner (not FastDownward).</dd>
+    <dt>PDDLStream</dt><dd>The TAMP framework you build on — symbolic planning with &ldquo;streams&rdquo; that sample continuous parameters.</dd>
+    <dt>Boxel</dt><dd>Your semantic spatial unit; the partition has OBJECT, FREE_SPACE, and SHADOW boxels.</dd>
+    <dt>Shadow boxel</dt><dd>An explicit symbolic region representing volume occluded behind an object — where a hidden target might be.</dd>
+    <dt>Voxel (TAMPURA)</dt><dd>A cell in TAMPURA&rsquo;s 15&nbsp;mm visibility grid — a data-structure entry, <em>not</em> a planning predicate.</dd>
+    <dt>Knowledge-literal (K-literal)</dt><dd>A symbolic fact about what is <em>known</em> (e.g. <code>obj_at_boxel_KIF</code>), the core of POD planning.</dd>
+    <dt>Controller (TAMPURA)</dt><dd>An executable skill bundled with a learned model of its stochastic effect (<code>effects_fn</code> + <code>execute_fn</code>).</dd>
+    <dt>Oracle</dt><dd>The ground-truth source of object poses/visibility your system currently uses instead of a learned detector.</dd>
+    <dt>find_dice</dt><dd>TAMPURA&rsquo;s &ldquo;find the hidden die&rdquo; task — the closest analogue to your hidden-target task.</dd>
+  </dl>
+</section>
+
+<footer>
+  Generated from the 2026-05-21 working session · Semantic Boxels thesis &times; TAMPURA.<br>
+  Claims grounded in the thesis source, the codebase, and TAMPURA&rsquo;s published code (<code>aidan-curtis/tampura</code>, <code>tampura_environments</code>).
+</footer>
+
+</div>
+</body>
+</html>

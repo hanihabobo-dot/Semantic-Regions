@@ -1,0 +1,280 @@
+% !TEX root = ../main.tex
+
+\chapter{Discussion}
+\label{ch:discussion}
+
+The evaluation in \cref{ch:results} measures the Boxel-based POD-TAMP
+framework on three goals (holding, stack, find-and-tray-stack) against a
+uniform-grid baseline that keeps everything else fixed, and against
+TAMPURA's published numbers as an external reference. This chapter
+interprets those results: where the adaptive partition pays off, where
+finer leaves stop helping, what the TAMPURA comparison does and does not
+show, and what the failure modes say about the bottleneck.
+
+\section{Adaptive vs uniform partitioning}
+\label{sec:disc-semantic-vs-uniform}
+
+The headline finding is the cost gap between the adaptive partition and a
+uniform free-space grid at the same cell scale. Both partitions use the
+same auto-set cell size --- the largest object's footprint, $\approx$6--9\,cm
+in our scenes --- so the comparison isolates the structural choice rather
+than the resolution. On holding, the adaptive partition produces 25--43
+Boxels per scene; the uniform grid produces $\sim$320 free-space cells
+alone (\cref{fig:boxel-count-holding}). On stack the ratio widens to
+$\sim$25 vs $\sim$1340. Larger partitions translate to larger initial-state
+fact counts ($\sim$300 vs 11\,000--14\,000 on stack) and longer per-call
+planning time, which is the mechanism behind \cref{fig:plantime-holding}.
+
+What that gap buys is goal-dependent. On holding the uniform baseline
+still solves about a third of scenes; it pays several times the planning
+time at every $n_\text{occ}$ but the mechanism still works. On stack the
+adaptive variants degrade gracefully from 97\,\% at $h=2$ to 13\,\% at
+$h=4$, while uniform collapses from 97\,\% to 1\,\%. On
+find-and-tray-stack, which composes occluded sensing with stacking,
+uniform is effectively broken (1.3\,\% success). The reading is that the
+adaptive partition does not change the planner; it changes how many
+irrelevant cells the planner has to ground and search over. When the goal
+needs only a handful of candidate placements --- a single hidden target ---
+the overhead of a few hundred free-space cells is tolerable; when the
+goal requires composing placements across multiple replans, the overhead
+dominates.
+
+\section{The 5\,cm leaf-floor variant}
+\label{sec:disc-mbs0}
+
+The \texttt{semantic+mbs0.05} variant was included to test whether
+forcing a 5\,cm floor on the free-space leaf size changes outcomes
+against the default \texttt{semantic} configuration, where the leaf
+floor is the largest object's footprint. It does not: on stack the
+curves overlap seed-for-seed; on holding the floor is $\sim$4\,pp ahead
+of \texttt{semantic}; on find-and-tray-stack it is $\sim$7\,pp behind,
+with a visible degradation as $n_\text{occ}$ grows
+(\cref{fig:success-fats}). The mean replan count rises slightly on
+holding and find-and-tray-stack relative to \texttt{semantic} ---
+consistent with more sensing/replanning cycles without more
+successes.
+
+The mechanism is that the largest object's footprint ($\sim$6--9\,cm in
+our object set) is already the binding constraint on placement; the 5\,cm
+floor cannot shrink cells past this point and contributes only at the
+cost of more cells in the partition. This is a characterisation of the
+regime, not a defect of the method. In scenes whose placements are
+constrained by sub-5\,cm geometry --- narrow pockets, dense small-occluder
+shelves --- a finer leaf floor would in principle help. Constructing such
+a scene and re-running the same comparison is the natural follow-up; it
+is noted in \cref{sec:future_work}.
+
+\section{Architectural comparison with TAMPURA}
+\label{sec:disc-tampura}
+
+\Cref{fig:tampura} reports our \texttt{semantic} median wall-clock of
+14.0\,s on find-and-tray-stack against TAMPURA's reported
+57\,$\pm$\,38\,s on its Partial Observability task (Table~II of
+\cite{curtis2024partially}). The comparison merits a careful read
+because of how the two systems differ.
+
+The real difference is \emph{when} the geometry-sampling cost is paid.
+TAMPURA pays it offline in a Learn-Model phase (Algorithm~2 of
+\cite{curtis2024partially}): for each problem it constructs a sparse MDP
+$\bar{\mathcal{B}}_\text{sparse}$ by running $K$ deterministic
+FastDownward plans, then solves the sparse MDP at plan time with
+LAO*. The expensive step --- sampling continuous parameters --- is done
+once per problem and amortised across LAO*'s queries. Our system pays
+the same kind of cost online, every PDDLStream call, with streams
+sampling inside the planner loop. Both run a Fast Downward--based determinised planner inside the loop---ours
+via PDDLStream; TAMPURA's released code via SymK, a Fast Downward--derived
+top-$k$ planner (its Algorithm~2 names FastDownward)---so the salient
+difference is \emph{when} geometry sampling is paid, not the search engine.
+Neither system caches across episodes.
+
+This framing changes what the 14.0\,s vs 57\,s number means. It is not a
+``semantic-Boxels-beats-TAMPURA'' claim --- comparing wall-clocks of two
+fundamentally different sampling schedules is not a benchmark of either.
+It does show that the streams-online architecture is competitive with
+the offline-MDP architecture on the closest analogous task, without front-loading
+the sampling cost---and it reaches that parity without the learned sparse-MDP
+abstraction the offline architecture must estimate, one of the representation
+advantages set out in \cref{ch:related-work}: deterministic knowledge literals in
+place of a probabilistic model, at the price of no risk-weighting and a reliance on
+replanning (\cref{sec:limitations}).
+
+Beyond \emph{when} sampling is paid, the comparison highlights \emph{what} each system can reason about. Because our planner holds occlusion as explicit symbolic state, line of sight is a planning condition: the \texttt{sense} action requires a clear view of its target region, and the objects that block a view are explicit facts in the planner's state. Those facts also cover candidate placements: a free cell lying on the camera's line of sight to a shadow is flagged as view-blocking, so the planner will not set an object down where it would block a region it still needs to observe. TAMPURA's \emph{Find Die} benchmark---its hidden-object task, the closest analogue to our setting---instead keeps occlusion sub-symbolic: a visibility voxel grid that only weights the success probability of the \texttt{look} action, and a placement sampler that draws object poses with no visibility check, so an object can be placed view-blind. Making space plannable in this way is the point of the representation; its present realization is partial---a clear view is a precondition, but \emph{restoring} a blocked view by first moving the obstruction is left to future work (\cref{sec:future_work}), and the current loop instead bounds itself with a give-up rule (\cref{sec:limitations}).
+
+\section{Failure modes}
+\label{sec:disc-failure}
+
+\Cref{fig:failure-modes} stacks the exit reasons across all nine
+$(\text{goal}, \text{variant})$ cells. Three patterns matter.
+
+First, \texttt{planner\_failed} dominates everywhere. This means the
+PDDLStream search exhausted its budget without finding a feasible plan
+--- typically because every grasp or motion sample on a candidate Boxel
+was rejected or the Boxel itself was unreachable. The bottleneck is
+search, not perception or execution.
+
+Second, \texttt{replan\_limit} is the second-largest slice on stack and
+visible on holding \texttt{semantic+mbs0.05}. The sense--plan--act loop
+is bounded by a maximum number of replans per episode; hitting this
+bound indicates a shadow whose contents the system could not resolve
+within the loop. This is the failure path of the bounded
+three-strike give-up discussed in \cref{sec:limitations}: when a
+sensing target returns \emph{still-blocked} three times the loop marks
+the shadow empty and proceeds; if no candidate shadow remains the
+episode fails with \texttt{replan\_limit}.
+
+Third, \texttt{timeout} is small everywhere except find-and-tray-stack
+adaptive variants, where it accounts for roughly 10\,\% of cells.
+Find-and-tray-stack is a multi-step composition of search and stacking;
+episodes that nearly succeed but exhaust the per-call budget on a
+difficult replan show up here. \texttt{uniform} on find-and-tray-stack
+is almost entirely \texttt{planner\_failed} (or \texttt{no\_summary},
+which records the same fact at a different point in the execution
+loop), consistent with the 1.3\,\% success rate.
+
+Read together, the failure-mode breakdown points at search heuristics
+and the give-up rule as the two paths most likely to lift success rates
+without changing the representation.
+
+\section{Threats to validity}
+\label{sec:disc-validity}
+
+The findings above are conditional on the scenes, the budget, and the
+oracle perception. Five threats merit explicit mention.
+
+\paragraph{Scene family.} All measurements are on tabletop scenes with a
+fixed overhead camera, a Franka Panda, and 6--9\,cm cubes. The
+adaptive-vs-uniform gap is most pronounced in this regime because
+free-space cells dominate the uniform partition; in scenes with denser
+objects or smaller workspaces the ratio would narrow.
+
+\paragraph{Oracle perception.} Object detection reads ground-truth poses;
+a learned detector consuming the rendered RGB-D would surface noise,
+misclassification, and partial-detection failure modes the current
+numbers do not reflect.
+
+\paragraph{TAMPURA via published numbers.} We compare against TAMPURA's
+Table~II rather than re-running their code. Algorithmic, implementation,
+and parameter differences are bundled into a single delta. Both planners
+are single-threaded, and TAMPURA's CPU has a marginally higher base clock
+(2.5 vs 2.0\,GHz), so the hardware difference, if anything, slightly
+favours TAMPURA rather than us. Re-running both systems on a shared scene
+file would strengthen the comparison.
+
+\paragraph{Resolution regime.} The mbs0.05 null finding holds for the
+scene scales tested. It does not generalise to scenes where placements
+are constrained by sub-5\,cm geometry; constructing such a scene is the
+natural follow-up (\cref{sec:future_work}).
+
+\paragraph{Bounded give-up.} The three-strike give-up on still-blocked
+shadows is unsound for shadows that are physically unreachable. The run
+report distinguishes shadows observed empty from shadows given up this
+way, and the evaluation counts the give-up case as a failure;
+\cref{sec:limitations} expands on the consequence.
+
+The Limitations and Accepted Simplifications below catalogue the design
+decisions that fix the scope of these results.
+
+\section{Limitations and Accepted Simplifications}
+\label{sec:limitations}
+
+The system evaluated in this thesis embodies a set of deliberate
+simplifications. Each was adopted to keep the implementation tractable and
+to isolate the contribution --- semantic Boxel discretization and its
+integration with partially observable deterministic TAMP --- from concerns
+that are orthogonal to it. This subsection consolidates these
+simplifications so that the empirical claims of \cref{ch:results} are
+read with the correct scope.
+
+\paragraph{Perception.} The scene contains a single fixed overhead camera
+that observes the whole table. Its rendered RGB-D images are not processed,
+however: object detection is performed by an oracle that queries
+ground-truth object poses directly from the simulator and uses ray-casts to
+determine which objects are visible from the camera's viewpoint. There is
+therefore no learned detector and no sensor-noise model. This isolates the
+planning contribution from perception error --- a real perception module
+consuming the camera images could replace the oracle without altering the
+planning architecture. Because the camera is fixed, the robot never moves
+to a sensing configuration; this is sufficient for the tabletop scenes
+studied here, where every shadow is visible from one viewpoint, but a
+robot-mounted sensor would be required for occlusions not visible from any
+fixed vantage point.
+
+\paragraph{Manipulation and execution.} Grasping is constraint-based: a
+held object is rigidly welded to the gripper, so objects cannot slip or be
+dropped in transit. Only top-down grasps are sampled, at a single fixed
+height offset. The final approach phase of a pick uses a local
+inverse-kinematics solver that bypasses the planner's collision checks, on
+the standard TAMP assumption that the short final motion is obstacle-free
+if the pre-grasp pose is valid. After a place or stack, execution adds a
+small hardcoded vertical lift before returning; this lift is invisible to
+the planner --- it produces no PDDL state change and moves only along the
+gravity axis --- and exists solely to give the sampling-based motion
+planner a non-pathological start configuration for the next move. Collision
+events detected during execution are logged but do not trigger an automatic
+replan.
+
+\paragraph{Spatial representation.} Free-space cells are merged only across
+exactly aligned shared faces; a full semantic merge --- matching
+view-blocking, observability, and ordering --- was not implemented, so the
+partition contains more Boxels than strictly necessary. When an occluder is
+relocated, its previously computed shadow geometry and the shadow-blocker
+map are not recomputed at its new position. This rests on the assumption
+that the world is static apart from the objects the robot itself moves:
+nothing else shifts, so the only outdated geometry belongs to the relocated
+object, whose new pose the planner tracks explicitly and replans from. The symbolic interface also uses
+string identifiers as proxies for geometric volumes --- shadows and moved
+occluders are passed to the planner as named entities rather than as
+bounding boxes or occupancy grids --- bridging continuous geometry to
+discrete planning at the cost of a representation that is not purely
+geometric.
+
+\paragraph{Planning.} The primary goal studied is \texttt{holding};
+\texttt{stack} and \texttt{find-and-tray-stack} are shipped extensions that
+broaden goal diversity. Enabling stacking roughly doubles per-call planning
+time, traced to the conditional-effects requirement on the pick action;
+this regression is accepted rather than optimized away, a mitigation having
+been considered and dropped as out of scope. A second, smaller planner-search
+bias concerns the cost model: the domain gives the \texttt{stack} action a cost
+of 2 while every other action costs 1. This is a hand-tuned bias rather than a
+claim about stacking---because the planner minimises total plan cost and cannot
+weigh one action's outcome likelihood against another's, the higher cost is what
+keeps it from substituting a \texttt{stack} as a cheap rescue when a \texttt{place}
+onto a free Boxel fails its motion check, forcing it to exhaust placement options
+first. It is a deterministic stand-in for the probabilistic action selection the
+POD layer does not perform; \texttt{stack} remains available whenever the goal
+requires it. More fundamentally, when a
+shadow returns \emph{still-blocked} three times in succession the execution
+loop marks it as not containing the target and proceeds. The shadow is
+never directly observed, so for a physically unreachable shadow this
+violates the invariant that belief should reflect observation. It is
+accepted to keep the sense--plan--act loop bounded; the run report
+distinguishes shadows observed empty from shadows given up this way, and
+the evaluation counts the give-up case as a failure. The principled
+remedy --- re-grounding the planner's view-blocking atoms from current
+physics --- is left to future work (\cref{sec:future_work}).
+\Cref{fig:retry-giveup} catches this event in the action log.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{sim/sense_fail_retry3.png}
+    \caption{The bounded give-up in action. The log line ``retry 3/3'' marks the third consecutive still-blocked sensing attempt on a shadow; at this point the loop marks the shadow empty and proceeds, even though it was never directly observed. This is the unsound shortcut discussed above.}
+    \label{fig:retry-giveup}
+\end{figure}
+
+\paragraph{Parameters.} Several geometric constants --- grasp height
+offsets, approach and lift heights, the octree's minimum leaf size, the
+camera pose --- are tuned for the specific table, robot, and object set
+used here and would not transfer unchanged to a different setup.
+Generalizing them, for example by deriving grasp parameters from object
+geometry, is orthogonal to the core contribution and is noted as future
+work.
+
+\paragraph{Simplifications disclosed in the approach.} Two further
+simplifications are stated where they are introduced rather than here. The
+conceptual belief model uses two Know-If literals, $K(p)$ and $K(\neg p)$;
+the implemented domain collapses these into a single Know-If fluent paired
+with a value-carrying fluent, an equivalent encoding for the scenarios
+studied (\cref{sec:kif_belief}). The \texttt{sense} action is modeled
+optimistically --- it assumes the target is found --- with reactive
+replanning when execution reveals otherwise, because PDDLStream and
+FastDownward do not support contingent planning (\cref{ch:methods}).

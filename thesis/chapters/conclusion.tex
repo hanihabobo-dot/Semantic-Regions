@@ -1,0 +1,49 @@
+% !TEX root = ../main.tex
+
+\chapter{Conclusion}
+\label{ch:conclusion}
+
+This thesis presented a novel approach to Task and Motion Planning under partial observability by integrating a semantic spatial abstraction, termed Boxels, with a Partially Observable Deterministic planning framework. At the core of the methodology is adaptive semantic discretization: it partitions the workspace into Boxels, concentrating detail on the objects and occluded regions that matter for the task. By modeling belief states over these Boxels, our system lets a PDDLStream-based TAMP framework plan around uncertain object locations and occlusions.
+
+The Semantic POD-TAMP model formalizes this integration, enabling the planner to generate and execute plans that interleave information-gathering and manipulation actions. The use of K-literals to represent knowledge within the PDDL state allows for a direct and conceptually simple integration with existing POD planners. As demonstrated, this enables the robot to reason about what it knows and where uncertainty lies, and to take actions to resolve that uncertainty in a targeted manner.
+
+This work contributes a representation in which occlusion is first-class symbolic state, letting a TAMP framework handle partial observability without enumerating an exhaustive state space and without the sub-symbolic visibility grid of a POMDP-based TAMP baseline such as TAMPURA's \emph{Find Die} benchmark. The evaluation isolates this representation by ablation---the same planner on the adaptive partition against a uniform grid at the same cell scale---and shows on three tabletop goals that it produces an order of magnitude fewer cells, lowering per-call planning time accordingly and solving find-and-tray-stack scenes that the uniform baseline effectively cannot (39.8\,\% vs 1.3\,\% success). The semantic+mbs0.05 variant---forcing a 5\,cm floor on the free-space leaf size---is indistinguishable from the default in the regime tested, indicating that placement is bottlenecked on object footprint rather than free-space resolution at these scene scales. Against the published TAMPURA POMDP-based framework, the streams-online approach reaches a median wall-clock of 14.0\,s on the closest analogous task; the comparison is architectural rather than a hardware benchmark, since the difference reflects when geometry sampling is paid (TAMPURA front-loads it offline; PDDLStream pays it per call). The remaining directions for extending this work are outlined below.
+
+\section{Future Work}
+\label{sec:future_work}
+
+The simplifications consolidated in \cref{sec:limitations} each suggest a
+concrete next step. The following directions would extend the system beyond
+the tabletop scenes evaluated here without altering its core architecture.
+
+\paragraph{Learned perception.} The most direct extension is to replace the
+oracle detector with a learned perception module that operates on the
+rendered RGB-D images rather than ground-truth simulator poses. Because the
+oracle is confined behind a narrow detection interface, such a module could
+be substituted without changing the Boxel discretization or the planning
+layer, turning the architecture's perception-agnosticism from a claim into
+a demonstrated property.
+
+\paragraph{Active sensing with a robot-mounted camera.} The current fixed
+overhead camera observes the whole table at once. A robot-mounted sensor
+would require the planner to reason about \emph{where to look}: a
+sensing-configuration stream that computes a robot pose from which a target
+region becomes visible, integrated as an additional precondition on the
+\texttt{sense} action. This is the prerequisite for scenes with occlusions
+not visible from any single fixed viewpoint.
+
+\paragraph{Discovering objects beyond anticipated shadows.} When the robot
+senses a shadow region, any object hidden there is discovered and added to
+the representation. The scenes studied here are arranged so that every
+place an object can hide is one such anticipated shadow region. Extending
+the approach to objects hidden inside concave geometry --- such as a
+container or cupboard, whose interior is itself a hidden region that may
+hold further objects and occlusions --- would require the partitioning to
+recurse: re-running over the newly revealed interior and recursively
+bounding whatever it exposes.
+
+\paragraph{Full semantic free-space merge.} Free-space cells are presently
+merged only across exactly aligned shared faces. A full semantic merge that
+also matches view-blocking, observability, and back-to-front ordering would
+yield a coarser, more task-relevant partition with fewer Boxels, reducing
+the planner's initial-state size.
