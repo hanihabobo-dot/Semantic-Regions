@@ -154,7 +154,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
 
 ################################################################################
 #                                                                              #
-#  OPEN ISSUES — #98 #100 #101                                                 #
+#  OPEN ISSUES — #98 #100 #101 #104                                            #
 #                                                                              #
 ################################################################################
 
@@ -607,14 +607,69 @@ Related:
 
 
 ================================================================================
-SUMMARY — STATUS (updated 2026-05-23)
+#104. REFRESH THE PLOTS + DATA EMBEDDED IN THE THESIS PDF TO CURRENT EVAL OUTPUTS
+================================================================================
+Status:   OPEN.  Filed 2026-05-24.  The thesis PDF embeds older eval
+          figures + quoted numbers; the data has moved on (#100 merged
+          the 1800 coarse-end cells -> 4500-cell sweep_anytime;
+          figures regenerated under .../sweep_anytime/resolution/).
+          Tracks re-sourcing every figure + number the PDF shows.
+Priority: TIER 3 — figure/data sync into the thesis; no codebase
+          correctness risk.  Gates a faithful thesis build.
+Where:    eval_results/sweep_anytime/ (+ /resolution/) = figure/table
+          source; thesis/graphics/ = embedded copies; thesis .tex =
+          quoted numbers.  Tooling: eval_plotter.py +
+          tools/render_thesis_figs.py (in progress).
+Depends:  #100 (merged dataset + combined resolution figure); #98
+          RESULT (the numbers); thesis_audit.md #121 (eval chapter),
+          #168 (partition-comparison figure).
+Effort:   ~0.5 day — re-export + swap PNGs, reconcile numbers, rebuild.
+
+What:  The PDF's eval figures + data are downstream of the pipeline
+       and have drifted: the resolution figure/numbers are new
+       (#100/#101); sweep_anytime is now the 4500-cell merged set, so
+       headline success-rate / planning-time / partition numbers may
+       be stale; the partition-comparison figure (#168) is still being
+       curated.  Every eval-derived figure + number must be re-sourced
+       from the current artifacts.
+
+Fix:   1. Inventory every eval-derived plot + quoted number in the
+          thesis (eval-chapter figures; resolution figure #100;
+          partition comparison #168; headline tables).
+       2. Re-export current PNGs/tables from sweep_anytime/ (+
+          /resolution/) via eval_plotter.py / render_thesis_figs.py;
+          swap the stale copies in thesis/graphics/.
+       3. Reconcile quoted numbers vs the regenerated summary_table.md
+          (holding 42.3/40.3/45.7; f-a-t-s 39.8/35.3/35.3; stack 61.3
+          flat).
+       4. Rebuild the PDF; confirm figures + numbers consistent.
+
+Care:
+       (1) Plots ADD, never overwrite — keep old thesis figures
+           regenerable; read each regenerated PNG before embedding.
+       (2) Document-side edits (figure swaps + prose) land in the
+           thesis repo; thesis_audit.md owns those (#121 / #168).
+           This CODEBASE issue is the data/figure-sync tracker and
+           closes when the PDF's eval figures + numbers are current.
+       (3) Stack rows carry the #95 cell-tag misnaming — slice stack
+           by stack_height, not the occ token.
+
+Related:
+       #100 — merged dataset + combined resolution figure.
+       #101 — eval-chapter resolution-axis writeup.
+       #98  — the RESULT the numbers must match.
+       thesis_audit.md #121 / #168 — thesis chapter + figure.
+
+
+================================================================================
+SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
 Issue numbers are chronological (discovery order), NOT priority — follow the
 TIER labels.  Full bodies of closed issues are in git history
 (git log --grep="audit: mark #N") and the "RESOLVED / DONE ISSUES" section of
 archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 3 items (full bodies above):
+OPEN — 4 items (full bodies above):
   #98  TIER 2 — coarse-end resolution sweep DONE; RESULT recorded
        (resolution axis flat above auto_cell — auto_cell is a
        robust plateau).  Integration follow-ups split to #100/#101.
@@ -622,6 +677,9 @@ OPEN — 3 items (full bodies above):
        + combined 4-point resolution plot (#98 Step 4).
   #101 TIER 3 — eval-chapter resolution-axis writeup; thesis #121
        territory (#98 Step 5).
+  #104 TIER 3 — refresh the plots + data embedded in the thesis PDF
+       to the current (post-#100 merge) eval outputs; figure/data
+       sync into the thesis (thesis #121 / #168).
   TIER 0/1: zero open items.
 
 CLOSED (one-line; full detail in git / archive):
