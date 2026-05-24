@@ -304,6 +304,12 @@ review (see CORRECTIONS at top).
 ================================================================================
 T1. HONEST-IFY THE CITED fig:tampura COMPARISON  (thesis-now, NOT gated)
 ================================================================================
+STATUS (2026-05-24): RESEARCH/ANALYSIS DONE (commit f749525 -- see the
+        "T1 RESEARCH (2026-05-24, pre-edit)" block below).  The honest-
+        ification is DESIGNED; APPLYING it is what remains.  NEXT = start
+        work item 1 (eval_plotter.py: holding + dual time-measure plot),
+        then the thesis prose (abstract/results/discussion), THESIS_NOTES
+        §21, and the memory file.  T1 is NOT closed until those edits land.
 Priority: TIER 1 of the comparison -- cheapest, highest value, and the
           only item not blocked by the supervisor gate.  It fixes (and
           RESOLVES a self-contradiction in) a comparison the thesis
