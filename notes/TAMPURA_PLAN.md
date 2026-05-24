@@ -137,7 +137,7 @@ Currently-open TAMPURA work
   uses our SEMANTIC system.  The #66 body below is UNCHANGED: it is a
   shared-across-branches artifact (see its own Care note), so it must
   not be edited on this branch.
-- T1 -- honesty fixes to the cited fig:tampura comparison (thesis-now).
+- T1 -- MOVED to thesis_audit.md #177 (thesis-prose contradiction; thesis-now).
 - T2 -- run our holding pipeline on a find_dice-equivalent scene.
 - T3 -- stand up & run real TAMPURA find_dice on our hardware.
 - CAVEAT -- occlusion-mode mismatch (comparability boundary).
@@ -302,168 +302,14 @@ comparison).  All factual claims here verified against source this
 review (see CORRECTIONS at top).
 
 ================================================================================
-T1. HONEST-IFY THE CITED fig:tampura COMPARISON  (thesis-now, NOT gated)
+T1. -> MOVED to thesis_audit.md #177 (2026-05-24)
 ================================================================================
-STATUS (2026-05-24): RESEARCH/ANALYSIS DONE (commit f749525 -- see the
-        "T1 RESEARCH (2026-05-24, pre-edit)" block below).  The honest-
-        ification is DESIGNED; APPLYING it is what remains.  NEXT = start
-        work item 1 (eval_plotter.py: holding + dual time-measure plot),
-        then the thesis prose (abstract/results/discussion), THESIS_NOTES
-        §21, and the memory file.  T1 is NOT closed until those edits land.
-Priority: TIER 1 of the comparison -- cheapest, highest value, and the
-          only item not blocked by the supervisor gate.  It fixes (and
-          RESOLVES a self-contradiction in) a comparison the thesis
-          ALREADY makes; needs no TAMPURA run.
-Where:    eval_plotter.py plot_tampura_wallclock_comparison (goal filter
-          line 1007 `r.get("goal") != "find-and-tray-stack"`; caption
-          lines 1073-1078 -- STILL says "20-core Xeon ... ours 8-core");
-          thesis/chapters/results.tex subsec:tampura (209-216: "the
-          closest analogue", 14.0 s, n=119, ~4x);
-          thesis/chapters/abstract.tex (14-17: "closest analogue ...
-          14.0 s vs 57 s" -- THE HEADLINE; MISSED by the 2026-05-23 draft);
-          thesis/chapters/discussion.tex (70-94 still uses 14.0 s on
-          f-a-t-s; 101 ALREADY calls find_dice the closest analogue;
-          158 ALREADY has the single-threaded/clock framing);
-          thesis/chapters/related-work.tex (SymK/FD wording);
-          THESIS_NOTES §21.1 (hardware caveat; fix the stale
-          proposal-template path there).
-Depends:  None.  Holding wall-clock already exists in the SAME eval rows
-          the plot reads -- VERIFIED: sweep_anytime has holding rows
-          (semantic n_success=127; summary_table_aggregate.csv).  The
-          core fix is changing the line-1007 filter string.
-
-What:  THE THESIS CONTRADICTS ITSELF.  fig:tampura + results.tex:209 +
-       abstract.tex:14-17 + discussion.tex:70-94 compare OUR find-and-
-       tray-stack (median 14.0 s, n=119) against TAMPURA find_dice (mean
-       57+-38 s) and call f-a-t-s "the closest analogue".  But
-       discussion.tex:101 ALREADY states the opposite -- TAMPURA's "Find
-       Die ... the closest analogue to our setting" -- and find_dice IS
-       our `holding` task, not f-a-t-s (which adds trays + stacking,
-       strictly more).  So T1 is contradiction-RESOLUTION, and the
-       thesis's own discussion is the justification.  Gaps:
-       (a) TASK: figure/abstract/results compare the wrong task (f-a-t-s);
-           discussion.tex:101 already names the right one (find_dice).
-       (b) STATISTIC: ours = median + IQR, success-only; theirs =
-           mean +- std over ALL 20 anytime trials.  Mixed statistics.
-       (c) SUCCESS RATE absent AND its DIRECTION unverified.  The
-           2026-05-23 draft assumed "TAMPURA trades success for speed"
-           (TAMPURA = lower success) -- but OUR holding success is only
-           ~42 % (semantic) / ~46 % (mbs0.05) / ~33 % (uniform).  If
-           TAMPURA's find_dice success (Table II) is high, WE are the
-           low-success side and "4x faster" misleads the OTHER way.  Pull
-           the actual number; state direction FROM data.
-       (d) HARDWARE: the figure CAPTION still says "20-core Xeon vs
-           8-core" (eval_plotter.py:1076) -- but discussion.tex:158
-           ALREADY has the correct framing (both single-threaded; TAMPURA
-           2.5 vs our 2.0 GHz base clock slightly favours TAMPURA).  So
-           this is a caption/abstract CONSISTENCY fix to match the
-           already-correct discussion, not a fresh correction.
-       (e) SymK: related-work wording only.  discussion.tex:84-87 ALREADY
-           calls SymK "a Fast Downward-derived top-k planner" -- again
-           consistency, not new.
-       (f) TIME MEASURE (new): confirm BOTH numbers are per-episode
-           wall-clock INCLUDING PyBullet execution + replanning, not
-           solve-only.  results.tex:209 says "per-episode wall-clock" and
-           14.0 s is median wall_clock_s -- but the summary table reports
-           a DIFFERENT, smaller mean_plan_time_s (holding semantic 7.78 s);
-           do NOT conflate.  TAMPURA's 57 s is per-episode (memory
-           reference_tampura_perf: 21-129 s/episode).  If the two sides
-           measure different spans the comparison is a category error --
-           check before re-deriving any delta.
-       (g) TASK ASYMMETRY (new): find_dice goal = holding(die) AND at-home
-           (env.py:1004).  OUR holding goal = (holding ?o) ONLY -- the
-           domain has NO home goal predicate (home_config is just the
-           motion rest pose, streams.py:190; goal tuple is ('holding',obj),
-           pddlstream_planner.py:145).  find_dice does strictly MORE (one
-           final go-home).  State "holding ~ find_dice MINUS homing"; do
-           NOT claim exact equivalence.
-
-Fix:   - Switch the line-1007 goal filter to `holding` (or add a holding
-         series alongside f-a-t-s, labelled).  Re-derive the delta from
-         holding rows; it WILL change (holding < f-a-t-s wall-clock, so
-         the gap likely GROWS in our favour) -- do NOT carry over 14.0 s
-         / "~4x".
-       - Fix abstract.tex:14-17 (the headline) AND results.tex:209 +
-         discussion.tex:70-94 to name `holding` as the analogue, aligning
-         them with discussion.tex:101.
-       - Report ours as mean +- std too, OR annotate the median-vs-mean
-         and success-only-vs-all-trials mismatch in caption + THESIS_NOTES.
-       - Add success rate, BOTH sides (ours from eval ~42 %; TAMPURA from
-         Table II), and state who trades success for speed FROM the data.
-       - Rewrite the figure caption (eval_plotter.py:1076) to drop
-         "20-core"; match discussion.tex:158 (single-threaded; clock
-         slightly favours TAMPURA).
-       - Correct SymK/FD in related-work + memory reference_tampura_perf.md
-         (discussion already correct).
-       - Verify the (f) time-measure parity before trusting any delta.
-       - State NO speed winner; keep the architectural framing (offline
-         Learn-Model vs online stream sampling) the thesis already has.
-Effort: ~0.5-1 day, mostly plot + prose + caption.  Re-read the
-        regenerated PNG before commit (feedback_plot_regeneration).
-Care:  (1) Switching to holding changes the headline number -- state it
-           from data; do not reuse 14.0 s / 4x.
-       (2) T1 buys task-TYPE parity, NOT scenario parity: the holding rows
-           are our default/random scenes, NOT find_dice-equiv scenes.  The
-           residual scene-distribution gap is closed only by T2.  Say so;
-           do not over-sell T1 as "same problem".
-       (3) Keep success-only vs all-trials explicit: TAMPURA's 57 s is
-           over all 20 trials (incl. failures); ours is success-only.
-       (4) THESIS_NOTES §21.1 path is stale (proposal-template) -- fix
-           while there.
-       (5) Update abstract + discussion in the SAME pass (memory
-           feedback_update_notes); leaving abstract.tex stale REINTRODUCES
-           the contradiction T1 set out to remove.
-
-================================================================================
-T1 RESEARCH (2026-05-24, pre-edit) -- web-verified findings + user decision
-================================================================================
-Checked gaps (f) and (c/d) against arXiv:2403.10454 (HTML) before editing.
-Two assumptions in the T1 body above were WRONG; two sub-steps are KILLs.
-
-A. TIME-MEASURE MISMATCH (gap f -- the body ASSUMED both sides were
-   per-episode wall-clock; they are NOT).  TAMPURA Table II is PLANNING TIME
-   ONLY.  Caption verbatim: "Average and standard deviation of planning times
-   ... over 20 trials for each combination of environment and method."  So
-   57+-38 s EXCLUDES execution.  OURS (wall_clock_s, eval_runner.py:476) is
-   full per-episode wall-clock INCLUDING PyBullet execution + replanning; our
-   planning-only analogue is total_planning_time_s (holding semantic mean
-   7.78 s).  The cited figure thus compares our full-episode wall-clock to
-   their planning-only time -- different spans.
-   DECISION (user, 2026-05-24): DO BOTH.  Keep the wall-clock bar (informative
-   -- "even WITH execution we are in range") AND add a planning-time bar as
-   the fairer like-for-like vs their planning-only 57 s.  A planning-only
-   comparison favours us MORE (~7.8 s vs 57 s), so wall-clock is the
-   conservative measure -- present both, claim no winner.
-
-B. NO PUBLISHED SUCCESS RATE (gap c/d -- the 2026-05-23 "TAMPURA trades
-   success for speed" direction is UNVERIFIABLE).  TAMPURA reports no success
-   percentage anywhere.  Table I = "Average discounted return (gamma=0.98)";
-   Partial Observability, Bayes Optimistic + LAO* (their method) = 0.63+-0.30
-   -- a discounted return, NOT a success rate.  So there is NO success-rate
-   head-to-head.  Report OURS (holding: semantic 42.3 %, mbs0.05 46.3 %,
-   uniform 33.3 %) and state TAMPURA publishes only a discounted return; do
-   NOT assert who trades success for speed.
-
-C. KILL -- related-work SymK/FD.  related-work.tex has NO SymK / "Fast
-   Downward" / top-k wording (grep); its only TAMPURA mention is continuous-
-   pose sampling + Bayes3D.  Nothing to correct; discussion.tex:84-87 already
-   carries the correct SymK framing.
-
-D. KILL -- THESIS_NOTES "stale proposal-template path".  No "proposal-template"
-   string exists in THESIS_NOTES (grep).  §21.1/§21.2 are already corrected
-   (single-thread framing; "host not at a hardware disadvantage") and §21.2
-   already maps Partial-Obs -> "hidden-target / shadow-search" (the holding
-   analogue).  The stale find-and-tray-stack framing is in MEMORY
-   reference_tampura_perf.md:31, not THESIS_NOTES.  (§21 still gets a holding
-   note per feedback_update_notes.)
-
-E. CONFIRMED -- gap (f) our side.  wall_clock_s = full episode incl
-   execution+replanning (eval_runner.py:432-477), distinct from the smaller
-   total_planning_time_s.  The 14.0 s headline IS median wall_clock_s, n=119.
-
-HOLDING HEADLINE SOURCE (replaces f-a-t-s 14.0 s / n=119): holding semantic
-n_success=127, success 42.3 %, mean_plan_time 7.78 s; median wall_clock_s
-computes on plot regen (expected < 14.0 s).
+"Honest-ify the cited fig:tampura comparison" is fundamentally a THESIS-PROSE
+self-contradiction (abstract/results/discussion name two different "closest
+analogues" to find_dice), so it now lives in the thesis audit as #177 [T0] [NOW],
+with the full analysis folded in (wrong task: find-and-tray-stack vs holding;
+planning-only 57 s vs our wall-clock; success >= 63 % vs ~42 %).  T2/T3/CAVEAT
+below still say "T1" for context = that issue.
 
 ================================================================================
 T2. RUN OUR HOLDING PIPELINE ON A find_dice-EQUIVALENT SCENE  (post-thesis, gated)
