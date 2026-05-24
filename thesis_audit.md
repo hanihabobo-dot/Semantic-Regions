@@ -140,10 +140,35 @@ Refs:  introduction.tex; methods.tex; background.tex; results.tex;
        discussion.tex; thesis/graphics/sim/.
 
 ================================================================================
+#175  [T2] [THESIS]  methods.tex shadow-splitting text vs code (CODEBASE #102/#103)
+================================================================================
+Where: methods.tex shadow-Boxel description (the "one or more shadow
+       Boxels, split by depth and by intervening obstacles" phrasing).
+What:  Two CODEBASE_AUDIT fixes (2026-05-24) changed the shadow
+       representation the methods text describes:
+       - #102 made the per-occluder depth split CONDITIONAL.  A
+         non-intersecting occluder now casts ONE shadow Boxel; only a
+         shadow whose lateral overhang overlaps another shadow / object
+         is split into near + far slabs (and further divided by
+         intervening obstacles).
+       - #103 stops a mid-air / held occluder from casting a shadow at
+         all (only objects resting on the support surface do).
+       The current prose implies every shadow is split by depth, which
+       now overstates what the code produces.
+Fix:   Reword so depth-splitting reads as conditional --- e.g. "a shadow
+       is a single Boxel unless it overlaps another region, in which case
+       it is split by depth and by intervening obstacles" --- and note
+       that an occluder must rest on a surface to cast one.  Cross-check
+       the shadow figures flagged in #168 (they show the two-slab case).
+Refs:  methods.tex (thesis/); CODEBASE_AUDIT.txt #102 #103; #168.
+
+================================================================================
 OPEN ISSUES
 ================================================================================
 
-After the 2026-05-23 prose + citation-accuracy pass, 1 issue remains open.
+After the 2026-05-23 prose + citation-accuracy pass, 1 issue remained open
+(#168); a 2026-05-24 follow-up (#175) tracks methods-text reconciliation after
+CODEBASE_AUDIT #102/#103.
 Each issue's header carries its tier (T0-T3) and disposition.
 The nine issues resolved in that pass (#164 #166 #167 #169 #170 #171 #172 #173 #174)
 have been removed; see `git log --grep="Fix #"` (thesis repo) and
@@ -151,6 +176,7 @@ have been removed; see `git log --grep="Fix #"` (thesis repo) and
 
 OPEN:
   Figures: #168  (every figure one-by-one; figures agent)
+  Methods: #175  (shadow-splitting prose vs #102/#103 code; prose)
 
 Gating: #141-#156 and #130 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
