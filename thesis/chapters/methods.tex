@@ -1,0 +1,151 @@
+% !TEX root = ../main.tex
+
+\chapter{Approach}
+\label{ch:methods}
+
+This chapter details the methodology for integrating a novel spatial abstraction, Boxels, into a Partially Observable Deterministic (POD) Task and Motion Planning (TAMP) framework built upon PDDLStream.
+\section{Overview}
+Our methodology links abstract belief representation to continuous geometric reasoning through three components:
+\begin{enumerate}
+    \item \textbf{Adaptive Semantic Discretization:} A dynamic procedure for partitioning the robot's workspace into a set of meaningful Semantic Boxels, i.e. semantically meaningful subspaces, based on detected objects and their known 3D models.
+    \item \textbf{A Formal POD-TAMP Model:} A formal model that uses these Boxels as the foundation for its state representation, allowing a POD planner to reason about knowledge and uncertainty regarding object locations and unobstructed spaces.
+    \item \textbf{PDDLStream Integration:} An implementation using custom PDDL fluents, actions, and streams that operate on the belief state over Boxels, realizing the formal model in PDDLStream.
+\end{enumerate}
+
+\section{Adaptive Semantic Discretization: Generating Boxels}
+We build the Boxel abstraction through a process of \textit{adaptive semantic discretization}. This process dynamically generates a set of Semantic Boxels ($\mathcal{BX}_{\text{set}}$) by partitioning the workspace based on detected objects and the occlusions they create. It runs as a Python stage before each call to the planner---and is re-run between actions as the scene changes---rather than as a PDDLStream procedure. \Cref{fig:boxelization} illustrates the process.
+\begin{figure}[H]
+    \centering % Centers the image
+    \includegraphics[width=0.65\textwidth]{Boxelization.png}
+    \caption{Adaptive Semantic Discretization Process. (a) Initial scene with robot viewpoint and objects. (b) Objects are bounded by dedicated Boxels. (c) Occlusion regions are calculated and defined as new Boxels. (d) Remaining free space is recursively partitioned into Free Space Boxels.}
+    \label{fig:boxelization}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{sim/boxelization_real.png}
+    \caption{The same partition applied to a PyBullet scene. Object bounding cuboids enclose the visible cubes; red wireframe shadows mark the volumes occluded by each object. Free-space cells (not rendered) fill the remaining workspace.}
+    \label{fig:boxelization-real}
+\end{figure}
+
+The generation process is as follows:
+\begin{enumerate}
+    \item \textbf{Object-Centric Bounding:} When an object is detected, we generate a dedicated Boxel: a cuboid that tightly bounds the object's known 3D model at its detected pose. This isolates each known object in its own spatial region. Object detection is provided by an oracle that returns ground-truth object identities and poses from the simulator, which isolates the planning contribution from perception noise; replacing it with a learned, image-based detector is left to future work.
+    \item \textbf{Occlusion-Aware Subdivision:} For each object-bounding Boxel, the space occluded by it from the fixed camera viewpoint is calculated and partitioned into one or more shadow Boxels, split by depth and by any intervening visible obstacles. As the robot acts, the set of shadow Boxels is updated: sensing a region resolves its shadow, and discovering a previously hidden object adds a shadow for that object. A relocated object, however, is not given a new shadow at its destination. Re-creating shadows for moved objects could admit plans that never terminate, so it is deliberately omitted; handling it safely would require additional belief bookkeeping and is left to future work. This explicitly represents regions the robot currently cannot observe, so the planner can target them with information-gathering actions.
+
+    \item \textbf{Recursive Partitioning:} The space not occupied by object or occlusion Boxels is partitioned recursively, starting from a single Boxel that spans the whole workspace. A Boxel found to be empty is kept as a Free Space Boxel; a Boxel that still overlaps an object or occlusion is split into eight octants, and the procedure repeats on each. Subdivision stops when a region is empty or a minimum Boxel size is reached. The resulting free cells are then merged greedily across shared faces into larger convex Boxels, which reduces their number without changing the represented free volume. This merge is convex-only---two cells are combined only when they share an exactly aligned face---so the partition retains more, smaller free Boxels than a full semantic merge would; this is accepted as sufficient for the object counts evaluated here (see \cref{sec:limitations}).
+\end{enumerate}
+This adaptive, object-centric approach contrasts with a uniform voxel grid by focusing discretization effort on task-relevant areas---the objects themselves and the occluded spaces they create---rather than partitioning all space uniformly. Its free-space stage is itself an octree, and a uniform-grid baseline is implemented for comparison. Each generated Boxel is assigned a unique ID and associated geometric data; the completed set of Boxels is supplied to the planner as static facts in its initial state. \Cref{fig:partition-comparison} contrasts the two partitions on a matching scene.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{sim/partition_semantic.png}
+        \caption{Semantic partition: object boxels and free space where the scene is empty.}
+        \label{fig:partition-semantic}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{sim/partition_uniform.png}
+        \caption{Uniform-grid baseline: hundreds of cells of fixed size cover the workspace.}
+        \label{fig:partition-uniform}
+    \end{subfigure}
+    \caption{Adaptive semantic partition (left) versus uniform-grid baseline (right) on a matching scene. The adaptive partition produces a small set of task-relevant cells; the uniform grid covers the whole workspace at the same cell size, producing an order of magnitude more cells.}
+    \label{fig:partition-comparison}
+\end{figure}
+
+\section{Belief over Boxels with Know-If Fluents}
+\label{sec:kif_belief}
+The Semantic Boxels generated in the previous section partition the workspace into a finite set of regions; what the robot does not know is which Boxel a hidden object occupies. We represent this uncertainty with the Know-If Fluents introduced in \cref{ch:background}. For each object $obj$ and Boxel $Boxel$, the belief carries the K-literal $K(\operatorname{InBoxel}(obj, Boxel))$ when the robot knows the object is in that Boxel and $K(\neg \operatorname{InBoxel}(obj, Boxel))$ when it knows the object is not; the absence of both means the object is possibly there. Because the set of Boxels is finite, the belief over object locations is finite as well, and it is held directly in the planner's symbolic state.
+
+Representing belief this way is what keeps planning tractable. As described in \cref{ch:background}, the K-literal translation compiles a partially observable problem into a classical one. Applied here, it lets an ordinary classical planner reason directly about where objects might be and plan sensing actions to resolve that uncertainty within the same classical search, rather than delegating belief to a separate contingent or belief-space planner. This compile-to-classical reduction is the one introduced by the POD planners CLG and LW1 \cite{albore2009translation, bonet2014flexible}; we adopt their knowledge-literal translation and solve the result by optimistic determinisation and reactive replanning (\cref{ch:related-work}).
+
+Knowing which Boxel holds an object is not enough on its own: a manipulation action also needs a reachable grasp and a collision-free trajectory. For this continuous-geometry side we rely on PDDLStream, which extends classical PDDL with \emph{streams}---the lazily-evaluated samplers and tests for continuous parameters described in \cref{ch:background}. Our approach combines the two in a single PDDL domain: Know-If Fluents carry the discrete belief over Boxels, while streams certify the continuous facts---grasps, inverse-kinematics solutions, and motions---that the manipulation actions require. A symbolic action such as picking a target object therefore mixes both kinds of precondition: a Know-If Fluent stating that the target's Boxel is known, and stream-certified geometric facts stating that the grasp and motion are feasible. The following two sections make this concrete, giving first the formal POD-TAMP model and then its PDDLStream realization.
+
+\section{Semantic POD-TAMP Model Definition}
+We formalize our Semantic POD-TAMP system as an explicit state model, adapting the state-space formulation of Geffner and Bonet~\cite{geffner2013concise} to the partially observable deterministic setting. The model is a tuple:
+\[
+\mathcal{M} = \langle \mathcal{S}, \mathcal{S}_0, \mathcal{S}_G, \mathcal{A}, f, \mathcal{O} \rangle
+\]
+where:
+\begin{itemize}
+    \item \textbf{$\mathcal{S}$ (States):} A finite set of abstract states. Each state is a consistent assignment of truth values to a set of atomic propositions $\mathcal{AP}$ built from K-literals (see \cref{ch:background}). These propositions are grounded in the Boxel representation, e.g., $K(\operatorname{InBoxel}(obj_k, Boxel_j))$.
+    \item \textbf{$\mathcal{S}_0$ (Initial States):} The set of possible initial abstract states, representing the initial belief $b_0$.
+    \item \textbf{$\mathcal{S}_G$ (Goal States):} The set of goal states to be reached with certainty, specified by a logical formula over $\mathcal{AP}$ (e.g., $K(\text{holding}(\text{target\_obj}))$).
+    \item \textbf{$\mathcal{A}$ (Actions):} A set of abstract actions defined as PDDLStream action schemas that operate on the belief state, such as `sense` or `pick`.
+    \item \textbf{$f$ (Transition Function):} A deterministic state-transition function $s' = f(a,s)$ that applies an action's add and delete effects to the current state, so that the successor state reflects the updated knowledge.
+    \item \textbf{$\mathcal{O}$ (Sensor Model):} The sensor model relates a sensing action to the observation it yields---the target is found in a Boxel, or it is not---and the resulting belief update. In our system this is not realized as an observation function inside the POD planner: the planner's sensing action is optimistic and assumes the target is found, while the true outcome is obtained at execution time and folded into the belief by a Python sense-plan-act loop, which replans whenever the optimistic assumption proves wrong.
+\end{itemize}
+The planning problem is to find a sequence of actions from $\mathcal{A}$ that moves the belief state from $b_0 = \mathcal{S}_0$ to a belief state $b_g$ in which every possible state is a goal state (i.e., $b_g \subseteq \mathcal{S}_G$).
+
+\section{PDDLStream Integration}
+This section presents the implemented PDDL domain and streams that realize the model on the belief state over Boxels. For readability the listings show the belief-related fragment of the domain, eliding the geometric and stacking predicates that are not central to this discussion.
+
+\subsection{PDDL Fluents for Belief Representation}
+The agent's knowledge is represented directly in the PDDL state. The implemented domain is untyped STRIPS, so object categories are themselves predicates, and the belief over object locations is carried by a single Know-If fluent.
+\begin{lstlisting}[style=PDDL, caption=PDDL fluents for belief over Boxels, label=lst:pddl_fluents_k_literal]
+(:predicates
+    ; --- Category predicates (untyped domain) ---
+    (Boxel ?x)               ; ?x is a Boxel
+    (Obj ?x)                 ; ?x is a manipulable object
+
+    ; --- Boxel classification ---
+    (is_shadow ?b)           ; ?b is an occluded region
+    (is_object ?b)           ; ?b bounds a physical object
+    (is_free_space ?b)       ; ?b is known-empty space
+
+    ; --- Object location: value and knowledge ---
+    (obj_at_boxel ?o ?b)     ; object ?o is at Boxel ?b
+    (obj_at_boxel_KIF ?o ?b) ; Know-If fluent: it is known whether ?o is at ?b
+
+    ; --- Other knowledge and robot state ---
+    (obj_pose_known ?o)      ; ?o has been localized to a Boxel
+    (handempty)              ; the gripper is empty
+    (holding ?o)             ; the gripper holds ?o
+    ; ... further robot, geometry, and stacking predicates
+)
+\end{lstlisting}
+\Cref{sec:kif_belief} describes belief with the two K-literals $K(\operatorname{InBoxel})$ and $K(\neg\operatorname{InBoxel})$. The implemented domain realizes the same belief with a single Know-If fluent: \texttt{obj\_at\_boxel\_KIF} marks that the location of an object relative to a Boxel is \emph{known}, while \texttt{obj\_at\_boxel} carries the value; the absence of the Know-If fluent means the location is still uncertain. The two encodings are logically equivalent, and the single fluent keeps the grounded state smaller.
+
+\subsection{The Sensing Action}
+Information gathering is realized by a single \texttt{sense} action, which checks whether a target object is present in a given Boxel.
+
+\begin{lstlisting}[style=PDDL, caption=The implemented sense action, label=lst:pddl_sense_k_literal]
+(:action sense
+    :parameters (?o ?region)
+    :precondition (and
+        (Obj ?o)
+        (Boxel ?region)
+        (view_clear ?region)                 ; line of sight to the region is clear
+        (boxel_fits ?o ?region)              ; ?o physically fits inside ?region
+        (not (obj_at_boxel_KIF ?o ?region))  ; only sense while the location is unknown
+    )
+    :effect (and
+        (obj_at_boxel_KIF ?o ?region)        ; the location of ?o is now known
+        (obj_at_boxel ?o ?region)            ; optimistic: assume the object is found here
+        (obj_pose_known ?o)
+        (increase (total-cost) 1)
+    )
+)
+\end{lstlisting}
+The action is \emph{optimistic}: its effect unconditionally asserts that the object is found in the sensed region. An earlier design used conditional effects that branched on a \texttt{found}/\texttt{not\_found} observation, which would let the planner build a multi-step search (``sense $A$; if empty, sense $B$'') within one plan. PDDLStream and its classical backend do not support such contingent planning, so the implemented domain commits to the optimistic outcome and relies on \emph{reactive replanning}: when execution reveals that the target is not in the sensed region, the execution loop updates the belief and replans. An empty region is recorded as clear; a region that instead turns out to hold a \emph{non-target} object has that object---and the new region it occludes---added to the partition, re-boxelizing the workspace before the next plan so the newly revealed occluder enters the belief rather than being discarded. With $N$ candidate regions this converges in at most $N$ replanning cycles and is functionally equivalent to a conditional plan executed in sequence; optimistic planning with replanning on failure is a standard pattern for TAMP under partial observability. \Cref{fig:sense-action} shows the action targeting a shadow region in the simulator, and \cref{fig:replan-cycle} the execution-time moment when the optimistic assumption is rejected and a replan is triggered.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{sim/sense_targeting_shadow_real.png}
+    \caption{The \texttt{sense} action targeting a shadow region in PyBullet. The arm has been moved to a sensing configuration over a labelled shadow; the in-simulator overlay labels each object and its shadow region. This is the configuration in which the \texttt{sense} action's \texttt{(view\_clear ?region)} precondition is checked and its optimistic \texttt{(obj\_at\_boxel ?o ?region)} effect is asserted.}
+    \label{fig:sense-action}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{sim/replan_cycle.png}
+    \caption{The reactive-replan trigger. The action log reads ``sense shadow\_of\_purple\_object --- target not here'': execution has rejected the optimistic add-effect, so the loop marks that shadow empty in the belief and replans, now searching only the remaining shadows.}
+    \label{fig:replan-cycle}
+\end{figure}
+
+One bounded exception to this observation-driven belief update concerns regions that cannot be observed at all: if the line of sight to a shadow remains blocked after a fixed number of sensing attempts, that shadow is marked empty without ever being directly observed. This keeps the planner progressing when a region is effectively unreachable, but it is unsound---the region could still hold the target. A sound treatment, which would re-ground the view-blocking facts so the planner first clears the obstruction, is left to future work.
+
+The sense action calls no streams. Because a fixed overhead camera observes the scene, no robot sensing configuration has to be sampled, and the only geometric precondition is the derived predicate \texttt{(view\_clear ?region)}, which holds when no object blocks the line of sight to the region. Streams instead serve the manipulation actions: the domain declares \texttt{sample-grasp}, \texttt{plan-motion}, \texttt{compute-kin}, and \texttt{compute-stack-kin}, so that an action such as \texttt{pick} requires a valid grasp, an inverse-kinematics solution, and a collision-free motion, each certified by a stream.

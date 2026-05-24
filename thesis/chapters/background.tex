@@ -1,0 +1,161 @@
+% !TEX root = ../main.tex
+
+\chapter{Background}
+\label{ch:background}
+This chapter builds up the pieces the thesis depends on, ending with PDDLStream and how 3D space is represented for planning.
+
+\section{AI Planning Fundamentals}
+Artificial Intelligence (AI) planning produces a sequence of actions---a plan---that gets from a given initial state to a specified goal \cite{ghallab2004automated}.
+
+\subsection{State-Space Models in Classical Planning}
+The formal basis for classical planning problems is a \textit{state-space model} \cite{geffner2013concise, hofmann2024learning, ghallab2004automated}. A state-space model defines every possible configuration of the world and how actions move between configurations.
+
+More formally, a deterministic state-space model can be described as a tuple $\Pi = \langle S, s_0, S_G, Act, A, f \rangle$, where:
+\begin{itemize}
+    \item $S$: A set representing all possible \textit{states} the world can be in. For example, in a simple blocksworld problem with two blocks A and B and a table, a state could be "Block A is on Block B, and Block B is on the table, and the robot hand is empty."
+    \item $s_0 \in S$: The specific \textit{initial state} from which planning begins. E.g., "Block A is on the table, Block B is on the table, hand empty."
+    \item $S_G \subseteq S$: The set of \textit{goal states}. Any state in this set satisfies the desired objective. E.g., any state where "Block A is on Block B."
+    \item $Act$: A set of all possible \textit{actions} the agent can perform. E.g., \textit{pick blockX}, \textit{stack blockX on blockY}.
+    \item $A(s) \subseteq Act$: A function that, for any given state $s \in S$, returns the subset of actions from $Act$ that are \textit{applicable} (can be executed) in state $s$. For example, \textit{pick blockA} is applicable only if Block A is clear (nothing on top of it) and the robot hand is empty.
+    \item $f(a, s) \rightarrow s'$: A deterministic \textit{state transition function}. Given a state $s$ and an applicable action $a \in A(s)$, $f(a,s)$ returns the unique successor state $s'$ that results from executing action $a$ in state $s$. For example, if $s$ is "A on table, B on table, hand empty" and $a$ is \textit{pick blockA}, then $s' = f(a,s)$ would be "B on table, hand holding A."
+\end{itemize}
+A \textit{solution} or \textit{plan} is then a sequence of actions $\sigma = [a_0, a_1, \dots, a_n]$ such that if $s_i$ is the state before action $a_i$, then $a_i \in A(s_i)$, $s_{i+1} = f(a_i, s_i)$, and the final state $s_{n+1}$ is in $S_G$. Often, we are interested in an \textit{optimal plan}, which could be the shortest sequence of actions or one that minimizes some associated cost.
+
+\paragraph{Compact Representation: STRIPS, and PDDL}
+Explicitly enumerating all possible states $S$ is infeasible for all but the simplest problems. Therefore, planning problems are typically described in a more compact, \textit{factored} representation using a planning language. In this representation, a state is defined by a set of propositions (or ground atoms) that are currently true.
+
+A foundational language for this is \textbf{STRIPS (Stanford Research Institute Problem Solver)} \cite{fikes1971strips}. In STRIPS:
+\begin{itemize}
+    \item \textbf{States} are represented as sets of true propositions (e.g., \texttt{ (on A B), (ontable B), (handempty) }).
+    \item \textbf{Actions} are defined by:
+        \begin{itemize}
+            \item \textit{Preconditions}: A set of propositions that must be true in the current state for the action to be applicable.
+            \item \textit{Effects}: Specified as two lists:
+                \begin{itemize}
+                    \item \textit{Add-list}: A set of propositions that become true after the action is executed.
+                    \item \textit{Delete-list}: A set of propositions that become false (are no longer true) after the action.
+                \end{itemize}
+        \end{itemize}
+    \item The transition function $f(a,s)$ is implicitly defined: the new state $s'$ is obtained by taking state $s$, removing all propositions in the delete-list of $a$, and then adding all propositions in the add-list of $a$.
+    \item The initial state ($s_0$) is a set of initially true propositions, and the goal ($S_G$) is specified by a set of propositions that must be true in any goal state.
+\end{itemize}
+
+The \textbf{Planning Domain Definition Language (PDDL)} \cite{aeronautiques1998pddl} builds upon and extends the STRIPS representation, providing a more expressive and standardized syntax for a wider range of classical planning problems. In PDDL:
+\begin{itemize}
+    \item \textbf{Domain File} defines:
+        \begin{itemize}
+            \item \textit{Types}: Categories for objects (e.g., \texttt{block}, \texttt{robot}).
+            \item \textit{Predicates}: Relations or properties (e.g., \texttt{(on ?x - block ?y - block)}).
+            \item \textit{Action Schemas}: Templates for actions, generalizing STRIPS operators. For instance:
+            \begin{lstlisting}[style=PDDL,  label=lst:pddl_stack_action]
+                (:action stack
+                    :parameters (?obj1 - block ?obj2 - block)
+                    :precondition (and (holding ?obj1) (clear ?obj2))
+                    :effect (and (on ?obj1 ?obj2) (not (holding ?obj1))
+                                 (not (clear ?obj2)) (handempty) (clear ?obj1))
+                )
+
+            \end{lstlisting}
+
+                In STRIPS terms, this action's delete-list contains \texttt{(holding ?obj1)} and \texttt{(clear ?obj2)}, while its add-list contains \texttt{(on ?obj1 ?obj2)}, \texttt{(handempty)}, and \texttt{(clear ?obj1)}.
+        \end{itemize}
+    \item \textbf{Problem File} specifies:
+        \begin{itemize}
+            \item \textit{Objects}: Specific objects (e.g., \texttt{A, B, C - block}).
+            \item \textit{Initial State (\texttt{Init})}: Ground atoms true at the start.
+            \item \textit{Goal (\texttt{G})}: Ground atoms that must be true in a goal state.
+        \end{itemize}
+\end{itemize}
+A PDDL problem $P = \langle \text{Domain}, \text{Instance} \rangle$ thus compactly encodes the state model $S(P)$. Ground actions (action schemas with parameters replaced by specific objects) form the set $Act$. More advanced PDDL versions also support features beyond STRIPS, such as conditional effects (\texttt{(when <condition> <effect>)}), numeric fluents, and axioms (derived predicates).
+%Derived predicates allow the definition of new predicates whose truth values are logically inferred from the base predicates in the current state, rather than being directly changed by action effects. For example, one might define:
+% \begin{lstlisting}[style=PDDL, language=Lisp, basicstyle=\ttfamily\scriptsize]
+% (:derived (block_in_region ?b - block ?r - region)
+%     (exists (?p - pose)
+%         (and (at_pose ?b ?p)
+%              (pose_in_region ?p ?r) ; Assuming pose_in_region is base or another derived
+%         )
+%     )
+% )
+% \end{lstlisting}
+% This allows for more expressive and modular domain definitions.
+\section{Planning under Partial Observability}
+Classical planning's assumption of full observability is often violated in robotics. When an agent has incomplete information about the true state of the world, it must reason about its \textit{belief state}.
+
+\subsection{Belief States and K-Literals}
+A belief state represents the agent's current set of possible world states consistent with its history of actions and observations. We refer to the setting this thesis targets as \emph{Partially Observable Deterministic (POD)} planning: the world itself behaves deterministically and the only uncertainty is the agent's incomplete knowledge of the initial situation, which sensing resolves. ``POD'' is a descriptive label we adopt for this setting rather than established terminology in the contingent-planning literature it builds on \cite{bonet2014flexible, albore2009translation, geffner2013concise}. The belief state $b$ is explicitly a set of possible states. Actions transition this set, and observations prune it.
+A common way to reason about knowledge in POD planning is through K-literals \cite{bonet2011planning, geffner2013concise}. K-literals make the robot's knowledge about a proposition $p$ explicit. For example:
+\begin{itemize}
+    \item $K(p)$ signifies "$p$ is known to be true."
+    \item $K(\neg p)$ signifies "$p$ is known to be false."
+\end{itemize}
+If neither $K(p)$ nor $K(\neg p)$ holds, the truth of $p$ is unknown. Separately, $p$ is "possibly true" whenever $K(\neg p)$ does not hold---which also covers the case where $p$ is known to be true.
+
+K-literals are the basis of a \emph{translation} that compiles a partially observable problem into a classical one \cite{geffner2013concise}. Each literal $L$ of the original problem is replaced by the two fluents $K(L)$ and $K(\neg L)$; in the translated problem these are made true in the initial state only where the agent actually knows the corresponding value, and a literal whose value is unknown contributes neither. The translated problem therefore carries no uncertainty in its initial state and can be solved by an ordinary classical planner, which now searches for a plan that reaches a desired \emph{state of knowledge}---for example $K(\text{goal\_achieved})$---rather than a desired world state. Because the pair $K(L)$ and $K(\neg L)$ together encodes whether the agent knows the truth of $L$, we call such a knowledge fluent a \emph{Know-If Fluent (KIF)}. KIFs are the belief representation used throughout this thesis (\cref{ch:methods}).
+
+\subsection{Probabilistic vs. Deterministic Partial Observability}
+POD planning differs from planning with Partially Observable Markov Decision Processes (POMDPs) \cite{kaelbling1998planning}---a distinction that matters because we later compare our approach to POMDP-based TAMP. In POMDPs, the world is modeled as a Markov Decision Process (MDP) with probabilistic transitions and observations, and the belief state is a probability distribution over world states. While highly expressive, POMDPs are computationally very demanding. POD planning assumes outcomes and observations are deterministic but unknown. This makes it more tractable than POMDPs, and it fits robotic problems where the uncertainty comes from not knowing the world rather than from actions behaving randomly.
+
+
+\section{Task and Motion Planning (TAMP)}
+Task and Motion Planning (TAMP) connects high-level task goals with a robot's actual physical movements \cite{garrett2021integrated}. The core problem is ensuring that a plan is physically possible. High-level planners often ignore geometry, leading to plans that seem correct but can't be executed. Yet, including all geometric details from the start makes the problem too complex to solve. Combining high-level logic with real-world geometry is the central difficulty of TAMP, and frameworks like PDDLStream exist to bridge it.
+
+
+\subsection{PDDLStream for TAMP}
+PDDLStream \cite{garrett2018pddlstream} is a TAMP framework built to bridge this symbolic-continuous gap. It extends the classical Planning Domain Definition Language (PDDL) by introducing the core concept of \textbf{streams}.
+
+\paragraph{Streams: Declarative Procedures for Continuous Parameters}
+A stream in PDDLStream is a procedure that generates or tests values for continuous parameters required by symbolic actions. These parameters might include object poses, robot configurations, grasp transformations, or motion trajectories. Streams have both a procedural and a declarative component:
+\begin{itemize}
+    \item \textbf{Procedural Component (Conditional Generator):} This is the actual code (e.g., a Python function) that, given some input values (which can be discrete symbols or other continuous values), produces a (potentially infinite) sequence of output values. For example, an inverse kinematics (IK) stream, given an object, its target pose, and a grasp, would generate a sequence of robot configurations that achieve that end-effector pose. A collision-checking stream, given a trajectory, would test if it's collision-free.
+    \item \textbf{Declarative Component (Stream Specification):} This part is described in a PDDL-like syntax and informs  the symbolic planner what the stream does, what inputs it requires, what outputs it produces, and, crucially, what logical conditions (fluents) are associated with these inputs and outputs. This specification includes:
+        \begin{itemize}
+            \item \texttt{:inputs}: The typed parameters the stream procedure takes.
+            \item \texttt{:domain}: A set of PDDL facts (preconditions) that must be true for the stream to be applicable for a given set of inputs. For example, an IK stream might require that a valid pose and grasp for the object are already known.
+            \item \texttt{:outputs}: The typed parameters that the stream procedure generates.
+            \item \texttt{:certified}: A set of PDDL facts that are guaranteed to be true if the stream successfully produces a set of outputs for given inputs. These "certified fluents" are added to the planner's state and represent new knowledge derived from the continuous domain. For instance, if an IK stream successfully finds a configuration \texttt{?q} for picking object \texttt{?obj} at pose \texttt{?p} with grasp \texttt{?g}, it might certify the fluent \texttt{(KinSolution ?obj ?p ?g ?q)}.
+        \end{itemize}
+\end{itemize}
+PDDLStream employs a \textbf{lazy evaluation} strategy. Streams are not called exhaustively beforehand; instead, the symbolic planner calls them "on-demand" when it encounters an action whose preconditions require a continuous parameter to be instantiated or a continuous condition to be tested.
+
+\paragraph{Example PDDLStream Workflow}
+Consider a symbolic action \texttt{(pick ?obj ?p ?g ?q ?t)} (pick object \texttt{?obj} from pose \texttt{?p} using grasp \texttt{?g} via configuration \texttt{?q} along trajectory \texttt{?t}). For this action to be applicable:
+\begin{enumerate}
+    \item A stream might first be called to sample a stable \texttt{?p} for \texttt{?obj} on a surface. If successful, it certifies \texttt{(AtPose ?obj ?p)}.
+    \item Then, another stream samples a grasp \texttt{?g} for \texttt{?obj}. If successful, it certifies \texttt{(Grasp ?obj ?g)}.
+    \item An IK stream then takes \texttt{?obj, ?p, ?g} as input and tries to find a robot configuration \texttt{?q}. If successful, it certifies \texttt{(KinSolution ?obj ?p ?g ?q)}.
+    \item Finally, a motion planning stream takes the current configuration and \texttt{?q} as input to find a collision-free trajectory \texttt{?t}, certifying \texttt{(Motion ?q\_start ?t ?q)}.
+\end{enumerate}
+Only if all these streams succeed and certify their respective fluents will the preconditions of the symbolic \texttt{(pick ...)} action be met.
+
+The overall PDDLStream algorithm often reduces a TAMP problem to a sequence of finite PDDL problems, iteratively calling streams to discover more certified fluents until a complete, grounded plan is found. The original PDDLStream framework, however, was primarily designed for fully observable and deterministic settings.
+
+\section{Spatial Representation for Robotic Planning}
+\label{sec:spatial_representation}
+
+A robot needs some way to represent the 3D space around it and the objects in it. Representing space is harder under partial observability, because the robot must also represent what it does not yet know.
+
+\subsection{Discretization of Continuous Space}
+Robots operate in continuous space, but symbolic planners reason over discrete states --- so the continuous space has to be discretized somehow.
+
+\paragraph{Voxel Grids and Octrees}
+A common approach to represent 3D environments is to discretize them into a grid of uniform volumetric pixels, or \textbf{voxels}. Each voxel can store information, such as whether it is occupied, free, or unknown. While straightforward, uniform voxel grids can be memory-intensive and computationally expensive for large environments or high resolutions.
+
+\textbf{Octrees} (\cref{fig:octmap_illustration}) \cite{hornung2013octomap} offer a more efficient hierarchical data structure for representing 3D space. An octree is a tree data structure in which each internal (non-leaf) node has exactly eight children, while leaf nodes have none. It starts with a single large voxel encompassing the entire space of interest. If this voxel is not homogeneous (e.g., it contains both free and occupied space), it is recursively subdivided into eight smaller child voxels (octants).
+\begin{figure}[H]
+    \centering % Centers the image
+    \includegraphics[width=0.65\textwidth]{octmap_illustration.png}
+    \caption{Example of an octree storing free (shaded white) and occupied (black) cells. The volumetric model is shown on the left and the corresponding tree representation on the right.}
+    \label{fig:octmap_illustration}
+\end{figure}
+This subdivision continues until voxels are homogeneous or a minimum resolution/maximum depth is reached. This process creates a tree where large, uniform regions (whether free, occupied, or unknown) are represented by single nodes at a shallower depth, making it highly efficient for representing sparse environments in comparison to uniform grid voxelization. The \textbf{OctoMap} framework \cite{hornung2013octomap} uses this principle to build probabilistic 3D occupancy maps from noisy sensor data. In such a framework, unobservable space is typically represented implicitly by the absence of nodes in a given volume; querying such a region returns an "unknown" status. The same octree structure also underpins learning-based 3D methods such as OctNet \cite{riegler2017octnet}, which runs deep convolutions efficiently on an octree rather than building an occupancy map; here it is the occupancy-mapping use that is relevant.
+
+% Octrees are widely used in robotics for creating 3D occupancy maps from sensor data (e.g., OctoMap \cite{hornung2013octomap}), as they efficiently represent large free or unknown areas with fewer nodes.
+
+% However, a limitation of standard Octree construction methods, when applied to planning under partial observability, is their typical reliance on direct sensor measurements (like point clouds) to guide subdivision based on observed point density or occupancy changes. This makes it challenging to use them directly to represent and reason about beliefs in unobserved or occluded regions where specific target objects might be hiding – a key focus for information-gathering plans.
+
+\paragraph{Sidd's Critical Regions}
+To make planning more efficient, space can be divided based on task-relevant meaning rather than uniform geometric criteria. One such approach is the concept of \textbf{Critical Regions (CRs)}, introduced by Molina et al.~\cite{molina2020learn} and later extended by Shah and Srivastava~\cite{shah2022abstractions}. In the original formulation, a critical region is a part of the configuration space with a low probability of being sampled by a uniform sampler yet essential to a solution---narrow passages such as doorways~\cite{molina2020learn}. Shah and Srivastava generalised this to regions where task-relevant features---controller success rates, object visibility, or transition likelihoods---change significantly~\cite{shah2022abstractions}.
+
+In this line of work the regions are not hand-specified: a deep network is trained to \emph{predict} the critical regions of a given environment from that scene's input, and the predictor generalises to environments it was not trained on. Once predicted, a region-based Voronoi diagram (RBVD) partitions the configuration space around the CRs: each point is assigned to the nearest critical region, forming abstract states. Transitions between these abstract states define abstract actions, forming the backbone for hierarchical planning. By focusing computation on these task-relevant regions, this approach scales planning more effectively, but the regions are predicted once per environment and then held fixed; they do not adapt as objects move within a scene during execution.
+
+Our work combines these techniques, as explained in \cref{ch:methods}.
