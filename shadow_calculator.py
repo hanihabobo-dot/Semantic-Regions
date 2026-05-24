@@ -179,50 +179,64 @@ class ShadowCalculator:
         else:
             s_max[dom_axis] = min(s_max[dom_axis], o_min[dom_axis])
 
-        # --- Step 2.5: Two-slab lateral tightening (audit #72) ---
-        # Hit points spread laterally because rays from the 4 back corners
-        # diverge outward from the camera.  s_min/s_max along the perpendicular
-        # axes inherits the full hit-point spread, so the shadow AABB
-        # overhangs past the occluder's back face on the camera-facing sides
-        # — visible as wireframes extending ~7-10 cm beside the occluder in
-        # the seed 779694423 random-pairs GUI run.
+        # --- Step 2.5: Two-slab lateral tightening (audit #72), now
+        #     CONDITIONAL on intersection (audit #102 direction d) ---
+        # Rays from the 4 back corners diverge outward from the camera, so
+        # s_min/s_max on the perpendicular axes inherits the full hit-point
+        # spread and the shadow AABB overhangs the occluder's back face by
+        # ~7-10 cm on the camera-facing sides (seed 779694423 random-pairs).
         #
-        # Fix per audit #72 option C: split the shadow along dom_axis at the
-        # midpoint.  The near slab (cube-bordering) is clamped to the
-        # OBJECT's perpendicular range so it doesn't overhang past the
-        # occluder; the far slab keeps the full hit-point range where the
-        # frustum has actually widened to that extent.  Only the non-Z
-        # perpendicular axis is clamped so table-level shadow cells aren't
-        # dropped (gravity axis keeps the existing height overestimate).
-        mid_depth = 0.5 * (s_min[dom_axis] + s_max[dom_axis])
+        # That overhang only MATTERS when it overlaps another shadow or a
+        # visible object.  So keep ONE big shadow AABB per occluder by
+        # default (pre-#72 behaviour — Step 3 below still splits it on any
+        # true obstacle intersection), and apply the #72 option-C carve
+        # only when the overhang actually collides with an obstacle: split
+        # along dom_axis at the midpoint, clamp the near (cube-bordering)
+        # slab to the occluder's perpendicular range so it no longer
+        # overhangs, and keep the far slab's full hit-point range where the
+        # frustum has genuinely widened.  Only the non-Z perpendicular axes
+        # are clamped so table-level cells aren't dropped (the gravity axis
+        # keeps the existing height overestimate).
         lateral_axes = [a for a in range(3) if a != dom_axis and a != 2]
-
-        near_min = s_min.copy()
-        near_max = s_max.copy()
-        if shadow_dir[dom_axis] > 0:
-            near_max[dom_axis] = mid_depth
-        else:
-            near_min[dom_axis] = mid_depth
-        for pa in lateral_axes:
-            near_min[pa] = max(near_min[pa], o_min[pa])
-            near_max[pa] = min(near_max[pa], o_max[pa])
-
-        far_min = s_min.copy()
-        far_max = s_max.copy()
-        if shadow_dir[dom_axis] > 0:
-            far_min[dom_axis] = mid_depth
-        else:
-            far_max[dom_axis] = mid_depth
 
         # Initial Shadow BoxelData(s) (IDs assigned later by registry).
         initial_shadows: List[BoxelData] = []
-        for slab_min, slab_max in [(near_min, near_max), (far_min, far_max)]:
-            if np.any(slab_max - slab_min <= 1e-6):
-                continue
+        if self._overhang_overlaps_obstacle(
+                s_min, s_max, o_min, o_max, lateral_axes, obstacles):
+            mid_depth = 0.5 * (s_min[dom_axis] + s_max[dom_axis])
+
+            near_min = s_min.copy()
+            near_max = s_max.copy()
+            if shadow_dir[dom_axis] > 0:
+                near_max[dom_axis] = mid_depth
+            else:
+                near_min[dom_axis] = mid_depth
+            for pa in lateral_axes:
+                near_min[pa] = max(near_min[pa], o_min[pa])
+                near_max[pa] = min(near_max[pa], o_max[pa])
+
+            far_min = s_min.copy()
+            far_max = s_max.copy()
+            if shadow_dir[dom_axis] > 0:
+                far_min[dom_axis] = mid_depth
+            else:
+                far_max[dom_axis] = mid_depth
+
+            for slab_min, slab_max in [(near_min, near_max), (far_min, far_max)]:
+                if np.any(slab_max - slab_min <= 1e-6):
+                    continue
+                initial_shadows.append(BoxelData(
+                    boxel_type=BoxelType.SHADOW,
+                    min_corner=slab_min.copy(),
+                    max_corner=slab_max.copy(),
+                    created_by_object=obj_boxel.object_name,
+                ))
+        else:
+            # No overhang collision → one big shadow AABB (pre-#72).
             initial_shadows.append(BoxelData(
                 boxel_type=BoxelType.SHADOW,
-                min_corner=slab_min.copy(),
-                max_corner=slab_max.copy(),
+                min_corner=s_min.copy(),
+                max_corner=s_max.copy(),
                 created_by_object=obj_boxel.object_name,
             ))
 
@@ -245,6 +259,31 @@ class ShadowCalculator:
         """Check if two boxels intersect."""
         return (np.all(b1.min_corner <= b2.max_corner) and
                 np.all(b1.max_corner >= b2.min_corner))
+
+    def _overhang_overlaps_obstacle(self, s_min: np.ndarray, s_max: np.ndarray,
+                                    o_min: np.ndarray, o_max: np.ndarray,
+                                    lateral_axes: List[int],
+                                    obstacles: List[BoxelData]) -> bool:
+        """
+        True if the shadow's lateral overhang — the part of shadow AABB
+        [s_min, s_max] reaching beyond the occluder footprint [o_min, o_max]
+        on a lateral axis — overlaps any obstacle (another shadow or object).
+
+        audit #102: the #72 two-slab carve only earns its extra boxel when
+        that overhang actually collides with something; otherwise the single
+        AABB is kept and Step 3 still splits it on true obstacle intersection.
+        """
+        for obstacle in obstacles:
+            om = obstacle.min_corner
+            oM = obstacle.max_corner
+            if not (np.all(s_min <= oM) and np.all(s_max >= om)):
+                continue  # obstacle doesn't touch the shadow at all
+            for pa in lateral_axes:
+                lo = max(s_min[pa], om[pa])
+                hi = min(s_max[pa], oM[pa])
+                if lo < o_min[pa] - 1e-6 or hi > o_max[pa] + 1e-6:
+                    return True  # overlap reaches into the overhang
+        return False
 
     def _subtract_aabb(self, shadow: BoxelData, obstacle: BoxelData,
                        direction: np.ndarray) -> List[BoxelData]:
