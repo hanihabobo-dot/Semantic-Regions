@@ -269,8 +269,13 @@ geometric.
 \paragraph{Planning.} The primary goal studied is \texttt{holding};
 \texttt{stack} and \texttt{find-and-tray-stack} are shipped extensions that
 broaden goal diversity. Enabling stacking roughly doubles per-call planning
-time, traced to the conditional-effects requirement on the pick action;
-this regression is accepted rather than optimized away, a mitigation having
+time. The cause is not the conditional-effects requirement on the pick
+action as such, but the larger domain the stack goal adds all at once---a
+new \texttt{stack} action, three new predicates, and an additional
+stream---which together raise grounding and search cost; the conditional
+\texttt{:requirements} flag and the \texttt{forall--when} on pick ground to
+a no-op on find-only runs.
+This regression is accepted rather than optimized away, a mitigation having
 been considered and dropped as out of scope. A second, smaller planner-search
 bias concerns the cost model: the domain gives the \texttt{stack} action a cost
 of 2 while every other action costs 1. This is a hand-tuned bias rather than a
