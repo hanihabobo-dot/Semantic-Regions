@@ -194,7 +194,7 @@ vs IBSP MLOccludes / SS-Replan BOccluded near-misses + dropped stale "offline" T
 Refs: related-work.tex:27,32; garrett2020online; kaelbling2013integrated; hadfield2015modular.
 
 ================================================================================
-#189  [T0] [NOW]  related-work.tex:30 overgeneralizes the knowledge-literal / compile-to-classical claim
+#189  [DONE 2026-05-25] [T0]  related-work.tex:30 overgeneralizes the knowledge-literal / compile-to-classical claim
 ================================================================================
 related-work.tex:30. Verified overgeneralized: K-literal + compile-to-classical is the
 TRANSLATION-BASED family (CLG, K-replanner, LW1), not all POD planning (Contingent-FF/MBP
@@ -416,8 +416,7 @@ OPEN:
   Intro: #178 (partition omits free space; T1/NOW), #179 (de-hype TAMPURA + cut "first-class" opener)
   Background: #180 (Pi/S(P) notation), #181 (name "contingent planning"), #182 ("Voxel Grids" heading)
   Related Work: #184 (pan "behaviors"), #185 (Ma paragraph rewrite), #186 (CoCo-TAMP expand),
-                #187 (Bai: limitation + TAVP name/learned-policy; merged #192; T1/NOW),
-                #189 (POD K-literal overgeneralized; T0/NOW)
+                #187 (Bai: limitation + TAVP name/learned-policy; merged #192; T1/NOW)
   Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief to background; T1), #194 (marketing voice + over-long para)
   Methods: #195 (optimistic-determinisation/untyped/standard-pattern clarity), #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
@@ -427,7 +426,7 @@ OPEN:
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #177, #183, #188, #190. MERGED: #192->#187, #196->#176.
+DONE: #177, #183, #188, #189, #190. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
