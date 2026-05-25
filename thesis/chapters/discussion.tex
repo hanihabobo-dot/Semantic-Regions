@@ -160,10 +160,23 @@ are single-threaded, and TAMPURA's CPU has a marginally higher base clock
 favours TAMPURA rather than us. Re-running both systems on a shared scene
 file would strengthen the comparison.
 
-\paragraph{Resolution regime.} The mbs0.05 null finding holds for the
-scene scales tested. It does not generalise to scenes where placements
-are constrained by sub-5\,cm geometry; constructing such a scene is the
-natural follow-up (\cref{sec:future_work}).
+\paragraph{Resolution regime.} The free-space leaf size behaves as a flat
+knob across the full $\sim$4$\times$ range tested. Below \emph{auto\_cell},
+forcing a 5\,cm floor changes nothing (the \texttt{mbs0.05} null finding);
+above it, coarsening the free-space leaf to 1.5$\times$ and 2$\times$
+\emph{auto\_cell} leaves the success rate essentially unchanged --- identical
+seed-for-seed on stack, within seed noise on holding, and only a mild
+$\sim$4\,pp drop on find-and-tray-stack --- while shrinking the free-space
+partition by 30--40\,\%. The cause is structural rather than numerical: the
+partition's merge step collapses adjacent same-label free-space cells into a
+single Boxel irrespective of the underlying leaf size, so leaf size alters
+the partition only where sub-cell geometry forces a split. \emph{auto\_cell}
+(the largest visible footprint plus a 1\,cm margin) is therefore a robust
+default rather than a tuned constant, and semantic's compactness advantage
+over \texttt{uniform} is a structural property of the adaptive partition, not
+an artefact of resolution tuning. Neither result generalises to scenes where
+placements are constrained by sub-5\,cm geometry; constructing such a scene
+is the natural follow-up (\cref{sec:future_work}).
 
 \paragraph{Bounded give-up.} The three-strike give-up on still-blocked
 shadows is unsound for shadows that are physically unreachable. The run
