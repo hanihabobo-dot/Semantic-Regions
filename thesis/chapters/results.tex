@@ -47,7 +47,7 @@ This chapter reports the experimental evaluation of the Boxel-based POD-TAMP fra
     \centering
     \begin{subfigure}[t]{0.32\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{sim/n_occ_low_real.png}
+        \includegraphics[width=\textwidth]{sim/n_occ_low.png}
         \caption{Low $n_\text{occ}$}
         \label{fig:n-occ-low}
     \end{subfigure}
@@ -105,7 +105,7 @@ Three variants of the planner are compared, plus one external reference:
     \item \textbf{semantic} --- the adaptive Boxel partition described in \cref{ch:methods}. Free-space cells are placed only where the workspace is empty; their leaf size is auto-set to the largest object's footprint ($\approx$6--9\,cm), since finer leaves break placement on the table dimensions used here.
     \item \textbf{semantic+mbs0.05} --- the same adaptive partition but with the free-space leaf-size floor forced to 5\,cm (\texttt{min\_boxel\_size = 0.05}). This is intended to test the effect of a finer free-space leaf floor independently of the semantic structure.
     \item \textbf{uniform} --- the adaptive partition is replaced by a uniform voxel grid over the workspace; the object and shadow Boxels are unchanged. The cell size is auto-set to the same largest-object-footprint value, since finer cells likewise break placement. This isolates the contribution of the adaptive free-space partition.
-    \item \textbf{TAMPURA} \cite{curtis2024partially} --- a published POMDP-based TAMP framework. Its Table~II reports several model-learning/search configurations on a \textit{Partial Observability} task; we compare against TAMPURA's own primary configuration there---Bayes-Optimistic belief updates with LAO* search---which it reports at 57\,$\pm$\,38\,s over 20 trials (Table~II of \cite{curtis2024partially}, arXiv\,v2), rather than re-running it; the comparison is architectural --- offline Learn-Model vs online stream sampling --- not a hardware benchmark. See \cref{sec:disc-tampura} for the full framing.
+    \item \textbf{TAMPURA} \cite{curtis2024partially} --- a published POMDP-based TAMP framework. Its Table~II reports several model-learning/search configurations on a \textit{Partial Observability} task; we compare against TAMPURA's own primary configuration there---Bayes-Optimistic belief updates with LAO* search---which it reports at 57\,$\pm$\,38\,s over 20 trials (Table~II of \cite{curtis2024partially}, arXiv\,v2), rather than re-running it; the comparison is architectural --- a probabilistic learned-MDP planner solved with LAO* versus our deterministic knowledge-literal planning with replanning --- not a hardware benchmark. See \cref{sec:disc-tampura} for the full framing.
 \end{enumerate}
 
 \section{Results}
@@ -206,12 +206,12 @@ The cost gap traces back to the size of the representation. \Cref{fig:boxel-coun
 \subsection{Comparison with TAMPURA}
 \label{subsec:tampura}
 
-\Cref{fig:tampura} reports per-episode wall-clock times on the find-and-tray-stack task, the closest analogue to TAMPURA's published \textit{Partial Observability} setting (Table~II of \cite{curtis2024partially}). Our \texttt{semantic} variant achieves a median wall-clock of 14.0\,s (n=119, IQR shown) against TAMPURA's mean 57.0\,$\pm$\,38\,s (n=20), a $\sim$4$\times$ delta. The comparison is architectural --- offline Learn-Model vs online stream sampling --- rather than a benchmark; \cref{ch:discussion} unpacks the framing.
+\Cref{fig:tampura} compares per-episode times on our \texttt{holding} task --- the closest analogue to TAMPURA's hidden-object \emph{Find Die} task (its \textit{Partial Observability} planning times are in Table~II of \cite{curtis2024partially}) --- with TAMPURA's reported numbers. Two cautions make this a framing exercise rather than a benchmark. First, the spans differ: our per-episode \emph{wall-clock} (mean 13.7\,s, success-only) bundles PyBullet execution and replanning, whereas TAMPURA's 57.0\,$\pm$\,38\,s is \emph{planning time only}; the like-for-like quantity is our planning time, a mean 7.8\,s. Second, reliability runs the other way --- our \texttt{semantic} variant succeeds on 42\,\% of holding episodes, while TAMPURA's discounted return of 0.63\,$\pm$\,0.30 (Table~I, $\gamma=0.98$, binary terminal reward) implies a success rate of at least 63\,\%. We are cheaper to plan but less reliable, on a marginally easier goal (\emph{Find Die} also requires returning home; our \texttt{holding} goal does not). The comparison is architectural --- a probabilistic learned-MDP planner (LAO*) versus our deterministic knowledge-literal planning with replanning --- with no speed or quality winner; \cref{ch:discussion} unpacks the framing.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.7\textwidth]{tampura_wallclock_comparison.png}
-    \caption{Wall-clock per episode on find-and-tray-stack: ours (median + IQR, success-only) against TAMPURA's reported Table~II numbers.}
+    \caption{Per-episode time on \texttt{holding}: our wall-clock and our planning time (both mean\,$\pm$\,std, success-only) against TAMPURA's planning-only Partial Observability time (mean\,$\pm$\,std, Table~II). Wall-clock and planning measure different spans; only our planning time is like-for-like with TAMPURA's. On reliability the order reverses: holding-\texttt{semantic} success is 42\,\% against TAMPURA's inferred $\geq$\,63\,\%.}
     \label{fig:tampura}
 \end{figure}
 

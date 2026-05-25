@@ -67,38 +67,58 @@ is noted in \cref{sec:future_work}.
 \section{Architectural comparison with TAMPURA}
 \label{sec:disc-tampura}
 
-\Cref{fig:tampura} reports our \texttt{semantic} median wall-clock of
-14.0\,s on find-and-tray-stack against TAMPURA's reported
-57\,$\pm$\,38\,s on its Partial Observability task (Table~II of
-\cite{curtis2024partially}). The comparison merits a careful read
-because of how the two systems differ.
+\Cref{fig:tampura} sets our \texttt{holding} results against TAMPURA's
+reported Partial Observability numbers (Table~II of
+\cite{curtis2024partially}); \texttt{holding} --- find a hidden object
+and pick it up --- is the closest analogue to TAMPURA's \emph{Find Die}
+task. Read carefully, the comparison cuts two ways. The reported spans
+differ: our per-episode wall-clock (mean 13.7\,s, success-only) includes
+PyBullet execution and replanning, whereas TAMPURA's 57\,$\pm$\,38\,s is
+planning time only, so the like-for-like figure is our planning time, a
+mean 7.8\,s. And reliability runs against us: our holding success rate is
+42\,\%, below the $\geq$\,63\,\% implied by TAMPURA's 0.63\,$\pm$\,0.30
+discounted return (Table~I). We plan more cheaply but less reliably, on a
+marginally easier goal --- \emph{Find Die} also requires returning home,
+which ours does not. Beyond the numbers, the two systems differ in kind.
 
-The real difference is \emph{when} the geometry-sampling cost is paid.
-TAMPURA pays it offline in a Learn-Model phase (Algorithm~2 of
-\cite{curtis2024partially}): for each problem it constructs a sparse MDP
-$\bar{\mathcal{B}}_\text{sparse}$ by running $K$ deterministic
-FastDownward plans, then solves the sparse MDP at plan time with
-LAO*. The expensive step --- sampling continuous parameters --- is done
-once per problem and amortised across LAO*'s queries. Our system pays
-the same kind of cost online, every PDDLStream call, with streams
-sampling inside the planner loop. Both run a Fast Downward--based determinised planner inside the loop---ours
-via PDDLStream; TAMPURA's released code via SymK, a Fast Downward--derived
-top-$k$ planner (its Algorithm~2 names FastDownward)---so the salient
-difference is \emph{when} geometry sampling is paid, not the search engine.
-Neither system caches across episodes.
+Both systems sample geometry \emph{online}, inside the planning loop, and
+both rely on the same determinised, Fast Downward--based classical planner
+--- but they use it for different ends. TAMPURA's model-learning runs at
+every control step (Algorithm~2 of \cite{curtis2024partially}). From the
+current belief it optimistically assumes each action succeeds and runs
+Fast Downward to propose candidate action sequences that reach the goal;
+it then samples those actions' real outcomes to estimate how they branch
+under uncertainty, building a \emph{probabilistic} sparse MDP
+$\bar{\mathcal{B}}_\text{sparse}$, and finally solves that MDP with LAO*
+for an uncertainty- and risk-aware policy. Fast Downward thus chooses
+\emph{which goal-reaching action sequences are worth considering}; LAO*
+chooses \emph{what to do once their outcomes are uncertain}, weighing each
+branch's probability of success. Our planner runs the same kind of
+determinised search through PDDLStream, but stops there: it reasons over
+deterministic knowledge literals, executes the chosen plan, and replans
+when an optimistic assumption proves wrong --- there are no transition
+probabilities to estimate, no probabilistic MDP, and no policy layer on
+top. The salient difference is that probabilistic layer --- learning the
+MDP and solving it with LAO* for a policy --- not the symbolic search
+engine underneath.
 
-This framing changes what the 14.0\,s vs 57\,s number means. It is not a
-``semantic-Boxels-beats-TAMPURA'' claim --- comparing wall-clocks of two
-fundamentally different sampling schedules is not a benchmark of either.
-It does show that the streams-online architecture is competitive with
-the offline-MDP architecture on the closest analogous task, without front-loading
-the sampling cost---and it reaches that parity without the learned sparse-MDP
-abstraction the offline architecture must estimate, one of the representation
-advantages set out in \cref{ch:related-work}: deterministic knowledge literals in
-place of a probabilistic model, at the price of no risk-weighting and a reliance on
-replanning (\cref{sec:limitations}).
+This framing changes what the 7.8\,s vs 57\,s planning-time gap means. It is
+not a ``semantic-Boxels-beats-TAMPURA'' claim. The two figures come from
+different environments --- our tabletop scenes against TAMPURA's --- so the
+times are not measuring the same problem and benchmark neither
+system. The planners do also differ in kind --- ours runs deterministic
+classical search and replans, whereas TAMPURA learns a probabilistic
+sparse MDP and solves it for a policy. What the comparison does show is
+that a deterministic, replanning-based planner reaches the goal on the
+closest analogous task without ever estimating the learned sparse-MDP
+abstraction TAMPURA relies on. Both planners represent the belief with
+symbolic atoms --- including epistemic ones, such as whether an object's
+pose is yet known --- so the contrast is not whether knowledge is symbolic
+but how it is used: we reason over it deterministically and recover by
+replanning, with no transition probabilities to estimate, at the price of
+no risk-weighting over uncertain outcomes (\cref{sec:limitations}).
 
-Beyond \emph{when} sampling is paid, the comparison highlights \emph{what} each system can reason about. Because our planner holds occlusion as explicit symbolic state, line of sight is a planning condition: the \texttt{sense} action requires a clear view of its target region, and the objects that block a view are explicit facts in the planner's state. Those facts also cover candidate placements: a free cell lying on the camera's line of sight to a shadow is flagged as view-blocking, so the planner will not set an object down where it would block a region it still needs to observe. TAMPURA's \emph{Find Die} benchmark---its hidden-object task, the closest analogue to our setting---instead keeps occlusion sub-symbolic: a visibility voxel grid that only weights the success probability of the \texttt{look} action, and a placement sampler that draws object poses with no visibility check, so an object can be placed view-blind. Making space plannable in this way is the point of the representation; its present realization is partial---a clear view is a precondition, but \emph{restoring} a blocked view by first moving the obstruction is left to future work (\cref{sec:future_work}), and the current loop instead bounds itself with a give-up rule (\cref{sec:limitations}).
+Beyond \emph{how} each system plans, the comparison highlights \emph{what} each system can reason about. Because our planner holds occlusion as explicit symbolic state, line of sight is a planning condition: the \texttt{sense} action requires a clear view of its target region, and the objects that block a view are explicit facts in the planner's state. Those facts also cover candidate placements: a free cell lying on the camera's line of sight to a shadow is flagged as view-blocking, so the planner will not set an object down where it would block a region it still needs to observe. TAMPURA's \emph{Find Die} benchmark---its hidden-object task, the closest analogue to our setting---instead keeps occlusion sub-symbolic: a visibility voxel grid that only weights the success probability of the \texttt{look} action, and a placement sampler that draws object poses with no visibility check, so an object can be placed view-blind. Making space plannable in this way is the point of the representation; its present realization is partial---a clear view is a precondition, but \emph{restoring} a blocked view by first moving the obstruction is left to future work (\cref{sec:future_work}), and the current loop instead bounds itself with a give-up rule (\cref{sec:limitations}).
 
 \section{Failure modes}
 \label{sec:disc-failure}
@@ -168,10 +188,10 @@ above it, coarsening the free-space leaf to 1.5$\times$ and 2$\times$
 seed-for-seed on stack, within seed noise on holding, and only a mild
 $\sim$4\,pp drop on find-and-tray-stack --- while shrinking the free-space
 partition by 30--40\,\%. The cause is structural rather than numerical: the
-partition's merge step collapses adjacent same-label free-space cells into a
-single Boxel irrespective of the underlying leaf size, so leaf size alters
-the partition only where sub-cell geometry forces a split. \emph{auto\_cell}
-(the largest visible footprint plus a 1\,cm margin) is therefore a robust
+merge step combines free-space cells whenever their merged region is convex,
+so the partition reflects the convex structure of the free space rather than
+the leaf size itself. \emph{auto\_cell}
+(the largest visible footprint plus a 1\,cm margin) is therefore a
 default rather than a tuned constant, and semantic's compactness advantage
 over \texttt{uniform} is a structural property of the adaptive partition, not
 an artefact of resolution tuning. Neither result generalises to scenes where
