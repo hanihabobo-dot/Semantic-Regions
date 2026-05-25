@@ -357,7 +357,7 @@ Fix:   (a) replace the limitation with "retargeting to a new goal requires new P
 Refs:  related-work.tex:24; bai2025learning (arXiv:2508.05186, "TAVP"); #205.
 
 ================================================================================
-#188  [T0] [NOW]  related-work.tex:27 belief-space paragraph: false SS-Replan contrast (+ jargon)
+#188  [DONE] [T0] [NOW]  related-work.tex:27 belief-space paragraph: false SS-Replan contrast (+ jargon)
 ================================================================================
 Where: related-work.tex:27 (Belief-Space Planning and Replanning).
 What:  (1) FACTUAL ERROR (T0): the claim that our info-gathering is "composed
@@ -742,7 +742,7 @@ OPEN:
   Background: #180 (Pi/S(P) notation), #181 (name "contingent planning"), #182 ("Voxel Grids" heading)
   Related Work: #184 (pan "behaviors"),
                 #185 (Ma paragraph rewrite), #186 (CoCo-TAMP expand), #187 (Bai et al.: limitation + TAVP name/learned-policy; merged #192; T1/NOW),
-                #188 (SS-Replan false contrast + jargon; T0/NOW), #189 (POD K-literal overgeneralized; T0/NOW)
+                #189 (POD K-literal overgeneralized; T0/NOW)
   --- batch 2 (sections 4-7 + figures, 2026-05-24) ---
   Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief section to background; T1), #194 (marketing voice + over-long paragraph)
   Methods: #195 (optimistic-determinisation/untyped/standard-pattern clarity), #197 (replan-cycle caption wrong; T1/NOW)
