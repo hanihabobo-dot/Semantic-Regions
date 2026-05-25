@@ -712,6 +712,21 @@ Refs:  results.tex:194 (subsec:compactness); discussion.tex:60; #202; #203;
        CODEBASE_AUDIT #108 (plot + mbs0.1 arm), #98/#100/#101 (resolution sweep data +
        eval-chapter writeup); eval_results/sweep_anytime/aggregated.csv.
 
+================================================================================
+#210  [T3] [POLISH]  Related Work: drop author names, cite by number ([4]) --- VERY LOW PRIORITY
+================================================================================
+Where: related-work.tex throughout (e.g. "Kaelbling and Lozano-P\'erez \cite{...}",
+       "Hadfield-Menell et al.~\cite{...}", "Ma et al.~\cite{...}", "Bai et al.",
+       "Saleem et al.", "Zhao et al."), and any other "<Author> et al." lead-ins.
+What:  Author-name lead-ins ("X et al. introduced ...") clutter the prose; the user
+       wants the related work to start referring to works by their numeric citation
+       label only (e.g. "[4] introduces ...") rather than naming the authors inline.
+Fix:   Sweep related-work.tex (and, if extended, the rest of the document) to replace
+       inline "<Author> et al." phrasings with citation-number references. Mechanical;
+       do as a low-priority polish pass once the T0/T1 content fixes are settled. Watch
+       for sentences whose grammar depends on the author name as the subject.
+Refs:  related-work.tex (document-wide citation style).
+
 --------------------------------------------------------------------------------
 NB (verified, NO issue filed):
  - discussion.tex:121 "an object can be placed view-blind" (TAMPURA) is TRUE -- verified
@@ -750,6 +765,7 @@ OPEN:
   Results: #199 (task rename find/stack/find-and-stack), #200 (per-call <1s FALSE; T0/NOW), #201 (drop_failed/denominator/known-empty/one-boxel clarity), #202 (mbs0.05 no-op; T1), #207 (success-rate band caption), #209 (resolution-floor vs total-boxel-count study + figure)
   Discussion: #203 ("more cells" FALSE + characterisation; T0/NOW), #204 (stack ratio mention), #205 (stacking slowdown misattributed; T0/NOW), #206 (section-6 trims + deletions)
   Conclusion/front: #208 (add GitHub+GitLab code links)
+  Style (very low priority): #210 (Related Work: drop author names, cite by number; T3/POLISH)
 
 Gating: #141-#156 and #130 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
