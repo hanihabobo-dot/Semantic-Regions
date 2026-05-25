@@ -112,7 +112,7 @@ at :13; (c) rename tuple to a neutral letter (e.g. M).
 Refs: background.tex:11,13,69; geffner2013concise.
 
 ================================================================================
-#181  [T2] [POLISH]  "POD ... rather than established terminology" -- name the real term (contingent planning)
+#181  [DONE 2026-05-25] [T2]  "POD ... rather than established terminology" -- name the real term (contingent planning)
 ================================================================================
 background.tex:85 hedges that "POD" isn't established terminology. Verified: the literature
 calls this exact setting CONTINGENT PLANNING; the hedge is true but bare. Fix: name it —
@@ -413,7 +413,7 @@ OPEN:
   Figures: #168  (every figure one-by-one; figures agent)
   Figures: #176  (discretization-progression figure + free-space split->merge stages, merged #196)
   Methods: #175  (shadow-splitting prose vs #102/#103 code)
-  Background: #181 (name "contingent planning"), #182 ("Voxel Grids" heading)
+  Background: #182 ("Voxel Grids" heading)
   Related Work: #184 (pan "behaviors"), #185 (Ma paragraph rewrite), #186 (CoCo-TAMP expand)
   Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief to background; T1), #194 (marketing voice + over-long para)
   Methods: #195 (optimistic-determinisation/untyped/standard-pattern clarity), #197 (replan-cycle caption wrong; T1/NOW)
@@ -424,7 +424,7 @@ OPEN:
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #177, #178, #179, #180, #183, #187, #188, #189, #190. MERGED: #192->#187, #196->#176.
+DONE: #177, #178, #179, #180, #181, #183, #187, #188, #189, #190. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
