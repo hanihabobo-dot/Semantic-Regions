@@ -247,7 +247,7 @@ no-MDP w/ costs) -> condense to a few sentences or compact list.
 Refs: related-work.tex:35,37.
 
 ================================================================================
-#195  [T2] [NOW]  Methods clarity: rephrase "optimistic determinisation", explain "untyped STRIPS", delete a self-justification
+#195  [DONE 2026-05-25] [T2]  Methods clarity: rephrase "optimistic determinisation", explain "untyped STRIPS", delete a self-justification
 ================================================================================
 methods.tex:63,87,90,133. (O) "optimistic determinisation and reactive replanning" opaque ->
 "assume each sensing action succeeds (optimistic), plan as if the world were fully known,
@@ -413,7 +413,7 @@ OPEN:
   Figures: #168  (every figure one-by-one; figures agent)
   Figures: #176  (discretization-progression figure + free-space split->merge stages, merged #196)
   Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief to background; T1)
-  Methods: #195 (optimistic-determinisation/untyped/standard-pattern clarity), #197 (replan-cycle caption wrong; T1/NOW)
+  Methods: #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
   Results: #199 (task rename), #200 (per-call <1s FALSE; T0/NOW), #201 (drop_failed/denominator/known-empty/one-boxel),
            #202 (mbs0.05 no-op; T1), #207 (success-rate band caption), #209 (resolution-floor study + figure)
@@ -421,7 +421,7 @@ OPEN:
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194. MERGED: #192->#187, #196->#176.
+DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
