@@ -292,7 +292,7 @@ labels may need a plotter label map (CODEBASE). Audit-internal refs in #177/#190
 Refs: results.tex; discussion.tex; conclusion.tex; abstract.tex; methods.tex; #177.
 
 ================================================================================
-#200  [T0] [NOW]  results:83 "well under a second per call" is FALSE
+#200  [DONE 2026-05-25] [T0]  results:83 "well under a second per call" is FALSE
 ================================================================================
 results.tex:83. Data-contradicted (sweep_anytime): pooled per-call planning over successful
 cells median ~1.99 s, mean ~5.4 s, only ~19% <1 s. By goal: stack 0.97 s (54% <1s); find 2.05 s
@@ -415,13 +415,13 @@ OPEN:
   Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief to background; T1)
   Methods: #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
-  Results: #199 (task rename), #200 (per-call <1s FALSE; T0/NOW), #201 (drop_failed/denominator/known-empty/one-boxel),
+  Results: #199 (task rename), #201 (drop_failed/denominator/known-empty/one-boxel),
            #202 (mbs0.05 no-op; T1), #207 (success-rate band caption), #209 (resolution-floor study + figure)
   Discussion: #203 ("more cells" FALSE; T0/NOW), #204 (stack ratio mention), #205 (stacking slowdown misattributed; T0/NOW), #206 (section-6 trims)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195. MERGED: #192->#187, #196->#176.
+DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
