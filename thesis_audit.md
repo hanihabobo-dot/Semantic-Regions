@@ -351,7 +351,7 @@ enlarged domain (added action+predicates+stream raising grounding/search cost).
 Refs: discussion.tex:266; pddl/domain_pddlstream.pddl; git 0d5def7.
 
 ================================================================================
-#206  [T2] [THESIS]  Discussion section-6 trims and clarity
+#206  [DONE 2026-05-25] [T2]  Discussion section-6 trims and clarity
 ================================================================================
 discussion.tex. (AO) delete the whole \section{Failure modes} (:123) — duplicates results
 coverage. (AN) remove :121 "restoring a blocked view ... give-up rule" clause. (AQ) remove :239
@@ -416,11 +416,10 @@ OPEN:
   Methods: #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
   Results: #199 (task rename), #209 (resolution-floor study + figure)
-  Discussion: #206 (section-6 trims)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200, #201, #202, #203, #204, #205, #207. MERGED: #192->#187, #196->#176.
+DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200, #201, #202, #203, #204, #205, #206, #207. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
