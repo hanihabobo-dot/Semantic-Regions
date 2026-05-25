@@ -311,7 +311,7 @@ leaves break placement" is a design choice (each object bounded by exactly ONE b
 Refs: results.tex:96,98,105; CODEBASE_AUDIT #106.
 
 ================================================================================
-#202  [T1] [THESIS]  semantic+mbs0.05 is effectively identical to semantic (a no-op variant)
+#202  [DONE 2026-05-25] [T1]  semantic+mbs0.05 is effectively identical to semantic (a no-op variant)
 ================================================================================
 results.tex:106. Data-confirmed: semantic+mbs0.05 = plain semantic to ~0.1% (find 35.07 vs
 35.03), same results — the 5 cm floor never binds (autosize ~6-9 cm) and finer floors are
@@ -416,12 +416,12 @@ OPEN:
   Methods: #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
   Results: #199 (task rename), #201 (drop_failed/denominator/known-empty/one-boxel),
-           #202 (mbs0.05 no-op; T1), #207 (success-rate band caption), #209 (resolution-floor study + figure)
+           #207 (success-rate band caption), #209 (resolution-floor study + figure)
   Discussion: #203 ("more cells" FALSE; T0/NOW), #204 (stack ratio mention), #205 (stacking slowdown misattributed; T0/NOW), #206 (section-6 trims)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200. MERGED: #192->#187, #196->#176.
+DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200, #202. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
