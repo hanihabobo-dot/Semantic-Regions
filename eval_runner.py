@@ -241,6 +241,34 @@ SCALABILITY_VS_RESOLUTION = [
     },
 ]
 
+# audit #108 — a distinct semantic+mbs0.1 floor point. The sweep has semantic
+# auto / mbs0.05 / 1.5x / 2x but no 0.10 m floor; this fills it so the
+# boxel-count-vs-config figure has an evenly spaced resolution axis. 0.10 m is
+# just above random-pairs auto_cell (~0.09) and above stack auto_cell (~0.06).
+RESOLUTION_MBS01 = [
+    {  # semantic, occluder-driven goals
+        "n_occluders":        [2, 3, 4],
+        "seed":               _CORPUS_SEEDS,
+        "goal":               ["holding", "find-and-tray-stack"],
+        "baseline":           ["semantic"],
+        "min_boxel_size":     [0.10],
+        "unit_costs":         [False],
+        "scene":              ["random-pairs"],
+        "_n_hidden_strategy": "none",
+    },
+    {  # semantic, stack goal
+        "n_occluders":        [2, 3, 4],
+        "n_targets":          [3],
+        "seed":               _CORPUS_SEEDS,
+        "goal":               ["stack"],
+        "baseline":           ["semantic"],
+        "min_boxel_size":     [0.10],
+        "unit_costs":         [False],
+        "scene":              ["stack"],
+        "_n_hidden_strategy": "none",
+    },
+]
+
 MATRIX_PRESETS = {
     "scalability":               SCALABILITY_MATRIX,
     "smoke":                     SMOKE_MATRIX,
@@ -248,6 +276,7 @@ MATRIX_PRESETS = {
     "random-pairs":              RANDOM_PAIRS_MATRIX,
     "scalability-vs-time":       SCALABILITY_VS_TIME,
     "scalability-vs-resolution": SCALABILITY_VS_RESOLUTION,
+    "resolution-mbs01":          RESOLUTION_MBS01,
 }
 
 
