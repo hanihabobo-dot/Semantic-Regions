@@ -571,6 +571,89 @@ def plot_boxel_count_breakdown(
     return out_path
 
 
+# Audit #108 part-c / #101 — boxel count vs free-space leaf size.
+# Grouped by variant tag (auto / +mbs floor arms), NOT raw leaf size:
+# the auto (#67) leaf is computed per scene, so its effective value
+# varies ~8-10 cm and a raw-leaf scatter smears the auto point into a
+# vertical band.  Collapsing per variant and plotting each at its mean
+# effective leaf keeps one clean point per arm.  Uniform rows excluded —
+# their cell size comes from uniform_cell_size, a different knob, and
+# their ~300-1340 cells would swamp the y-axis.  Includes failed runs
+# (boxel counts are end-of-run snapshots, valid regardless of outcome —
+# same rationale as group_boxel_counts).
+def group_boxel_vs_resolution(rows: List[dict]
+                              ) -> Dict[str, Dict[str, Dict[str, List[float]]]]:
+    """``{goal: {variant: {"total": [...], "free_space": [...], "leaf": [...]}}}``."""
+    out: Dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    for r in rows:
+        if (r.get("baseline") or "semantic") == "uniform":
+            continue
+        goal = r.get("goal")
+        leaf = r.get("effective_min_boxel_size")
+        fre = r.get("n_free_space_boxels")
+        if not goal or leaf in (None, "") or fre in (None, ""):
+            continue
+        try:
+            leaf_f = float(leaf)
+            fre_i = int(fre)
+            tot_i = fre_i + int(r.get("n_object_boxels") or 0) \
+                          + int(r.get("n_shadow_boxels") or 0)
+        except (TypeError, ValueError):
+            continue
+        variant = r.get("_variant") or _row_variant(r)
+        out[goal][variant]["total"].append(tot_i)
+        out[goal][variant]["free_space"].append(fre_i)
+        out[goal][variant]["leaf"].append(leaf_f)
+    return out
+
+
+def plot_boxel_vs_resolution(
+    grouped: Dict[str, Dict[str, Dict[str, List[float]]]],
+    title: str,
+    out_path: Path,
+) -> Optional[Path]:
+    """Two panels (total | free-space) of mean boxel count vs free-space
+    leaf size, one line per goal.  Each point is one variant, placed at
+    its mean effective leaf size.  Audit #108 part-c / #101.  No-op if
+    fewer than two variants are present."""
+    variants_all = {v for g in grouped.values() for v in g}
+    if not HAVE_MPL:
+        print(f"\n=== {title} (matplotlib not available) ===")
+        for goal in sorted(grouped):
+            for variant in sorted(grouped[goal]):
+                p = grouped[goal][variant]
+                print(f"  {goal}/{variant}: leaf={mean(p['leaf'])*100:.1f}cm "
+                      f"total={mean(p['total']):.1f} free={mean(p['free_space']):.1f}")
+        return None
+    if len(variants_all) < 2:
+        print("[plotter] boxel-vs-resolution: <2 variants, skipping")
+        return None
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), sharex=True)
+    for ax, (key, lbl) in zip(axes, [("total", "total"),
+                                     ("free_space", "free-space")]):
+        for goal in sorted(grouped):
+            pts = []
+            for variant, d in grouped[goal].items():
+                if not d.get("leaf") or not d.get(key):
+                    continue
+                pts.append((mean(d["leaf"]) * 100.0, mean(d[key])))  # cm
+            pts.sort()
+            if not pts:
+                continue
+            ax.plot([p[0] for p in pts], [p[1] for p in pts],
+                    marker="o", label=goal)
+        ax.set_xlabel("free-space leaf size (cm)")
+        ax.set_ylabel(f"mean {lbl} boxel count (over seeds)")
+        ax.grid(True, alpha=0.3)
+    axes[0].legend(fontsize=8)
+    fig.suptitle(title)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
+
+
 def group_boxel_volumes(rows: List[dict],
                         goal: Optional[str] = None
                         ) -> Dict[str, Dict[str, List[float]]]:
@@ -2090,6 +2173,15 @@ def main(argv=None) -> int:
                   "(anytime / #77, linear)",
             out_path=out_dir / "solved_vs_time_linear.png",
             log_x=False,
+        )
+    # Audit #108 part-c / #101: boxel count vs free-space leaf size,
+    # one line per goal.  No-op unless the sweep varies min_boxel_size
+    # (same guard as the anytime curve).
+    if _has_anytime_axis(all_rows):
+        plot_boxel_vs_resolution(
+            group_boxel_vs_resolution(all_rows),
+            title="Boxel count vs free-space leaf size",
+            out_path=out_dir / "boxel_count_vs_resolution.png",
         )
     # Audit #73 — tabular summary alongside the plots (markdown +
     # 2 CSVs).  Aggregate by (goal, baseline) + per-occluder breakdown.
