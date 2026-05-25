@@ -362,7 +362,7 @@ than optimized away" sentence. (AP) :168 "would narrow" -> "could narrow". (AR) 
 Refs: discussion.tex:121,123,168,239,245,258,268.
 
 ================================================================================
-#207  [T3] [THESIS]  Success-rate-vs-n_occ caption should state what the band is
+#207  [DONE 2026-05-25] [T3]  Success-rate-vs-n_occ caption should state what the band is
 ================================================================================
 results.tex (success-rate-vs-n_occ fig). The shaded band is +/-1 SAMPLE STD of per-trial 0/1
 success flags over ~80-100 seeds/point (clipped [0,1]) — NOT a CI. Fix: say so in the caption;
@@ -415,12 +415,12 @@ OPEN:
   Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief to background; T1)
   Methods: #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
-  Results: #199 (task rename), #207 (success-rate band caption), #209 (resolution-floor study + figure)
+  Results: #199 (task rename), #209 (resolution-floor study + figure)
   Discussion: #203 ("more cells" FALSE; T0/NOW), #204 (stack ratio mention), #205 (stacking slowdown misattributed; T0/NOW), #206 (section-6 trims)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200, #201, #202. MERGED: #192->#187, #196->#176.
+DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200, #201, #202, #207. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
