@@ -321,7 +321,7 @@ Fix: drop the variant or reframe honestly as evidence the floor does NOT change 
 Refs: results.tex:106; eval_results/sweep_anytime; #203; CODEBASE_AUDIT #108.
 
 ================================================================================
-#203  [T0] [NOW]  discussion:60 "at the cost of more cells" is FALSE; "characterisation of the regime" is empty
+#203  [DONE 2026-05-25] [T0]  discussion:60 "at the cost of more cells" is FALSE; "characterisation of the regime" is empty
 ================================================================================
 discussion.tex:60. (AK) Data-contradicted: a finer free-space floor does NOT add cells (greedy
 convex merge -> counts identical across semantic/mbs0.05/mbs0.09, e.g. stack free 17.64 in all);
@@ -416,11 +416,11 @@ OPEN:
   Methods: #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
   Results: #199 (task rename), #209 (resolution-floor study + figure)
-  Discussion: #203 ("more cells" FALSE; T0/NOW), #205 (stacking slowdown misattributed; T0/NOW), #206 (section-6 trims)
+  Discussion: #205 (stacking slowdown misattributed; T0/NOW), #206 (section-6 trims)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200, #201, #202, #204, #207. MERGED: #192->#187, #196->#176.
+DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200, #201, #202, #203, #204, #207. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
