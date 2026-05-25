@@ -71,15 +71,17 @@ is noted in \cref{sec:future_work}.
 reported Partial Observability numbers (Table~II of
 \cite{curtis2024partially}); \texttt{holding} --- find a hidden object
 and pick it up --- is the closest analogue to TAMPURA's \emph{Find Die}
-task. Read carefully, the comparison cuts two ways. The reported spans
-differ: our per-episode wall-clock (mean 13.7\,s, success-only) includes
-PyBullet execution and replanning, whereas TAMPURA's 57\,$\pm$\,38\,s is
-planning time only, so the like-for-like figure is our planning time, a
-mean 7.8\,s. And reliability runs against us: our holding success rate is
-42\,\%, below the $\geq$\,63\,\% implied by TAMPURA's 0.63\,$\pm$\,0.30
-discounted return (Table~I). We plan more cheaply but less reliably, on a
-marginally easier goal --- \emph{Find Die} also requires returning home,
-which ours does not. Beyond the numbers, the two systems differ in kind.
+task. Read carefully, the comparison cuts two ways. On time, TAMPURA's
+57\,$\pm$\,38\,s (Table~II) includes executing the selected controllers in
+simulation, so it is a per-episode figure rather than planner time alone;
+the like-for-like quantity is therefore our per-episode wall-clock (mean
+13.7\,s, success-only, which likewise includes PyBullet execution and
+replanning). On reliability the order runs against us: our holding
+success rate is 42\,\%, below the $\geq$\,63\,\% implied by TAMPURA's
+0.63\,$\pm$\,0.30 discounted return (Table~I). We are no more expensive
+end-to-end but less reliable, on a marginally easier goal --- \emph{Find
+Die} also requires returning home, which ours does not. Beyond the
+numbers, the two systems differ in kind.
 
 Both systems sample geometry \emph{online}, inside the planning loop, and
 both rely on the same determinised, Fast Downward--based classical planner
@@ -89,20 +91,20 @@ current belief it optimistically assumes each action succeeds and runs
 Fast Downward to propose candidate action sequences that reach the goal;
 it then samples those actions' real outcomes to estimate how they branch
 under uncertainty, building a \emph{probabilistic} sparse MDP
-$\bar{\mathcal{B}}_\text{sparse}$, and finally solves that MDP with LAO*
+$\bar{\mathcal{B}}_\text{sparse}$, and finally solves that MDP
 for an uncertainty- and risk-aware policy. Fast Downward thus chooses
-\emph{which goal-reaching action sequences are worth considering}; LAO*
-chooses \emph{what to do once their outcomes are uncertain}, weighing each
-branch's probability of success. Our planner runs the same kind of
+\emph{which goal-reaching action sequences are worth considering}; the MDP
+solver chooses \emph{what to do once their outcomes are uncertain}, weighing
+each branch's probability of success. Our planner runs the same kind of
 determinised search through PDDLStream, but stops there: it reasons over
 deterministic knowledge literals, executes the chosen plan, and replans
 when an optimistic assumption proves wrong --- there are no transition
 probabilities to estimate, no probabilistic MDP, and no policy layer on
 top. The salient difference is that probabilistic layer --- learning the
-MDP and solving it with LAO* for a policy --- not the symbolic search
+MDP and solving it for a policy --- not the symbolic search
 engine underneath.
 
-This framing changes what the 7.8\,s vs 57\,s planning-time gap means. It is
+This framing changes what the time comparison means. It is
 not a ``semantic-Boxels-beats-TAMPURA'' claim. The two figures come from
 different environments --- our tabletop scenes against TAMPURA's --- so the
 times are not measuring the same problem and benchmark neither
@@ -191,8 +193,8 @@ partition by 30--40\,\%. The cause is structural rather than numerical: the
 merge step combines free-space cells whenever their merged region is convex,
 so the partition reflects the convex structure of the free space rather than
 the leaf size itself. \emph{auto\_cell}
-(the largest visible footprint plus a 1\,cm margin) is therefore a
-default rather than a tuned constant, and semantic's compactness advantage
+(the largest visible footprint plus a 1\,cm margin) is therefore a convenient
+choice rather than a tuned constant, and semantic's compactness advantage
 over \texttt{uniform} is a structural property of the adaptive partition, not
 an artefact of resolution tuning. Neither result generalises to scenes where
 placements are constrained by sub-5\,cm geometry; constructing such a scene

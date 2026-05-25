@@ -584,6 +584,220 @@ Related:
 
 
 ================================================================================
+#105. ADD A WUMPUS-WORLD BASELINE FOR SEARCH-UNDER-OCCLUSION COMPARISON
+================================================================================
+Status:   OPEN.  Filed 2026-05-24.  We currently compare semantic
+          boxelization against uniform voxelization (#10) and TAMPURA;
+          there is no classic search-under-partial-observability baseline
+          that ignores geometry entirely.  A Wumpus-style baseline gives
+          a geometry-agnostic lower bound: discretize the workspace into
+          cells, treat hidden objects as the "wumpus", and sense/move
+          purely on belief over cells with no shadow reasoning.
+Priority: TIER 2 — adds an evaluation arm; no correctness risk to the
+          existing pipeline, but gates a stronger comparison claim in
+          the eval chapter.
+Where:    new baseline module alongside the uniform-voxelization
+          baseline (#10); wires into the eval runner + scalability
+          matrix (#9) as a new variant tag so eval_plotter.py keys it
+          like semantic / uniform (#99).
+Depends:  #10 (uniform baseline scaffold to mirror), #9 (eval runner /
+          matrix), #99 (variant-key plotter must pick up the new tag).
+Effort:   TBD — scope the planner/belief model before estimating.
+
+What:  A Wumpus-World baseline reframes the search problem as cell-based
+       belief tracking with no shadow geometry: the agent maintains a
+       probability/occupancy belief over discretized cells, senses a
+       cell, and replans, with the target ("wumpus") found when its cell
+       is sensed.  It isolates the value of semantic shadow reasoning by
+       comparing against an agent that has the same sensing/replanning
+       loop but a geometry-blind belief.
+
+Fix:   1. Define the cell discretization + belief representation
+          (mirror the uniform baseline's grid where possible).
+       2. Implement the sense/move/replan loop over cell belief; no
+          shadow_calculator coupling.
+       3. Register it as a new eval variant tag; confirm eval_plotter
+          (#99) splits it out from semantic / uniform.
+       4. Run a matrix slice; record headline numbers in EVAL_SUMMARY.
+
+Care:
+       (1) New variant tag must be distinct so #99 plotter grouping
+           does not average it into semantic / uniform.
+       (2) Plots ADD, never overwrite existing baseline figures.
+
+Related:
+       #10  — uniform-voxelization baseline to mirror.
+       #9   — eval runner + scalability matrix.
+       #99  — variant-key plotter.
+
+
+################################################################################
+#  ISSUES #106-#112 --- ADDED 2026-05-24 (thesis read-through batch 2 spillover)
+################################################################################
+Code / eval / plotter follow-ups surfaced during the 2026-05-24 thesis read-through
+(thesis-prose counterparts are thesis_audit.md #199-#207). Several are eval-data
+findings verified by a research agent against eval_results/sweep_anytime.
+
+================================================================================
+#106. FAILURE-MODE TAXONOMY: FOLD all_searched + physics_mismatch INTO planner_failed; INVESTIGATE no_summary
+================================================================================
+Status:   OPEN. Filed 2026-05-24. Drives thesis #201 (results.tex:96 exit-reason
+          list) + the failure-mode figure.
+Priority: TIER 2 — eval classification + plot grouping; changes how failures are
+          reported, not the runs.
+Where:    exit-reason classification (eval_runner.py / run_logger) + failure-mode
+          grouping in eval_plotter.py; thesis results.tex:96,221 + the figure.
+Depends:  #99 (variant-key plotter), #9 (eval runner).
+Effort:   small for the merge; no_summary needs investigation first.
+
+What:  (1) all_searched and physics_mismatch are search/planner outcomes, not
+       distinct user-facing failure modes -- collapse both into planner_failed in
+       the REPORTED taxonomy. (2) no_summary cells (ended without a recorded
+       summary -- the ~6% denominator gap at results.tex:98) need investigating:
+       what are they, can they get a real exit reason instead of null?
+Fix:   1. Investigate no_summary (scripts/_audit96_scan_no_summary.py exists, #96).
+       2. Map all_searched, physics_mismatch -> planner_failed at report time
+          (keep raw codes in the data).
+       3. Regenerate the failure-mode figure (ADD, never overwrite).
+       4. Update thesis #201 prose to the merged set.
+Care:  Keep raw exit codes in data; merge only for figure/table. Plots ADD.
+Related: thesis_audit #201; #96; #99.
+
+================================================================================
+#107. REMOVE THE PER-EPISODE REPLAN LIMIT IN EVALUATIONS (run to time budget; keep 3-retry give-ups)
+================================================================================
+Status:   OPEN. Filed 2026-05-24. User: evals should NOT cap replans per episode;
+          an episode should keep replanning until the wall-clock budget ends. Keep
+          only the give-ups: 3 failed drops -> exit (#79/#80) and the unreachable-
+          shadow three-strike sense give-up.
+Priority: TIER 1 — changes eval methodology and reported numbers (replan_limit
+          exit reason disappears; some episodes run longer).
+Where:    eval_runner.py replan-limit logic (produces the replan_limit exit reason).
+Depends:  #9; interacts with #106 (taxonomy) and the 1800 s per-call budget
+          (results.tex:83 / thesis #200).
+Effort:   small code change + re-run of affected cells (stack especially, where
+          replan_limit dominates -- results.tex:221).
+
+What:  Today an episode ends with replan_limit after a fixed number of replans. The
+       user wants episodes bounded by wall-clock time only (then timeout), keeping
+       only the drop give-up and the sense give-up -- an honest time-bounded eval.
+Fix:   1. Remove/disable the per-episode replan cap; bound by wall-clock time.
+       2. Keep the 3-failed-drop and sense three-strike give-ups.
+       3. Re-run affected cells; regenerate plots (ADD); update taxonomy (#106,
+          replan_limit goes away).
+       4. Update thesis prose mentioning a replan limit.
+Care:  Changes headline numbers -- coordinate with thesis eval figures (#104) and
+       #177/#190 framing. Plots ADD.
+Related: thesis_audit #200 #201; #106; #104; #79 #80.
+
+================================================================================
+#108. BOXEL-COUNT-VS-CONFIG PLOT + semantic+mbs0.1 ARM (min free-space size barely changes cell count)
+================================================================================
+Status:   OPEN. Filed 2026-05-24. Supports thesis #202/#203 (finer floor does NOT
+          add cells -- the greedy convex merge dominates).
+Priority: TIER 2 — adds a figure + one eval arm; no correctness risk.
+Where:    eval_plotter.py (new boxel-count-by-config plot); eval_runner.py matrix
+          (new mbs0.1 arm).
+Depends:  #99, #77/#100 (sweep data), #95 (stack tagging).
+Effort:   plot small (most data exists); +1 arm (mbs0.1) is a short run.
+
+What:  Plot total + category Boxel counts across configs: uniform, semantic (auto),
+       semantic+mbs0.05, semantic+mbs0.1, and the coarse arms (the existing 1.5x/2x
+       auto_cell probes = mbs0.135/0.18 random-pairs, mbs0.09/0.12 stack, from #100).
+       Verified (agent): finer floors (0.05, 0.09) give counts IDENTICAL to auto;
+       only coarser floors reduce them. A distinct mbs0.1 point does NOT yet exist.
+Fix:   1. Add a semantic+mbs0.1 arm; run the affected slice.
+       2. New eval_plotter figure: (free-space + total) boxel count vs config, per
+          goal. ADD; do not overwrite #77/#100 figures.
+       3. Feed into thesis #203 (correct the "more cells" claim).
+Care:  Plots ADD (keep #77/#100 resolution figures). Stack rows: slice by
+       stack_height (#95).
+Related: thesis_audit #202 #203; #100; #99; #95.
+
+================================================================================
+#109. NEW BASELINES: uniform@smallest-object autocell; ENTITY-MEMBERSHIP action preconditions (drop boxel-center+10cm)
+================================================================================
+Status:   OPEN. Filed 2026-05-24. Two related user proposals.
+Priority: TIER 2 — research/eval extension; the precondition redesign is a
+          non-trivial change to how actions consume boxels.
+Where:    uniform baseline (#10) auto-cell sizing; PDDL action design + Python
+          action impl (target pose = boxel-center + 10 cm today); eval matrix.
+Depends:  #10, #9, #99.
+Effort:   medium-large (precondition reformulation touches domain + python).
+
+What:  (a) A uniform baseline whose auto-cell = the SMALLEST object in the scene
+       (vs current largest-footprint), plus a matching semantic comparison --
+       expected worse but worth testing. (b) Reformulate action preconditions so a
+       pose belonging to AT LEAST ONE entity (object A or shadow B or free cell C)
+       is usable by the action, instead of "boxel-center + 10 cm"; this means
+       rethinking how target poses are generated in Python.
+Fix:   1. Add the smallest-object uniform arm + semantic comparison.
+       2. Prototype pose-in-any-entity preconditions in domain + streams; replace
+          boxel-center+offset pose generation.
+       3. Evaluate; record in EVAL_SUMMARY; feed into the eval chapter.
+Care:  Big behavioural change -- gate behind a flag; keep current pipeline runnable.
+       Plots ADD.
+Related: thesis_audit (Baselines, results.tex:100); #10; #105.
+
+================================================================================
+#110. LIVE-DEMO NATURAL-LANGUAGE CLI ("pick blue box" -> executes)
+================================================================================
+Status:   OPEN. Filed 2026-05-24. Future/demo feature.
+Priority: TIER 3 — nice-to-have demo; off the eval/thesis critical path.
+Where:    new interactive entry point over the existing planner/executor
+          (pddlstream_planner.py + executor); parses a typed command into a goal.
+Depends:  existing action set (pick/drop/sense/stack) + goal builders.
+Effort:   medium.
+
+What:  A terminal demo: user types e.g. "pick blue box" and the robot executes it.
+       Cover all basic actions/goals -- pick (~= holding/find), drop, sense, stack,
+       find-and-stack. A lightweight NL/regex parser maps the utterance to object +
+       action/goal; robust enough to extract the goal, and when ambiguous ASK back
+       ("did you mean <X>?") rather than guess.
+Fix:   1. Define the command grammar (verbs + object descriptors -> colour/type
+          resolved against the scene).
+       2. Map to a goal/action; dispatch through the existing planner/executor.
+       3. Ambiguity path ("did you mean ...?") + help listing.
+Care:  Thin wrapper; do not entangle with the eval pipeline.
+Related: existing action set; thesis Future Work.
+
+================================================================================
+#111. REMOVE "THESIS_NOTES" TEXT FROM THE TAMPURA WALL-CLOCK PLOT
+================================================================================
+Status:   OPEN. Filed 2026-05-24. Cosmetic but visible in the thesis figure.
+Priority: TIER 3 — plot cosmetics; ties to thesis #177/#190.
+Where:    eval_plotter.py plot_tampura_wallclock_comparison (text rendered on the
+          figure).
+Depends:  #94, #99.
+Effort:   tiny.
+
+What:  The TAMPURA wall-clock figure renders "THESIS_NOTES" text in the image;
+       remove it. Note also: TAMPURA's Table II 57 s is "over 20 trials" and the
+       paper does NOT state success-only, whereas our series is success-only -- the
+       caption should not imply like-for-like success filtering (thesis #177/#190).
+Fix:   1. Drop the THESIS_NOTES text. 2. Regenerate (ADD a new PNG; keep old
+       regenerable). 3. Reconcile the success-basis caveat with thesis #177.
+Care:  Plots ADD.
+Related: thesis_audit #177 #190; #94; #99.
+
+================================================================================
+#112. (OPTIONAL) WILSON INTERVAL FOR SUCCESS-RATE PLOTS
+================================================================================
+Status:   OPEN. Filed 2026-05-24. Optional statistical improvement.
+Priority: TIER 3 — optional; current bands are usable once captioned (thesis #207).
+Where:    eval_plotter.py group_success_rate / plot_metric (the +/-1 std band).
+Depends:  #86, #99.
+Effort:   small.
+
+What:  Success-rate plots shade +/-1 SAMPLE STD of per-trial 0/1 flags clipped to
+       [0,1] -- not a proper interval for a binomial rate. A Wilson score interval
+       is more appropriate for ~80-100 Bernoulli trials/point.
+Fix:   Replace (or supplement) the band with a Wilson interval; regenerate plots
+       (ADD); update thesis #207 caption.
+Care:  Plots ADD.
+Related: thesis_audit #207; #86; #99.
+
+================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
 Issue numbers are chronological (discovery order), NOT priority — follow the
@@ -591,7 +805,7 @@ TIER labels.  Full bodies of closed issues are in git history
 (git log --grep="audit: mark #N") and the "RESOLVED / DONE ISSUES" section of
 archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 3 items (full bodies above):
+OPEN — 11 items (full bodies above):
   #98  TIER 2 — coarse-end resolution sweep DONE; RESULT recorded
        (resolution axis flat above auto_cell — auto_cell is a
        robust plateau).  Integration follow-ups split to #100/#101.
@@ -600,7 +814,23 @@ OPEN — 3 items (full bodies above):
   #104 TIER 3 — refresh the plots + data embedded in the thesis PDF
        to the current (post-#100 merge) eval outputs; figure/data
        sync into the thesis (thesis #121 / #168).
-  TIER 0/1: zero open items.
+  #105 TIER 2 — add a Wumpus-World baseline (cell-belief search, no
+       shadow geometry) as a new eval variant alongside uniform (#10)
+       / TAMPURA, to isolate the value of semantic shadow reasoning.
+  --- batch 2 (2026-05-24 thesis read-through spillover) ---
+  #106 TIER 2 — failure-mode taxonomy: fold all_searched + physics_mismatch
+       into planner_failed; investigate no_summary (thesis #201).
+  #107 TIER 1 — remove the per-episode replan limit in evals (run to time
+       budget; keep the 3-retry give-ups); will change reported numbers.
+  #108 TIER 2 — boxel-count-vs-config plot + semantic+mbs0.1 arm (shows the
+       free-space floor barely changes cell count; thesis #202/#203).
+  #109 TIER 2 — new baselines: uniform@smallest-object autocell + entity-
+       membership action preconditions (drop boxel-center+10cm).
+  #110 TIER 3 — live-demo natural-language CLI ("pick blue box" -> executes).
+  #111 TIER 3 — remove "THESIS_NOTES" text from the TAMPURA wall-clock plot
+       (thesis #177/#190).
+  #112 TIER 3 — (optional) Wilson interval for success-rate plots (thesis #207).
+  TIER 0/1: one open TIER-1 item (#107, eval methodology); zero TIER-0.
 
 CLOSED (one-line; full detail in git / archive):
   #100 [2026-05-24] merge coarse-end resolution sweep into sweep_anytime

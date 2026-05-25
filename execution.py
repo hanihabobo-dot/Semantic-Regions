@@ -28,6 +28,8 @@ this module owns the geometry/physics primitives plus the sense action
 handler.
 """
 
+import os
+import time
 from dataclasses import dataclass
 from typing import Optional, Set, Tuple
 
@@ -39,6 +41,23 @@ from reboxelize import reboxelize_free_space
 from streams import RobotConfig
 from robot_utils import (END_EFFECTOR_LINK, FINGER_JOINTS, solve_ik,
                          move_robot_smooth, open_gripper, close_gripper)
+
+
+def _capture_freeze(label: str) -> None:
+    """Figure-capture aid (thesis/audit). If the env var BOXEL_CAPTURE_FREEZE is
+    set to a number of seconds, hold the GUI on this event so it can be
+    screenshotted (Win+Shift+S -> Window snip). Default OFF: when the var is
+    unset this is a no-op, so normal runs and the eval sweep are unaffected."""
+    secs = os.environ.get("BOXEL_CAPTURE_FREEZE")
+    if not secs:
+        return
+    try:
+        secs = float(secs)
+    except ValueError:
+        return
+    print(f"    [CAPTURE] {label} -- GUI frozen {secs:.0f}s; screenshot the "
+          f"window now (terminal for the log line).", flush=True)
+    time.sleep(secs)
 
 
 def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
@@ -1374,6 +1393,8 @@ def handle_sense_action(
             ]
             print(f"    Shadow {shadow_id} contains non-target "
                   f"object(s): {discovered_names}")
+            _capture_freeze(f"replan trigger: {shadow_id} holds non-target "
+                            f"{discovered_names}")
 
             for obj_name in discovered_names:
                 obj_info = env.objects.get(obj_name)
@@ -1520,6 +1541,7 @@ def handle_sense_action(
               f"re-ground blocker atoms after repeated "
               f"failure — audit #47 (deferred out of scope "
               f"2026-05-06).")
+        _capture_freeze(f"give-up: {shadow_id} blocked 3x (still-blocked 3/3)")
         blocked_giveup_shadows.add(sid_str)
         belief.mark_sensed(sid_str, found=False)
     else:

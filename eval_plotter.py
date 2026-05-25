@@ -994,38 +994,39 @@ def plot_tampura_wallclock_comparison(
     title: str,
     out_path: Path,
 ) -> Optional[Path]:
-    """Bar chart: our holding-task per-episode times vs TAMPURA's
-    Partial Observability planning time (57 ± 38 from
+    """Bar chart: our holding-task per-episode wall-clock vs TAMPURA's
+    Partial Observability per-episode time (57 ± 38 from
     arXiv:2403.10454 Table II).
 
     Audit #177 (was #73 TIER C plot 9).  holding is the closest
     analogue to TAMPURA's hidden-object Find Die task (find a hidden
     object, pick it up); find-and-tray-stack is strictly harder and was
-    the wrong comparison.  Three bars, semantic variant only: our
-    wall-clock (full episode incl. PyBullet + replanning) and our
-    planning time (total_planning_time_s -- the like-for-like span vs
-    TAMPURA's planning-only number), against TAMPURA.  All bars are
-    mean ± std; the lower whisker is clipped at 0 because our times are
-    right-skewed (mean > median; medians reported in the caption).
-    Reliability runs the other way (ours ~42 %, TAMPURA >= 63 %); see
-    THESIS_NOTES §21 for the architectural framing.
+    the wrong comparison.  TAMPURA's Table II time INCLUDES executing the
+    selected controllers in simulation, so it is a per-episode figure,
+    not planner time alone; the comparable quantity is therefore our
+    per-episode wall-clock (full episode incl. PyBullet + replanning).
+    The planning sub-component is intentionally NOT plotted.  Two bars,
+    semantic variant only: our wall-clock vs TAMPURA, both mean ± std;
+    the lower whisker is clipped at 0 because our times are right-skewed
+    (mean > median; median reported in the caption).  Reliability runs
+    the other way (ours ~42 %, TAMPURA >= 63 %); see THESIS_NOTES §21 for
+    the architectural framing.
     """
     # TAMPURA Partial Observability — arXiv:2403.10454 Table II
-    # (planning time, mean ± std, 20 trials).  Success >= 63 % is
-    # inferred from the 0.63 ± 0.30 discounted return (Table I,
-    # gamma=0.98, binary terminal reward).  Hardcoded; update if the
-    # paper revises.
+    # (per-episode time incl. simulated controller execution, mean ± std,
+    # 20 trials).  Success >= 63 % is inferred from the 0.63 ± 0.30
+    # discounted return (Table I, gamma=0.98, binary terminal reward).
+    # Hardcoded; update if the paper revises.
     TAMPURA_MEAN = 57.0
     TAMPURA_STD = 38.0
     TAMPURA_N = 20
 
     # Audit #177 — holding is the find_dice analogue (find a hidden
     # object, pick it up); find-and-tray-stack was the wrong, harder
-    # task.  Collect both spans for the semantic variant: wall-clock
-    # (full episode) and planning time (like-for-like vs TAMPURA's
-    # planning-only number), success-only.
+    # task.  TAMPURA's Table II time includes simulated controller
+    # execution (per-episode), so our wall-clock is the comparable span;
+    # collect it for the semantic variant, success-only.
     wall: List[float] = []
-    plan: List[float] = []
     n_cells = 0
     n_success = 0
     for r in rows:
@@ -1038,32 +1039,26 @@ def plot_tampura_wallclock_comparison(
             continue
         n_success += 1
         wc = r.get("wall_clock_s")
-        pt = r.get("total_planning_time_s")
         try:
             if wc not in (None, ""):
                 wall.append(float(wc))
-            if pt not in (None, ""):
-                plan.append(float(pt))
         except (TypeError, ValueError):
             continue
 
-    if not wall or not plan:
+    if not wall:
         print(f"[plotter] no successful holding semantic cells "
               f"for {title}")
         return None
 
     succ_pct = 100.0 * n_success / n_cells if n_cells else 0.0
     wm, ws, wmed = mean(wall), stdev(wall), median(wall)
-    pm, ps, pmed = mean(plan), stdev(plan), median(plan)
 
     # (label, mean, lo_err, hi_err, n, color); lower error clipped to
     # the bar height so the right-skewed std does not draw below zero.
     bars = [
         ("Ours: wall-clock\n(holding, semantic)",
          wm, min(ws, wm), ws, len(wall), "#1f77b4"),
-        ("Ours: planning\n(holding, semantic)",
-         pm, min(ps, pm), ps, len(plan), "#1f77b4"),
-        ("TAMPURA: planning\n(Partial Obs.)",
+        ("TAMPURA: per-episode\n(Partial Obs.)",
          TAMPURA_MEAN, min(TAMPURA_STD, TAMPURA_MEAN), TAMPURA_STD,
          TAMPURA_N, "#d62728"),
     ]
@@ -1102,10 +1097,10 @@ def plot_tampura_wallclock_comparison(
     # single-threaded; THESIS_NOTES §21.1).  State the span mismatch and
     # the success gap instead.
     fig.text(0.5, 0.02,
-             f"Ours: mean ± std, success-only (right-skewed; medians "
-             f"{wmed:.1f}/{pmed:.1f}s).  TAMPURA: mean ± std (Table II).\n"
-             f"Only planning is like-for-like with TAMPURA's planning-only "
-             f"time.  Success: ours {succ_pct:.0f}%, TAMPURA ≥ 63%.",
+             f"Ours: mean ± std, success-only (right-skewed; median "
+             f"{wmed:.1f}s).  TAMPURA: mean ± std per episode (Table II, "
+             f"incl. simulated execution).\n"
+             f"Success: ours {succ_pct:.0f}%, TAMPURA ≥ 63%.",
              ha="center", fontsize=8, style="italic")
     fig.tight_layout(rect=[0, 0.10, 1, 1])
     fig.savefig(out_path, dpi=120)
