@@ -1,31 +1,10 @@
 ================================================================================
 CODEBASE AUDIT — OPEN ISSUES
 ================================================================================
-Date: 2026-02-25 (original audit, merged from 3 audit passes)
-Slimmed: 2026-05-12 (later) - resolved bodies (#62, #69, #70) and the entire
-         archive/CODEBASE_AUDIT_RESOLVED.txt (5772 lines of historical resolved
-         bodies, ~75 entries) deleted per user direction.  Closed-issue
-         summaries remain in the SUMMARY block at the bottom; full historical
-         trail is in git history (git log --grep="Fix #N" or
-         "audit: mark #N").  Each open issue body below stands on its own.
-Slimmed: 2026-05-19 - full bodies of DONE issues #63, #75, #76, #79-#85
-         moved to archive/CODEBASE_AUDIT_DEFERRED.txt ("RESOLVED / DONE
-         ISSUES" section); the verbose ROADMAP and SUMMARY closed-issue
-         detail collapsed to one-liners.  Only the 2 open issues (#77,
-         #78) keep full bodies in this file.
-Slimmed: 2026-05-20 - #77 body collapsed Step 0-3b implementation
-         history (~110 lines of as-built notes) to one-line per-step
-         status entries now that the sweep is complete and the
-         hypothesis has been reframed by #93's full data; #96 closed
-         (interpreter pin in place, Care(3) scan clean); #93 body
-         refreshed for the 2700/2700 cell aggregate.
-Slimmed: 2026-05-20 (later) - #77, #93 closed (infrastructure +
-         findings published in EVAL_SUMMARY.md; chapter writeup
-         lands in thesis #121); #97 deferred to archive (research
-         scene not pursued for thesis completion); #95 stale body
-         removed (parallel agent closed it earlier in the day but
-         left the body in-place).  Open list down to #98 only.
-
+Date: 2026-02-25 (original, merged from 3 passes). Slimmed repeatedly (2026-05-12,
+-19, -20) — resolved bodies + the RESOLVED archive moved to git history /
+archive/CODEBASE_AUDIT_DEFERRED.txt; closed-issue one-liners kept in the SUMMARY block.
+Slimmed 2026-05-25: open issue bodies condensed; POLICY + FOR LATER kept verbatim.
 Deferred/background/resolved: archive/CODEBASE_AUDIT_DEFERRED.txt
 
 ================================================================================
@@ -151,53 +130,17 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
        blocks_view_at facts — old #73 [DONE, archive].  See THESIS_NOTES.md
        for accepted geometric / symbolic gaps (including stale shadow AABBs).
 
-
-################################################################################
-#                                                                              #
-#  OPEN ISSUES — #98 #101 #104                                                 #
-#                                                                              #
-################################################################################
-
-
 ================================================================================
-ISSUE NUMBERING — CHRONOLOGICAL, NOT PRIORITY-ORDERED  (banner 2026-05-15)
+OPEN ISSUES — #98 #101 #104 #105 #106-#112
 ================================================================================
+Issue numbers are DISCOVERY ORDER, not priority — read the TIER label, not the number
+(e.g. #63 is T3 doc work, #81 was T0). If walking the list lowest-first, re-sort by TIER.
 
-Issue numbers (#1, #2, ... #81) reflect DISCOVERY ORDER, not importance.
-A LOWER number is NOT more important than a HIGHER one.  For actual priority,
-read the TIER label inside each issue body and the SUMMARY block at the bottom
-of this file.
-
-Two examples that bit contributors before this banner existed:
-  • #63 is a TIER 3 doc sweep; #81 is a TIER 0 correctness defect — work #81
-    first, even though it has the higher number.
-  • #50 (deferred) had a low number but was scoped out, while later-discovered
-    #69 was promoted to TIER 0 and shipped same-day.
-
-If you find yourself walking the list lowest-first, stop and re-sort by TIER.
-
-
-================================================================================
-STATUS (2026-05-20)
-================================================================================
-The pre-evaluation correctness chain, the evaluation framework (#9 runner +
-#10 uniform-voxelization baseline), the eval-chapter figures (#73), the
-gripper-handoff correctness chain (#75-#85), and the README/wiki doc sweep
-(#63) are all DONE.  Three issues remain open, all TIER 2/3 follow-ups
-to the coarse-end resolution sweep: #98 (sweep DONE 2026-05-22, RESULT
-recorded — resolution axis flat above auto_cell), #100 (merge the
-1800 coarse cells into sweep_anytime + combined 4-point plot), and
-#101 (eval-chapter resolution-axis writeup, thesis #121 territory).
-Closed 2026-05-20: #77 (anytime sweep infrastructure; chapter writeup
-owned by thesis #121 + EVAL_SUMMARY.md), #93 (full-sweep findings
-published to EVAL_SUMMARY.md), #94 (plot_solved_vs_time), #95
-(_row_difficulty plotter rework), #96 (numpy interpreter pin +
-Care(3) scan), #99 (variant-key plotter).  Deferred 2026-05-20: #78
-(perception multi-shadow), #97 (fine-resolution-discriminating
-scene); both in archive/CODEBASE_AUDIT_DEFERRED.txt.  See the SUMMARY block at the bottom of this file for the tiered
-list and the full closed / deferred / wontfix breakdown.  Closed-issue
-detail lives in git history (git log --grep="audit: mark #N") and
-archive/CODEBASE_AUDIT_DEFERRED.txt.
+STATUS (2026-05-20): pre-eval correctness chain, eval framework (#9 runner + #10 uniform
+baseline), eval-chapter figures (#73), gripper-handoff chain (#75-#85), README/wiki sweep
+(#63) all DONE. Open are T2/T3 follow-ups to the resolution sweep (#98 done w/ RESULT,
+#101 writeup) plus the 2026-05-24 read-through spillover (#104-#112). Closed 2026-05-20:
+#77 #93 #94 #95 #96 #99. Deferred: #78 #97. Detail in git / DEFERRED archive.
 
 ================================================================================
 FOR LATER
@@ -308,582 +251,225 @@ FOR LATER
   archive/CODEBASE_AUDIT_DEFERRED.txt if work stays on the current
   PDDLStream + FD path.
 
-
 ================================================================================
 #98. COARSER-THAN-AUTO_CELL FOLLOW-UP SWEEP — CHARACTERISE THE RESOLUTION AXIS ABOVE auto_cell
 ================================================================================
-Status:   OPEN.  Filed 2026-05-20 as the symmetric counterpart of
-          #97.  #93's null finding (semantic == semantic+mbs0.05
-          at this scene scale) established that auto_cell is the
-          binding constraint on the FINE end.  This issue probes
-          the opposite direction — what happens when
-          min_boxel_size is held strictly ABOVE auto_cell (1.5x,
-          2x).
-          SWEEP COMPLETE 2026-05-22 — 1800 cells,
-          SCALABILITY_VS_RESOLUTION preset (commit 66a26ed), run
-          on the 100-seed audit-#77 corpus.  See RESULT below.
-          Remaining: merge cells into sweep_anytime + combined
-          4-point resolution plot (Step 4), chapter writeup
-          (Step 5, owned by thesis #121).
-Priority: TIER 2 — informational; characterises the resolution-
-          vs-success curve and feeds the Discussion (thesis #125
-          / #140).  Not blocking the main #77 anytime claim, but
-          gives the chapter a defensible "we swept resolution in
-          both directions" story.
-Where:    eval_runner.py MATRIX_PRESETS — extend
-          SCALABILITY_VS_TIME's min_boxel_size axis (or sibling
-          preset SCALABILITY_VS_RESOLUTION) with two coarse
-          points.  test_full_pipeline.py effective_cell logic
-          already supports mbs > auto_cell verbatim post-#77
-          step 3a (the clamp was lifted in both directions).
-Depends:  #77 step 3a [DONE]; #93 (the null finding this is the
-          dual of); #95 (stack cell-tag misnaming, so stack rows
-          stay interpretable).
-Effort:   1-2 days for matrix extension + smoke sub-sweep +
-          full re-run + plotter check.  Corpus is reusable
-          (still random-pairs + stack scenes, same seeds).
+Status/Priority: OPEN, TIER 2 (informational; feeds Discussion thesis #125/#140). Sweep
+   COMPLETE 2026-05-22 (1800 cells, SCALABILITY_VS_RESOLUTION preset, commit 66a26ed, on
+   the 100-seed audit-#77 corpus). Remaining: merge cells into sweep_anytime + combined
+   4-point plot (-> #100), chapter writeup (-> #101).
+Where:  eval_runner.py MATRIX_PRESETS (SCALABILITY_VS_RESOLUTION); effective_cell logic
+   already supports mbs > auto_cell post-#77 step 3a. Depends: #77 3a, #93, #95.
+What:   dual of #97 — as min_boxel_size grows ABOVE auto_cell, when does coarser hurt?
+   Hypothesis: success + per-call time fall (fewer free boxels = cheaper but lower fidelity).
 
-What:  #97 asks "engineer a scene where FINER than auto_cell
-       wins."  This is the dual: as min_boxel_size grows ABOVE
-       auto_cell, at what point does coarser representation
-       start to hurt?  Today the sweep covers two points (auto,
-       and mbs=0.05 which falls AT or below auto_cell for these
-       scenes); neither exercises the coarse end of the curve.
-
-       Hypothesis: success rate falls and per-call planning
-       time falls as min_boxel_size grows past auto_cell ---
-       fewer free-space boxels means the planner has fewer
-       atoms to reason over (cheap planning) but loses the
-       representational fidelity needed for reach corridors,
-       placement targets, and shadow disambiguation (harder
-       to find a plan, more plans may not exist).  The cross-
-       over is what the sweep reveals.
-
-       Expected reading (random-pairs auto_cell ~ 9 cm; stack
-       auto_cell ~ 6 cm):
-       - auto_cell                — current baseline (#93:
-                                    semantic 61% stack /
-                                    42% holding / 40% f-a-t-s).
-       - 1.5x auto_cell           — coarse but still finer than
-                                    the largest object.
-                                    Plausible: modest success
-                                    drop, modest speed-up.
-       - 2.0x auto_cell           — approaches the uniform-cell
-                                    scale.  Might match
-                                    uniform's success on stack
-                                    (~65%) but with semantic's
-                                    object/shadow boxels intact,
-                                    so init-facts stay an order
-                                    of magnitude below uniform.
-
-RESULT (2026-05-22 — coarse-end sweep, 1800 cells, semantic only):
-       Success rate per (goal, min_boxel_size) against the #93
-       auto_cell baseline (median plan time / median total boxels
-       / median init-state facts in parentheses):
-
-         goal                 auto_cell (#93)   1.5x auto         2.0x auto
-         holding              42.3%             40.3% (0.135 m)   45.7% (0.18 m)
-         find-and-tray-stack  39.8%             35.3% (0.135 m)   35.3% (0.18 m)
-         stack                61.3%             61.3% (0.09 m)    61.3% (0.12 m)
-
-       Partition shrinks 30-40% as mbs grows (median boxels:
-       holding 35->20, f-a-t-s 42->25, stack 28->22; init facts
-       fall similarly: holding ~276->173, f-a-t-s ~482->290,
-       stack ~296->251) and planning is marginally faster.
-
-       FINDING: the resolution axis is essentially FLAT above
-       auto_cell at these scene scales.  Coarsening to 1.5x and
-       even 2x auto_cell does NOT degrade success materially —
-       holding flat within seed noise, find-and-tray-stack a mild
-       ~4 pp drop, stack IDENTICAL seed-for-seed (184/300 at
-       every point).  The expected "coarser hurts" cross-over
-       (Hypothesis above) does NOT appear in the 1x-2x range.
-       This realises Care(3): the axis is flat — report and stop
-       rather than extending it.
-
-       Combined with #93's below-auto null result (mbs0.05 ==
-       auto), the complete picture: the adaptive partition is
-       INSENSITIVE to the leaf-size knob across a ~4x range
-       (0.05 m -> 0.18 m on random-pairs).  auto_cell is not a
-       tuned magic number; it sits in a flat-optimal plateau, so
-       the audit-#67 heuristic (largest visible AABB + 1 cm) is a
-       robust default.  This is a positive robustness finding for
-       the method and belongs in the Discussion (thesis #125 /
-       #140), not just a negative.
-
-       Data: eval_results/sweep_2026-05-20_13-38-28_scalability-
-       vs-resolution/{aggregated.csv, aggregated.jsonl};
-       per-(goal,mbs) summary via scripts/_audit98_summary.py.
-
-Fix:   Steps:
-       Step 1 [DONE 2026-05-20, commit 66a26ed] — added the
-                SCALABILITY_VS_RESOLUTION sibling preset using
-                option (b) per-scene numerics: random-pairs
-                {0.135, 0.18} m, stack {0.09, 0.12} m; semantic
-                only (uniform clamped to auto_cell by #66).
-                1800 cells.
-       Step 2 [DONE 2026-05-20] — single-cell smoke
-                (random-pairs holding seed=0 mbs=0.18):
-                effective_min_boxel_size recorded as 0.18
-                verbatim (clamp-lift from #77 step 3a works in
-                BOTH directions); partition collapsed to 11
-                boxels / 79 facts without crash; CellMerger did
-                not fold everything into one giant boxel.
-       Step 3 [DONE 2026-05-22] — full 100-seed corpus sweep
-                (1800 cells).  See RESULT above.
-       The two remaining integration steps were split into their
-       own issues 2026-05-22 (the sweep-and-characterise job that
-       #98 owns is complete; the RESULT above is the deliverable):
-       Step 4 -> #100 — merge the 1800 cells into sweep_anytime +
-                combined 4-point resolution plot.
-       Step 5 -> #101 — eval-chapter resolution-axis writeup
-                (thesis #121 territory).
-
-Care:
-       (1) auto_cell varies per scene (~6 cm stack, ~9 cm
-           random-pairs).  A single matrix-level mbs constant
-           means the effective multiplier differs across
-           scenes.  Either accept that and document, or use
-           per-scene presets / a --mbs-ratio flag.
-       (2) The audit-#77 step 3a clamp lift was tested
-           primarily at SMALLER-than-auto values.  Smoke must
-           also verify the larger end: that the free-space
-           octree does subdivide above auto_cell, that
-           CellMerger respects label boundaries, and that
-           planner streams can still ground reach / place /
-           sense at coarser cells.  No code change anticipated,
-           but the path is less exercised.
-       (3) If 1.5x and 2x produce the same success / planning
-           time as auto, the resolution axis is flat above
-           auto_cell at this scene scale — itself a finding.
-           Report it and stop the sweep there rather than
-           expanding the axis further.
-       (4) The coarse-end variant cells inherit #95's stack-
-           cell-tag misnaming.  Aggregate stack rows by
-           stack_height (run_config), not by the occ token.
-
-Related:
-       #77 [OPEN, TIER 1] — parent anytime sweep; this is the
-            symmetric counterpart to step 3b's resolution axis.
-       #93 — null result that motivated the dual axis.
-       #97 — fine-end discriminating scene; this issue is the
-            coarse-end probe.
-       thesis_audit.md #140 — broader eval-design gap; this
-            issue's data feeds the same discussion.
-
+RESULT (2026-05-22, coarse-end sweep, semantic only) — success vs (goal, mbs) vs #93 auto:
+   goal                 auto_cell(#93)  1.5x auto        2.0x auto
+   holding              42.3%           40.3% (0.135 m)  45.7% (0.18 m)
+   find-and-tray-stack  39.8%           35.3% (0.135 m)  35.3% (0.18 m)
+   stack                61.3%           61.3% (0.09 m)   61.3% (0.12 m)
+   Partition shrinks 30-40% as mbs grows (boxels: holding 35->20, f-a-t-s 42->25, stack
+   28->22; init facts fall similarly); planning marginally faster.
+   FINDING: resolution axis is essentially FLAT above auto_cell — no "coarser hurts"
+   crossover in 1x-2x (stack identical seed-for-seed 184/300). With #93's below-auto null
+   (mbs0.05==auto), the partition is INSENSITIVE to leaf size across ~4x (0.05->0.18 m):
+   auto_cell sits in a flat-optimal plateau, so the #67 heuristic (largest visible AABB +
+   1 cm) is a robust default — a positive robustness finding for the Discussion.
+   Data: eval_results/sweep_2026-05-20_13-38-28_scalability-vs-resolution/; per-(goal,mbs)
+   via scripts/_audit98_summary.py.
+Fix:    Step 1-3 DONE (preset added commit 66a26ed; smoke; full 100-seed sweep -> RESULT).
+   Integration split out: Step 4 -> #100 (merge + 4-point plot), Step 5 -> #101 (writeup).
+Care:   (1) auto_cell varies per scene (~6 cm stack, ~9 cm random-pairs) — a single mbs
+   constant gives different multipliers; document or use per-scene presets. (2) verify the
+   octree subdivides above auto_cell + CellMerger respects label boundaries (path less
+   exercised). (3) flat axis = report and stop. (4) coarse cells inherit #95 stack-tag
+   misnaming — aggregate by stack_height.
+Related: #77 (parent), #93, #97, thesis_audit.md #140.
 
 ================================================================================
 #101. EVAL-CHAPTER RESOLUTION-AXIS WRITEUP (thesis #121 territory)
 ================================================================================
-Status:   OPEN.  Filed 2026-05-22, split out of #98 Step 5.
-          Tracking issue on the CODEBASE side; the actual prose
-          lands in the thesis Evaluation chapter (thesis_audit.md
-          #121).
-Priority: TIER 3 — writeup, not code.  Listed here so the
-          resolution-axis story is not lost between the codebase
-          data (#98/#100) and the thesis chapter (#121).
-Where:    proposal-template/sections/evaluation.tex via the #121
-          structural rewrite; figure from #100.
-Depends:  #100 (combined 4-point plot); #98 (RESULT finding);
-          thesis_audit.md #121 (the chapter rewrite that owns the
-          prose); thesis_audit.md #125 / #140 (Discussion).
-Effort:   folds into the #121 chapter writeup; no standalone code.
-
-What:  The eval chapter needs a short resolution-axis subsection
-       built on the #98 finding: the adaptive partition is
-       insensitive to the min_boxel_size knob across a ~4x range
-       (0.05 -> 0.18 m random-pairs), so auto_cell is a robust
-       default rather than a tuned constant.  Pairs the combined
-       4-point curve (#100) with the #93 below-auto null result
-       to tell the full "we swept resolution in both directions"
-       story.
-
-Fix:   Inside the #121 Evaluation chapter rewrite, add a
-       resolution-axis paragraph + the #100 figure:
-       - state the auto_cell heuristic (#67: largest visible
-         AABB + 1 cm);
-       - report the flat plateau (1x / 1.5x / 2x indistinguishable
-         on stack, near-flat on holding / f-a-t-s);
-       - tie to the compactness pillar: coarsening shrinks the
-         partition 30-40% with no success cost, reinforcing that
-         semantic's advantage is structural, not resolution-tuned;
-       - hand the "why flat" interpretation to the Discussion
-         (#125): CellMerger collapses same-label leaves regardless
-         of leaf size, so leaf size only matters when sub-cell
-         geometry forces a split (#97's deferred discriminating
-         scene).
-
-Care:
-       (1) This is thesis prose; do NOT duplicate it as code.
-           When thesis #121 lands, this issue closes alongside.
-       (2) Keep the #93 null result and the #98 flat-plateau
-           result BOTH in the chapter — they are the two halves
-           of the resolution-insensitivity story.
-
-Related:
-       #98 — the coarse-end finding.
-       #100 — the combined figure this writeup cites.
-       thesis_audit.md #121 — the chapter rewrite that owns the
-            prose.
-       thesis_audit.md #125 / #140 — Discussion / eval-design gap.
-
+Status/Priority: OPEN, TIER 3 (writeup, not code; prose lands in thesis #121). Split from
+   #98 Step 5. Depends: #100 (figure), #98 (RESULT), thesis_audit #121/#125/#140.
+What/Fix: inside the #121 Evaluation rewrite, add a resolution-axis subsection on the #98
+   finding (partition insensitive to min_boxel_size across ~4x; auto_cell robust, not tuned).
+   State the #67 auto_cell heuristic; report the flat plateau (1x/1.5x/2x); tie to the
+   compactness pillar (coarsening shrinks partition 30-40% at no success cost); hand the
+   "why flat" interpretation to Discussion (#125: CellMerger collapses same-label leaves
+   regardless of leaf size). Pair with #93's below-auto null for the full both-directions story.
+Care:   thesis prose — do NOT duplicate as code; keep BOTH the #93 null and #98 plateau.
+Related: #98, #100, thesis_audit #121/#125/#140.
 
 ================================================================================
 #104. REFRESH THE PLOTS + DATA EMBEDDED IN THE THESIS PDF TO CURRENT EVAL OUTPUTS
 ================================================================================
-Status:   OPEN.  Filed 2026-05-24.  The thesis PDF embeds older eval
-          figures + quoted numbers; the data has moved on (#100 merged
-          the 1800 coarse-end cells -> 4500-cell sweep_anytime;
-          figures regenerated under .../sweep_anytime/resolution/).
-          Tracks re-sourcing every figure + number the PDF shows.
-Priority: TIER 3 — figure/data sync into the thesis; no codebase
-          correctness risk.  Gates a faithful thesis build.
-Where:    eval_results/sweep_anytime/ (+ /resolution/) = figure/table
-          source; thesis/graphics/ = embedded copies; thesis .tex =
-          quoted numbers.  Tooling: eval_plotter.py +
-          tools/render_thesis_figs.py (in progress).
-Depends:  #100 (merged dataset + combined resolution figure); #98
-          RESULT (the numbers); thesis_audit.md #121 (eval chapter),
-          #168 (partition-comparison figure).
-Effort:   ~0.5 day — re-export + swap PNGs, reconcile numbers, rebuild.
-
-What:  The PDF's eval figures + data are downstream of the pipeline
-       and have drifted: the resolution figure/numbers are new
-       (#100/#101); sweep_anytime is now the 4500-cell merged set, so
-       headline success-rate / planning-time / partition numbers may
-       be stale; the partition-comparison figure (#168) is still being
-       curated.  Every eval-derived figure + number must be re-sourced
-       from the current artifacts.
-
-Fix:   1. Inventory every eval-derived plot + quoted number in the
-          thesis (eval-chapter figures; resolution figure #100;
-          partition comparison #168; headline tables).
-       2. Re-export current PNGs/tables from sweep_anytime/ (+
-          /resolution/) via eval_plotter.py / render_thesis_figs.py;
-          swap the stale copies in thesis/graphics/.
-       3. Reconcile quoted numbers vs the regenerated summary_table.md
-          (holding 42.3/40.3/45.7; f-a-t-s 39.8/35.3/35.3; stack 61.3
-          flat).
-       4. Rebuild the PDF; confirm figures + numbers consistent.
-
-Care:
-       (1) Plots ADD, never overwrite — keep old thesis figures
-           regenerable; read each regenerated PNG before embedding.
-       (2) Document-side edits (figure swaps + prose) land in the
-           thesis repo; thesis_audit.md owns those (#121 / #168).
-           This CODEBASE issue is the data/figure-sync tracker and
-           closes when the PDF's eval figures + numbers are current.
-       (3) Stack rows carry the #95 cell-tag misnaming — slice stack
-           by stack_height, not the occ token.
-
-Related:
-       #100 — merged dataset + combined resolution figure.
-       #101 — eval-chapter resolution-axis writeup.
-       #98  — the RESULT the numbers must match.
-       thesis_audit.md #121 / #168 — thesis chapter + figure.
-
+Status/Priority: OPEN, TIER 3 (figure/data sync; no correctness risk; gates a faithful
+   build). Filed 2026-05-24. Depends: #100 (merged 4500-cell dataset + resolution figure),
+   #98 RESULT, thesis_audit #121/#168.
+What:   the PDF's eval figures + quoted numbers have drifted (sweep_anytime now 4500 rows;
+   resolution figure/numbers new; partition-comparison #168 being curated).
+Fix:    1. inventory every eval-derived plot + number in the thesis. 2. re-export from
+   sweep_anytime/(+/resolution/) via eval_plotter.py / render_thesis_figs.py; swap stale
+   PNGs in thesis/graphics/. 3. reconcile numbers vs regenerated summary_table.md (holding
+   42.3/40.3/45.7; f-a-t-s 39.8/35.3/35.3; stack 61.3 flat). 4. rebuild, confirm consistent.
+Care:   plots ADD never overwrite (read each PNG first); doc edits land thesis-side (#121/
+   #168); stack rows carry #95 misnaming — slice by stack_height.
+Related: #100, #101, #98, thesis_audit #121/#168.
 
 ================================================================================
 #105. ADD A WUMPUS-WORLD BASELINE FOR SEARCH-UNDER-OCCLUSION COMPARISON
 ================================================================================
-Status:   OPEN.  Filed 2026-05-24.  We currently compare semantic
-          boxelization against uniform voxelization (#10) and TAMPURA;
-          there is no classic search-under-partial-observability baseline
-          that ignores geometry entirely.  A Wumpus-style baseline gives
-          a geometry-agnostic lower bound: discretize the workspace into
-          cells, treat hidden objects as the "wumpus", and sense/move
-          purely on belief over cells with no shadow reasoning.
-Priority: TIER 2 — adds an evaluation arm; no correctness risk to the
-          existing pipeline, but gates a stronger comparison claim in
-          the eval chapter.
-Where:    new baseline module alongside the uniform-voxelization
-          baseline (#10); wires into the eval runner + scalability
-          matrix (#9) as a new variant tag so eval_plotter.py keys it
-          like semantic / uniform (#99).
-Depends:  #10 (uniform baseline scaffold to mirror), #9 (eval runner /
-          matrix), #99 (variant-key plotter must pick up the new tag).
-Effort:   TBD — scope the planner/belief model before estimating.
-
-What:  A Wumpus-World baseline reframes the search problem as cell-based
-       belief tracking with no shadow geometry: the agent maintains a
-       probability/occupancy belief over discretized cells, senses a
-       cell, and replans, with the target ("wumpus") found when its cell
-       is sensed.  It isolates the value of semantic shadow reasoning by
-       comparing against an agent that has the same sensing/replanning
-       loop but a geometry-blind belief.
-
-Fix:   1. Define the cell discretization + belief representation
-          (mirror the uniform baseline's grid where possible).
-       2. Implement the sense/move/replan loop over cell belief; no
-          shadow_calculator coupling.
-       3. Register it as a new eval variant tag; confirm eval_plotter
-          (#99) splits it out from semantic / uniform.
-       4. Run a matrix slice; record headline numbers in EVAL_SUMMARY.
-
-Care:
-       (1) New variant tag must be distinct so #99 plotter grouping
-           does not average it into semantic / uniform.
-       (2) Plots ADD, never overwrite existing baseline figures.
-
-Related:
-       #10  — uniform-voxelization baseline to mirror.
-       #9   — eval runner + scalability matrix.
-       #99  — variant-key plotter.
-
+Status/Priority: OPEN, TIER 2 (new eval arm; no correctness risk; stronger comparison
+   claim). Filed 2026-05-24. Depends: #10 (uniform scaffold to mirror), #9 (runner/matrix),
+   #99 (variant-key plotter). Effort TBD — scope the planner/belief model first.
+What:   a geometry-blind lower bound: discretize the workspace into cells, treat hidden
+   objects as the "wumpus", maintain occupancy belief over cells, sense/move/replan with NO
+   shadow reasoning — isolates the value of semantic shadow reasoning vs same sense/replan loop.
+Fix:    1. define cell discretization + belief (mirror uniform grid). 2. implement sense/
+   move/replan over cell belief (no shadow_calculator). 3. register as a new variant tag
+   (confirm #99 splits it out). 4. run a matrix slice; record in EVAL_SUMMARY.
+Care:   distinct variant tag so #99 doesn't average it in; plots ADD.
+Related: #10, #9, #99.
 
 ################################################################################
-#  ISSUES #106-#112 --- ADDED 2026-05-24 (thesis read-through batch 2 spillover)
+#  ISSUES #106-#112 — ADDED 2026-05-24 (thesis read-through batch 2 spillover)
 ################################################################################
-Code / eval / plotter follow-ups surfaced during the 2026-05-24 thesis read-through
-(thesis-prose counterparts are thesis_audit.md #199-#207). Several are eval-data
-findings verified by a research agent against eval_results/sweep_anytime.
+Code/eval/plotter follow-ups from the 2026-05-24 read-through (prose counterparts =
+thesis_audit.md #199-#207); several are eval-data findings agent-verified vs sweep_anytime.
 
 ================================================================================
 #106. FAILURE-MODE TAXONOMY: FOLD all_searched + physics_mismatch INTO planner_failed; INVESTIGATE no_summary
 ================================================================================
-Status:   OPEN. Filed 2026-05-24. Drives thesis #201 (results.tex:96 exit-reason
-          list) + the failure-mode figure.
-Priority: TIER 2 — eval classification + plot grouping; changes how failures are
-          reported, not the runs.
-Where:    exit-reason classification (eval_runner.py / run_logger) + failure-mode
-          grouping in eval_plotter.py; thesis results.tex:96,221 + the figure.
-Depends:  #99 (variant-key plotter), #9 (eval runner).
-Effort:   small for the merge; no_summary needs investigation first.
-
-What:  (1) all_searched and physics_mismatch are search/planner outcomes, not
-       distinct user-facing failure modes -- collapse both into planner_failed in
-       the REPORTED taxonomy. (2) no_summary cells (ended without a recorded
-       summary -- the ~6% denominator gap at results.tex:98) need investigating:
-       what are they, can they get a real exit reason instead of null?
-Fix:   1. Investigate no_summary (scripts/_audit96_scan_no_summary.py exists, #96).
-       2. Map all_searched, physics_mismatch -> planner_failed at report time
-          (keep raw codes in the data).
-       3. Regenerate the failure-mode figure (ADD, never overwrite).
-       4. Update thesis #201 prose to the merged set.
-Care:  Keep raw exit codes in data; merge only for figure/table. Plots ADD.
+Status/Priority: OPEN, TIER 2 (eval classification + plot grouping; changes reporting, not
+   runs). Drives thesis #201 + the failure-mode figure. Depends: #99, #9.
+What/Fix: (1) all_searched + physics_mismatch are planner outcomes -> collapse both into
+   planner_failed at REPORT time (keep raw codes in data). (2) no_summary cells (the ~6%
+   denominator gap, results.tex:98) need investigating (scripts/_audit96_scan_no_summary.py,
+   #96) — give them a real exit reason. Then regenerate the figure (ADD) + update #201 prose.
 Related: thesis_audit #201; #96; #99.
 
 ================================================================================
 #107. REMOVE THE PER-EPISODE REPLAN LIMIT IN EVALUATIONS (run to time budget; keep 3-retry give-ups)
 ================================================================================
-Status:   OPEN. Filed 2026-05-24. User: evals should NOT cap replans per episode;
-          an episode should keep replanning until the wall-clock budget ends. Keep
-          only the give-ups: 3 failed drops -> exit (#79/#80) and the unreachable-
-          shadow three-strike sense give-up.
-Priority: TIER 1 — changes eval methodology and reported numbers (replan_limit
-          exit reason disappears; some episodes run longer).
-Where:    eval_runner.py replan-limit logic (produces the replan_limit exit reason).
-Depends:  #9; interacts with #106 (taxonomy) and the 1800 s per-call budget
-          (results.tex:83 / thesis #200).
-Effort:   small code change + re-run of affected cells (stack especially, where
-          replan_limit dominates -- results.tex:221).
-
-What:  Today an episode ends with replan_limit after a fixed number of replans. The
-       user wants episodes bounded by wall-clock time only (then timeout), keeping
-       only the drop give-up and the sense give-up -- an honest time-bounded eval.
-Fix:   1. Remove/disable the per-episode replan cap; bound by wall-clock time.
-       2. Keep the 3-failed-drop and sense three-strike give-ups.
-       3. Re-run affected cells; regenerate plots (ADD); update taxonomy (#106,
-          replan_limit goes away).
-       4. Update thesis prose mentioning a replan limit.
-Care:  Changes headline numbers -- coordinate with thesis eval figures (#104) and
-       #177/#190 framing. Plots ADD.
-Related: thesis_audit #200 #201; #106; #104; #79 #80.
+Status/Priority: OPEN, TIER 1 (changes eval methodology + reported numbers; replan_limit
+   exit reason disappears). Filed 2026-05-24. Where: eval_runner.py replan-limit logic.
+   Depends: #9; interacts w/ #106 + the 1800 s per-call budget (thesis #200).
+What/Fix: bound episodes by wall-clock time only (then timeout), keeping ONLY the give-ups
+   (3 failed drops -> exit #79/#80; unreachable-shadow three-strike sense give-up). Remove
+   the per-episode replan cap; re-run affected cells (stack especially, where replan_limit
+   dominates, results.tex:221); regenerate plots (ADD); update taxonomy (#106) + thesis prose.
+Care:   changes headline numbers — coordinate w/ thesis eval figures (#104) + #177/#190.
+Related: thesis_audit #200/#201; #106; #104; #79/#80.
 
 ================================================================================
 #108. BOXEL-COUNT-VS-CONFIG PLOT + semantic+mbs0.1 ARM (min free-space size barely changes cell count)
 ================================================================================
-Status:   OPEN. Filed 2026-05-24. Supports thesis #202/#203 (finer floor does NOT
-          add cells -- the greedy convex merge dominates).
-Priority: TIER 2 — adds a figure + one eval arm; no correctness risk.
-Where:    eval_plotter.py (new boxel-count-by-config plot); eval_runner.py matrix
-          (new mbs0.1 arm).
-Depends:  #99, #77/#100 (sweep data), #95 (stack tagging).
-Effort:   plot small (most data exists); +1 arm (mbs0.1) is a short run.
-
-What:  Plot total + category Boxel counts across configs: uniform, semantic (auto),
-       semantic+mbs0.05, semantic+mbs0.1, and the coarse arms (the existing 1.5x/2x
-       auto_cell probes = mbs0.135/0.18 random-pairs, mbs0.09/0.12 stack, from #100).
-       Verified (agent): finer floors (0.05, 0.09) give counts IDENTICAL to auto;
-       only coarser floors reduce them. A distinct mbs0.1 point does NOT yet exist.
-Fix:   1. Add a semantic+mbs0.1 arm; run the affected slice.
-       2. New eval_plotter figure: (free-space + total) boxel count vs config, per
-          goal. ADD; do not overwrite #77/#100 figures.
-       3. Feed into thesis #203 (correct the "more cells" claim).
-Care:  Plots ADD (keep #77/#100 resolution figures). Stack rows: slice by
-       stack_height (#95).
-Related: thesis_audit #202 #203; #100; #99; #95.
+Status/Priority: OPEN, TIER 2 (figure + one eval arm; no correctness risk). Supports thesis
+   #202/#203. Depends: #99, #77/#100, #95.
+What/Fix: plot total + category boxel counts across configs (uniform, semantic auto,
+   +mbs0.05, +mbs0.1, coarse 1.5x/2x arms from #100). Verified: finer floors (0.05/0.09)
+   give counts IDENTICAL to auto; only coarser reduce them; a distinct mbs0.1 point doesn't
+   exist yet. Steps: add a mbs0.1 arm + run the slice; new figure (free-space + total) boxel
+   count vs config per goal (ADD, don't overwrite #77/#100); feed thesis #203.
+Care:   plots ADD; stack rows slice by stack_height (#95).
+Related: thesis_audit #202/#203; #100; #99; #95.
 
 ================================================================================
 #109. NEW BASELINES: uniform@smallest-object autocell; ENTITY-MEMBERSHIP action preconditions (drop boxel-center+10cm)
 ================================================================================
-Status:   OPEN. Filed 2026-05-24. Two related user proposals.
-Priority: TIER 2 — research/eval extension; the precondition redesign is a
-          non-trivial change to how actions consume boxels.
-Where:    uniform baseline (#10) auto-cell sizing; PDDL action design + Python
-          action impl (target pose = boxel-center + 10 cm today); eval matrix.
-Depends:  #10, #9, #99.
-Effort:   medium-large (precondition reformulation touches domain + python).
-
-What:  (a) A uniform baseline whose auto-cell = the SMALLEST object in the scene
-       (vs current largest-footprint), plus a matching semantic comparison --
-       expected worse but worth testing. (b) Reformulate action preconditions so a
-       pose belonging to AT LEAST ONE entity (object A or shadow B or free cell C)
-       is usable by the action, instead of "boxel-center + 10 cm"; this means
-       rethinking how target poses are generated in Python.
-Fix:   1. Add the smallest-object uniform arm + semantic comparison.
-       2. Prototype pose-in-any-entity preconditions in domain + streams; replace
-          boxel-center+offset pose generation.
-       3. Evaluate; record in EVAL_SUMMARY; feed into the eval chapter.
-Care:  Big behavioural change -- gate behind a flag; keep current pipeline runnable.
-       Plots ADD.
+Status/Priority: OPEN, TIER 2 (research/eval extension; precondition redesign is non-
+   trivial). Depends: #10, #9, #99. Effort medium-large.
+What/Fix: (a) a uniform baseline whose auto-cell = SMALLEST object in scene (vs current
+   largest-footprint) + matching semantic comparison. (b) reformulate action preconditions
+   so a pose belonging to AT LEAST ONE entity (object/shadow/free cell) is usable, instead of
+   "boxel-center + 10 cm" — rethinks Python target-pose generation. Steps: add the smallest-
+   object arm; prototype pose-in-any-entity preconditions in domain+streams; evaluate.
+Care:   big behavioural change — gate behind a flag; keep current pipeline runnable; plots ADD.
 Related: thesis_audit (Baselines, results.tex:100); #10; #105.
 
 ================================================================================
 #110. LIVE-DEMO NATURAL-LANGUAGE CLI ("pick blue box" -> executes)
 ================================================================================
-Status:   OPEN. Filed 2026-05-24. Future/demo feature.
-Priority: TIER 3 — nice-to-have demo; off the eval/thesis critical path.
-Where:    new interactive entry point over the existing planner/executor
-          (pddlstream_planner.py + executor); parses a typed command into a goal.
-Depends:  existing action set (pick/drop/sense/stack) + goal builders.
-Effort:   medium.
-
-What:  A terminal demo: user types e.g. "pick blue box" and the robot executes it.
-       Cover all basic actions/goals -- pick (~= holding/find), drop, sense, stack,
-       find-and-stack. A lightweight NL/regex parser maps the utterance to object +
-       action/goal; robust enough to extract the goal, and when ambiguous ASK back
-       ("did you mean <X>?") rather than guess.
-Fix:   1. Define the command grammar (verbs + object descriptors -> colour/type
-          resolved against the scene).
-       2. Map to a goal/action; dispatch through the existing planner/executor.
-       3. Ambiguity path ("did you mean ...?") + help listing.
-Care:  Thin wrapper; do not entangle with the eval pipeline.
+Status/Priority: OPEN, TIER 3 (nice-to-have demo, off critical path). Effort medium.
+   Where: new interactive entry point over pddlstream_planner.py + executor.
+What/Fix: terminal demo — type "pick blue box", robot executes; cover pick(~=holding/find),
+   drop, sense, stack, find-and-stack. Lightweight NL/regex parser maps utterance -> object +
+   action/goal; ASK back when ambiguous rather than guess. Steps: define grammar (verbs +
+   descriptors resolved vs scene); map to goal/action through existing planner/executor;
+   ambiguity + help paths.
+Care:   thin wrapper; do not entangle with the eval pipeline.
 Related: existing action set; thesis Future Work.
 
 ================================================================================
 #111. REMOVE "THESIS_NOTES" TEXT FROM THE TAMPURA WALL-CLOCK PLOT
 ================================================================================
-Status:   OPEN. Filed 2026-05-24. Cosmetic but visible in the thesis figure.
-Priority: TIER 3 — plot cosmetics; ties to thesis #177/#190.
-Where:    eval_plotter.py plot_tampura_wallclock_comparison (text rendered on the
-          figure).
-Depends:  #94, #99.
-Effort:   tiny.
-
-What:  The TAMPURA wall-clock figure renders "THESIS_NOTES" text in the image;
-       remove it. Note also: TAMPURA's Table II 57 s is "over 20 trials" and the
-       paper does NOT state success-only, whereas our series is success-only -- the
-       caption should not imply like-for-like success filtering (thesis #177/#190).
-Fix:   1. Drop the THESIS_NOTES text. 2. Regenerate (ADD a new PNG; keep old
-       regenerable). 3. Reconcile the success-basis caveat with thesis #177.
-Care:  Plots ADD.
-Related: thesis_audit #177 #190; #94; #99.
+Status/Priority: OPEN, TIER 3 (plot cosmetics; ties to thesis #177/#190). Where:
+   eval_plotter.py plot_tampura_wallclock_comparison. Depends: #94, #99.
+What/Fix: the figure renders "THESIS_NOTES" text — remove it; regenerate (ADD a new PNG).
+   Also: TAMPURA's Table II 57 s is "over 20 trials" and NOT stated success-only, whereas
+   ours is success-only — caption must not imply like-for-like success filtering (#177/#190).
+Related: thesis_audit #177/#190; #94; #99.
 
 ================================================================================
 #112. (OPTIONAL) WILSON INTERVAL FOR SUCCESS-RATE PLOTS
 ================================================================================
-Status:   OPEN. Filed 2026-05-24. Optional statistical improvement.
-Priority: TIER 3 — optional; current bands are usable once captioned (thesis #207).
-Where:    eval_plotter.py group_success_rate / plot_metric (the +/-1 std band).
-Depends:  #86, #99.
-Effort:   small.
-
-What:  Success-rate plots shade +/-1 SAMPLE STD of per-trial 0/1 flags clipped to
-       [0,1] -- not a proper interval for a binomial rate. A Wilson score interval
-       is more appropriate for ~80-100 Bernoulli trials/point.
-Fix:   Replace (or supplement) the band with a Wilson interval; regenerate plots
-       (ADD); update thesis #207 caption.
-Care:  Plots ADD.
+Status/Priority: OPEN, TIER 3 (optional; current bands usable once captioned, thesis #207).
+   Where: eval_plotter.py group_success_rate / plot_metric. Depends: #86, #99.
+What/Fix: success-rate plots shade +/-1 SAMPLE STD of per-trial 0/1 flags (clipped [0,1]) —
+   not a proper binomial interval. Replace/supplement with a Wilson score interval for the
+   ~80-100 Bernoulli trials/point; regenerate plots (ADD); update thesis #207 caption.
 Related: thesis_audit #207; #86; #99.
 
 ================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
-Issue numbers are chronological (discovery order), NOT priority — follow the
-TIER labels.  Full bodies of closed issues are in git history
-(git log --grep="audit: mark #N") and the "RESOLVED / DONE ISSUES" section of
-archive/CODEBASE_AUDIT_DEFERRED.txt.
+Chronological numbers, NOT priority — follow TIER. Closed bodies in git history
+(git log --grep="audit: mark #N") + archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 11 items (full bodies above):
-  #98  TIER 2 — coarse-end resolution sweep DONE; RESULT recorded
-       (resolution axis flat above auto_cell — auto_cell is a
-       robust plateau).  Integration follow-ups split to #100/#101.
-  #101 TIER 3 — eval-chapter resolution-axis writeup; thesis #121
-       territory (#98 Step 5).
-  #104 TIER 3 — refresh the plots + data embedded in the thesis PDF
-       to the current (post-#100 merge) eval outputs; figure/data
-       sync into the thesis (thesis #121 / #168).
-  #105 TIER 2 — add a Wumpus-World baseline (cell-belief search, no
-       shadow geometry) as a new eval variant alongside uniform (#10)
-       / TAMPURA, to isolate the value of semantic shadow reasoning.
-  --- batch 2 (2026-05-24 thesis read-through spillover) ---
-  #106 TIER 2 — failure-mode taxonomy: fold all_searched + physics_mismatch
-       into planner_failed; investigate no_summary (thesis #201).
-  #107 TIER 1 — remove the per-episode replan limit in evals (run to time
-       budget; keep the 3-retry give-ups); will change reported numbers.
-  #108 TIER 2 — boxel-count-vs-config plot + semantic+mbs0.1 arm (shows the
-       free-space floor barely changes cell count; thesis #202/#203).
-  #109 TIER 2 — new baselines: uniform@smallest-object autocell + entity-
-       membership action preconditions (drop boxel-center+10cm).
-  #110 TIER 3 — live-demo natural-language CLI ("pick blue box" -> executes).
-  #111 TIER 3 — remove "THESIS_NOTES" text from the TAMPURA wall-clock plot
-       (thesis #177/#190).
-  #112 TIER 3 — (optional) Wilson interval for success-rate plots (thesis #207).
-  TIER 0/1: one open TIER-1 item (#107, eval methodology); zero TIER-0.
+OPEN — 11 items (bodies above):
+  #98  T2 — coarse-end resolution sweep DONE; RESULT recorded (axis flat above auto_cell;
+       auto_cell a robust plateau). Integration follow-ups -> #100/#101.
+  #101 T3 — eval-chapter resolution-axis writeup; thesis #121 territory (#98 Step 5).
+  #104 T3 — refresh thesis-PDF plots + numbers to post-#100-merge outputs (thesis #121/#168).
+  #105 T2 — Wumpus-World baseline (cell-belief search, no shadow geometry) vs uniform/TAMPURA.
+  --- batch 2 (2026-05-24 read-through spillover) ---
+  #106 T2 — failure-mode taxonomy: fold all_searched+physics_mismatch into planner_failed;
+       investigate no_summary (thesis #201).
+  #107 T1 — remove per-episode replan limit (run to time budget; keep 3-retry give-ups);
+       will change reported numbers.
+  #108 T2 — boxel-count-vs-config plot + semantic+mbs0.1 arm (floor barely changes count;
+       thesis #202/#203).
+  #109 T2 — new baselines: uniform@smallest-object autocell + entity-membership preconditions.
+  #110 T3 — live-demo natural-language CLI.
+  #111 T3 — remove "THESIS_NOTES" text from the TAMPURA wall-clock plot (thesis #177/#190).
+  #112 T3 — (optional) Wilson interval for success-rate plots (thesis #207).
+  TIER tally: one open T1 (#107); zero T0.
 
 CLOSED (one-line; full detail in git / archive):
-  #100 [2026-05-24] merge coarse-end resolution sweep into sweep_anytime
-       + combined 4-point resolution plot (#98 Step 4): 1800 SVR cells
-       (mbs 1.5x/2x auto_cell) merged into sweep_anytime/cells/
-       (aggregated.csv now 4500 rows); combined plots in the resolution/
-       subdir (kept separate so the #77 anytime figures are not
-       overwritten); eval_plotter gains green(1.5x)/red(2x) variant
-       colours so the 4 resolution arms stay distinct;
-       matrix_resolution.json preserves provenance; EVAL_SUMMARY §2.5 +
-       §4.7.  Finding: resolution axis flat above auto_cell.
-  #103 [2026-05-24] mid-air occluders no longer cast shadows
-       (shadow_calculator.py): calculate_shadow_boxel skips any object
-       whose footprint sits above the support surface (held in the
-       gripper, or left mid-air by a failed/#79-cleared place) so it
-       can't spawn shadow boxels from a bogus elevated pose.  Repro:
-       random-pairs seed=977165494.  (Stale shadows of a picked-up
-       occluder are a separate, already-documented gap — THESIS_NOTES
-       §8 / audit #71.)
-  #102 [2026-05-24] #72 two-slab shadow carve made conditional on
-       intersection (shadow_calculator.py): one shadow AABB per
-       occluder by default (pre-#72; Step 3 still splits on true
-       obstacle intersection); #72 near/far lateral carve only when
-       the overhang overlaps another shadow/object.
-  #77  [2026-05-20] anytime compactness sweep (#77 Step 0-4 all
-       done; Step 5 chapter writeup lands in thesis #121).  Full
-       2700-cell sweep complete; headline plots regenerated;
-       EVAL_SUMMARY.md catalogues the data and findings.
-  #93  [2026-05-20] sweep_anytime status / full-sweep findings —
-       results published in EVAL_SUMMARY.md (§3 headline numbers,
-       §4 findings-with-evidence) and summary_table.md.
-  #95  [2026-05-20] stack-scene cell-tag misnaming: add
-       _row_difficulty(r) helper (stack_height for stack rows,
-       n_occluders elsewhere) and route it through
-       write_summary_table, group_metric, group_success_rate,
-       group_boxel_counts, and plot_boxel_count_breakdown; per-goal
-       x_label so stack plots axis reads "stack_height".  Per-
-       difficulty table now shows the audit-#93 "stack difficulty
-       grows sharply with stack_height" finding directly (success
-       97 / 74 / 13 % at h=2/3/4 for semantic).
-  #99  [2026-05-20] variant-key plotter (eval_plotter.py): every
-       line / bar / histogram / summary-table grouper now keys by
-       a per-row variant tag (semantic / semantic+mbs0.05 / uniform)
-       instead of baseline; SCALABILITY_VS_TIME sweep plots no
-       longer silently average across the two semantic resolution
-       arms.  Regenerated eval_results/sweep_anytime/ figures
-       confirm the split (semantic 42.3 % vs mbs0.05 46.3 % on
-       holding matches the #93 numbers verbatim).
-  #96  [2026-05-20] numpy env-bug interpreter pin: main() probe +
-       absolute-path sys.executable in argv[0]; 5 cells re-ran;
-       Care(3) verified clean (scripts/_audit96_scan_no_summary.py).
-  #94  [2026-05-20] plot_solved_vs_time + TAMPURA annotation +
-       EXIT_REASON_COLOUR (eval_plotter.py).
+  #100 [2026-05-24] merge coarse-end sweep into sweep_anytime + combined 4-point resolution
+       plot (#98 Step 4): 1800 SVR cells (mbs 1.5x/2x) merged -> aggregated.csv 4500 rows;
+       combined plots in resolution/ subdir (kept separate from #77 figures); green(1.5x)/
+       red(2x) variant colours; matrix_resolution.json provenance; EVAL_SUMMARY §2.5+§4.7.
+       Finding: resolution axis flat above auto_cell.
+  #103 [2026-05-24] mid-air occluders no longer cast shadows (shadow_calculator.py:
+       calculate_shadow_boxel skips any object whose footprint sits above the support
+       surface). Repro: random-pairs seed=977165494. (Stale shadows of a picked-up occluder
+       = separate gap, THESIS_NOTES §8 / audit #71.)
+  #102 [2026-05-24] #72 two-slab shadow carve made conditional on intersection
+       (shadow_calculator.py): one shadow AABB/occluder by default; #72 near/far carve only
+       when the overhang overlaps another shadow/object.
+  #77  [2026-05-20] anytime compactness sweep (Step 0-4 done; Step 5 writeup -> thesis #121).
+       Full 2700-cell sweep; headline plots regenerated; EVAL_SUMMARY.md.
+  #93  [2026-05-20] sweep_anytime full-sweep findings published to EVAL_SUMMARY.md + summary_table.md.
+  #95  [2026-05-20] stack-scene cell-tag misnaming: _row_difficulty(r) helper (stack_height
+       for stack rows, n_occluders else) routed through summary/group/breakdown plotters;
+       per-goal x_label. Surfaces the "stack difficulty grows w/ height" finding (97/74/13%
+       at h=2/3/4 semantic).
+  #99  [2026-05-20] variant-key plotter: every grouper keys by per-row variant tag (semantic
+       / +mbs0.05 / uniform), no longer averaging the two semantic resolution arms.
+  #96  [2026-05-20] numpy interpreter pin (main() probe + abs-path sys.executable); 5 cells
+       re-ran; Care(3) clean (scripts/_audit96_scan_no_summary.py).
+  #94  [2026-05-20] plot_solved_vs_time + TAMPURA annotation + EXIT_REASON_COLOUR.
   #63  [2026-05-19] README + wiki final doc sweep.
   #86  [2026-05-16] eval_plotter sample-std (N-1) fix for error bands.
   #85  [2026-05-15] place-time pad-vs-cube wedge; 15 mm pre-release lift.
