@@ -916,19 +916,12 @@ def main(gui=True, run_logger=None, scene_config=None,
     # the updated belief.  This is cheaper than encoding every possible
     # sensing outcome in PDDL.
     #
-    # Termination: each replan eliminates at least one shadow (or retries
-    # a blocked one up to 3 times), so worst case is bounded.  Budget:
-    # 4 attempts per shadow + 1 final pick.  Stack has no shadows; size
-    # the budget by stack height instead — 2 PDDL actions per cube
-    # (pick + stack) plus a small slack for retries (audit #30).
-    if goal_kind == 'stack':
-        max_replans = 2 * stack_height + 3
-    elif goal_kind == 'find-and-tray-stack':
-        # audit #49 — sense (up to 4 attempts/shadow) + pick+stack
-        # (2 actions/cube) + slack.
-        max_replans = 4 * len(shadows) + 2 * len(stack_target_objects) + 3
-    else:
-        max_replans = 4 * len(shadows) + 1
+    # Termination (audit #107): no per-episode replan cap. The loop ends when
+    # the goal is met, a give-up fires (3 failed drops -> drop_failed; per-shadow
+    # 3-strike still_blocked -> all_searched once every shadow is observed-empty
+    # or given up; planner returns no plan -> planner_failed), or the eval runner
+    # kills the cell at its per-cell wall-clock --timeout (exit_reason="timeout").
+    # Time-bounded, not replan-count-bounded.
     grasp_constraint_id = None       # set during pick, cleared after place
     held_body_id = None              # PyBullet body ID of the held object
     held_object_boxel_id = None      # registry boxel ID of the held object
@@ -953,7 +946,7 @@ def main(gui=True, run_logger=None, scene_config=None,
             return belief.is_target_found()
         return goal_satisfied(goal, on_relations)
 
-    while not _loop_done() and plan_count < max_replans:
+    while not _loop_done():
         plan_count += 1
         unknown_shadows = belief.get_unknown_shadows()
         known_empty = belief.get_known_empty_shadows()
@@ -1618,10 +1611,9 @@ def main(gui=True, run_logger=None, scene_config=None,
                 print(f"  PHYSICAL_FAILURE (goal): "
                       f"(holding {target_name}) — {reason}")
                 # Reclassify the exit reason so the FAILED summary
-                # in report_run_outcome doesn't print the misleading
-                # "Replan limit reached" default — the loop exited
-                # cleanly on belief, the failure is a physics
-                # mismatch with that belief.
+                # in report_run_outcome doesn't fall through to the
+                # timeout default — the loop exited cleanly on belief,
+                # the failure is a physics mismatch with that belief.
                 if exit_reason is None:
                     exit_reason = "physics_mismatch"
         success = symbolic_ok and not physics_failures
@@ -1651,7 +1643,6 @@ def main(gui=True, run_logger=None, scene_config=None,
         sense_count=sense_count,
         shadows=shadows,
         blocked_giveup_shadows=blocked_giveup_shadows,
-        max_replans=max_replans,
         plan_times=plan_times,
         total_plan_time=total_plan_time,
         physical_failures=physical_failures,

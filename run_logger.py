@@ -221,7 +221,6 @@ def report_run_outcome(
     sense_count: int = 0,  # audit #73 step 3(c) plot 4
     shadows: list,
     blocked_giveup_shadows: set,
-    max_replans: int,
     plan_times: list,
     total_plan_time: float,
     physical_failures: list,
@@ -255,7 +254,10 @@ def report_run_outcome(
     else:
         remaining = belief.get_unknown_shadows()
         if exit_reason is None:
-            exit_reason = "replan_limit"
+            # audit #107: replan cap removed; a failed run with no explicit
+            # give-up means the runner's per-cell wall-clock budget was
+            # exhausted (it records "timeout").
+            exit_reason = "timeout"
         if exit_reason == "all_searched":
             if blocked_giveup_shadows:
                 # Audit #21: distinguish observed-empty shadows from
@@ -294,8 +296,8 @@ def report_run_outcome(
             print(f"FAILED: Stack goal not reached after {plan_count} plans "
                   f"(goal {goal}, achieved {on_relations})")
         else:
-            print(f"FAILED: Replan limit reached ({max_replans}) with "
-                  f"{len(remaining)} unsearched shadows remaining")
+            print(f"FAILED: Ran out of wall-clock budget after {plan_count} "
+                  f"plans with {len(remaining)} unsearched shadows remaining")
         print(f"  Plans executed: {plan_count}")
 
     print(f"\n--- Planning timing summary ---")
