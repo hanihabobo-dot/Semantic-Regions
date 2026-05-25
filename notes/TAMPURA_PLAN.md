@@ -312,8 +312,91 @@ planning-only 57 s vs our wall-clock; success >= 63 % vs ~42 %).  T2/T3/CAVEAT
 below still say "T1" for context = that issue.
 
 ================================================================================
-T2. RUN OUR HOLDING PIPELINE ON A find_dice-EQUIVALENT SCENE  (post-thesis, gated)
+T2. find_dice HEAD-TO-HEAD: REAL TAMPURA, THEN OUR PLANNER ON THEIR ENV
+    [REDONE 2026-05-25 per user -- supersedes the preset approach below]
 ================================================================================
+NEW BROAD PLAN (2026-05-25, user direction).  Drop the "replicate the task
+in OUR framework via a preset" approach (kept below for record; its
+smoke-test findings still stand) and instead do a DIRECT head-to-head on
+TAMPURA's ACTUAL find_dice PyBullet env.  Old T3 (stand up real TAMPURA) is
+no longer a separate/optional item -- it is PHASE 1 here.  Run everything
+WITH GUI.  Four phases, each gated on the previous being CONFIRMED by the
+user before proceeding:
+
+  PHASE 1 -- STAND UP & RUN REAL TAMPURA find_dice ON THIS MACHINE (GUI).
+     Bring-up state VERIFIED ON DISK 2026-05-25 (no longer hypothetical):
+     - ../tampura (planner) is FULLY present incl. third_party/symk C++
+       source -> needs a py3.11 env, `pip install -e .`, pygraphviz, and a
+       SymK BUILD (third_party/symk/build.py; cmake + g++; Linux/WSL).  No
+       top-level CLI: envs run via the notebook pattern
+       planner.rollout(env, b0, store) (notebooks/grasping_env.ipynb) -> a
+       small driver script is needed (adapt the notebook for env name
+       "find_dice" + a problems/*.json).
+     - ../tampura_environments is a SPARSE checkout: only
+       find_dice/{env.py,env_generator.py} + 3 released problems/*.json are
+       on disk.  find_dice imports
+       tampura_environments.panda_utils.{pb_utils,panda_env_utils,
+       primitives,robot,voxel_utils} (+ a bundled motion_planning/ RRT
+       suite) and models/srl (Panda URDF, YCB meshes, SAVED GRASPS for
+       GRASP_MODE="saved") -- ALL unmaterialized.  Must un-sparse
+       panda_utils/ + models/.  env registers as "find_dice" /
+       "find_dice_simple" (env.py:1032-1033); TARGET_OBJECT="dice";
+       GRID_RESOLUTION=0.015.
+     - WINDOWS BLOCKER (confirmed; exactly ONE file in the 3452-file tree):
+       panda_utils/motion_planning/images/rrt*.png -- the only NTFS-illegal
+       name (a doc image).  A full checkout on /mnt/c (NTFS) aborts on it.
+       FIX: do the TAMPURA bring-up on WSL EXT4 (e.g. ~/tampura,
+       ~/tampura_environments -- NOT /mnt/c), where `*` is legal and SymK
+       builds Linux-native.  Cleanest mechanic: `git clone` from the
+       EXISTING local /mnt/c clones into ~/ (their .git pack already holds
+       the full tree, so no re-download; a fresh clone does a FULL checkout
+       on ext4, materialising panda_utils + models incl. rrt*.png).  (Alt:
+       sparse-exclude that one file in place.)
+     - Run find_dice on the 3 released problems/*.json with GUI (WSLg
+       DISPLAY=:0); GRASP_MODE="saved" so no grasp regeneration.
+  PHASE 2 -- RECORD success rate + per-episode wall-clock + (if separable)
+     planning time on OUR hardware (Ryzen 7 PRO 7730U, 8c; THESIS_NOTES
+     §21.1).  Save to JSON (e.g. eval_results/tampura_real/<ts>.json) AND
+     summarise here + in CODEBASE_AUDIT.txt.  Compare vs published
+     57+-38 s planning-only + success >= 63% (#177 / reference_tampura_perf).
+  PHASE 3 -- RUN OUR PLANNER ON THEIR find_dice ENV (GUI), minor code
+     adjustments.  Write a NEW domain: COPY pddl/domain_pddlstream.pddl to a
+     find_dice variant (e.g. pddl/domain_find_dice.pddl) and tweak it for
+     their env, rather than editing the shared domain.  Bridge their scene
+     (object poses, the die, the cups) into our belief/streams; ground a
+     problem; plan; execute.  STOP and get user CONFIRMATION that it works
+     before the eval.
+     NOTE (scope, not pushback -- "the code wins"): the integration surface
+     is LARGER than the domain file alone.  Their occlusion is CONTAINMENT
+     (cup over die) vs our LATERAL shadow (CAVEAT below); their
+     robot/grasps/IK/motion differ from our streams; our execution loop
+     assumes our env API.  Expect adapter work beyond the new .pddl -- the
+     new domain is the START of Phase 3, not the whole change.
+  PHASE 4 -- EVAL.  Both systems on the SAME env + SAME hardware: success
+     rate + time over >= 20 problems/seeds.  Plot ours vs real-TAMPURA
+     (Phase 2) -- now same task AND same hardware, removing the
+     cross-hardware caveat the published-number comparison carries.
+
+CARE (new plan):
+  - GUI for every run (user drives it).  Per-change: one commit, before/
+    after preview, explicit approval (workflow skill); plots ADD never
+    overwrite.
+  - find_dice goal = holding(die) AND at-home; ours is holding only -- add a
+    go-home in the Phase-3 problem or note the one-action asymmetry (#177).
+  - Keep the CAVEAT (occlusion-mode) section below -- it now bounds Phase 3,
+    not a preset design.
+  - reference_tampura_perf.md / thesis #190: TAMPURA model-learning is
+    ONLINE per-step; do NOT reintroduce the "offline Learn-Model" framing
+    when writing up Phase 2/4.
+
+--------------------------------------------------------------------------------
+SUPERSEDED APPROACH (preset-in-our-framework; kept for record 2026-05-25).
+The SMOKE-TEST RESULT below is still a VALID finding about our system (the
+relocate->sense->pick capability works; a lone small occluder fails to
+ground via test_target_can_hide_in_shadow).  Only the "build a
+find_dice_equiv preset and sweep OUR scenes" plan is dropped, in favour of
+the head-to-head on THEIR env above.
+--------------------------------------------------------------------------------
 Priority: TIER 2 -- the genuine same-task number (our system solving
           the missing-dice problem on our hardware).  Gated by the
           supervisor rule.  Realistic replacement for the 2026-05-21
@@ -429,6 +512,7 @@ Care:  (1) Single-layer ONLY -- match find_dice; nested occlusion is a
 
 ================================================================================
 T3. STAND UP & RUN REAL TAMPURA find_dice ON OUR HARDWARE  (post-thesis, gated, optional)
+    [FOLDED INTO T2 PHASE 1 -- 2026-05-25; body kept below as the bring-up reference]
 ================================================================================
 Priority: TIER 3 -- pins the hardware axis (TAMPURA measured on our HW
           removes the cross-hardware caveat, making T2-vs-T3 same-task
