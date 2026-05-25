@@ -301,7 +301,7 @@ cap as a safety bound hit only by rare pathological/timeout cells. Drop "well un
 Refs: results.tex:83; eval_results/sweep_anytime (per_call_planning_time_s).
 
 ================================================================================
-#201  [T2] [THESIS]  Results clarity: drop_failed, denominator note, "known to be empty", one-boxel-per-object
+#201  [DONE 2026-05-25] [T2]  Results clarity: drop_failed, denominator note, "known to be empty", one-boxel-per-object
 ================================================================================
 results.tex:96,98,105. (Y) drop_failed unexplained -> when the gripper can't release a non-
 target object, after three failed drop events the episode exits (depends on CODEBASE #106). (Z)
@@ -415,13 +415,12 @@ OPEN:
   Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief to background; T1)
   Methods: #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
-  Results: #199 (task rename), #201 (drop_failed/denominator/known-empty/one-boxel),
-           #207 (success-rate band caption), #209 (resolution-floor study + figure)
+  Results: #199 (task rename), #207 (success-rate band caption), #209 (resolution-floor study + figure)
   Discussion: #203 ("more cells" FALSE; T0/NOW), #204 (stack ratio mention), #205 (stacking slowdown misattributed; T0/NOW), #206 (section-6 trims)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200, #202. MERGED: #192->#187, #196->#176.
+DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200, #201, #202. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
