@@ -673,6 +673,17 @@ Direct quote on the model-learning phase (run online, per step):
 >  belief state b̄, and reach the goal."
 > — Curtis et al. 2024, § V-A
 
+**[QUOTE-VERIFY 2026-05-25]** Present verbatim in the arXiv HTML
+(arxiv.org/html/2403.10454) at §V-A "Guiding learning with determinized
+plans"; §V-D names LAO\*, and §IV adds that "exact solution methods like
+value iteration" may also be used (the released code uses value iteration).
+The user could NOT find this sentence in the attached 17-page PDF
+(password-protected) -- likely a different version / section numbering.
+Do NOT cite a §-number in the thesis until reconciled against the exact
+cited version (see TAMPURA_PLAN.md). Notes-only: this verbatim quote is
+not used in thesis prose (the mechanism there is in our own words, backed
+by policy_search.py).
+
 > "The robot calculates an uncertainty and risk aware plan in the
 >  sparse MDP it has learned, and executes this plan."
 > — Curtis et al. 2024, § IV (Figure 3 caption)

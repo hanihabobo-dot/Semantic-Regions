@@ -141,6 +141,14 @@ Currently-open TAMPURA work
 - T2 -- run our holding pipeline on a find_dice-equivalent scene.
 - T3 -- stand up & run real TAMPURA find_dice on our hardware.
 - CAVEAT -- occlusion-mode mismatch (comparability boundary).
+- VERIFY (2026-05-25) -- paper version / section-number reconciliation.
+  The §V-A quote ("repeatedly construct optimistic, deterministic
+  plans...") IS present verbatim in the arXiv HTML (§V-A "Guiding learning
+  with determinized plans"); the user could not find it in the attached
+  17-page PDF (password-protected -- likely a different version).  Before
+  citing any TAMPURA section number in the thesis, confirm which version
+  `curtis2024partially` resolves to and map the section numbers.  Quick
+  check; fold into T2 PHASE 1 bring-up.
 
 Related (closed, in archive):
 - #10 [DONE 2026-05-08] -- uniform voxelization baseline (free-space-

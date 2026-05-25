@@ -97,12 +97,7 @@ STYLE STANDARD (T2 Style issues)
    are suggestions — keep the technical content, drop the fluff.
 
 
-################################################################################
-#  ISSUE --- ADDED 2026-05-23  (FIGURES / CAPTIONS REVIEW)
-################################################################################
-Surfaced 2026-05-23: the figures need a dedicated pass. Several either do not
-show what their caption / surrounding text claims, or are not the clearest
-illustration of the concept. Go through them ONE BY ONE. OPEN.
+# ISSUE ADDED 2026-05-23 (FIGURES / CAPTIONS REVIEW): figures need a dedicated one-by-one pass.
 
 ================================================================================
 #168  [T1] [THESIS]  Figures/captions review --- go through every figure one by one
@@ -163,7 +158,7 @@ Fix:   Reword so depth-splitting reads as conditional --- e.g. "a shadow
 Refs:  methods.tex (thesis/); CODEBASE_AUDIT.txt #102 #103; #168.
 
 ================================================================================
-#176  [T3] [THESIS]  Real discretization-progression figure (PyBullet captures)
+#176  [T3] [THESIS]  Discretization-progression figure (PyBullet captures) + free-space split->merge stages (merged #196)
 ================================================================================
 Where: methods.tex (thesis/) --- a possible companion to the schematic
        fig:boxelization; captures live under thesis/graphics/sim/raw_captures/.
@@ -187,67 +182,18 @@ Refs:  methods.tex (fig:boxelization); thesis/graphics/sim/raw_captures/;
        tools/render_thesis_figs.py; #168.
 
 ================================================================================
-#177  [DONE] [T0] [NOW]  TAMPURA comparison: wrong task cited + self-contradicts on the analogue
+#177  [DONE 2026-05-25] [T0]  TAMPURA comparison: wrong task + self-contradiction (now holding, wall-clock)
 ================================================================================
-Where: abstract.tex:14-17 ("closest analogue ... 14.0 s vs 57 s" headline);
-       results.tex:209-216 (subsec:tampura, fig:tampura; "find-and-tray-stack,
-       the closest analogue", 14.0 s, n=119, ~4x); discussion.tex:70-94 (14.0 s
-       on find-and-tray-stack) vs discussion.tex:101 (already calls TAMPURA's
-       Find Die "the closest analogue to our setting"); the plot in
-       eval_plotter.py plot_tampura_wallclock_comparison (goal filter =
-       find-and-tray-stack). TAMPURA = curtis2024partially, Tables I-II.
-What:  The thesis contradicts itself AND compares the wrong task.
-       (1) SELF-CONTRADICTION: abstract/results/discussion:70 call our FIND-AND-
-           TRAY-STACK "the closest analogue" to TAMPURA's Partial Observability
-           (find_dice); but discussion:101 already calls find_dice "the closest
-           analogue to OUR setting". find_dice (find a hidden object, pick it, go
-           home) IS our HOLDING task -- not find-and-tray-stack, which adds trays
-           + stacking (strictly more). The figure/abstract/results compare the
-           wrong, harder task.
-       (2) TIME-MEASURE CATEGORY ERROR: ours (14.0 s) is per-episode WALL-CLOCK
-           incl. PyBullet execution + replanning (eval_runner.py wall_clock_s);
-           TAMPURA's 57+-38 s (Table II) is PLANNING TIME ONLY (table caption:
-           "...planning times..."). Different spans -> the "~4x" delta is not
-           like-for-like. Our planning-only analogue is total_planning_time_s
-           (holding semantic mean 7.78 s).
-       (3) RELIABILITY FRAMING BACKWARDS: no success rate sits beside the time,
-           and TAMPURA is MORE reliable, not less. TAMPURA reports discounted
-           return 0.63+-0.30 (Table I, gamma=0.98) under a binary terminal reward
-           -> success >= 63 %; our holding-semantic success is ~42 %. We are the
-           LESS-reliable side; any "faster/better" reading misleads.
-Fix:   Re-point the figure + abstract:14-17 + results:209 + discussion:70-94 to
-       HOLDING (the find_dice analogue), aligning them with discussion:101;
-       re-derive the number from holding rows (do NOT reuse 14.0 s / "~4x").
-       Show BOTH our wall-clock AND our planning-time vs TAMPURA's planning-only
-       57 s (decided 2026-05-24). State success on both sides (ours ~42 %; TAMPURA
-       >= 63 %, derived) and frame honestly: architectural difference (probabilistic learned-MDP +
-       LAO* vs deterministic K-literal classical planning + replanning; both
-       sample ONLINE -- it is NOT offline-vs-online, that premise is WRONG, see
-       #190), NO speed/quality winner -- we are
-       cheaper-to-plan but less reliable and on a slightly less-constrained task
-       (find_dice goal = holding AND at-home; ours is holding only). Plot:
-       eval_plotter.py plot_tampura_wallclock_comparison -- switch goal filter
-       find-and-tray-stack -> holding, add the planning-time series, drop "20-core"
-       from the caption (the single-threaded framing in discussion:158 and the
-       SymK wording in discussion:84-87 are already correct). Reconcile
-       THESIS_NOTES §21 the same turn. Data in eval_results/sweep_anytime/ --
-       holding rows already exist, no eval RUN needed.
-Refs:  abstract.tex; results.tex (subsec:tampura, fig:tampura); discussion.tex
-       (70-101, 158); eval_plotter.py; eval_runner.py (wall_clock_s);
-       notes/THESIS_NOTES.md §21; curtis2024partially (arXiv:2403.10454, Tables
-       I-II); reference_tampura_perf.md (memory). Was notes/TAMPURA_PLAN.md T1,
-       moved here 2026-05-24.
+CLOSED 2026-05-25.  Figure + abstract + results + discussion re-pointed from
+find-and-tray-stack to HOLDING (the find_dice analogue); the self-contradiction
+with discussion:101 removed; success stated on both sides (ours ~42% vs TAMPURA
+>= 63%).  The "planning-time only / like-for-like / 14.0 s / ~4x" framing this
+issue first prescribed was WRONG and was dropped: TAMPURA's Table II time
+includes simulated controller execution (per-episode), so the comparison now
+reports our per-episode wall-clock (mean 13.7 s) against TAMPURA's 57 s only.
+Architectural framing: see #190 (online per-step, not offline).
 
-################################################################################
-#  ISSUES --- ADDED 2026-05-24  (INTRO / BACKGROUND / RELATED-WORK READ-THROUGH)
-################################################################################
-Surfaced 2026-05-24 from a user read-through of sections 1-3 against a freshly
-compiled main.pdf. Factual claims about TAMPURA/Bayes3D, the "POD" label, and the
-cited related work were verified by three research agents (TAMPURA/Bayes3D from
-the local tampura + tampura_environments code AND both papers; the POD/contingent
-literature; the pan/ma/CoCo-TAMP/SS-Replan/kaelbling/hadfield papers). Two of the
-user's instincts caught real errors (#183 scaling claim, #188 SS-Replan contrast).
-OPEN.
+# ISSUES ADDED 2026-05-24 (INTRO / BACKGROUND / RELATED-WORK read-through, agent-verified): #178-#189.
 
 ================================================================================
 #178  [T1] [NOW]  Intro says the partition discretizes "only" objects + occlusions (omits free space)
@@ -333,30 +279,12 @@ Fix:   Rename heading to "Voxel Grids". Optionally fold the octree text in with 
 Refs:  background.tex:140,143-150 (fig:octmap_illustration).
 
 ================================================================================
-#183  [DONE] [T0] [NOW]  related-work.tex:12 mischaracterizes Bayes3D scaling; clarify TAMPURA belief source
+#183  [DONE 2026-05-25] [T0]  related-work.tex:12 Bayes3D scaling claim + TAMPURA belief source
 ================================================================================
-Where: related-work.tex:12 (POMDP-based TAMP subsection: "TAMPURA samples
-       placements in continuous pose space and draws its object-pose belief from
-       its perception front-end, Bayes3D ... sequential Monte Carlo over rendered
-       scene hypotheses. Such sampling-heavy posterior representations tend to
-       scale poorly as the number of hypotheses and objects grows.").
-What:  (1) FACTUAL ERROR: "scale poorly as #hypotheses/objects grows" is wrong --
-       Bayes3D is explicitly GPU-PARALLEL (renders+scores ~2048 scene hypotheses
-       in parallel) precisely to avoid sequential blow-up (paper-confirmed). The
-       sequential-scaling criticism does not hold. (2) UNCLEAR: "sequential Monte
-       Carlo over rendered scene hypotheses" needs a plain gloss. (3) PRECISION:
-       Bayes3D is TAMPURA's REAL-ROBOT front-end; the released Find-Die SIM uses
-       ground-truth segmentation + a visibility voxel grid (code-confirmed), so
-       "draws its belief from Bayes3D" should be scoped to the real-robot pipeline.
-Fix:   Drop the "scale poorly" sentence. Reword: "TAMPURA samples object placements
-       in continuous pose space and, in its real-robot pipeline, draws its
-       object-pose belief from a perception front-end, Bayes3D: a generative
-       inverse-graphics model that infers a posterior over 3D scenes by rendering
-       candidate object arrangements and scoring them against the observed depth
-       image." If a fair critique is wanted, it is render/memory cost of holding
-       many full-scene hypotheses -- NOT sequential scaling.
-Refs:  related-work.tex:12,37; curtis2024partially; gothoskar2023bayes3d; local
-       tampura/tampura_environments code.
+CLOSED.  Dropped the wrong "scales poorly as #hypotheses/objects grows" claim
+(Bayes3D is GPU-parallel, ~2048 hypotheses scored in parallel) and scoped the
+Bayes3D belief source to TAMPURA's real-robot pipeline (the released Find-Die
+sim uses ground-truth segmentation + a visibility voxel grid).
 
 ================================================================================
 #184  [T3] [POLISH]  pan2024task: "reactive controllers" -> their term is "behaviors"
@@ -408,23 +336,25 @@ Fix:   Expand to ~2 sentences covering the QA->distribution->filter pipeline and
 Refs:  related-work.tex:22; kim2026llmguided (arXiv:2603.03704).
 
 ================================================================================
-#187  [T1] [NOW]  related-work.tex:24 states the wrong limitation ("hardcoded geometric constants")
+#187  [T1] [NOW]  related-work.tex:24 Bai et al.: wrong limitation + framework name/mechanism (merged #192)
 ================================================================================
-Where: related-work.tex:24 (end of Bai et al. paragraph: "adapting it to a new
-       environment, however, currently requires re-tuning hardcoded geometric
-       constants").
-What:  User correction (2026-05-24, SUPERSEDES an earlier "mention the oracle" note):
-       "hardcoded geometric constants" is simply NOT TRUE. The real cost of
-       retargeting our system to a new goal is that it requires NEW PDDL ACTIONS
-       (and their streams) -- adapting to a new goal/task means authoring new actions,
-       not re-tuning geometric constants.
-Fix:   Replace "...currently requires re-tuning hardcoded geometric constants" with the
-       real limitation: retargeting to a genuinely new goal requires adding new PDDL
-       actions (and streams), not just a new goal specification. (Do NOT use the oracle
-       here -- the oracle limitation already appears at :20/:22; this sentence is about
-       retargeting cost.) Concrete evidence: the stack goal required a new action +
-       predicates + stream (#205).
-Refs:  related-work.tex:24; #205 (stack added a new action + predicates + stream).
+Where: related-work.tex:24 (Bai et al. paragraph; both fixes hit the same sentences).
+What:  (a) LIMITATION WRONG (T1): "adapting ... requires re-tuning hardcoded geometric
+           constants" is NOT TRUE -- retargeting to a new goal requires adding NEW PDDL
+           actions (+ streams), not tuning constants (evidence: the stack goal needed a
+           new action + predicates + stream, #205). Do NOT use the oracle here (it is at
+           :20/:22); this sentence is about retargeting cost.
+       (b) NAMING + MECHANISM (T2; agent-verified, arXiv:2508.05186, CVPR 2026): the
+           framework is named TAVP (the thesis calls it "TVVE"); the manipulation action
+           is produced by an END-TO-END LEARNED policy (RVT-2 + action head + TaskMoE),
+           NOT a planner, and a SEPARATE RL policy (MVEP) selects viewpoints. "A learned
+           policy that selects viewpoints before acting" blurs the two policies.
+Fix:   (a) replace the limitation with "retargeting to a new goal requires new PDDL
+           actions (+ streams), not just a new goal spec."
+       (b) use the name TAVP (or drop the acronym) and state the action is an end-to-end
+           learned policy (no planner), sharpening the contrast with our planner-based
+           sensing; optionally note the viewpoint selector is a distinct RL policy.
+Refs:  related-work.tex:24; bai2025learning (arXiv:2508.05186, "TAVP"); #205.
 
 ================================================================================
 #188  [T0] [NOW]  related-work.tex:27 belief-space paragraph: false SS-Replan contrast (+ jargon)
@@ -496,15 +426,7 @@ Parked follow-ons, NOT part of #190's offline fix:
       only / like-for-like = our planning time" framing is itself wrong (our
       wall-clock would be the closer analogue) -- pending confirmation.
 
-################################################################################
-#  ISSUES --- ADDED 2026-05-24  (sections 4-7 + FIGURES READ-THROUGH, batch 2)
-################################################################################
-Surfaced 2026-05-24 from a second user read-through (Methods/Results/Discussion/
-Conclusion + figures). Factual claims verified against the local tampura repo, the
-Semantic_Boxels eval data/code, and the cited papers (research agents). Several
-confirmed the user's instinct: per-call <1s (#200), mbs0.05 no-op (#202), finer-floor
-cell count (#203), stacking slowdown cause (#205). Code/eval/plotter follow-ups are
-filed in CODEBASE_AUDIT.txt #106-#112. OPEN.
+# ISSUES ADDED 2026-05-24 (Methods/Results/Discussion/Conclusion + figures, batch 2, agent-verified): #191-#209. Code follow-ups: CODEBASE_AUDIT #106-#112.
 
 ================================================================================
 #191  [T3] [THESIS]  Intro hero caption: identify the target object
@@ -517,20 +439,9 @@ Fix:   Add "the target is the cyan cube behind the green cube." Verify against t
 Refs:  introduction.tex:19; #168.
 
 ================================================================================
-#192  [T2] [POLISH]  Bai et al.: acts via an end-to-end learned policy, not a planner; framework is TAVP
+#192  [MERGED 2026-05-25 into #187]  Bai et al.: TAVP naming + end-to-end-learned-policy
 ================================================================================
-Where: related-work.tex:24 (Bai et al. / "Task-Aware Virtual View Exploration (TVVE)").
-What:  Verified (agent; paper arXiv:2508.05186, CVPR 2026). The framework is named
-       TAVP (the thesis calls it "TVVE"). After virtual-view exploration the
-       manipulation action is chosen by an END-TO-END LEARNED policy (RVT-2 backbone +
-       autoregressive action head + TaskMoE), NOT a planner; a SEPARATE RL-trained
-       policy (MVEP) selects the virtual viewpoints. "A learned policy that selects
-       viewpoints ... before acting" blurs the two policies.
-Fix:   Use the framework name (TAVP) or drop the acronym; state the action itself is
-       produced by an end-to-end learned policy (no planner) -- this sharpens the
-       contrast with our planner-based sensing. Optionally note the viewpoint selector
-       is a distinct RL policy.
-Refs:  related-work.tex:24; bai2025learning (arXiv:2508.05186, project "TAVP").
+Folded into #187 (same related-work.tex:24 Bai et al. paragraph).
 
 ================================================================================
 #193  [T1] [THESIS]  Relocate/shrink "Spatial Belief Representation in TAMP" into Background
@@ -586,16 +497,11 @@ Fix:   (O) rephrase, e.g. "we assume each sensing action succeeds (optimistic), 
 Refs:  methods.tex:63,87,90,133.
 
 ================================================================================
-#196  [T2] [THESIS]  New figure: free-space generation stages (split -> convex merge)
+#196  [MERGED 2026-05-25 into #176]  Free-space generation stages (split -> convex merge) figure
 ================================================================================
-Where: methods.tex:20 (fig:boxelization, currently a single 4-panel schematic (a)-(d)).
-What:  User wants a NEW figure (or added subfigures) documenting the FREE-SPACE stages:
-       (1) all of space incl. objects, (2) recursive octree splitting, (3) recursive
-       convex merging.
-Fix:   Generate 2+ subfigures of the free-space build (tools/render_thesis_figs.py).
-       ADD images (never overwrite); read each PNG before embedding. Overlaps #176
-       (real discretization-progression captures).
-Refs:  methods.tex:20; #176; #168; tools/render_thesis_figs.py.
+Folded into #176 (overlapping discretization-progression figure).  Content: a
+methods.tex figure of the free-space build -- (1) all space incl. objects, (2)
+recursive octree split, (3) recursive convex merge -- via tools/render_thesis_figs.py.
 
 ================================================================================
 #197  [T1] [NOW]  fig:replan-cycle caption is wrong vs the image
@@ -813,10 +719,6 @@ NB (verified, NO issue filed):
    yaw with no visibility check, and the place action has no visibility precondition. The
    claim stands; optionally add a one-line basis ("evident from their released placement
    sampler"). [code-confirmed]
- - AG ("the closest analogue ... = holding"): ALREADY FIXED at results.tex:209 and
-   discussion.tex:73 (both now say holding / Find Die). See #177.
- - TAMPURA Table II 57 s is reported "over 20 trials" and the paper does NOT state
-   success-only; ours is success-only -- another apples-to-oranges wrinkle for #177/#190.
 
 ================================================================================
 OPEN ISSUES
@@ -834,16 +736,16 @@ have been removed; see `git log --grep="Fix #"` (thesis repo) and
 
 OPEN:
   Figures: #168  (every figure one-by-one; figures agent)
-  Figures: #176  (optional real discretization-progression figure; captures archived)
+  Figures: #176  (discretization-progression figure + free-space split->merge stages, merged #196; captures archived)
   Methods: #175  (shadow-splitting prose vs #102/#103 code; prose)
   Intro: #178 (partition omits free space; T1/NOW), #179 (de-hype TAMPURA + cut "first-class" opener)
   Background: #180 (Pi/S(P) notation), #181 (name "contingent planning"), #182 ("Voxel Grids" heading)
   Related Work: #184 (pan "behaviors"),
-                #185 (Ma paragraph rewrite), #186 (CoCo-TAMP expand), #187 (oracle not "hardcoded constants"; T1/NOW),
+                #185 (Ma paragraph rewrite), #186 (CoCo-TAMP expand), #187 (Bai et al.: limitation + TAVP name/learned-policy; merged #192; T1/NOW),
                 #188 (SS-Replan false contrast + jargon; T0/NOW), #189 (POD K-literal overgeneralized; T0/NOW)
   --- batch 2 (sections 4-7 + figures, 2026-05-24) ---
-  Intro/RW: #191 (hero caption target), #192 (Bai=learned policy/TAVP), #193 (move Spatial-Belief section to background; T1), #194 (marketing voice + over-long paragraph)
-  Methods: #195 (optimistic-determinisation/untyped/standard-pattern clarity), #196 (free-space-stages figure), #197 (replan-cycle caption wrong; T1/NOW)
+  Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief section to background; T1), #194 (marketing voice + over-long paragraph)
+  Methods: #195 (optimistic-determinisation/untyped/standard-pattern clarity), #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
   Results: #199 (task rename find/stack/find-and-stack), #200 (per-call <1s FALSE; T0/NOW), #201 (drop_failed/denominator/known-empty/one-boxel clarity), #202 (mbs0.05 no-op; T1), #207 (success-rate band caption), #209 (resolution-floor vs total-boxel-count study + figure)
   Discussion: #203 ("more cells" FALSE + characterisation; T0/NOW), #204 (stack ratio mention), #205 (stacking slowdown misattributed; T0/NOW), #206 (section-6 trims + deletions)
