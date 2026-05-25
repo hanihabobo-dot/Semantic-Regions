@@ -81,7 +81,7 @@ WRONG and dropped (TAMPURA Table II time includes simulated controller execution
 so it now reports our per-episode wall-clock (mean 13.7 s) vs TAMPURA's 57 s. See #190.
 
 ================================================================================
-#178  [T1] [NOW]  Intro says the partition discretizes "only" objects + occlusions (omits free space)
+#178  [DONE 2026-05-25] [T1]  Intro says the partition discretizes "only" objects + occlusions (omits free space)
 ================================================================================
 introduction.tex:26,33 say the partition covers "only" the objects + the regions they
 occlude — drops the Free Space Boxels stage (methods.tex:36, recursive octree + greedy
@@ -413,7 +413,7 @@ OPEN:
   Figures: #168  (every figure one-by-one; figures agent)
   Figures: #176  (discretization-progression figure + free-space split->merge stages, merged #196)
   Methods: #175  (shadow-splitting prose vs #102/#103 code)
-  Intro: #178 (partition omits free space; T1/NOW), #179 (de-hype TAMPURA + cut "first-class" opener)
+  Intro: #179 (de-hype TAMPURA + cut "first-class" opener)
   Background: #180 (Pi/S(P) notation), #181 (name "contingent planning"), #182 ("Voxel Grids" heading)
   Related Work: #184 (pan "behaviors"), #185 (Ma paragraph rewrite), #186 (CoCo-TAMP expand),
                 #187 (Bai: limitation + TAVP name/learned-policy; merged #192; T1/NOW)
@@ -426,7 +426,7 @@ OPEN:
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #177, #183, #188, #189, #190. MERGED: #192->#187, #196->#176.
+DONE: #177, #178, #183, #188, #189, #190. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
