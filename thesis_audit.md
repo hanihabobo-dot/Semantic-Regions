@@ -48,7 +48,10 @@ image (never overwrite), keep old regenerable, keep paths sim/<name>.png.
 Refs: introduction.tex; methods.tex; background.tex; results.tex; discussion.tex; thesis/graphics/sim/.
 
 ================================================================================
-#175  [DONE 2026-05-25] [T2]  methods.tex shadow-splitting text vs code (CODEBASE #102/#103)
+#175  [T2] [THESIS]  methods.tex shadow-splitting text vs code (CODEBASE #102/#103)
+NOTE 2026-05-25: conditional/surface-resting rewrite REVERTED per author; only the "by depth"
+clause was dropped. The #102 (a non-intersecting occluder casts ONE shadow, no split) and #103
+(only surface-resting occluders cast shadows) reconciliations remain if wanted.
 ================================================================================
 CODEBASE #102 made the per-occluder depth split CONDITIONAL (a non-intersecting occluder
 casts ONE shadow Boxel; only a shadow overlapping another region splits into near+far +
@@ -112,7 +115,11 @@ at :13; (c) rename tuple to a neutral letter (e.g. M).
 Refs: background.tex:11,13,69; geffner2013concise.
 
 ================================================================================
-#181  [DONE 2026-05-25] [T2]  "POD ... rather than established terminology" -- name the real term (contingent planning)
+#181  [T2] [POLISH]  "POD ... rather than established terminology" -- name the real term (contingent planning)
+NOTE 2026-05-25: naming attempt REVERTED per author. POD is the problem setting (deterministic
++ partially observable); contingent planning is a SOLUTION family for it (branching plans) and
+not the approach this thesis uses (it determinises-and-replans). Don't equate the two. Original
+hedge restored; if reworded, name contingent planning as a solution family, not a synonym for POD.
 ================================================================================
 background.tex:85 hedges that "POD" isn't established terminology. Verified: the literature
 calls this exact setting CONTINGENT PLANNING; the hedge is true but bare. Fix: name it —
@@ -157,7 +164,8 @@ the oracle parenthetical.
 Refs: related-work.tex:20; ma2025task.
 
 ================================================================================
-#186  [DONE 2026-05-25] [T2]  CoCo-TAMP description too thin -- expand mechanism
+#186  [REJECTED 2026-05-25] [T2]  CoCo-TAMP description too thin -- expand mechanism
+NOTE 2026-05-25: expansion REVERTED per author; concise one-sentence description kept by choice.
 ================================================================================
 related-work.tex:22. Verified mechanism: LLM asked multiple-choice location questions ->
 softmax over answer log-probs -> distribution over semantic locations -> hierarchical Bayesian
@@ -255,6 +263,8 @@ execute, and replan when an observation contradicts that (reactive replanning)".
 STRIPS" unexplained -> gloss "no PDDL type declarations, so object categories are ordinary
 predicates not types". (Q) delete the ":133 standard pattern" self-justification.
 Refs: methods.tex:63,87,90,133.
+NOTE 2026-05-25: (P) untyped-STRIPS gloss REVERTED per author; (O) optimistic-determinisation
+gloss and (Q) self-justification deletion stand.
 
 ================================================================================
 #196  [MERGED 2026-05-25 into #176]  Free-space generation stages (split -> convex merge) figure
@@ -338,6 +348,7 @@ observable and needs no free-space partitioning, so the ratio isn't meaningful t
 it, or state stack is fully observable (no shadows) so the ratio reflects only the uniform
 baseline's free-space blow-up, not a partial-observability benefit.
 Refs: discussion.tex:24.
+NOTE 2026-05-25: resolved by DELETING the stack-ratio sentence (author: don't mention stack/uniform here).
 
 ================================================================================
 #205  [DONE 2026-05-25] [T0]  discussion:266 stacking slowdown misattributed (bigger domain, not pick conditional-effects)
@@ -349,6 +360,8 @@ AND the conditional :requirement + forall-when on pick (which grounds to a no-op
 So the slowdown is a LARGER DOMAIN, not the pick conditional effect. Fix: re-attribute to the
 enlarged domain (added action+predicates+stream raising grounding/search cost).
 Refs: discussion.tex:266; pddl/domain_pddlstream.pddl; git 0d5def7.
+NOTE 2026-05-25: resolved by REMOVING the stacking-slowdown claim entirely (author: don't mention
+that adding stacking made things slower). No misattribution remains.
 
 ================================================================================
 #206  [DONE 2026-05-25] [T2]  Discussion section-6 trims and clarity
@@ -412,6 +425,8 @@ OPEN ISSUES
 OPEN:
   Figures: #168  (every figure one-by-one; figures agent)
   Figures: #176  (discretization-progression figure + free-space split->merge stages, merged #196)
+  Background: #181 (POD vs contingent-planning naming -- reverted; reconsider, don't equate them)
+  Methods: #175 (shadow-split #102/#103 -- only "by depth" dropped; conditional/surface-resting remain)
   Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief to background; T1)
   Methods: #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
@@ -419,7 +434,7 @@ OPEN:
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200, #201, #202, #203, #204, #205, #206, #207. MERGED: #192->#187, #196->#176.
+DONE: #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #194, #195, #200, #201, #202, #203, #204, #205, #206, #207. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
