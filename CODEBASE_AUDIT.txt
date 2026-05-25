@@ -359,27 +359,22 @@ Related: thesis_audit #201; #96; #99.
 ================================================================================
 #107. REMOVE THE PER-EPISODE REPLAN LIMIT IN EVALUATIONS (run to time budget; keep 3-retry give-ups)
 ================================================================================
-Status/Priority: OPEN, TIER 1 (changes eval methodology + reported numbers; replan_limit
-   exit reason disappears). Filed 2026-05-24. Where: eval_runner.py replan-limit logic.
-   Depends: #9; interacts w/ #106 + the 1800 s per-call budget (thesis #200).
-What/Fix: bound episodes by wall-clock time only (then timeout), keeping ONLY the give-ups
-   (3 failed drops -> exit #79/#80; unreachable-shadow three-strike sense give-up). Remove
-   the per-episode replan cap; re-run affected cells (stack especially, where replan_limit
-   dominates, results.tex:221); regenerate plots (ADD); update taxonomy (#106) + thesis prose.
-Care:   changes headline numbers — coordinate w/ thesis eval figures (#104) + #177/#190.
+Status: OPEN, TIER 1. Code DONE 2026-05-25 (cabad01: per-episode replan cap removed;
+   episodes bounded by runner wall-clock only, then timeout; give-ups kept -> exit #79/#80
+   + unreachable-shadow three-strike). DEFERRED to next full re-run: re-run affected cells
+   (stack esp., where replan_limit dominated, results.tex:221) -> shifts headline numbers
+   feeding thesis #177/#190/#200/#203/#209 + #104 figures; regen plots (ADD); update #106.
 Related: thesis_audit #200/#201; #106; #104; #79/#80.
 
 ================================================================================
 #108. BOXEL-COUNT-VS-CONFIG PLOT + semantic+mbs0.1 ARM (min free-space size barely changes cell count)
 ================================================================================
-Status/Priority: OPEN, TIER 2 (figure + one eval arm; no correctness risk). Supports thesis
-   #202/#203. Depends: #99, #77/#100, #95.
-What/Fix: plot total + category boxel counts across configs (uniform, semantic auto,
-   +mbs0.05, +mbs0.1, coarse 1.5x/2x arms from #100). Verified: finer floors (0.05/0.09)
-   give counts IDENTICAL to auto; only coarser reduce them; a distinct mbs0.1 point doesn't
-   exist yet. Steps: add a mbs0.1 arm + run the slice; new figure (free-space + total) boxel
-   count vs config per goal (ADD, don't overwrite #77/#100); feed thesis #203.
-Care:   plots ADD; stack rows slice by stack_height (#95).
+Status: OPEN, TIER 2. Part-a DONE 2026-05-25 (67335c1: resolution-mbs01 preset / semantic+
+   mbs0.1 arm added). DEFERRED to next full re-run: part-b (run --matrix resolution-mbs01
+   --output sweep_anytime --skip-existing, ~900 cells) + part-c (boxel-count-vs-config figure:
+   free-space + total count vs config per goal, ADD, don't overwrite #77/#100; feed thesis
+   #203). Verified: finer floors 0.05/0.09 == auto, only coarser reduce. Stack rows slice by
+   stack_height (#95).
 Related: thesis_audit #202/#203; #100; #99; #95.
 
 ================================================================================
@@ -405,11 +400,10 @@ Related: existing action set; thesis Future Work.
 ================================================================================
 #111. REMOVE "THESIS_NOTES" TEXT FROM THE TAMPURA WALL-CLOCK PLOT
 ================================================================================
-Status/Priority: OPEN, TIER 3 (plot cosmetics; ties to thesis #177/#190). Where:
-   eval_plotter.py plot_tampura_wallclock_comparison. Depends: #94, #99.
-What/Fix: the figure renders "THESIS_NOTES" text — remove it; regenerate (ADD a new PNG).
-   Also: TAMPURA's Table II 57 s is "over 20 trials" and NOT stated success-only, whereas
-   ours is success-only — caption must not imply like-for-like success filtering (#177/#190).
+Status: OPEN, TIER 3. Caption DONE 2026-05-25 (59157ec: caption notes the 57 s spans all 20
+   trials, not success-only; the "THESIS_NOTES"-text removal was already done by thesis #177).
+   DEFERRED to next full re-run: regenerate the TAMPURA wall-clock PNG (ADD) once the re-run
+   lands. Where: eval_plotter.py plot_tampura_wallclock_comparison.
 Related: thesis_audit #177/#190; #94; #99.
 
 ================================================================================
