@@ -1099,7 +1099,7 @@ def plot_tampura_wallclock_comparison(
     fig.text(0.5, 0.02,
              f"Ours: mean ± std, success-only (right-skewed; median "
              f"{wmed:.1f}s).  TAMPURA: mean ± std per episode (Table II, "
-             f"incl. simulated execution).\n"
+             f"all 20 trials, incl. simulated execution).\n"
              f"Success: ours {succ_pct:.0f}%, TAMPURA ≥ 63%.",
              ha="center", fontsize=8, style="italic")
     fig.tight_layout(rect=[0, 0.10, 1, 1])
