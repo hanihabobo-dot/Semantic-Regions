@@ -92,7 +92,7 @@ space with coarse cells, vs uniform). Keep the semantic-vs-uniform contrast.
 Refs: introduction.tex:26,33; methods.tex:36,:20,:27,:45.
 
 ================================================================================
-#179  [T2] [POLISH]  Intro contributions: drop TAMPURA from section 1, cut the "first-class state" opener
+#179  [DONE 2026-05-25] [T2]  Intro contributions: drop TAMPURA from section 1, cut the "first-class state" opener
 ================================================================================
 introduction.tex:31: (a) confine TAMPURA to Related Work — remove the "dense visibility
 voxel grid of TAMPURA's Find Die ... learned model" clause + the "architectural comparison
@@ -413,7 +413,6 @@ OPEN:
   Figures: #168  (every figure one-by-one; figures agent)
   Figures: #176  (discretization-progression figure + free-space split->merge stages, merged #196)
   Methods: #175  (shadow-splitting prose vs #102/#103 code)
-  Intro: #179 (de-hype TAMPURA + cut "first-class" opener)
   Background: #180 (Pi/S(P) notation), #181 (name "contingent planning"), #182 ("Voxel Grids" heading)
   Related Work: #184 (pan "behaviors"), #185 (Ma paragraph rewrite), #186 (CoCo-TAMP expand)
   Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief to background; T1), #194 (marketing voice + over-long para)
@@ -425,7 +424,7 @@ OPEN:
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #177, #178, #183, #187, #188, #189, #190. MERGED: #192->#187, #196->#176.
+DONE: #177, #178, #179, #183, #187, #188, #189, #190. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
