@@ -331,7 +331,7 @@ coarsening reduces it"; delete the filler sentence. Figure: CODEBASE #108.
 Refs: discussion.tex:60; eval_results/sweep_anytime; #202; CODEBASE_AUDIT #108.
 
 ================================================================================
-#204  [T2] [THESIS]  discussion:24 stack-goal boxel ratio -- stack needs no free-space partition
+#204  [DONE 2026-05-25] [T2]  discussion:24 stack-goal boxel ratio -- stack needs no free-space partition
 ================================================================================
 discussion.tex:24 ("stack ratio steeper, semantic ~25 vs uniform ~1340"). Stack is fully
 observable and needs no free-space partitioning, so the ratio isn't meaningful there. Fix: drop
@@ -416,11 +416,11 @@ OPEN:
   Methods: #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
   Results: #199 (task rename), #209 (resolution-floor study + figure)
-  Discussion: #203 ("more cells" FALSE; T0/NOW), #204 (stack ratio mention), #205 (stacking slowdown misattributed; T0/NOW), #206 (section-6 trims)
+  Discussion: #203 ("more cells" FALSE; T0/NOW), #205 (stacking slowdown misattributed; T0/NOW), #206 (section-6 trims)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200, #201, #202, #207. MERGED: #192->#187, #196->#176.
+DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194, #195, #200, #201, #202, #204, #207. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
