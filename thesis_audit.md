@@ -333,7 +333,7 @@ Fix:   Rename heading to "Voxel Grids". Optionally fold the octree text in with 
 Refs:  background.tex:140,143-150 (fig:octmap_illustration).
 
 ================================================================================
-#183  [T0] [NOW]  related-work.tex:12 mischaracterizes Bayes3D scaling; clarify TAMPURA belief source
+#183  [DONE] [T0] [NOW]  related-work.tex:12 mischaracterizes Bayes3D scaling; clarify TAMPURA belief source
 ================================================================================
 Where: related-work.tex:12 (POMDP-based TAMP subsection: "TAMPURA samples
        placements in continuous pose space and draws its object-pose belief from
@@ -413,16 +413,18 @@ Refs:  related-work.tex:22; kim2026llmguided (arXiv:2603.03704).
 Where: related-work.tex:24 (end of Bai et al. paragraph: "adapting it to a new
        environment, however, currently requires re-tuning hardcoded geometric
        constants").
-What:  User: this is not our real limitation -- mention the ORACLE instead. Our
-       actual current limitation (stated elsewhere: related-work.tex:20,22,
-       introduction.tex, sec:limitations) is that visibility / object poses come
-       from a ground-truth oracle, not a learned perception module.
-Fix:   Replace "...requires re-tuning hardcoded geometric constants" with the
-       oracle limitation: "...its current limitation lies elsewhere -- the
-       visibility signal it relies on is supplied by a ground-truth oracle rather
-       than a learned perception module (\cref{sec:limitations})." Avoid verbatim
-       repeat of :20/:22 wording.
-Refs:  related-work.tex:24,20,22; sec:limitations.
+What:  User correction (2026-05-24, SUPERSEDES an earlier "mention the oracle" note):
+       "hardcoded geometric constants" is simply NOT TRUE. The real cost of
+       retargeting our system to a new goal is that it requires NEW PDDL ACTIONS
+       (and their streams) -- adapting to a new goal/task means authoring new actions,
+       not re-tuning geometric constants.
+Fix:   Replace "...currently requires re-tuning hardcoded geometric constants" with the
+       real limitation: retargeting to a genuinely new goal requires adding new PDDL
+       actions (and streams), not just a new goal specification. (Do NOT use the oracle
+       here -- the oracle limitation already appears at :20/:22; this sentence is about
+       retargeting cost.) Concrete evidence: the stack goal required a new action +
+       predicates + stream (#205).
+Refs:  related-work.tex:24; #205 (stack added a new action + predicates + stream).
 
 ================================================================================
 #188  [T0] [NOW]  related-work.tex:27 belief-space paragraph: false SS-Replan contrast (+ jargon)
@@ -448,6 +450,9 @@ Fix:   Replace the false contrast: state the contribution as the explicit named
        kaelbling/hadfield sentence in plain terms ("plan over the robot's belief
        using hierarchical goal regression"; "interleave" -> "exchange information
        as the plan is built"; note HM'15's modularity vs K&LP'13's bespoke planner).
+       (3) WORDING: replace "What we add is orthogonal to the replanning loop" -- never
+       use "orthogonal" outside a geometry context; say "separate from" / "independent
+       of" the replanning loop.
 Refs:  related-work.tex:27; garrett2020online; kaelbling2013integrated;
        hadfield2015modular; SS-Replan code.
 
@@ -474,54 +479,344 @@ Refs:  related-work.tex:30; albore2009translation (CLG); bonet2011planning
        geffner2013concise.
 
 ================================================================================
-#190  [T0] [NOW]  "TAMPURA pays it offline" -- WRONG; its model-learning is ONLINE (per-step)
+#190  [DONE 2026-05-25] [T0]  TAMPURA model-learning is ONLINE per-step (was framed "pays it offline")
 ================================================================================
-Where: discussion.tex:76-99 (sec:disc-tampura -- :77 "TAMPURA pays it offline in a
-       Learn-Model phase", :81-82 "done once per problem and amortised", :94 "the
-       offline-MDP architecture ... without front-loading", :96 "the offline
-       architecture must estimate"); results.tex:108 ("the comparison is
-       architectural -- offline Learn-Model vs online stream sampling");
-       conclusion.tex:10 ("TAMPURA front-loads it offline; PDDLStream pays it per
-       call").
-What:  FALSE PREMISE. Code-verified 2026-05-24 against the local tampura repo (the
-       same released code whose find_dice = our holding analogue). TAMPURA's
-       model-learning (outcome sampling -> sparse abstract MDP) is NOT offline; it
-       runs ONLINE, inside the per-timestep control loop, rooted at the CURRENT
-       belief, rebuilt from scratch by default:
-       - policy.py:105-120 rollout() loops over timesteps; each step calls
-         get_action() THEN env.step() (real execution).
-       - tampura_policy.py:120-145 get_action() runs the Outcome Sampling loop
-         (policy_search -> builds transition model F + reward R), then solves the
-         MDP with LAO*/VI (:149-168) and returns ONE action.
-       - default.yml: from_scratch=true + envelope_threshold=1 => model re-learned
-         at virtually every step (the envelope can be reused only when the realized
-         transition had probability 1; stochastic sensing in find_dice invalidates
-         it each step).
-       The "envelope" (tampura_policy.py:82-99) is an ONLINE cache reusing the last
-       solved policy while the plan stays on-track -- NOT an offline phase. The
-       paper's "mental simulation" (Algorithm 2) describes HOW outcomes are sampled
-       (in imagination vs on the real robot), not WHEN -- it is not evidence of
-       offline timing. So the discussion's central axis -- "the real difference is
-       WHEN sampling is paid: TAMPURA offline vs us online" -- COLLAPSES: both
-       sample online. "done once per problem" is also wrong for find_dice
-       (re-sampled per step).
-Fix:   Drop the offline/online "when is sampling paid" framing in all three places
-       (discussion:76-99, results:108, conclusion:10). Reframe the real
-       architectural difference: TAMPURA learns a PROBABILISTIC sparse MDP at
-       planning time and solves it with LAO* for a risk-aware policy; ours uses
-       DETERMINISTIC classical planning with knowledge literals + optimistic
-       replanning (no outcome-probability model, no MDP solve). Both sample online
-       inside a Fast Downward-derived loop (already noted at discussion:84-87), so
-       any 14.0s-vs-57s gap reflects MDP-learning+LAO* machinery vs lightweight
-       classical replanning, NOT offline vs online. CAUTION: this may require
-       rethinking the wall-clock ARGUMENT, not just rewording -- author to decide
-       the honest new framing. Invalidates the framing #177 prescribes (now fixed
-       there); also correct memory reference_tampura_perf.md. Reconcile
-       THESIS_NOTES if it repeats the offline claim.
-Refs:  discussion.tex:76-99; results.tex:108; conclusion.tex:10; #177;
-       tampura/tampura/policies/policy.py:105-120,
-       policies/tampura_policy.py:82-168, config/default.yml;
-       curtis2024partially (Alg 1/2); reference_tampura_perf.md (memory).
+CLOSED 2026-05-25.  The false "offline Learn-Model" framing was removed from
+discussion.tex / results.tex:108 / conclusion.tex:10 and reconciled in
+THESIS_NOTES section 21.3: both systems sample online per-step; the real
+difference is TAMPURA's probabilistic learned-MDP (solved for a policy) vs our
+deterministic knowledge-literal planning with replanning.  Code-verified against
+tampura policy.py / tampura_policy.py / config/default.yml (from_scratch=true,
+envelope_threshold=1).  (Working-tree edits applied; not yet committed.)
+Parked follow-ons, NOT part of #190's offline fix:
+  (a) LAO* vs value iteration -- the released code's solve_mdp defaults to value
+      iteration, not LAO*; the prose still says "LAO*".
+  (b) Per the user's reading of the paper PDF, the Table II times INCLUDE the
+      selected controller's execution in simulation, so #177's "planning-time
+      only / like-for-like = our planning time" framing is itself wrong (our
+      wall-clock would be the closer analogue) -- pending confirmation.
+
+################################################################################
+#  ISSUES --- ADDED 2026-05-24  (sections 4-7 + FIGURES READ-THROUGH, batch 2)
+################################################################################
+Surfaced 2026-05-24 from a second user read-through (Methods/Results/Discussion/
+Conclusion + figures). Factual claims verified against the local tampura repo, the
+Semantic_Boxels eval data/code, and the cited papers (research agents). Several
+confirmed the user's instinct: per-call <1s (#200), mbs0.05 no-op (#202), finer-floor
+cell count (#203), stacking slowdown cause (#205). Code/eval/plotter follow-ups are
+filed in CODEBASE_AUDIT.txt #106-#112. OPEN.
+
+================================================================================
+#191  [T3] [THESIS]  Intro hero caption: identify the target object
+================================================================================
+Where: introduction.tex:19 (fig:intro-hero caption, sim/scene_hidden_target.png).
+What:  Caption says the target "may be hidden behind others and must be located" but
+       never says which object is the target in the image.
+Fix:   Add "the target is the cyan cube behind the green cube." Verify against the
+       image (cross #168) before committing.
+Refs:  introduction.tex:19; #168.
+
+================================================================================
+#192  [T2] [POLISH]  Bai et al.: acts via an end-to-end learned policy, not a planner; framework is TAVP
+================================================================================
+Where: related-work.tex:24 (Bai et al. / "Task-Aware Virtual View Exploration (TVVE)").
+What:  Verified (agent; paper arXiv:2508.05186, CVPR 2026). The framework is named
+       TAVP (the thesis calls it "TVVE"). After virtual-view exploration the
+       manipulation action is chosen by an END-TO-END LEARNED policy (RVT-2 backbone +
+       autoregressive action head + TaskMoE), NOT a planner; a SEPARATE RL-trained
+       policy (MVEP) selects the virtual viewpoints. "A learned policy that selects
+       viewpoints ... before acting" blurs the two policies.
+Fix:   Use the framework name (TAVP) or drop the acronym; state the action itself is
+       produced by an end-to-end learned policy (no planner) -- this sharpens the
+       contrast with our planner-based sensing. Optionally note the viewpoint selector
+       is a distinct RL policy.
+Refs:  related-work.tex:24; bai2025learning (arXiv:2508.05186, project "TAVP").
+
+================================================================================
+#193  [T1] [THESIS]  Relocate/shrink "Spatial Belief Representation in TAMP" into Background
+================================================================================
+Where: related-work.tex:39-52 (\section{Spatial Belief Representation in TAMP}: Octree
+       limitations + Sidd's Critical Regions limitations); also related-work.tex:35
+       ("Belief-space replanning [11] ... does not make occlusion a first-class
+       planning entity").
+What:  User: this whole section reads like BACKGROUND, not related work, and its point
+       is unclear. The intended message is small: we drew on octrees and Critical
+       Regions for inspiration, and neither was usable out of the box during research.
+       Background already has the homes -- octrees (background.tex:140, see #182) and
+       Critical Regions (background.tex:156). The belief-space-replanning sentence
+       (related-work.tex:35) is also flagged as maybe-background, not related work.
+Fix:   Merge necessary octree/CR LIMITATION content into the background octree +
+       Critical-Regions subsections, then delete the related-work section, leaving at
+       most a brief note that octrees and CRs were the two inspirations and neither was
+       directly reusable. Decide where the belief-space-replanning point belongs (fold
+       into the #188 paragraph or background).
+Refs:  related-work.tex:39-52,35; background.tex:140,156; #182; #188.
+
+================================================================================
+#194  [T2] [POLISH]  Related-work framing: drop marketing voice; cut the over-long "three advantages" paragraph
+================================================================================
+Where: related-work.tex:35 ("This thesis sits at the intersection ...");
+       related-work.tex:37 (the "three concrete advantages ... each carrying a cost we
+       state plainly" paragraph).
+What:  (H) "sits at the intersection" is marketing language -- prefer plain "we extend
+       / build upon". (I) the three-advantages paragraph is far too long (one dense
+       block restating occlusion-as-state / no-probabilities / no-MDP with costs).
+Fix:   :35 -> "We build on / extend ..." (state plainly what is extended). :37 ->
+       condense to a few short sentences or a compact list; the long version is
+       redundant with the summary elsewhere.
+Refs:  related-work.tex:35,37.
+
+================================================================================
+#195  [T2] [NOW]  Methods clarity: rephrase "optimistic determinisation", explain "untyped STRIPS", delete a self-justification
+================================================================================
+Where: methods.tex:63 ("solve the result by optimistic determinisation and reactive
+       replanning"); methods.tex:87,90 ("the implemented domain is untyped STRIPS";
+       "Category predicates (untyped domain)"); methods.tex:133 ("optimistic planning
+       with replanning on failure is a standard pattern for TAMP under partial
+       observability").
+What:  (O) "optimistic determinisation and reactive replanning" is opaque. (P) "untyped
+       STRIPS / untyped domain" is unexplained. (Q) the "...is a standard pattern..."
+       clause is an unnecessary self-justification.
+Fix:   (O) rephrase, e.g. "we assume each sensing action succeeds (optimistic), plan as
+       if the world were fully known, execute, and replan whenever an observation
+       contradicts that assumption (reactive replanning)". (P) add a one-line gloss:
+       untyped STRIPS = no PDDL type declarations, so object categories are ordinary
+       predicates rather than types. (Q) delete the "standard pattern" clause -- no need
+       to justify/apologize.
+Refs:  methods.tex:63,87,90,133.
+
+================================================================================
+#196  [T2] [THESIS]  New figure: free-space generation stages (split -> convex merge)
+================================================================================
+Where: methods.tex:20 (fig:boxelization, currently a single 4-panel schematic (a)-(d)).
+What:  User wants a NEW figure (or added subfigures) documenting the FREE-SPACE stages:
+       (1) all of space incl. objects, (2) recursive octree splitting, (3) recursive
+       convex merging.
+Fix:   Generate 2+ subfigures of the free-space build (tools/render_thesis_figs.py).
+       ADD images (never overwrite); read each PNG before embedding. Overlaps #176
+       (real discretization-progression captures).
+Refs:  methods.tex:20; #176; #168; tools/render_thesis_figs.py.
+
+================================================================================
+#197  [T1] [NOW]  fig:replan-cycle caption is wrong vs the image
+================================================================================
+Where: methods.tex:145 (fig:replan-cycle caption, sim/replan_cycle.png).
+What:  User: the caption ("the action log reads 'sense shadow_of_purple_object ---
+       target not here' ... marks that shadow empty ... searching only the remaining
+       shadows") does NOT match what the image shows.
+Fix:   Inspect sim/replan_cycle.png (cross #168), then rewrite the caption to match the
+       actual logged action / scene; recapture if the image itself is wrong.
+Refs:  methods.tex:145; sim/replan_cycle.png; #168.
+
+================================================================================
+#198  [T3] [THESIS]  Figure captions/sizes to fix after visual inspection
+================================================================================
+Where: methods.tex:27 (fig:boxelization-real, sim/boxelization_real.png);
+       methods.tex:40-57 (fig:partition-comparison: partition_semantic vs
+       partition_uniform); results.tex:79 (eval-scene fig: oracle/RGB-D caption);
+       discussion.tex:293 (fig:retry-giveup, sim/sense_fail_retry3.png).
+What:  (M, :27) update caption by looking at the current image. (N, :40-57) make the two
+       subfigures EQUAL SIZE; update caption; briefly state what each colour means.
+       (T+U, results:79) "objects and their occlusion shadows are labelled in the
+       overlay" is unclear and the figure needs a new image; rewrite after inspection.
+       (AV, discussion:293) the "retry 3/3" caption is stale -- re-inspect and update.
+Fix:   Inspect each PNG (cross #168), then recaption / resize / recapture. ADD any
+       regenerated image; never overwrite; keep old regenerable.
+Refs:  methods.tex:27,40-57; results.tex:79; discussion.tex:293; #168.
+
+================================================================================
+#199  [T2] [THESIS]  Rename task terms to reader-facing names (drop code terms)
+================================================================================
+Where: document-wide -- results.tex (task defs ~:100s, plots, captions), discussion,
+       conclusion, abstract, methods. Code terms: holding, stack, find-and-tray-stack.
+What:  User: the code task names are confusing in prose. Use FIND (= holding; locate a
+       hidden object and pick it), STACK, and FIND AND STACK (= find-and-tray-stack).
+       (pick is essentially holding.)
+Fix:   Global rename in PROSE: holding -> find; find-and-tray-stack -> find and stack;
+       stack stays. Keep figure FILE names as code artifacts; rename only reader-facing
+       text + captions + axis labels (axis labels may need a plotter label map -- see
+       CODEBASE). Audit-internal refs in #177/#190 keep "holding" (bookkeeping only).
+Refs:  results.tex; discussion.tex; conclusion.tex; abstract.tex; methods.tex; #177.
+
+================================================================================
+#200  [T0] [NOW]  results:83 "well under a second per call" is FALSE
+================================================================================
+Where: results.tex:83 ("Most successful cells finish in well under a second per call;
+       the budget exists to catch pathological cases rather than as the operating
+       point.").
+What:  DATA-CONTRADICTED (eval_results/sweep_anytime, agent). Pooled per-call planning
+       time over successful cells: median ~1.99 s, mean ~5.4 s; only ~19% of calls
+       < 1 s. By goal: stack median 0.97 s (54% <1s) -- the only goal near the claim;
+       find(=holding) 2.05 s (10% <1s); find-and-stack 2.97 s (3% <1s). Also "budget
+       exists to catch pathological cases rather than as the operating point" is unclear.
+Fix:   Replace with real per-goal medians; describe the 1800 s cap as a safety bound hit
+       only by rare pathological/timeout cells, not the typical runtime. Drop "well under
+       a second".
+Refs:  results.tex:83; eval_results/sweep_anytime (per_call_planning_time_s).
+
+================================================================================
+#201  [T2] [THESIS]  Results clarity: drop_failed, denominator note, "known to be empty", one-boxel-per-object
+================================================================================
+Where: results.tex:96 (failure-mode list); results.tex:98 ("two denominators differ by
+       ~6%"); results.tex:105 ("where the workspace is empty"; "finer leaves break
+       placement on the table dimensions used here").
+What:  (Y) drop_failed listed with no explanation. (Z) "the two denominators differ by
+       ~6% of cells (early timeouts without a recorded state)" is opaque. (AA) "where the
+       workspace is empty" should be "where the workspace is KNOWN to be empty" (belief,
+       not ground truth). (AC) "finer leaves break placement ... used here" is stated as
+       self-evident but is a design choice (each object is bounded by exactly ONE boxel,
+       so a finer free-space leaf can split a placement target).
+Fix:   (Y) explain: when the gripper cannot release a non-target object it would hold it
+       forever; after three failed drop events the episode exits (drop_failed). (Z)
+       rephrase plainly. (AA) add "known to be". (AC) explain the one-boxel-per-object
+       design choice. Y depends on the CODEBASE taxonomy change (#106).
+Refs:  results.tex:96,98,105; CODEBASE_AUDIT #106.
+
+================================================================================
+#202  [T1] [THESIS]  semantic+mbs0.05 is effectively identical to semantic (a no-op variant)
+================================================================================
+Where: results.tex:106 ("semantic+mbs0.05 --- the same adaptive partition but with the
+       free-space leaf-size floor forced to 5 cm ... test the effect of a finer
+       free-space leaf floor").
+What:  DATA-CONFIRMED (agent): semantic+mbs0.05 produces boxel counts identical to plain
+       semantic to ~0.1% (e.g. find 35.07 vs 35.03) and the same results. The 5 cm floor
+       never meaningfully binds (autosize ~6-9 cm) and finer floors are absorbed by the
+       greedy convex merge (#203). Presenting it as "testing a finer floor" is misleading
+       -- it has no effect.
+Fix:   Drop the variant or reframe it honestly as evidence that the free-space floor does
+       NOT change the partition (merge dominates), not as an independent resolution probe.
+       Coordinate with #203 and CODEBASE #108.
+Refs:  results.tex:106; eval_results/sweep_anytime; #203; CODEBASE_AUDIT #108.
+
+================================================================================
+#203  [T0] [NOW]  discussion:60 "at the cost of more cells" is FALSE; "characterisation of the regime" is empty
+================================================================================
+Where: discussion.tex:60 ("... at the cost of more cells in the partition. This is a
+       characterisation of the regime, not a defect of the method.").
+What:  (AK) DATA-CONTRADICTED (agent): a finer free-space floor does NOT add cells -- free
+       cells are greedily convex-merged, so counts are essentially identical across
+       semantic / mbs0.05 / mbs0.09 (e.g. stack free-space boxels 17.64 in all three);
+       only COARSER floors reduce counts. So "finer resolution -> more cells" is wrong;
+       the minimum size barely matters. (AL) "This is a characterisation of the regime,
+       not a defect of the method" is empty filler.
+Fix:   Correct the claim: the minimum free-space leaf size has little effect on cell count
+       because of the convex merge (data); only coarsening reduces it. Delete the
+       "characterisation of the regime" sentence. Supporting figure: CODEBASE #108.
+Refs:  discussion.tex:60; eval_results/sweep_anytime; #202; CODEBASE_AUDIT #108.
+
+================================================================================
+#204  [T2] [THESIS]  discussion:24 stack-goal boxel ratio -- stack needs no free-space partition
+================================================================================
+Where: discussion.tex:24 ("On the stack goal the ratio is steeper (semantic ~25 vs
+       uniform ~1340) ...").
+What:  User: the stack goal is fully observable and needs no free-space partitioning, so
+       the semantic-vs-uniform free-space cell ratio is not a meaningful comparison there.
+Fix:   Either drop the stack-goal ratio, or state explicitly that stack is fully
+       observable (no shadows) so the ratio only reflects the uniform baseline's
+       free-space blow-up, not a partial-observability benefit.
+Refs:  discussion.tex:24.
+
+================================================================================
+#205  [T0] [NOW]  discussion:266 stacking slowdown misattributed (bigger domain, not pick conditional-effects)
+================================================================================
+Where: discussion.tex:266 ("Enabling stacking roughly doubles per-call planning time,
+       traced to the conditional-effects requirement on the pick action").
+What:  CODE-CONTRADICTED (agent, git). Commit 0d5def7 "add --goal stack" added, all at
+       once: a whole new \texttt{stack} action (7 preconds/6 effects), 3 new predicates
+       (on, clear, stack_kin), a new stream compute-stack-kin (+stream.pddl/python), AND
+       the conditional :requirement + a forall-when on pick. The conditional effect grounds
+       to a no-op on find/holding runs (no (on ...) facts). So the slowdown is a LARGER
+       DOMAIN (added action + predicates + stream), not specifically pick conditional effects.
+Fix:   Re-attribute: enabling stacking enlarges the domain (an added stack action,
+       predicates, and stream), raising grounding/search cost; do not pin it on the pick
+       conditional effect.
+Refs:  discussion.tex:266; pddl/domain_pddlstream.pddl; git 0d5def7.
+
+================================================================================
+#206  [T2] [THESIS]  Discussion section-6 trims and clarity
+================================================================================
+Where: discussion.tex -- :121 (restoring-blocked-view give-up clause), :123
+       (\section{Failure modes}), :168 ("the ratio would narrow"), :239 (IK-bypass
+       sentence), :245 ("non-pathological start configuration"), :258 (string-identifier
+       proxies sentence), :268 (regression-accepted sentence).
+What:  User edits: (AO) delete the entire \section{Failure modes} (:123) -- it duplicates
+       the results failure-mode coverage. (AN) remove the :121 "restoring a blocked view
+       ... give-up rule" trailing clause. (AQ) remove the :239 "final approach uses a local
+       IK solver that bypasses collision checks ..." sentence. (AS) remove the :258 "string
+       identifiers as proxies for geometric volumes ..." sentence. (AU) remove the :268
+       "this regression is accepted rather than optimized away ..." sentence. (AP) :168 "the
+       ratio would narrow" -> "could narrow". (AR) :245 explain "non-pathological start
+       configuration" plainly (a collision-free start configuration for the next move, to
+       avoid collisions).
+Fix:   Apply the deletions + two wording fixes (over-explanation / over-hedging / apology
+       the author wants gone).
+Refs:  discussion.tex:121,123,168,239,245,258,268.
+
+================================================================================
+#207  [T3] [THESIS]  Success-rate-vs-n_occ caption should state what the band is
+================================================================================
+Where: results.tex (fig success rate vs n_occ).
+What:  Verified (agent, eval_plotter): the shaded band is +/-1 SAMPLE STD of the per-trial
+       0/1 success flags across ~80-100 corpus seeds per (variant, n_occ) point (clipped to
+       [0,1]) -- NOT a confidence interval. The spread is the binomial noise of a success
+       rate over a modest seed count; uniform sits near 0 (low spread), adaptive varies more.
+Fix:   State in the caption that the band is +/-1 std of the per-trial success indicator over
+       N~80-100 seeds (not a CI). Optionally switch to a Wilson interval (CODEBASE #112).
+Refs:  results.tex; eval_plotter.py (group_success_rate, plot_metric); CODEBASE_AUDIT #112.
+
+================================================================================
+#208  [T3] [THESIS]  Add the code repository links (GitHub + GitLab)
+================================================================================
+Where: thesis front matter / introduction / an appendix or footnote (author's choice).
+What:  The thesis does not mention where the implementation lives. The code is in a GitHub
+       and a GitLab repository.
+Fix:   Add the GitHub + GitLab URLs (author to PROVIDE the exact URLs -- do not guess) as a
+       code-availability footnote/statement.
+Refs:  introduction.tex / abstract.tex / appendix.tex.
+
+================================================================================
+#209  [T2] [THESIS]  Results: resolution-floor sweep -- effect of min free-space leaf size on total boxel count
+================================================================================
+Where: results.tex (Representation compactness, subsec:compactness ~:194; a new
+       subsection + figure). Supplies the evidence for #203 (discussion.tex:60) and
+       justifies the #202 variant framing.
+What:  ADD a results study of how the free-space resolution floor (min_boxel_size)
+       changes the TOTAL boxel count, swept BELOW and ABOVE autocell:
+       <autocell (mbs0.05), autocell, 1.5x autocell, 2x autocell. (User: "what effect
+       does increasing or decreasing have on our boxel count".)
+       DATA already in eval_results/sweep_anytime/aggregated.csv (mean total boxels,
+       baseline=semantic, 300 cells/arm; the 1.5x/2x arms = CODEBASE #100):
+         find-and-stack: 0.05 -> 45.05 | auto(0.09) -> 44.95 | 1.5x(0.135) -> 26.96 | 2x(0.18) -> 26.59
+         find (holding): 0.05 -> 35.03 | auto(0.09) -> 35.07 | 1.5x(0.135) -> 20.39 | 2x(0.18) -> 20.16
+         stack:          0.05 -> 27.79 | auto(0.06) -> 27.79 | 1.5x(0.09) -> 27.79 | 2x(0.12) -> 22.24
+       FINDING (data-confirmed 2026-05-24): going FINER than autocell does NOT add
+       cells -- the greedy convex merge re-absorbs the finer leaves (mbs0.05 sets a
+       strictly finer floor, 0.05 vs auto 0.09 on random-pairs, yet total is
+       unchanged). Going COARSER (>= ~1.5x auto) reduces the count sharply. So the
+       minimum free-space size matters only on the COARSE side; autocell is the
+       natural operating point. (Object + shadow counts are unchanged at every floor
+       -- the floor touches only free space. Stack 1.5x=0.09 still equals auto because
+       stack autocell is already 0.06; the floor bites only at 2x=0.12.)
+Fix:   Add a short results subsection + figure (figure generated by CODEBASE #108):
+       total boxel count vs resolution floor (as a multiple of autocell), per goal.
+       State the finding plainly: finer = no change (merge dominates), coarser = fewer
+       cells. Optionally add a literal mbs0.1 point (CODEBASE #108 runs it). Coordinate
+       with #202/#203 so the three do not repeat each other.
+Refs:  results.tex:194 (subsec:compactness); discussion.tex:60; #202; #203;
+       CODEBASE_AUDIT #108 (plot + mbs0.1 arm), #98/#100/#101 (resolution sweep data +
+       eval-chapter writeup); eval_results/sweep_anytime/aggregated.csv.
+
+--------------------------------------------------------------------------------
+NB (verified, NO issue filed):
+ - discussion.tex:121 "an object can be placed view-blind" (TAMPURA) is TRUE -- verified
+   2026-05-24 from TAMPURA's find_dice code: the placement sampler is uniform x/y + random
+   yaw with no visibility check, and the place action has no visibility precondition. The
+   claim stands; optionally add a one-line basis ("evident from their released placement
+   sampler"). [code-confirmed]
+ - AG ("the closest analogue ... = holding"): ALREADY FIXED at results.tex:209 and
+   discussion.tex:73 (both now say holding / Find Die). See #177.
+ - TAMPURA Table II 57 s is reported "over 20 trials" and the paper does NOT state
+   success-only; ours is success-only -- another apples-to-oranges wrinkle for #177/#190.
 
 ================================================================================
 OPEN ISSUES
@@ -541,12 +836,18 @@ OPEN:
   Figures: #168  (every figure one-by-one; figures agent)
   Figures: #176  (optional real discretization-progression figure; captures archived)
   Methods: #175  (shadow-splitting prose vs #102/#103 code; prose)
-  Results/Disc/Concl: #190 (TAMPURA "offline" model-learning is WRONG -- it's online per-step; T0/NOW; #177's task/number/success part now DONE)
   Intro: #178 (partition omits free space; T1/NOW), #179 (de-hype TAMPURA + cut "first-class" opener)
   Background: #180 (Pi/S(P) notation), #181 (name "contingent planning"), #182 ("Voxel Grids" heading)
-  Related Work: #183 (Bayes3D scaling claim wrong + belief source; T0/NOW), #184 (pan "behaviors"),
+  Related Work: #184 (pan "behaviors"),
                 #185 (Ma paragraph rewrite), #186 (CoCo-TAMP expand), #187 (oracle not "hardcoded constants"; T1/NOW),
                 #188 (SS-Replan false contrast + jargon; T0/NOW), #189 (POD K-literal overgeneralized; T0/NOW)
+  --- batch 2 (sections 4-7 + figures, 2026-05-24) ---
+  Intro/RW: #191 (hero caption target), #192 (Bai=learned policy/TAVP), #193 (move Spatial-Belief section to background; T1), #194 (marketing voice + over-long paragraph)
+  Methods: #195 (optimistic-determinisation/untyped/standard-pattern clarity), #196 (free-space-stages figure), #197 (replan-cycle caption wrong; T1/NOW)
+  Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
+  Results: #199 (task rename find/stack/find-and-stack), #200 (per-call <1s FALSE; T0/NOW), #201 (drop_failed/denominator/known-empty/one-boxel clarity), #202 (mbs0.05 no-op; T1), #207 (success-rate band caption), #209 (resolution-floor vs total-boxel-count study + figure)
+  Discussion: #203 ("more cells" FALSE + characterisation; T0/NOW), #204 (stack ratio mention), #205 (stacking slowdown misattributed; T0/NOW), #206 (section-6 trims + deletions)
+  Conclusion/front: #208 (add GitHub+GitLab code links)
 
 Gating: #141-#156 and #130 done --- all eval-write-up
 content (Results, Discussion, abstract + conclusion closure) is in
