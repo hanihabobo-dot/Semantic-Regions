@@ -327,11 +327,16 @@ user before proceeding:
      Bring-up state VERIFIED ON DISK 2026-05-25 (no longer hypothetical):
      - ../tampura (planner) is FULLY present incl. third_party/symk C++
        source -> needs a py3.11 env, `pip install -e .`, pygraphviz, and a
-       SymK BUILD (third_party/symk/build.py; cmake + g++; Linux/WSL).  No
-       top-level CLI: envs run via the notebook pattern
-       planner.rollout(env, b0, store) (notebooks/grasping_env.ipynb) -> a
-       small driver script is needed (adapt the notebook for env name
-       "find_dice" + a problems/*.json).
+       SymK BUILD (third_party/symk/build.py; cmake + g++; Linux/WSL).
+       RUN ENTRY POINT (corrected 2026-05-25 -- the planner repo has no CLI,
+       but the ENV repo does): tampura_environments has run_planner.py at
+       root + env_configs/find_dice.yml.  README command:
+         python run_planner.py --config=./env_configs/find_dice.yml --vis=1
+                               --global-seed=0 --vis-graph=1
+       (--vis=1 -> PyBullet GUI; --vis-graph needs pygraphviz, set 0 to
+       skip).  find_dice.yml: planner=tampura_policy, max_steps=20,
+       gamma=0.98, from_scratch=true (= ONLINE per-step learning, confirms
+       #190), num_samples=200, num_skeletons=10.  No custom driver needed.
      - ../tampura_environments is a SPARSE checkout: only
        find_dice/{env.py,env_generator.py} + 3 released problems/*.json are
        on disk.  find_dice imports
