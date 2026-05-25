@@ -203,6 +203,20 @@ The cost gap traces back to the size of the representation. \Cref{fig:boxel-coun
     \label{fig:boxel-count-holding}
 \end{figure}
 
+\subsection{Free-space resolution}
+\label{subsec:resolution}
+
+The adaptive partition has one free parameter: the free-space leaf size. The \texttt{semantic} variant auto-sets it to the largest visible object's footprint plus a 1\,cm margin ($\approx$6--9\,cm, scene-dependent). To check whether this heuristic sits at a sensitive operating point, we swept the leaf size both below auto (the \texttt{semantic+mbs0.05} arm, 5\,cm) and coarser than auto, at 1.5$\times$ and 2$\times$ the auto value, on the same 100-seed scenes. \Cref{fig:boxel-resolution} plots the resulting Boxel count against the leaf size, one line per goal.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{boxel_count_vs_resolution.png}
+    \caption{Mean Boxel count vs free-space leaf size, per goal (semantic variant; total and free-space cells). Each point is one resolution arm, placed at its mean effective leaf size. The count is flat at and below the auto-set leaf size and falls 30--40\,\% as the leaf is coarsened above it.}
+    \label{fig:boxel-resolution}
+\end{figure}
+
+The partition shrinks as the leaf is coarsened above auto --- the free-space Boxel count falls by 30--40\,\% from $1\times$ to $2\times$ (holding 35\,$\to$\,20, find-and-tray-stack 45\,$\to$\,27, stack 28\,$\to$\,22), with the grounded-fact count falling in step. Below and at auto the count is flat: forcing the leaf floor to 5\,cm leaves the partition unchanged (and on stack, identical seed-for-seed; \cref{subsec:anytime}), because the auto value already sits at or above the floor. Success rate is unmoved across the whole range: within seed noise on holding (42.3\,\% / 40.3\,\% / 45.7\,\% at $1\times$ / $1.5\times$ / $2\times$) and find-and-tray-stack (39.8\,\% / 35.3\,\% / 35.3\,\%), and identical seed-for-seed on stack (61.3\,\% throughout). Across roughly a fourfold range of leaf sizes ($\approx$5--18\,cm), then, the partition is insensitive to the setting: the auto-set heuristic sits on a flat plateau rather than at a tuned optimum, so coarsening buys a more compact representation at no measured success cost. \Cref{ch:discussion} takes up why the partition is so insensitive.
+
 \subsection{Comparison with TAMPURA}
 \label{subsec:tampura}
 
