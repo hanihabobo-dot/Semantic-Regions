@@ -48,7 +48,7 @@ image (never overwrite), keep old regenerable, keep paths sim/<name>.png.
 Refs: introduction.tex; methods.tex; background.tex; results.tex; discussion.tex; thesis/graphics/sim/.
 
 ================================================================================
-#175  [T2] [THESIS]  methods.tex shadow-splitting text vs code (CODEBASE #102/#103)
+#175  [DONE 2026-05-25] [T2]  methods.tex shadow-splitting text vs code (CODEBASE #102/#103)
 ================================================================================
 CODEBASE #102 made the per-occluder depth split CONDITIONAL (a non-intersecting occluder
 casts ONE shadow Boxel; only a shadow overlapping another region splits into near+far +
@@ -412,7 +412,6 @@ OPEN ISSUES
 OPEN:
   Figures: #168  (every figure one-by-one; figures agent)
   Figures: #176  (discretization-progression figure + free-space split->merge stages, merged #196)
-  Methods: #175  (shadow-splitting prose vs #102/#103 code)
   Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief to background; T1)
   Methods: #195 (optimistic-determinisation/untyped/standard-pattern clarity), #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
@@ -422,7 +421,7 @@ OPEN:
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194. MERGED: #192->#187, #196->#176.
+DONE: #175, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188, #189, #190, #194. MERGED: #192->#187, #196->#176.
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
