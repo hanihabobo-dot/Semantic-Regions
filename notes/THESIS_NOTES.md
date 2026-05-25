@@ -657,12 +657,16 @@ the citable benchmark.
 
 ### 21.3 Why TAMPURA's planner is faster — algorithmic, not hardware
 
-TAMPURA's planner pays its geometry-sampling cost **offline** in a
-model-learning phase, then plans cheaply over the resulting sparse
-MDP.  PDDLStream (this thesis) interleaves stream sampling with
-search on every plan call.
+Both planners sample geometry **online**.  TAMPURA learns a
+**probabilistic** sparse MDP at planning time: at every control step it
+(re)samples action outcomes to rebuild the MDP from the current belief
+(`from_scratch=true` by default), then solves it with LAO* for a
+risk-aware policy.  PDDLStream (this thesis) interleaves stream sampling
+with deterministic classical search on every plan call --- no probability
+model and no MDP solve.  The cost gap is this machinery difference, not an
+offline-vs-online split.
 
-Direct quote on the offline learning phase:
+Direct quote on the model-learning phase (run online, per step):
 
 > "TAMPURA's approach to constructing ℬ̄_sparse is to repeatedly
 >  construct optimistic, deterministic plans which begin in abstract
@@ -684,14 +688,17 @@ outer probabilistic plan (LAO*):
 
 | | TAMPURA | Semantic Boxels (this thesis) |
 | --- | --- | --- |
-| Geometry sampling | Offline, in `Learn-Model` (Alg. 2): J simulations per controller, builds a sparse MDP before execution | Online, every PDDLStream plan call: streams sample inside the planner loop |
+| Outcome / geometry sampling | Online, per control step: `get_action` (re)builds a probabilistic sparse MDP from the current belief, then LAO*-solves it (`from_scratch=true`) | Online, every PDDLStream plan call: streams sample inside the planner loop |
 | Plan-time engine | LAO* on the *already-learned* sparse MDP — the abstraction is finite and small | PDDLStream adaptive search interleaved with stream sampling |
 | Determinized inner loop | FastDownward inside Learn-Model, called K times per learning iteration | FastDownward inside PDDLStream, called every replan |
 | Cross-episode model reuse | "No mention" of cross-episode caching in the paper | Same — `_build_init` re-emits all static facts every call (audit #50 candidate fix) |
 
-The asymmetry is *when the geometry cost is paid*, not the search
-engine itself.  TAMPURA front-loads the sampling cost; PDDLStream pays
-it per replan.
+The asymmetry is the *planning machinery* --- TAMPURA learns and
+LAO*-solves a probabilistic sparse MDP each step; we run deterministic
+classical planning with replanning --- not the symbolic search engine,
+and not an offline-vs-online split (both sample online; verified
+2026-05-24 against `policies/policy.py`, `policies/tampura_policy.py`,
+and `config/default.yml`).
 
 **Implementation note (verified 2026-05-21 in the cloned repo).** The
 paper's Algorithm 2 names `FastDownward`, but the *released code* uses
@@ -745,15 +752,36 @@ TAMPURA does not discretise placement.
 2. **Anytime caveat**: when reporting our planner times against the
    21–129 s TAMPURA range, clarify whether either side terminated
    anytime-style or ran to optimal completion.
-3. **Architectural comparison is the right axis**: the speed gap is
-   "online stream sampling vs offline `Learn-Model`," not Xeon vs
-   Ryzen.  Frame the discussion this way in the eval chapter.
+3. **Architectural comparison is the right axis**: the speed gap is the
+   planning machinery --- probabilistic learned-MDP + LAO* (TAMPURA) vs
+   deterministic knowledge-literal planning + replanning (ours), both
+   sampling online --- not Xeon vs Ryzen.  Frame the discussion this way
+   in the eval chapter.
 4. **No cross-episode caching in either system**: TAMPURA does not
    cache its learned MDP across initial-belief problems (per § 21.3);
    our `_build_init` does not cache static atoms across replans.
    Either system would benefit from cross-replan caching — audit
-   #50(a)/(c) and #62(c) propose this fix on our side, mirroring
-   TAMPURA's offline-then-online split.
+   #50(a)/(c) and #62(c) propose this fix on our side; TAMPURA likewise
+   re-learns its MDP from scratch each step rather than reusing it.
+5. **The reported comparison: `holding`, planning-time like-for-like
+   (audit #177, 2026-05-24).** The figure, abstract, results, discussion,
+   and conclusion compare our `holding` task (the `find_dice` analogue:
+   find a hidden object and pick it up) — NOT `find-and-tray-stack`,
+   which adds trays + stacking and is strictly harder. The like-for-like
+   time is our per-episode PLANNING time (`total_planning_time_s`,
+   holding-semantic mean 7.78 s, success-only) against TAMPURA's
+   planning-only 57 ± 38 s; our wall-clock (mean 13.7 s) is reported only
+   as full-episode context, as it also includes PyBullet execution +
+   replanning. Reliability runs the other way: holding-semantic success
+   is 42 % (127/300) vs TAMPURA's ≥ 63 % (inferred from the 0.63 ± 0.30
+   discounted return, Table I, γ=0.98, binary terminal reward); and
+   `find_dice`'s goal is marginally harder (holding AND at-home; ours is
+   holding only). Conclusion: cheaper to plan, less reliable, slightly
+   simpler task — NO speed/quality winner. The earlier "14.0 s vs 57 s,
+   ~4× faster on find-and-tray-stack" framing was a category error
+   (wall-clock vs planning) on the wrong task; removed. Architectural
+   framing is the planning-machinery split of point 3 (both sample
+   online), not the older "offline Learn-Model" wording.
 
 **References**: `CODEBASE_AUDIT.txt` #50, #62, #66 (Plan A landed
 2026-05-09 in commit `ce24e84`; Plan C pending on

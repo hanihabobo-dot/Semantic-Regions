@@ -994,70 +994,90 @@ def plot_tampura_wallclock_comparison(
     title: str,
     out_path: Path,
 ) -> Optional[Path]:
-    """Bar chart: our find-and-tray-stack wall_clock_s (median + IQR
-    over seeds, success-only) vs TAMPURA Partial Observability
-    (57 ± 38 from arXiv:2403.10454 Table II).
+    """Bar chart: our holding-task per-episode times vs TAMPURA's
+    Partial Observability planning time (57 ± 38 from
+    arXiv:2403.10454 Table II).
 
-    Audit #73 TIER C plot 9.  Three bars: semantic boxels, uniform
-    baseline, TAMPURA Partial Observability.  Our numbers use
-    median + IQR (robust to long-tail outliers visible in plot 8);
-    TAMPURA reports mean ± std.  Hardware-parity caveat from
-    THESIS_NOTES §21.1 lives in the figure caption.
+    Audit #177 (was #73 TIER C plot 9).  holding is the closest
+    analogue to TAMPURA's hidden-object Find Die task (find a hidden
+    object, pick it up); find-and-tray-stack is strictly harder and was
+    the wrong comparison.  Three bars, semantic variant only: our
+    wall-clock (full episode incl. PyBullet + replanning) and our
+    planning time (total_planning_time_s -- the like-for-like span vs
+    TAMPURA's planning-only number), against TAMPURA.  All bars are
+    mean ± std; the lower whisker is clipped at 0 because our times are
+    right-skewed (mean > median; medians reported in the caption).
+    Reliability runs the other way (ours ~42 %, TAMPURA >= 63 %); see
+    THESIS_NOTES §21 for the architectural framing.
     """
-    # TAMPURA Partial Observability — arXiv:2403.10454 Table II,
-    # 20 trials, mean ± std.  Hardcoded constants per audit spec;
-    # update if the paper revises.
+    # TAMPURA Partial Observability — arXiv:2403.10454 Table II
+    # (planning time, mean ± std, 20 trials).  Success >= 63 % is
+    # inferred from the 0.63 ± 0.30 discounted return (Table I,
+    # gamma=0.98, binary terminal reward).  Hardcoded; update if the
+    # paper revises.
     TAMPURA_MEAN = 57.0
     TAMPURA_STD = 38.0
     TAMPURA_N = 20
 
-    our_data: Dict[str, List[float]] = defaultdict(list)
+    # Audit #177 — holding is the find_dice analogue (find a hidden
+    # object, pick it up); find-and-tray-stack was the wrong, harder
+    # task.  Collect both spans for the semantic variant: wall-clock
+    # (full episode) and planning time (like-for-like vs TAMPURA's
+    # planning-only number), success-only.
+    wall: List[float] = []
+    plan: List[float] = []
+    n_cells = 0
+    n_success = 0
     for r in rows:
-        if r.get("goal") != "find-and-tray-stack":
+        if r.get("goal") != "holding":
             continue
+        if (r.get("_variant") or _row_variant(r)) != "semantic":
+            continue
+        n_cells += 1
         if not r.get("success"):
             continue
+        n_success += 1
         wc = r.get("wall_clock_s")
-        if wc in (None, ""):
-            continue
+        pt = r.get("total_planning_time_s")
         try:
-            variant = r.get("_variant") or _row_variant(r)
-            our_data[variant].append(float(wc))
+            if wc not in (None, ""):
+                wall.append(float(wc))
+            if pt not in (None, ""):
+                plan.append(float(pt))
         except (TypeError, ValueError):
             continue
 
-    if not any(our_data.values()):
-        print(f"[plotter] no successful find-and-tray-stack cells "
+    if not wall or not plan:
+        print(f"[plotter] no successful holding semantic cells "
               f"for {title}")
         return None
 
-    bars = []  # (label, central, lo_err, hi_err, n, color)
-    for variant in sorted(our_data.keys()):
-        vs = sorted(our_data[variant])
-        n = len(vs)
-        if n == 0:
-            continue
-        med = median(vs)
-        if n >= 4:
-            q1, _, q3 = quantiles(vs, n=4)
-        else:
-            # n < 4: not enough data for quartiles; fall back to
-            # min/max range so the bar still gives a magnitude clue.
-            q1, q3 = vs[0], vs[-1]
-        bars.append((f"Ours\n{variant}", med, med - q1, q3 - med, n,
-                     _VARIANT_COLOUR.get(variant, "#1f77b4")))
-    bars.append(("TAMPURA\nPartial Obs.",
-                 TAMPURA_MEAN, TAMPURA_STD, TAMPURA_STD, TAMPURA_N,
-                 "#d62728"))
+    succ_pct = 100.0 * n_success / n_cells if n_cells else 0.0
+    wm, ws, wmed = mean(wall), stdev(wall), median(wall)
+    pm, ps, pmed = mean(plan), stdev(plan), median(plan)
+
+    # (label, mean, lo_err, hi_err, n, color); lower error clipped to
+    # the bar height so the right-skewed std does not draw below zero.
+    bars = [
+        ("Ours: wall-clock\n(holding, semantic)",
+         wm, min(ws, wm), ws, len(wall), "#1f77b4"),
+        ("Ours: planning\n(holding, semantic)",
+         pm, min(ps, pm), ps, len(plan), "#1f77b4"),
+        ("TAMPURA: planning\n(Partial Obs.)",
+         TAMPURA_MEAN, min(TAMPURA_STD, TAMPURA_MEAN), TAMPURA_STD,
+         TAMPURA_N, "#d62728"),
+    ]
 
     if not HAVE_MPL:
         print(f"\n=== {title} (matplotlib not available) ===")
         for lab, c, lo, hi, n, _col in bars:
             print(f"  {lab.replace(chr(10), ' ')}: "
                   f"{c:.1f} (-{lo:.1f}/+{hi:.1f}) n={n}")
+        print(f"  success: ours {succ_pct:.0f}% (n={n_cells}); "
+              f"TAMPURA >= 63% (Table I)")
         return None
 
-    fig, ax = plt.subplots(figsize=(6.5, 5))
+    fig, ax = plt.subplots(figsize=(8, 5))
     xs = list(range(len(bars)))
     centrals = [b[1] for b in bars]
     yerr_lo = [b[2] for b in bars]
@@ -1070,20 +1090,22 @@ def plot_tampura_wallclock_comparison(
                 ha="center", va="bottom", fontsize=9)
     ax.set_xticks(xs)
     ax.set_xticklabels([b[0] for b in bars])
-    ax.set_ylabel("wall clock per episode (s)")
+    ax.set_ylabel("time per episode (s)")
     ax.set_title(title)
-    # Audit #94 cosmetic — set_ylim was bottom=0 only, so the
-    # "57.0s\n(n=N)" annotations placed at (c + hi) clipped against
-    # the matplotlib-auto top.  Pin the top to 25% above the tallest
-    # error-bar reach so the annotation has guaranteed headroom.
+    # Audit #94 cosmetic — pin the top to 25% above the tallest
+    # error-bar reach so the per-bar annotation has guaranteed headroom
+    # (set_ylim bottom=0 alone let it clip the matplotlib-auto top).
     _max_top = max(c + hi for _, c, _, hi, _, _ in bars)
     ax.set_ylim(bottom=0, top=_max_top * 1.25)
     ax.grid(True, axis="y", alpha=0.3)
+    # Audit #177 — drop the 20-core hardware caveat (both planners are
+    # single-threaded; THESIS_NOTES §21.1).  State the span mismatch and
+    # the success gap instead.
     fig.text(0.5, 0.02,
-             "Ours: median + IQR over seeds, success-only.  "
-             "TAMPURA: mean ± std (Table II, 20 trials).\n"
-             "Hardware caveat: TAMPURA 20-core Xeon Gold 6248; "
-             "ours 8-core consumer CPU (THESIS_NOTES §21.1).",
+             f"Ours: mean ± std, success-only (right-skewed; medians "
+             f"{wmed:.1f}/{pmed:.1f}s).  TAMPURA: mean ± std (Table II).\n"
+             f"Only planning is like-for-like with TAMPURA's planning-only "
+             f"time.  Success: ours {succ_pct:.0f}%, TAMPURA ≥ 63%.",
              ha="center", fontsize=8, style="italic")
     fig.tight_layout(rect=[0, 0.10, 1, 1])
     fig.savefig(out_path, dpi=120)
@@ -1832,12 +1854,12 @@ def main(argv=None) -> int:
             title="Replan-count distribution by (goal, variant)",
             out_path=out_dir / "plan_count_distribution.png",
         )
-        # Audit #73 TIER C plot 9: TAMPURA wall-clock comparison
-        # for find-and-tray-stack.  Sweep-level; no-op if the sweep
-        # has no successful find-and-tray-stack cells.
+        # Audit #177 (was #73 TIER C plot 9): TAMPURA comparison on
+        # holding (the Find Die analogue).  Sweep-level; no-op if the
+        # sweep has no successful holding semantic cells.
         plot_tampura_wallclock_comparison(
             all_rows,
-            title="TAMPURA wall-clock comparison (find-and-tray-stack)",
+            title="TAMPURA comparison (holding)",
             out_path=out_dir / "tampura_wallclock_comparison.png",
         )
         # Audit #94 (#77 step 4): IPC-style anytime curve.  No-op if
@@ -2049,12 +2071,12 @@ def main(argv=None) -> int:
         title="Replan-count distribution by (goal, variant)",
         out_path=out_dir / "plan_count_distribution.png",
     )
-    # Audit #73 TIER C plot 9: TAMPURA wall-clock comparison
-    # for find-and-tray-stack.  Sweep-level; no-op if the sweep
-    # has no successful find-and-tray-stack cells.
+    # Audit #177 (was #73 TIER C plot 9): TAMPURA comparison on
+    # holding (the Find Die analogue).  Sweep-level; no-op if the
+    # sweep has no successful holding semantic cells.
     plot_tampura_wallclock_comparison(
         all_rows,
-        title="TAMPURA wall-clock comparison (find-and-tray-stack)",
+        title="TAMPURA comparison (holding)",
         out_path=out_dir / "tampura_wallclock_comparison.png",
     )
     # Audit #94 (#77 step 4): IPC-style anytime curve.  No-op if the
