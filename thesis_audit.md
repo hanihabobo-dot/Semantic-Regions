@@ -224,7 +224,7 @@ prose still says "LAO*"; (b) Table II times include controller execution, so #17
 planning-time framing was itself wrong (wall-clock is the closer analogue).
 
 ================================================================================
-#191  [T3] [THESIS]  Intro hero caption: identify the target object
+#191  [DONE 2026-05-25] [T3]  Intro hero caption: identify the target object
 ================================================================================
 introduction.tex:19 (fig:intro-hero). Caption never says which object is the target. Fix: add
 "the target is the cyan cube behind the green cube"; verify vs image (#168) first.
@@ -429,13 +429,13 @@ OPEN:
   Figures: #176  (discretization-progression figure + free-space split->merge stages, merged #196)
   Background: #181 (POD vs contingent-planning naming -- reverted; reconsider, don't equate them)
   Methods: #175 (shadow-split #102/#103 -- only "by depth" dropped; conditional/surface-resting remain)
-  Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief to background; T1)
+  Intro/RW: #193 (move Spatial-Belief to background; T1)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
   Results: #199 (task rename), #209 (resolution-floor study + figure)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #194, #195, #197, #200, #201, #202, #203, #204, #205, #206, #207. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #200, #201, #202, #203, #204, #205, #206, #207. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
