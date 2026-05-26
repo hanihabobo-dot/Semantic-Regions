@@ -130,20 +130,13 @@ Information gathering is realized by a single \texttt{sense} action, which check
     )
 )
 \end{lstlisting}
-The action is \emph{optimistic}: its effect unconditionally asserts that the object is found in the sensed region. An earlier design used conditional effects that branched on a \texttt{found}/\texttt{not\_found} observation, which would let the planner build a multi-step search (``sense $A$; if empty, sense $B$'') within one plan. PDDLStream and its classical backend do not support such contingent planning, so the implemented domain commits to the optimistic outcome and relies on \emph{reactive replanning}: when execution reveals that the target is not in the sensed region, the execution loop updates the belief and replans. An empty region is recorded as clear; a region that instead turns out to hold a \emph{non-target} object has that object---and the new region it occludes---added to the partition, re-boxelizing the workspace before the next plan so the newly revealed occluder enters the belief rather than being discarded. With $N$ candidate regions this converges in at most $N$ replanning cycles and is functionally equivalent to a conditional plan executed in sequence. \Cref{fig:sense-action} shows the action targeting a shadow region in the simulator, and \cref{fig:replan-cycle} the execution-time moment when the optimistic assumption is rejected and a replan is triggered.
+The action is \emph{optimistic}: its effect unconditionally asserts that the object is found in the sensed region. An earlier design used conditional effects that branched on a \texttt{found}/\texttt{not\_found} observation, which would let the planner build a multi-step search (``sense $A$; if empty, sense $B$'') within one plan. PDDLStream and its classical backend do not support such contingent planning, so the implemented domain commits to the optimistic outcome and relies on \emph{reactive replanning}: when execution reveals that the target is not in the sensed region, the execution loop updates the belief and replans. An empty region is recorded as clear; a region that instead turns out to hold a \emph{non-target} object has that object---and the new region it occludes---added to the partition, re-boxelizing the workspace before the next plan so the newly revealed occluder enters the belief rather than being discarded. With $N$ candidate regions this converges in at most $N$ replanning cycles and is functionally equivalent to a conditional plan executed in sequence. \Cref{fig:sense-action} shows the action targeting a shadow region in the simulator.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.85\textwidth]{sim/sense_targeting_shadow.png}
     \caption{The \texttt{sense} action targeting a shadow region in PyBullet. The arm has been moved to a sensing configuration over a labelled shadow; the in-simulator overlay labels each object and its shadow region. This is the configuration in which the \texttt{sense} action's \texttt{(view\_clear ?region)} precondition is checked and its optimistic \texttt{(obj\_at\_boxel ?o ?region)} effect is asserted.}
     \label{fig:sense-action}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.85\textwidth]{sim/replan_cycle.png}
-    \caption{The reactive-replan trigger. The action log reads ``sense shadow\_of\_purple\_object --- target not here'': execution has rejected the optimistic add-effect, so the loop marks that shadow empty in the belief and replans, now searching only the remaining shadows.}
-    \label{fig:replan-cycle}
 \end{figure}
 
 One bounded exception to this observation-driven belief update concerns regions that cannot be observed at all: if the line of sight to a shadow remains blocked after a fixed number of sensing attempts, that shadow is marked empty without ever being directly observed. This keeps the planner progressing when a region is effectively unreachable, but it is unsound---the region could still hold the target. A sound treatment, which would re-ground the view-blocking facts so the planner first clears the obstruction, is left to future work.
