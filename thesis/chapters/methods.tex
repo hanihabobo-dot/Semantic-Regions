@@ -16,8 +16,8 @@ Our methodology links abstract belief representation to continuous geometric rea
 We build the Boxel abstraction through a process of \textit{adaptive semantic discretization}. This process dynamically generates a set of Semantic Boxels ($\mathcal{BX}_{\text{set}}$) by partitioning the workspace based on detected objects and the occlusions they create. It runs as a Python stage before each call to the planner---and is re-run between actions as the scene changes---rather than as a PDDLStream procedure. \Cref{fig:boxelization} illustrates the process.
 \begin{figure}[H]
     \centering % Centers the image
-    \includegraphics[width=0.65\textwidth]{Boxelization.png}
-    \caption{Adaptive Semantic Discretization Process. (a) Initial scene with robot viewpoint and objects. (b) Objects are bounded by dedicated Boxels. (c) Occlusion regions are calculated and defined as new Boxels. (d) Remaining free space is recursively partitioned into Free Space Boxels.}
+    \includegraphics[width=\textwidth]{boxelization_stages.png}
+    \caption{Adaptive Semantic Discretization Process. (a) Initial scene with robot viewpoint and detected objects. (b) Each object is bounded by a dedicated object Boxel. (c) The region each object occludes from the viewpoint becomes an occlusion (shadow) Boxel; dashed lines show the line of sight. (d)--(f) The remaining free space is partitioned: starting from a single cell spanning the whole workspace (d), cells overlapping any object or occlusion are recursively split (e), and the resulting free cells are greedily merged across aligned faces into larger convex Free Space Boxels (f).}
     \label{fig:boxelization}
 \end{figure}
 
