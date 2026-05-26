@@ -426,6 +426,17 @@ labels (e.g. "[4] introduces ..."). Mechanical low-priority polish once T0/T1 co
 watch sentences whose grammar depends on the author name as subject.
 Refs: related-work.tex (document-wide citation style).
 
+================================================================================
+#211  [DONE 2026-05-26] [T1]  Abstract repeats #178's "only" (omits free-space Boxels)
+================================================================================
+abstract.tex:6 said "...cuboids that discretise only the objects and the regions they
+occlude" -- the same false "only" that #178 fixed in the intro, but the abstract was missed.
+It drops the Free Space Boxels (methods.tex octree + greedy convex merge; the partition has
+object, occlusion AND free-space cells). Fix: "...concentrate resolution on the objects and
+the regions they occlude, covering the free space with a few coarse cells", matching
+introduction.tex:26,33.
+Refs: abstract.tex:5-7; #178; introduction.tex:26,33; methods.tex.
+
 --------------------------------------------------------------------------------
 NB (verified, NO issue filed):
  - discussion.tex:121 "an object can be placed view-blind" (TAMPURA) is TRUE — verified from
@@ -444,7 +455,7 @@ OPEN:
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
