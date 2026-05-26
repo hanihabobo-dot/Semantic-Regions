@@ -200,22 +200,27 @@ def _center_inside(rect, obj):
     return rx <= obj[0] <= rx + rw and ry <= obj[1] <= ry + rh
 
 
-def compute_shadows():
+def compute_shadows(objects=None):
     """All objects' shadow Boxels, swept from the camera then split around the
     other objects (the obstacle pass of shadow_calculator). An object only
     splits a shadow when its centre actually lies inside that shadow's swept
     AABB -- the obstacle pass is meant to carve genuine occluders, not objects
-    the axis-aligned AABB merely grazes at a corner."""
+    the axis-aligned AABB merely grazes at a corner.
+
+    `objects` defaults to the module scene; the 3-D figure passes its own
+    (smaller) object list so it can reuse this exact geometry."""
+    objs = OBJECTS if objects is None else objects
+    obj_rects = [_rect_of(o) for o in objs]
     shadows = []
-    for i, obj in enumerate(OBJECTS):
+    for i, obj in enumerate(objs):
         rect, shadow_dir = _swept_shadow(obj)
         active = [rect]
-        for j in range(len(OBJECTS)):
-            if j == i or not _center_inside(rect, OBJECTS[j]):
+        for j in range(len(objs)):
+            if j == i or not _center_inside(rect, objs[j]):
                 continue
             nxt = []
             for sh in active:
-                nxt.extend(_subtract(sh, OBJ_RECTS[j], shadow_dir))
+                nxt.extend(_subtract(sh, obj_rects[j], shadow_dir))
             active = nxt
         shadows.extend(active)
     return shadows
