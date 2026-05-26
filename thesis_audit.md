@@ -62,7 +62,11 @@ Cross-check the shadow figures in #168 (they show the two-slab case).
 Refs: methods.tex; CODEBASE_AUDIT.txt #102 #103; #168.
 
 ================================================================================
-#176  [T3] [THESIS]  Discretization-progression figure (PyBullet captures) + free-space split->merge stages (merged #196)
+#176  [DONE 2026-05-25] [T3]  Discretization-progression figure (PyBullet captures) + free-space split->merge stages (merged #196)
+NOTE 2026-05-25: resolved by DROPPING (audit option b) -- no new figure added. The schematic
+fig:boxelization (a)-(d) already shows the full build incl. free-space Boxels (green, panel d) with
+a legend, so a PyBullet-frame progression / free-space split->merge figure is redundant. Covers
+merged #196. Real captures can still be added later if desired (raw_captures/ retained).
 ================================================================================
 2026-05-24 capture session grabbed PyBullet GUI frames of free-space discretization
 building cell-by-cell (GUI required — offscreen path can't capture debug-draw). UNIFORM
@@ -431,7 +435,6 @@ OPEN ISSUES
 ================================================================================
 OPEN:
   Figures: #168  (every figure one-by-one; figures agent)
-  Figures: #176  (discretization-progression figure + free-space split->merge stages, merged #196)
   Background: #181 (POD vs contingent-planning naming -- reverted; reconsider, don't equate them)
   Methods: #175 (shadow-split #102/#103 -- only "by depth" dropped; conditional/surface-resting remain)
   Intro/RW: #193 (move Spatial-Belief to background; T1)
@@ -439,7 +442,7 @@ OPEN:
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
