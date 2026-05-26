@@ -63,10 +63,12 @@ Refs: methods.tex; CODEBASE_AUDIT.txt #102 #103; #168.
 
 ================================================================================
 #176  [DONE 2026-05-25] [T3]  Discretization-progression figure (PyBullet captures) + free-space split->merge stages (merged #196)
-NOTE 2026-05-25: resolved by DROPPING (audit option b) -- no new figure added. The schematic
-fig:boxelization (a)-(d) already shows the full build incl. free-space Boxels (green, panel d) with
-a legend, so a PyBullet-frame progression / free-space split->merge figure is redundant. Covers
-merged #196. Real captures can still be added later if desired (raw_captures/ retained).
+NOTE 2026-05-25: resolved by REGENERATING the schematic (author wanted the free-space generation
+steps shown, not dropped). New fig:boxelization is a 6-panel matplotlib figure
+(thesis/graphics/boxelization_stages.png, generator tools/render_boxelization_schematic.py): (a)
+scene, (b) object bounding, (c) occlusion subdivision, and the three free-space stages (d) whole
+workspace -> (e) recursive quad-tree split -> (f) greedy convex merge. Covers merged #196 (the
+split->merge stages). Old hand-made Boxelization.png kept (not overwritten).
 ================================================================================
 2026-05-24 capture session grabbed PyBullet GUI frames of free-space discretization
 building cell-by-cell (GUI required — offscreen path can't capture debug-draw). UNIFORM
