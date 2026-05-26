@@ -25,11 +25,12 @@ from __future__ import annotations
 
 import os
 
+import numpy as np
 import matplotlib
 matplotlib.use("Agg")  # headless: just save a PNG
 import matplotlib.pyplot as plt
 from matplotlib import font_manager as _fm
-from matplotlib.patches import FancyBboxPatch, Rectangle, FancyArrowPatch
+from matplotlib.patches import FancyBboxPatch, Rectangle
 from matplotlib.lines import Line2D
 
 # Camera emoji for the robot viewpoint. matplotlib/Agg renders it as a clean
@@ -77,13 +78,9 @@ OBJECTS = [
     (3.3, 1.8, 1.0, 0.7, "obj3"),
     (7.3, 2.8, 1.0, 0.8, "obj4"),
 ]
-# occlusion Boxels (shadows) beyond each object from the viewpoint: (cx,cy,w,h)
-OCCLUSIONS = [
-    (4.5, 5.4, 1.7, 1.4),
-    (7.5, 6.8, 1.7, 1.3),
-    (4.4, 2.4, 1.8, 1.2),
-    (8.3, 3.4, 1.5, 1.2),
-]
+# the workspace = the "table" the occlusion rays terminate on (shadow_calculator
+# clamps every ray hit to the table bounds).
+BOUNDS = (0.0, 0.0, W, H)
 # the hidden target: sits inside obj1's occlusion (in its shadow), so the camera
 # cannot see it -- the robot must reason about the shadow to find it. (cx, cy, s)
 HIDDEN = (4.8, 5.6, 0.6)
@@ -100,8 +97,147 @@ def _intersects(cell, rect):
     return not (cx + cw <= rx or rx + rw <= cx or cy + ch <= ry or ry + rh <= cy)
 
 
-OCC_RECTS = [_rect_of(o) for o in OCCLUSIONS]
 OBJ_RECTS = [_rect_of(o) for o in OBJECTS]
+
+
+# ----------------------------------------------- occlusion (shadow) geometry
+# Faithful 2-D port of shadow_calculator.ShadowCalculator.calculate_shadow_boxel
+# (top-down view): from the camera, rays graze each object's far ("back")
+# corners and continue to the workspace boundary; the shadow Boxel is the AABB
+# of {object box U ray-hit points} with its near face clipped to the object's
+# back face, then split around any OTHER object it sweeps over (the slab
+# directly behind that object is dropped as it is occluded twice over). This
+# replaces the hand-placed rectangles the schematic used before.
+def _ray_box_exit(origin, direction, bounds):
+    """Smallest t>0 at which origin + t*direction leaves the bounds box."""
+    x0, y0, x1, y1 = bounds
+    ts = []
+    if direction[0] > 1e-12:
+        ts.append((x1 - origin[0]) / direction[0])
+    elif direction[0] < -1e-12:
+        ts.append((x0 - origin[0]) / direction[0])
+    if direction[1] > 1e-12:
+        ts.append((y1 - origin[1]) / direction[1])
+    elif direction[1] < -1e-12:
+        ts.append((y0 - origin[1]) / direction[1])
+    ts = [t for t in ts if t > 0]
+    return min(ts) if ts else 0.0
+
+
+def _corners(cx, cy, w, h):
+    return np.array([[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2],
+                     [cx - w / 2, cy + h / 2], [cx + w / 2, cy + h / 2]])
+
+
+def _swept_shadow(obj):
+    """One object's swept shadow AABB (x, y, w, h) plus its shadow direction,
+    before any obstacle splitting."""
+    cx, cy, w, h, _ = obj
+    center = np.array([cx, cy], float)
+    view = np.array(VIEW, float)
+    cam_dir = center - view
+    cam_dir /= np.linalg.norm(cam_dir)
+    corners = _corners(cx, cy, w, h)
+    back = [c for c in corners if np.dot(c - center, cam_dir) > 0] or list(corners)
+    hits = []
+    for corner in back:
+        d = corner - view
+        d /= np.linalg.norm(d)
+        hit = corner + d * _ray_box_exit(corner, d, BOUNDS)
+        hit[0] = min(max(hit[0], BOUNDS[0]), BOUNDS[2])
+        hit[1] = min(max(hit[1], BOUNDS[1]), BOUNDS[3])
+        hits.append(hit)
+    hits = np.array(hits)
+    o_min = center - np.array([w / 2, h / 2])
+    o_max = center + np.array([w / 2, h / 2])
+    s_min = np.minimum(o_min, hits.min(axis=0))
+    s_max = np.maximum(o_max, hits.max(axis=0))
+    shadow_dir = hits.mean(axis=0) - center
+    dom = int(np.argmax(np.abs(shadow_dir)))
+    if shadow_dir[dom] > 0:
+        s_min[dom] = max(s_min[dom], o_max[dom])
+    else:
+        s_max[dom] = min(s_max[dom], o_min[dom])
+    s_min[0] = max(s_min[0], BOUNDS[0]); s_min[1] = max(s_min[1], BOUNDS[1])
+    s_max[0] = min(s_max[0], BOUNDS[2]); s_max[1] = min(s_max[1], BOUNDS[3])
+    return (s_min[0], s_min[1], s_max[0] - s_min[0], s_max[1] - s_min[1]), shadow_dir
+
+
+def _subtract(shadow, obstacle, direction):
+    """2-D port of _subtract_aabb + _is_downstream: carve `obstacle` out of
+    `shadow`, keep the before/around fragments, drop the slab behind it."""
+    s_min = [shadow[0], shadow[1]]
+    s_max = [shadow[0] + shadow[2], shadow[1] + shadow[3]]
+    o_min = [obstacle[0], obstacle[1]]
+    o_max = [obstacle[0] + obstacle[2], obstacle[1] + obstacle[3]]
+    if (s_min[0] >= o_max[0] or s_max[0] <= o_min[0] or
+            s_min[1] >= o_max[1] or s_max[1] <= o_min[1]):
+        return [shadow]
+    frags = []
+    if s_min[0] < o_min[0]:
+        frags.append((s_min[:], [o_min[0], s_max[1]])); s_min[0] = o_min[0]
+    if s_max[0] > o_max[0]:
+        frags.append(([o_max[0], s_min[1]], s_max[:])); s_max[0] = o_max[0]
+    if s_min[1] < o_min[1]:
+        frags.append((s_min[:], [s_max[0], o_min[1]])); s_min[1] = o_min[1]
+    if s_max[1] > o_max[1]:
+        frags.append(([s_min[0], o_max[1]], s_max[:])); s_max[1] = o_max[1]
+    dom = 0 if abs(direction[0]) >= abs(direction[1]) else 1
+    out = []
+    for mn, mx in frags:
+        if mx[0] - mn[0] <= 1e-6 or mx[1] - mn[1] <= 1e-6:
+            continue
+        if direction[dom] > 0 and mn[dom] >= o_max[dom] - 1e-4:
+            continue
+        if direction[dom] <= 0 and mx[dom] <= o_min[dom] + 1e-4:
+            continue
+        out.append((mn[0], mn[1], mx[0] - mn[0], mx[1] - mn[1]))
+    return out
+
+
+def _center_inside(rect, obj):
+    rx, ry, rw, rh = rect
+    return rx <= obj[0] <= rx + rw and ry <= obj[1] <= ry + rh
+
+
+def compute_shadows():
+    """All objects' shadow Boxels, swept from the camera then split around the
+    other objects (the obstacle pass of shadow_calculator). An object only
+    splits a shadow when its centre actually lies inside that shadow's swept
+    AABB -- the obstacle pass is meant to carve genuine occluders, not objects
+    the axis-aligned AABB merely grazes at a corner."""
+    shadows = []
+    for i, obj in enumerate(OBJECTS):
+        rect, shadow_dir = _swept_shadow(obj)
+        active = [rect]
+        for j in range(len(OBJECTS)):
+            if j == i or not _center_inside(rect, OBJECTS[j]):
+                continue
+            nxt = []
+            for sh in active:
+                nxt.extend(_subtract(sh, OBJ_RECTS[j], shadow_dir))
+            active = nxt
+        shadows.extend(active)
+    return shadows
+
+
+def silhouette_rays(obj):
+    """The two camera rays grazing the object's silhouette, continued past it to
+    the workspace boundary -- the line of sight drawn in panel (c)."""
+    cx, cy, w, h, _ = obj
+    view = np.array(VIEW, float)
+    corners = _corners(cx, cy, w, h)
+    angles = [np.arctan2(c[1] - view[1], c[0] - view[0]) for c in corners]
+    rays = []
+    for idx in (int(np.argmin(angles)), int(np.argmax(angles))):
+        d = corners[idx] - view
+        d /= np.linalg.norm(d)
+        end = view + d * _ray_box_exit(view, d, BOUNDS)
+        rays.append(((view[0], view[1]), (end[0], end[1])))
+    return rays
+
+
+OCC_RECTS = compute_shadows()
 CONTENT = OCC_RECTS + OBJ_RECTS
 
 
@@ -200,14 +336,14 @@ def _objboxels(ax):
 def _occlusions(ax):
     for rx, ry, rw, rh in OCC_RECTS:
         ax.add_patch(Rectangle((rx, ry), rw, rh, facecolor=C_OCC_F,
-                               edgecolor=C_OCC_E, linewidth=1.4, alpha=0.9, zorder=3))
+                               edgecolor=C_OCC_E, linewidth=1.2, alpha=0.55, zorder=3))
 
 
 def _los(ax):
-    for cx, cy, w, h, _ in OBJECTS:
-        ax.add_patch(FancyArrowPatch(VIEW, (cx, cy), arrowstyle="-",
-                                     linestyle=(0, (4, 3)), color=C_LOS,
-                                     linewidth=1.0, zorder=2))
+    for obj in OBJECTS:
+        for p0, p1 in silhouette_rays(obj):
+            ax.plot([p0[0], p1[0]], [p0[1], p1[1]], linestyle=(0, (4, 3)),
+                    color=C_LOS, linewidth=1.0, zorder=2)
 
 
 def _hidden(ax):
