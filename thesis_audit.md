@@ -273,7 +273,9 @@ Folded into #176. Content: a methods.tex figure of the free-space build — (1) 
 objects, (2) recursive octree split, (3) recursive convex merge — via tools/render_thesis_figs.py.
 
 ================================================================================
-#197  [T1] [NOW]  fig:replan-cycle caption is wrong vs the image
+#197  [DONE 2026-05-25] [T1]  fig:replan-cycle caption is wrong vs the image
+NOTE 2026-05-25: resolved by REMOVING the figure. The image is a drop-on-tray action, unrelated
+to sensing/replanning (author-confirmed); recapture declined. Figure + in-text reference deleted.
 ================================================================================
 methods.tex:145 (sim/replan_cycle.png). Caption ("action log reads 'sense
 shadow_of_purple_object --- target not here' ... marks shadow empty ... searching remaining
@@ -428,13 +430,12 @@ OPEN:
   Background: #181 (POD vs contingent-planning naming -- reverted; reconsider, don't equate them)
   Methods: #175 (shadow-split #102/#103 -- only "by depth" dropped; conditional/surface-resting remain)
   Intro/RW: #191 (hero caption target), #193 (move Spatial-Belief to background; T1)
-  Methods: #197 (replan-cycle caption wrong; T1/NOW)
   Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
   Results: #199 (task rename), #209 (resolution-floor study + figure)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #194, #195, #200, #201, #202, #203, #204, #205, #206, #207. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #194, #195, #197, #200, #201, #202, #203, #204, #205, #206, #207. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
