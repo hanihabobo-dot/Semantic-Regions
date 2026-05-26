@@ -1192,13 +1192,21 @@ def plot_tampura_wallclock_comparison(
     return out_path
 
 
+# Author-directed grouping for the failure-mode breakdown: physics_mismatch,
+# drop_failed and all_searched are all "the planner's plan ultimately did not
+# pan out" outcomes, so they are folded into planner_failed (one failure bucket)
+# rather than shown as separate slices.
+_PLANNER_FAILED_ALIASES = {"physics_mismatch", "drop_failed", "all_searched"}
+
+
 def group_failure_modes(rows: List[dict]
                         ) -> Dict[tuple, Dict[str, int]]:
     """``{(goal, variant): {exit_reason: count}}``.
 
     Audit #73 TIER B plot 6 data prep; audit #99 — sub-key is variant
     not baseline so the (find-and-tray-stack, semantic) bar height no
-    longer doubles up the mbs=None + mbs=0.05 cells.
+    longer doubles up the mbs=None + mbs=0.05 cells.  The execution/search
+    exit reasons in ``_PLANNER_FAILED_ALIASES`` are counted as planner_failed.
     """
     out: Dict = defaultdict(lambda: defaultdict(int))
     for r in rows:
@@ -1208,6 +1216,8 @@ def group_failure_modes(rows: List[dict]
             key = "success"
         else:
             key = r.get("exit_reason") or "unknown"
+            if key in _PLANNER_FAILED_ALIASES:
+                key = "planner_failed"
         out[(goal, variant)][key] += 1
     return out
 
