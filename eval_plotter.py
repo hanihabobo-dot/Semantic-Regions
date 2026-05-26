@@ -1867,6 +1867,12 @@ def main(argv=None) -> int:
                    help="aggregated.csv from eval_runner.py")
     p.add_argument("--baseline-csv", type=Path, default=None,
                    help="Overlay a baseline aggregated.csv (issue #10 hook).")
+    p.add_argument("--drop-coarse-resolution", action="store_true",
+                   help="Drop the coarse free-space resolution arms "
+                        "(min_boxel_size > 0.05 m) so the headline figures show "
+                        "only semantic / +mbs0.05 / uniform.  The #98/#100 coarse "
+                        "arms (0.09-0.18 m) are merged into sweep_anytime/cells; "
+                        "this filters them at plot time without re-running them.")
     args = p.parse_args(argv)
 
     if not args.csv_path.exists():
@@ -1877,6 +1883,25 @@ def main(argv=None) -> int:
     if not rows:
         print(f"[plotter] no rows in {args.csv_path}", file=sys.stderr)
         return 1
+
+    # Headline figures compare only semantic / +mbs0.05 / uniform.  The #98/#100
+    # coarse resolution arms (min_boxel_size 0.09-0.18 m) live in the same
+    # sweep_anytime/cells, so without this filter they leak in as extra variant
+    # lines.  The resolution-axis figure is plotted separately (unfiltered) from
+    # the resolution/ subdir.
+    if args.drop_coarse_resolution:
+        def _is_coarse(r: dict) -> bool:
+            mbs = r.get("min_boxel_size")
+            if mbs in (None, ""):
+                return False
+            try:
+                return float(mbs) > 0.05 + 1e-9
+            except (TypeError, ValueError):
+                return False
+        before = len(rows)
+        rows = [r for r in rows if not _is_coarse(r)]
+        print(f"[plotter] dropped {before - len(rows)} coarse-resolution rows "
+              f"(min_boxel_size > 0.05)")
 
     # Audit #73 TIER B plot 6: capture the full row set before any
     # auto-split mutates `rows` below — failure-mode breakdown is
