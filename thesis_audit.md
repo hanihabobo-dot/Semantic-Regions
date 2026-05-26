@@ -437,6 +437,19 @@ the regions they occlude, covering the free space with a few coarse cells", matc
 introduction.tex:26,33.
 Refs: abstract.tex:5-7; #178; introduction.tex:26,33; methods.tex.
 
+================================================================================
+#212  [DONE 2026-05-26] [T1]  Abstract: drop TAMPURA, clarify "compiling belief", fix false "no speed winner"
+================================================================================
+Three author-reported abstract fixes: (1) "Compiling the belief over Boxel occupancy to Know-If
+literals" was opaque -> "...belief about which Boxels are occupied is encoded as Know-If literals
+---one per Boxel, marking whether its contents are known---so...". (2) Remove the TAMPURA
+holding/Find-Die comparison from the abstract (author: no TAMPURA in the abstract); it stays in
+results/discussion. (3) The deleted "...implies no speed or quality winner" was false on speed --
+we are ~4x faster (13.7 vs 57 s); dropping the TAMPURA sentences removes the hedge and the speed
+advantage now stands plainly against the uniform baseline. NOTE: results/discussion still carry
+the TAMPURA "no winner" framing (#177) -- correct the speed-winner wording there separately if wanted.
+Refs: abstract.tex:8-15; #177; #211; results.tex; discussion.tex.
+
 --------------------------------------------------------------------------------
 NB (verified, NO issue filed):
  - discussion.tex:121 "an object can be placed view-blind" (TAMPURA) is TRUE — verified from
@@ -455,7 +468,7 @@ OPEN:
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
