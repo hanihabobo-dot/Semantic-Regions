@@ -17,6 +17,11 @@ Revised: 2026-05-24 - second review.  Re-verified every 2026-05-23
          were overstated; T2 assumed a move-to-reveal capability the
          thesis flags as future work; the CAVEAT mis-stated our reveal
          mechanism.  Expanded T1/T2/CAVEAT accordingly.
+Revised: 2026-05-25 - Phase-1 bring-up STOOD UP; find_dice RUNS (GUI seed 0
+         + headless confirmed; 20-seed sweep in progress).  Added the
+         "HOW TO RUN REAL TAMPURA" operational runbook below.  Headline
+         gotcha: SymK shells out to bare `python`, so the venv MUST be
+         activated / on PATH or the run dies ~33 s in at symk_translate.
 
 Purpose: dedicated home for TAMPURA-related issues and the find_dice
          comparison plan.
@@ -138,8 +143,11 @@ Currently-open TAMPURA work
   shared-across-branches artifact (see its own Care note), so it must
   not be edited on this branch.
 - T1 -- MOVED to thesis_audit.md #177 (thesis-prose contradiction; thesis-now).
-- T2 -- run our holding pipeline on a find_dice-equivalent scene.
-- T3 -- stand up & run real TAMPURA find_dice on our hardware.
+- T2 -- find_dice head-to-head [REDONE 2026-05-25].  PHASE 1 (stand up real
+  TAMPURA, was T3) DONE -- runs GUI + headless in WSL; PHASE 2 (20-seed
+  sweep: success + wall-clock + planning time) IN PROGRESS; PHASE 3/4 gated.
+  HOW-TO: see the "HOW TO RUN REAL TAMPURA" runbook below.
+- T3 -- FOLDED INTO T2 PHASE 1 (2026-05-25); body kept below as bring-up ref.
 - CAVEAT -- occlusion-mode mismatch (comparability boundary).
 - VERIFY (2026-05-25) -- paper version / section-number reconciliation.
   The §V-A quote ("repeatedly construct optimistic, deterministic
@@ -157,6 +165,92 @@ Related (closed, in archive):
 
 Tail (NOT the find_dice comparison): old C3 (hybrid) and C5 (nested
 occlusion) are preserved at the bottom under their own banner.
+
+================================================================================
+HOW TO RUN REAL TAMPURA -- OPERATIONAL RUNBOOK (2026-05-25)
+================================================================================
+Phase-1 bring-up is DONE; this is the how-to for re-running find_dice.
+Everything lives in WSL2 Ubuntu on EXT4 (NOT /mnt/c -- the rrt*.png Windows
+blocker, see T2 PHASE 1).  Invoke from Windows via PowerShell:
+    wsl -d Ubuntu -e bash -lc '<linux command>'
+PowerShell<->WSL roundtrip hangs ~60-120 s AFTER the call returns on this
+machine; for long runs launch in the background and read the output file.
+
+Layout (WSL):
+  /root/tampura-work/tampura/                planner repo (incl. SymK build)
+  /root/tampura-work/tampura_environments/   env repo (run_planner.py is here)
+  /root/tampura-work/.venv/                  python 3.11 venv
+  .../tampura_environments/env_configs/find_dice.yml     the config
+  .../tampura_environments/runs/run_<ts>/    one dir per episode (pkl + logs)
+
+*** GOTCHA #1 (the one that bites): SymK shells out to bare `python`. ***
+tampura/solvers/symk.py (symk_translate ~line 51, and the search step) calls
+subprocess.run(["python", ...]).  Ubuntu has only `python3`; the name
+`python` exists ONLY inside the venv (.venv/bin/python -> python3.11).
+=> You MUST run with the venv ACTIVATED (its bin on PATH).  If you instead
+   call the venv python by ABSOLUTE PATH without activating, run_planner.py
+   starts fine but DIES ~33 s in with:
+     FileNotFoundError: [Errno 2] No such file or directory: 'python'
+     (raised in tampura/solvers/symk.py -> symk_translate -> subprocess.run)
+   The GUI launcher works precisely because tampura_run_gui.sh:34 does
+   `source .venv/bin/activate`.  For a programmatic child process, instead
+   prepend .venv/bin to the child's PATH (what tampura_sweep.py does).
+
+CANONICAL COMMANDS (always activate the venv first):
+  # GUI, one episode (args: SEED VIS_GRAPH; vis-graph=1 renders the graphs):
+  wsl -d Ubuntu -e bash -lc 'bash /root/tampura-work/tampura_run_gui.sh 0 1'
+
+  # Headless, one episode (faster, no window, exits cleanly):
+  wsl -d Ubuntu -e bash -lc 'source /root/tampura-work/.venv/bin/activate && \
+    cd /root/tampura-work/tampura_environments && \
+    python run_planner.py --config=./env_configs/find_dice.yml --global-seed=0'
+
+GOTCHA #2: headless = OMIT --vis and --vis-graph (both default false in
+find_dice.yml).  Do NOT pass --vis=0: run_planner uses argparse type=bool and
+bool("0") is True, so --vis=0 STILL shows the GUI.  Omit the flag entirely.
+
+GOTCHA #3 (cosmetic): with the GUI, PyBullet teardown SEGFAULTS on WSLg
+(exit 139) AFTER the episode finishes and artifacts are saved.  Harmless.
+Headless (PyBullet DIRECT mode) exits 0 -- no segfault.
+
+READING A RESULT (per episode -> runs/run_<ts>/<date>.pkl):
+The pkl is a tampura.policies.policy.RolloutHistory (load with the venv
+python; tampura must be importable).  Fields used:
+  - rewards     : list[float].  SUCCESS  <=>  rewards[-1] == 1.0 (target die
+                  grasped AND robot at-home on the terminal belief).  Reward
+                  flips to 1.0 at the solve step, then holds via no-op() out
+                  to max_steps (=20); episodes do not terminate early.
+  - time_deltas : list[float], CUMULATIVE elapsed seconds (a running clock,
+                  NOT per-step deltas).  time_deltas[-1] = the planner-LOOP
+                  wall time (planning + pybullet execution inside the policy
+                  loop).  Seed 0: ~70 s headless, ~110 s with GUI.
+  - actions     : the executed plan (e.g. pick/place/look/pick/go-home, then
+                  no-op... ).
+NB: pure planning is NOT cleanly separable from execution in the pkl.  SymK
+solve times print to stdout ("... | Time: T"); tqdm shows Outcome-Sampling
+time.  Capture stdout if you need the planning/execution split.
+
+20-SEED SWEEP (this is T2 PHASE 2):
+Driver: /root/tampura-work/tampura_sweep.py -- headless; one ISOLATED
+subprocess per seed (so a teardown segfault can't kill the sweep); times each
+with perf_counter; reads success+timing from the pkl; writes an incremental,
+RESUMABLE JSON after every seed (skips seeds already marked complete).
+  wsl -d Ubuntu -e bash -lc 'source /root/tampura-work/.venv/bin/activate && \
+    cd /root/tampura-work/tampura_environments && \
+    python -u /root/tampura-work/tampura_sweep.py --seeds 0-19 \
+    --out runs/sweep_2026-05-25.json'
+JSON shape: per-seed {success, wall_s, loop_s, solve_step, rewards, ...} +
+aggregate {success_rate, wall_s/loop_s mean+-std}.  ~110 s/episode headless.
+COMPARE loop_s (TAMPURA's own loop clock) -- NOT wall_s (which includes
+process startup) -- against the paper's 57+-38 s; success_rate vs >= 0.63
+(Curtis et al. 2024, Partial-Observability task, N=20).  Phase-2 results:
+summarise BOTH here and in CODEBASE_AUDIT.txt (per the PHASE 2 instruction).
+
+LOCAL PATCH (do NOT push the public-repo clones): tampura_environments/
+__init__.py was patched to try/except each subpackage import -- the public
+repo ships 5 of 6 env subpackages (toy_discrete is missing) and the stock
+__init__ imported it unconditionally.  find_dice resolves regardless.
+
 ================================================================================
 #66. UNIFORM/TAMPURA BASELINES — PLACE FAILS WHEN OBJECT > CELL (split fix)
 ================================================================================
@@ -332,6 +426,10 @@ WITH GUI.  Four phases, each gated on the previous being CONFIRMED by the
 user before proceeding:
 
   PHASE 1 -- STAND UP & RUN REAL TAMPURA find_dice ON THIS MACHINE (GUI).
+     STATUS 2026-05-25: DONE.  Stood up in WSL (/root/tampura-work); SymK
+     built; find_dice runs GUI (seed 0) AND headless (rc=0).  20-seed sweep
+     (PHASE 2) in progress.  Operational details: see the "HOW TO RUN REAL
+     TAMPURA" runbook near the top of this file.
      Bring-up state VERIFIED ON DISK 2026-05-25 (no longer hypothetical):
      - ../tampura (planner) is FULLY present incl. third_party/symk C++
        source -> needs a py3.11 env, `pip install -e .`, pygraphviz, and a
@@ -371,7 +469,40 @@ user before proceeding:
      planning time on OUR hardware (Ryzen 7 PRO 7730U, 8c; THESIS_NOTES
      §21.1).  Save to JSON (e.g. eval_results/tampura_real/<ts>.json) AND
      summarise here + in CODEBASE_AUDIT.txt.  Compare vs published
-     57+-38 s planning-only + success >= 63% (#177 / reference_tampura_perf).
+     57+-38 s + success >= 63% (#177 / reference_tampura_perf).  [NB 2026-05-26:
+     that 57+-38 s is PER-STEP incl. sim controller execution, NOT planning-only
+     -- Table II caption; the "planning-only" label was wrong, see PHASE 2 RESULT.]
+  PHASE 2 RESULT [2026-05-26] -- DONE.  Headless 20-seed sweep on our HW
+     (Ryzen 7 PRO 7730U, 8c; TAMPURA is single-process).  Driver
+     tampura_sweep.py -> runs/sweep_2026-05-26.json, one clean uninterrupted
+     session (an earlier 05-25 sweep was DISCARDED: an overnight Windows
+     suspend inflated one seed's time_deltas to ~9 h; re-run sleep-guarded).
+     n=20:
+       - SUCCESS 11/20 = 55%  (paper >= 63%; ~1.5 episodes at N=20 -> same
+         regime, slightly low).
+       - loop_s (planning + pybullet execution): all 239.9 +- 151.1 s;
+         successes 166 +- 85 s; failures ~330 s (a failed episode plans every
+         step to max_steps=20, ~2x a success).
+       - wall_s (full process): all 253.3 +- 150.9 s.
+       - solve step (successes): mostly 5-7; two at 11, one at 15.
+     CAVEAT [CORRECTED 2026-05-26 vs paper, Table II screenshot] -- the 57+-38 s
+     (Task C = Partial Observability, Bayes-Optimistic+LAO* row) is NOT
+     planning-only and NOT per-episode.  Caption verbatim: "Average and standard
+     deviation of PER-STEP planning times (seconds) averaged over trials and
+     steps within each trial.  These include execution time of the selected
+     controller in simulation."  => PER-STEP, INCLUDING sim controller
+     execution.  Our loop_s is PER-EPISODE (20 steps); matched per-step =
+     loop_s/20 ~ 8 s/step (success) to ~16 s/step (fail), ~16-28 s per MEANINGFUL
+     step (no-ops ~free).  run_planner.py IS TAMPURA, so this sweep = TAMPURA
+     ON OUR HW vs TAMPURA's published their-HW number (a hardware/repro check,
+     NOT ours-vs-theirs -- that's PHASE 3).  Per-step our HW is AT/BELOW 57+-38,
+     so (a) the "3-4x slower" read was an artifact of per-episode-vs-per-step,
+     and (b) no evidence their HW is much better (cf. single-process /
+     single-core-clock correction up top).  STILL don't declare a winner: their
+     averaging (incl no-ops?) + benchmark task config may differ from the
+     released find_dice.  SUPERSEDES the "planning-only" wording in #177 /
+     THESIS_NOTES (thesis-prose fix flagged, not done here).  Mirrored in
+     CODEBASE_AUDIT.txt.
   PHASE 3 -- RUN OUR PLANNER ON THEIR find_dice ENV (GUI), minor code
      adjustments.  Write a NEW domain: COPY pddl/domain_pddlstream.pddl to a
      find_dice variant (e.g. pddl/domain_find_dice.pddl) and tweak it for

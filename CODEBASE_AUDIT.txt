@@ -242,6 +242,22 @@ FOR LATER
   scenes used for #12 scalability, reuse #9 metric hooks, run the same
   seeds — no domain re-encoding by us if their published encodings cover
   the task; otherwise drop the comparison rather than shoehorn.
+  RESULT [2026-05-26] -- TAMPURA half done on our HW.  Real find_dice now
+  stands up + runs in WSL (see notes/TAMPURA_PLAN.md "HOW TO RUN REAL TAMPURA"
+  + T2 PHASE 1/2).  Headless 20-seed sweep (runs/sweep_2026-05-26.json):
+  SUCCESS 11/20 = 55% (paper >= 63%); per-episode loop_s (planning + execution)
+  239.9 +- 151.1 s all / 166 +- 85 s on successes; wall_s 253.3 +- 150.9 s.
+  CORRECTION [2026-05-26, vs paper Table II screenshot]: the 57+-38 s (Task C)
+  is NOT planning-only and NOT per-episode -- caption: "PER-STEP planning times
+  ... averaged over trials and steps within each trial.  These include execution
+  time of the selected controller in simulation".  It is PER-STEP, incl sim
+  execution.  Matched: our per-step = loop_s/20 ~ 8 s/step (success) to ~16 s/step
+  (fail), ~16-28 s per MEANINGFUL step.  run_planner IS TAMPURA, so this is
+  TAMPURA-ON-OUR-HW vs their published their-HW number: per-step we are AT/BELOW
+  57+-38 -> NO "3-4x slower", and no evidence their HW is much better.  Don't
+  declare a winner (their averaging/task config may differ).  SymK classical
+  solve negligible (~0.03 s/step).  Ours-on-their-env is T2 PHASE 3 (planned).  Data also feeds
+  the deferred #111 TAMPURA wall-clock plot regen.
 
 - Parallel FastDownward / GPU — post-thesis research direction (raised
   2026-05-10).  CPU-side parallel FD has prior work (HDA*, ArvandHerd,
