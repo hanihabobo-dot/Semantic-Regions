@@ -9,7 +9,7 @@ cuboids, so 3-D is the honest view.
     (b) object-centric bounding
     (c) occlusion-aware subdivision (+ line of sight)
     (d) free space: whole workspace as one cell
-    (e) free space: recursive quad-tree split
+    (e) free space: recursive octree split (splits in z too, not just x-y)
     (f) free space: greedy convex merge
 
 The robot viewpoint is drawn as a camera emoji when Segoe UI Emoji is available
@@ -33,24 +33,60 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.colors import to_rgba
 
-# reuse layout + free-space algorithm from the 2-D generator
+# reuse layout + shadow geometry from the 2-D generator. The 3-D figure has its
+# OWN free-space partition (a real octree, below), so it does NOT import the
+# 2-D quad-tree.
 from render_boxelization_schematic import (
-    OBJECTS, OCC_RECTS, VIEW, W, H, HIDDEN,
-    quadtree_free, merge_free,
+    OBJECTS, VIEW, W, H, _rect_of,
+    compute_shadows, silhouette_rays,
     C_VIEW, C_OBJ, C_OBJBOX, C_OCC_E, C_FREE_E, C_TITLE, C_LOS,
     C_HIDE_F, C_HIDE_E,
 )
 
+# The 3-D view gets crowded with the tall swept shadow boxes, so it uses ONE
+# fewer occluder than the 2-D figure (drops obj4) and recomputes the shadow /
+# free-space partition from that smaller scene through the shared functions.
+OBJECTS_3D = [o for o in OBJECTS if o[4] != "obj4"]
+OBJ_RECTS_3D = [_rect_of(o) for o in OBJECTS_3D]
+OCC_RECTS_3D = compute_shadows(OBJECTS_3D)
+
 # camera body position (nudged in from the corner so the lens has room)
 CAM = (VIEW[0] + 0.4, VIEW[1] + 0.6)
 
-ZTOP = 2.6           # room / ceiling height
+ZTOP = 2.0           # workspace height; the octree's first z-split lands at the
+                     # object top, exposing the free LAYER above the objects
 OBJ_H = 1.0          # object cube height
-OCC_H = 2.0          # occlusion (shadow) Boxel height
-FREE_H = ZTOP        # free-space Boxels span the full room height (>= the
-                     # object/occlusion Boxels they sit among)
-C_WALL = "#dfe3e6"   # room walls
-C_TABLE = "#e5e8e8"  # table base
+OCC_H = 1.0          # shadow height = object height (shadow_calculator clamps
+                     # the ray hits to the table and sets the top to the object
+                     # top); the old 2.0 left no room for a free layer above
+MIN_RES = 2.0        # octree stop size (schematic units): coarse enough to keep
+                     # the figure readable, fine enough to show the z-layering
+WALL_H = 0.9         # LOW perimeter wall -- kept short + faint so matplotlib's
+                     # 3-D painter can't draw a tall back wall over the target
+C_WALL = "#cdd5da"   # perimeter wall
+C_TABLE = "#d8cdb0"  # table slab edge (side)
+C_FLOOR = "#ece3d0"  # table-top surface (no longer white)
+
+
+def _shadow_area(obj):
+    r = compute_shadows([obj])[0]
+    return r[2] * r[3]
+
+
+def _biggest_shadow_hidden():
+    """Hidden target sits inside the shadow of the object casting the LARGEST
+    occluded region (the one most worth reasoning about): a little way behind
+    that object along the camera ray, clamped to stay inside its shadow."""
+    best = max(OBJECTS_3D, key=_shadow_area)
+    rx, ry, rw, rh = compute_shadows([best])[0]
+    d = np.array([best[0] - VIEW[0], best[1] - VIEW[1]], float)
+    d /= np.linalg.norm(d)
+    px = min(max(best[0] + d[0] * 1.8, rx + 0.4), rx + rw - 0.4)
+    py = min(max(best[1] + d[1] * 1.8, ry + 0.4), ry + rh - 0.4)
+    return (px, py, 0.6)
+
+
+HIDDEN_3D = _biggest_shadow_hidden()
 
 # per-face brightness for a lit-from-above look. _faces order: b, t, f, k, l, r
 _SHADE = [0.55, 1.0, 0.84, 0.68, 0.9, 0.6]
@@ -122,57 +158,174 @@ def _camera(ax):
 
 
 def _hidden(ax):
-    cx, cy, s = HIDDEN
+    cx, cy, s = HIDDEN_3D
     _box(ax, cx - s / 2, cy - s / 2, 0, s, s, OBJ_H * 0.8, fc=C_HIDE_F,
-         ec=C_HIDE_E, alpha=0.45, lw=1.2, zorder=5, shade=True)
+         ec=C_HIDE_E, alpha=0.7, lw=1.4, zorder=5, shade=True)
 
 
 def _objects(ax):
-    for cx, cy, w, h, _ in OBJECTS:
+    for cx, cy, w, h, _ in OBJECTS_3D:
         _box(ax, cx - w / 2, cy - h / 2, 0, w, h, OBJ_H,
              fc=C_OBJ, ec="#7b241c", alpha=1.0, lw=0.5, zorder=6, shade=True)
 
 
 def _objboxels(ax):
-    for cx, cy, w, h, _ in OBJECTS:
+    for cx, cy, w, h, _ in OBJECTS_3D:
         _box(ax, cx - w / 2 - 0.16, cy - h / 2 - 0.16, -0.05,
              w + 0.32, h + 0.32, OBJ_H + 0.32, fc="none", ec=C_OBJBOX,
              alpha=1.0, lw=1.6, zorder=7, fill=False)
 
 
 def _occlusion(ax):
-    for rx, ry, rw, rh in OCC_RECTS:
+    for rx, ry, rw, rh in OCC_RECTS_3D:
         _box(ax, rx, ry, 0, rw, rh, OCC_H, fc="#f5cba7", ec=C_OCC_E,
              alpha=0.16, lw=1.3, zorder=3)
 
 
 def _los(ax):
-    vx, vy = CAM
-    segs = [[(vx, vy, 0.5), (cx, cy, OBJ_H / 2)] for cx, cy, *_ in OBJECTS]
+    z = OBJ_H / 2
+    segs = []
+    for obj in OBJECTS_3D:
+        for p0, p1 in silhouette_rays(obj):
+            segs.append([(p0[0], p0[1], z), (p1[0], p1[1], z)])
     ax.add_collection3d(Line3DCollection(segs, colors=C_LOS, linewidths=1.0,
                                          linestyles=(0, (4, 3)), zorder=2))
 
 
 def _free(ax, cells):
-    for rx, ry, rw, rh in cells:
-        _box(ax, rx, ry, 0, rw, rh, FREE_H, fc="#a9dfbf", ec=C_FREE_E,
-             alpha=0.09, lw=0.9, zorder=1)
+    for cmin, cmax in cells:
+        _box(ax, cmin[0], cmin[1], cmin[2],
+             cmax[0] - cmin[0], cmax[1] - cmin[1], cmax[2] - cmin[2],
+             fc="#a9dfbf", ec=C_FREE_E, alpha=0.10, lw=0.9, zorder=1)
+
+
+# ---------------------------------------------------- free-space octree (3-D)
+# Faithful port of free_space.FreeSpaceGenerator.generate + cell_merger: an
+# octree subdivides the workspace into octants and keeps any node clear of all
+# content as a free Boxel, so free space splits in z too -- a big layer ABOVE
+# the objects, finer cells around them -- then adjacent free boxels sharing a
+# full face are greedily merged. This replaces the 2-D quad-tree the 3-D figure
+# used to extrude into full-height columns.
+def _content_boxes_3d():
+    boxes = []
+    for rx, ry, rw, rh in OBJ_RECTS_3D:
+        boxes.append((np.array([rx, ry, 0.0]), np.array([rx + rw, ry + rh, OBJ_H])))
+    for rx, ry, rw, rh in OCC_RECTS_3D:
+        boxes.append((np.array([rx, ry, 0.0]), np.array([rx + rw, ry + rh, OCC_H])))
+    return boxes
+
+
+def octree_free(content, min_res):
+    """BFS octree subdivision; returns free boxels as (min_xyz, max_xyz)."""
+    free = []
+    layer = [(np.array([0.0, 0.0, 0.0]), np.array([W, H, ZTOP]))]
+    while layer:
+        nxt = []
+        for nmin, nmax in layer:
+            # MIXED iff the node's INTERIOR overlaps content (strict <). A node
+            # that merely rests on a content face (e.g. the free layer sitting
+            # exactly on the object tops) only touches it and stays free -- so
+            # free space is never split, only mixed space is. (free_space.py
+            # uses >=/<=; it never trips this because real content heights don't
+            # land on octree boundaries, but the schematic's round numbers do.)
+            mixed = any(np.all(nmax > bmin) and np.all(nmin < bmax)
+                        for bmin, bmax in content)
+            if not mixed:
+                free.append((nmin, nmax))                 # clear -> free Boxel
+                continue
+            if float(np.max(nmax - nmin)) <= min_res:
+                continue                                  # at resolution -> drop
+            mid = (nmin + nmax) / 2.0
+            for ix in (0, 1):
+                for iy in (0, 1):
+                    for iz in (0, 1):
+                        cmin = np.array([nmin[0] if ix == 0 else mid[0],
+                                         nmin[1] if iy == 0 else mid[1],
+                                         nmin[2] if iz == 0 else mid[2]])
+                        cmax = np.array([mid[0] if ix == 0 else nmax[0],
+                                         mid[1] if iy == 0 else nmax[1],
+                                         mid[2] if iz == 0 else nmax[2]])
+                        nxt.append((cmin, cmax))
+        layer = nxt
+    return free
+
+
+def _try_merge_3d(a, b, tol=1e-4):
+    a_min, a_max = a
+    b_min, b_max = b
+    for axis in range(3):
+        others = [i for i in range(3) if i != axis]
+        if not all(abs(a_min[o] - b_min[o]) < tol and abs(a_max[o] - b_max[o]) < tol
+                   for o in others):
+            continue
+        if abs(a_max[axis] - b_min[axis]) < tol:
+            return (a_min.copy(), b_max.copy())
+        if abs(b_max[axis] - a_min[axis]) < tol:
+            return (b_min.copy(), a_max.copy())
+    return None
+
+
+def _merge_quality_3d(box):
+    ext = (box[1] - box[0]) / 2.0
+    mx = float(np.max(ext))
+    return float(np.min(ext)) / mx if mx > 1e-9 else 0.0
+
+
+def merge_3d(boxels, max_iter=100):
+    """Greedy face-merge (mirrors CellMerger): combine adjacent boxels aligned
+    on the other two axes, preferring the most cubic result."""
+    cur = [(b[0].copy(), b[1].copy()) for b in boxels]
+    for _ in range(max_iter):
+        done = [False] * len(cur)
+        result, n_merges = [], 0
+        for i in range(len(cur)):
+            if done[i]:
+                continue
+            best, best_j = None, -1
+            for j in range(i + 1, len(cur)):
+                if done[j]:
+                    continue
+                m = _try_merge_3d(cur[i], cur[j])
+                if m is not None and (best is None or
+                                      _merge_quality_3d(m) > _merge_quality_3d(best)):
+                    best, best_j = m, j
+            if best is not None:
+                result.append(best)
+                done[i] = done[best_j] = True
+                n_merges += 1
+            else:
+                result.append(cur[i])
+        cur = result
+        if n_merges == 0:
+            break
+    return cur
 
 
 def _room(ax):
-    """Table EDGE only (a rim frame around the workspace perimeter, OUTSIDE the
-    green tile footprint so nothing shows through the translucent green) plus
-    back and side walls. NO interior table surface and NO front wall."""
-    t, th = 0.3, 0.4  # rim thickness, rim height (top at z=0)
-    rim = dict(fc=C_TABLE, ec="#b3b6b7", alpha=1.0, lw=0.5, zorder=0, shade=True)
+    """A coloured table-top surface at z=0 (no longer a white floor), a slab
+    edge below it for table thickness, and LOW translucent perimeter walls on
+    the back + sides (front left open toward the camera). The walls are short
+    (WALL_H) and faint so matplotlib's 3-D painter can no longer draw a tall
+    back wall over the hidden target."""
+    # table-top surface -- the floor is now coloured. Force it to sort behind
+    # everything (very negative sort z) so matplotlib's 3-D painter cannot draw
+    # this large flat polygon over the cubes/boxels that sit on it.
+    top = [[(0, 0, 0), (W, 0, 0), (W, H, 0), (0, H, 0)]]
+    surf = Poly3DCollection(top, facecolor=C_FLOOR, edgecolor="#cdbf9c", linewidths=0.8)
+    surf.set_zorder(0)
+    surf.set_sort_zpos(-1e5)
+    ax.add_collection3d(surf)
+    # slab edge (table thickness, below z=0)
+    t, th = 0.3, 0.4
+    rim = dict(fc=C_TABLE, ec="#b8ac8c", alpha=1.0, lw=0.5, zorder=0, shade=True)
     _box(ax, -t, -t, -th, W + 2 * t, t, th, **rim)   # front edge (y < 0)
     _box(ax, -t, H, -th, W + 2 * t, t, th, **rim)    # back edge  (y > H)
     _box(ax, -t, 0, -th, t, H, th, **rim)            # left edge  (x < 0)
     _box(ax, W, 0, -th, t, H, th, **rim)             # right edge (x > W)
-    # back wall (far, +y) and the two side walls (x=0, x=W); front (-y) left open
-    _box(ax, 0, H, 0, W, 0.06, ZTOP, fc=C_WALL, ec="#c4c9cc", alpha=0.35, lw=0.5, zorder=0)
-    _box(ax, -0.06, 0, 0, 0.06, H, ZTOP, fc=C_WALL, ec="#c4c9cc", alpha=0.30, lw=0.5, zorder=0)
-    _box(ax, W, 0, 0, 0.06, H, ZTOP, fc=C_WALL, ec="#c4c9cc", alpha=0.30, lw=0.5, zorder=0)
+    # LOW perimeter walls (back + sides); front (-y) left open toward the camera
+    _box(ax, 0, H, 0, W, 0.06, WALL_H, fc=C_WALL, ec="#bcc4c9", alpha=0.18, lw=0.4, zorder=0)
+    _box(ax, -0.06, 0, 0, 0.06, H, WALL_H, fc=C_WALL, ec="#bcc4c9", alpha=0.16, lw=0.4, zorder=0)
+    _box(ax, W, 0, 0, 0.06, H, WALL_H, fc=C_WALL, ec="#bcc4c9", alpha=0.16, lw=0.4, zorder=0)
 
 
 def _panel(ax, title):
@@ -187,9 +340,10 @@ def main():
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     out = os.path.join(repo, "thesis", "graphics", "boxelization_3d.png")
 
-    free_split = quadtree_free()
-    free_merged = merge_free(free_split)
-    whole = [(0.0, 0.0, W, H)]
+    content = _content_boxes_3d()
+    free_split = octree_free(content, MIN_RES)
+    free_merged = merge_3d(free_split)
+    whole = [(np.array([0.0, 0.0, 0.0]), np.array([W, H, ZTOP]))]
 
     fig = plt.figure(figsize=(15, 9.5))
     fig.patch.set_facecolor("white")
