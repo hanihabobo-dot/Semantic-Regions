@@ -28,8 +28,28 @@ import os
 import matplotlib
 matplotlib.use("Agg")  # headless: just save a PNG
 import matplotlib.pyplot as plt
+from matplotlib import font_manager as _fm
 from matplotlib.patches import FancyBboxPatch, Rectangle, FancyArrowPatch
 from matplotlib.lines import Line2D
+
+# Camera emoji for the robot viewpoint. matplotlib/Agg renders it as a clean
+# monochrome glyph from Segoe UI Emoji (Windows). If the font is unavailable
+# (e.g. a bare WSL env), EMOJI_PROP stays None and we fall back to a dark square.
+CAMERA = "\U0001F4F7"  # camera emoji
+
+
+def _emoji_prop():
+    for path in (r"C:\Windows\Fonts\seguiemj.ttf",
+                 "/mnt/c/Windows/Fonts/seguiemj.ttf"):
+        if os.path.exists(path):
+            try:
+                return _fm.FontProperties(fname=path)
+            except Exception:
+                pass
+    return None
+
+
+EMOJI_PROP = _emoji_prop()
 
 # ---------------------------------------------------------------- palette
 C_VIEW   = "#2c3e50"   # robot viewpoint
@@ -43,6 +63,8 @@ C_LOS    = "#95a5a6"   # line of sight
 C_PANEL  = "#fbfcfd"   # panel background
 C_PANELE = "#d5dbdb"   # panel border
 C_TITLE  = "#34495e"
+C_HIDE_F = "#4dd0e1"   # hidden target fill (cyan)
+C_HIDE_E = "#00838f"   # hidden target edge
 
 # ---------------------------------------------------------------- scene (units)
 W, H = 10.0, 8.0
@@ -62,6 +84,9 @@ OCCLUSIONS = [
     (4.4, 2.4, 1.8, 1.2),
     (8.3, 3.4, 1.5, 1.2),
 ]
+# the hidden target: sits inside obj1's occlusion (in its shadow), so the camera
+# cannot see it -- the robot must reason about the shadow to find it. (cx, cy, s)
+HIDDEN = (4.8, 5.6, 0.6)
 
 
 def _rect_of(c):
@@ -148,8 +173,12 @@ def _frame(ax, title):
 
 def _view(ax):
     x, y = VIEW
-    ax.add_patch(Rectangle((x - 0.28, y - 0.28), 0.56, 0.56,
-                           facecolor=C_VIEW, edgecolor="none", zorder=6))
+    if EMOJI_PROP is not None:
+        ax.text(x, y, CAMERA, fontproperties=EMOJI_PROP, fontsize=20,
+                ha="center", va="center", zorder=8)
+    else:
+        ax.add_patch(Rectangle((x - 0.28, y - 0.28), 0.56, 0.56,
+                               facecolor=C_VIEW, edgecolor="none", zorder=6))
 
 
 def _objects(ax, labels=True):
@@ -181,6 +210,15 @@ def _los(ax):
                                      linewidth=1.0, zorder=2))
 
 
+def _hidden(ax):
+    cx, cy, s = HIDDEN
+    ax.add_patch(Rectangle((cx - s / 2, cy - s / 2), s, s, facecolor=C_HIDE_F,
+                           edgecolor=C_HIDE_E, linewidth=1.6, linestyle="--",
+                           alpha=0.7, zorder=4.5))
+    ax.text(cx, cy, "?", color="white", ha="center", va="center",
+            fontsize=10, fontweight="bold", zorder=5)
+
+
 def _free(ax, cells, lw=1.0):
     for rx, ry, rw, rh in cells:
         ax.add_patch(Rectangle((rx, ry), rw, rh, facecolor=C_FREE_F,
@@ -200,32 +238,34 @@ def main():
     a, b, c, d, e, f = axes.flat
 
     # (a) initial scene
-    _frame(a, "(a) Initial scene"); _view(a); _objects(a)
+    _frame(a, "(a) Initial scene"); _view(a); _objects(a); _hidden(a)
 
     # (b) object bounding
     _frame(b, "(b) Object-centric bounding"); _view(b); _objects(b); _objboxels(b)
+    _hidden(b)
 
     # (c) occlusion subdivision
     _frame(c, "(c) Occlusion-aware subdivision"); _view(c)
-    _los(c); _occlusions(c); _objects(c, labels=False); _objboxels(c)
+    _los(c); _occlusions(c); _objects(c, labels=False); _objboxels(c); _hidden(c)
 
     # (d) free space: whole workspace one cell
     _frame(d, "(d) Free space: whole workspace")
     _free(d, [(0.0, 0.0, W, H)], lw=2.0)
-    _occlusions(d); _objects(d, labels=False); _objboxels(d)
+    _occlusions(d); _objects(d, labels=False); _objboxels(d); _hidden(d)
 
     # (e) free space: recursive split
     _frame(e, "(e) Free space: recursive split")
-    _free(e, free_split); _occlusions(e); _objects(e, labels=False); _objboxels(e)
+    _free(e, free_split); _occlusions(e); _objects(e, labels=False); _objboxels(e); _hidden(e)
 
     # (f) free space: convex merge (final)
     _frame(f, "(f) Free space: convex merge")
-    _free(f, free_merged); _occlusions(f); _objects(f, labels=False); _objboxels(f)
+    _free(f, free_merged); _occlusions(f); _objects(f, labels=False); _objboxels(f); _hidden(f)
 
     # legend
     handles = [
         ("Robot viewpoint", C_VIEW, "s", None),
         ("Detected object", C_OBJ, "s", None),
+        ("Hidden target", C_HIDE_F, "s", C_HIDE_E),
         ("Object Boxel", "white", "s", C_OBJBOX),
         ("Occlusion Boxel", C_OCC_F, "s", C_OCC_E),
         ("Free Space Boxel", C_FREE_F, "s", C_FREE_E),
@@ -235,9 +275,9 @@ def main():
                       markeredgewidth=1.6) for _, fc, _, ec in handles]
     proxies.append(Line2D([0], [0], linestyle=(0, (4, 3)), color=C_LOS, linewidth=1.4))
     labels = [h[0] for h in handles] + ["Line of sight"]
-    fig.legend(proxies, labels, loc="lower center", ncol=6, frameon=False,
+    fig.legend(proxies, labels, loc="lower center", ncol=7, frameon=False,
                fontsize=10, bbox_to_anchor=(0.5, -0.01),
-               handletextpad=0.5, columnspacing=1.6)
+               handletextpad=0.5, columnspacing=1.4)
 
     fig.suptitle("Adaptive Semantic Discretization", fontsize=15,
                  fontweight="bold", color=C_TITLE, y=0.99)
