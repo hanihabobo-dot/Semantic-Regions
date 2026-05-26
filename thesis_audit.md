@@ -284,7 +284,12 @@ actual logged action/scene; recapture if the image is wrong.
 Refs: methods.tex:145; sim/replan_cycle.png; #168.
 
 ================================================================================
-#198  [T3] [THESIS]  Figure captions/sizes to fix after visual inspection
+#198  [DONE 2026-05-25] [T3]  Figure captions/sizes to fix after visual inspection
+NOTE 2026-05-25: (M) boxelization-real caption corrected (free-space cells ARE rendered in cyan,
+author-confirmed). (N) partition-comparison subfigs already equal-size (0.48\textwidth); added
+cyan/free-space + object/shadow colour meanings. (T+U) eval-scene caption: dropped unclear "labelled
+in the overlay" claim, described the RGB/depth insets (no recapture). (AV) fig:retry-giveup REMOVED
+(image has no "retry 3/3"/action log; author chose remove).
 ================================================================================
 (M) methods.tex:27 fig:boxelization-real — update caption from the current image. (N)
 methods.tex:40-57 fig:partition-comparison — make subfigures EQUAL SIZE, update caption, state
@@ -430,12 +435,11 @@ OPEN:
   Background: #181 (POD vs contingent-planning naming -- reverted; reconsider, don't equate them)
   Methods: #175 (shadow-split #102/#103 -- only "by depth" dropped; conditional/surface-resting remain)
   Intro/RW: #193 (move Spatial-Belief to background; T1)
-  Figures: #198 (boxelization-real/partition-comparison/eval-scene/give-up captions+sizes)
   Results: #199 (task rename), #209 (resolution-floor study + figure)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #200, #201, #202, #203, #204, #205, #206, #207. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
