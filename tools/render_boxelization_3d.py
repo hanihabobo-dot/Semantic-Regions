@@ -50,8 +50,9 @@ OBJECTS_3D = [o for o in OBJECTS if o[4] != "obj4"]
 OBJ_RECTS_3D = [_rect_of(o) for o in OBJECTS_3D]
 OCC_RECTS_3D = compute_shadows(OBJECTS_3D)
 
-# camera body position (nudged in from the corner so the lens has room)
-CAM = (VIEW[0] + 0.4, VIEW[1] + 0.6)
+# camera body position: pulled forward into open table space toward the open
+# front edge, clear of the perimeter walls (it used to sit on the left wall)
+CAM = (VIEW[0] + 1.1, VIEW[1] - 0.3)
 
 ZTOP = 2.0           # workspace height; the octree's first z-split lands at the
                      # object top, exposing the free LAYER above the objects
