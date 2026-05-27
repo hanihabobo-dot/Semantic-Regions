@@ -1256,7 +1256,7 @@ def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
     labels = [f"{g}\n{v}" for g, v in keys]
     xs = list(range(len(keys)))
 
-    fig, ax = plt.subplots(figsize=(max(7, 1.6 * len(keys)), 5))
+    fig, ax = plt.subplots(figsize=(max(7, 1.9 * len(keys)), 5))
     cmap = plt.get_cmap("tab10")
     bottoms = [0.0] * len(keys)
     for ri, reason in enumerate(all_reasons):
@@ -1272,16 +1272,16 @@ def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
         bottoms = [b + c for b, c in zip(bottoms, counts)]
 
     ax.set_xticks(xs)
-    ax.set_xticklabels(labels, fontsize=13, rotation=20, ha="right")
+    ax.set_xticklabels(labels, fontsize=11, rotation=30, ha="right")
     ax.tick_params(axis="y", labelsize=14)
     ax.set_xlabel("(goal, variant)", fontsize=18)
     ax.set_ylabel("cell count", fontsize=18)
     ax.set_title(title, fontsize=20)
     ax.grid(True, axis="y", alpha=0.3)
-    ax.legend(loc="upper right", fontsize=13, title="exit_reason",
-              title_fontsize=14)
+    ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=13,
+              title="exit_reason", title_fontsize=14)
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"[plotter] wrote {out_path}")
     return out_path
