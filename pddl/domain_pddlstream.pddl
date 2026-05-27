@@ -159,7 +159,6 @@
       (Obj ?o)
       (Boxel ?region)
       (view_clear ?region)
-      (boxel_fits ?o ?region)              ; audit #62: ?o physically fits inside ?region
       (not (obj_at_boxel_KIF ?o ?region))  ; Only sense if unknown
     )
     :effect (and
