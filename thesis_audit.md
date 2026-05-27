@@ -36,7 +36,15 @@ STATUS  no marker = OPEN; resolved = [DONE] (or [REJECTED]) on the header line.
 NUMBERING  #N is filing order, not priority — read the TIER tag.
 
 ================================================================================
-#168  [T1] [THESIS]  Figures/captions review --- go through every figure one by one
+#168  [DONE 2026-05-27] [T1] [THESIS]  Figures/captions review --- go through every figure one by one
+NOTE 2026-05-27: closed cumulatively. Per-figure caption/accuracy fixes landed across prior
+sessions (#176 boxelization, #191 intro-hero, #197 replan-cycle removed, #198 captions, #207
+success-band); the 2026-05-27 supervisor-review pass then swept every Methods/Results figure for
+readability --- enlarged fonts to body-text size (4.1, 5.4-5.12), converted the success-rate /
+planning-time line+band plots to grouped BAR charts (5.5-5.8; CODEBASE #113/#114), moved 5.11's
+tiny in-figure note into its caption, fixed 5.10's suptitle-vs-y-label overlap (short horizontal
+labels), and reconciled the 5.5 + 5.11 captions with the regenerated images. Figure-specific
+follow-ups stay tracked separately: #175 (shadow figures), #209 (resolution figure).
 ================================================================================
 Every \includegraphics: intro fig:intro-hero; methods fig:boxelization,
 fig:boxelization-real, fig:partition-semantic/uniform, fig:sense-action, fig:replan-cycle;
@@ -460,7 +468,6 @@ NB (verified, NO issue filed):
 OPEN ISSUES
 ================================================================================
 OPEN:
-  Figures: #168  (every figure one-by-one; figures agent)
   Background: #181 (POD vs contingent-planning naming -- reverted; reconsider, don't equate them)
   Methods: #175 (shadow-split #102/#103 -- only "by depth" dropped; conditional/surface-resting remain)
   Intro/RW: #193 (move Spatial-Belief to background; T1)
@@ -468,7 +475,7 @@ OPEN:
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
