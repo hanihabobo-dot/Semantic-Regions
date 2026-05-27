@@ -1294,7 +1294,7 @@ def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
         bottoms = [b + c for b, c in zip(bottoms, counts)]
 
     ax.set_xticks(xs)
-    ax.set_xticklabels(labels, fontsize=11, rotation=30, ha="right")
+    ax.set_xticklabels(labels, fontsize=14, rotation=30, ha="right")
     ax.tick_params(axis="y", labelsize=14)
     ax.set_xlabel("(goal, variant)", fontsize=18)
     ax.set_ylabel("cell count", fontsize=18)
