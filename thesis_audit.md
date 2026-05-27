@@ -96,6 +96,8 @@ CLOSED. Figure+abstract+results+discussion re-pointed from find-and-tray-stack t
 sides (ours ~42% vs TAMPURA >=63%). The "planning-time only / 14.0 s / ~4x" framing was
 WRONG and dropped (TAMPURA Table II time includes simulated controller execution per-episode),
 so it now reports our per-episode wall-clock (mean 13.7 s) vs TAMPURA's 57 s. See #190.
+CORRECTION [2026-05-27]: "per-episode" above is WRONG -- Table II is PER-STEP incl. sim execution
+(arXiv v2 PDF p.15). Comparison re-derived under #213.
 
 ================================================================================
 #178  [DONE 2026-05-25] [T1]  Intro says the partition discretizes "only" objects + occlusions (omits free space)
@@ -236,6 +238,8 @@ config/default.yml: from_scratch=true, envelope_threshold=1).
 Parked follow-ons (NOT part of this fix): (a) solve_mdp defaults to value iteration, not LAO* —
 prose still says "LAO*"; (b) Table II times include controller execution, so #177's old
 planning-time framing was itself wrong (wall-clock is the closer analogue).
+CORRECTION [2026-05-27]: (b) understated it -- Table II is PER-STEP incl. execution (arXiv v2 PDF
+p.15), so even "per-episode wall-clock vs 57 s" is unit-mismatched. Re-derived under #213.
 
 ================================================================================
 #191  [DONE 2026-05-25] [T3]  Intro hero caption: identify the target object
@@ -458,6 +462,36 @@ advantage now stands plainly against the uniform baseline. NOTE: results/discuss
 the TAMPURA "no winner" framing (#177) -- correct the speed-winner wording there separately if wanted.
 Refs: abstract.tex:8-15; #177; #211; results.tex; discussion.tex.
 
+================================================================================
+#213  [T1]  TAMPURA Table II is PER-STEP, not per-episode (arXiv v2 PDF) -- re-derive comparison
+================================================================================
+TRUTH (source: arXiv:2403.10454 v2 PDF p.15, Table II + caption; author screenshot 2026-05-27).
+Caption verbatim: "Average and standard deviation of PER-STEP planning times (seconds) averaged
+over trials and steps within each trial.  These include execution time of the selected controller
+in simulation."  So the Partial-Observability cell (Bayes-Optimistic + LAO*) 57 +- 38 is PER-STEP
+INCLUDING simulated controller execution -- NOT per-episode, NOT planning-only.
+
+SOURCE OF MISCONCEPTION: the paper states something different than the PDF -- the v2 PDF Table II
+caption (per-step, above) is authoritative.  #177 and #190(b) both recorded 57 s as "per-episode
+(incl. execution)"; that is the error this issue corrects.
+
+Matched axes (author decision 2026-05-27, "both, per-episode primary"):
+  - PER-EPISODE, SAME HARDWARE (primary; the figure): TAMPURA find_dice local on our Ryzen 7730U
+    (runs/sweep_2026-05-26.json) = 166 +- 85 s/ep success-only (n=11), 240 +- 151 all (n=20),
+    success 55%; OURS holding-semantic = 13.7 s/ep (success-only, median 8.5), success 42%
+    (127/300).  ~12x slower per successful episode, more reliable.
+  - PER-STEP (prose reconciliation, vs the PUBLISHED number): TAMPURA 57 +- 38 s/step (paper);
+    OURS = wall_clock/plan_count = 13.676/2.315 = 5.9 s per PDDLStream solve (avg 2.315 plans/ep,
+    holding-semantic success-only, execution-inclusive to match).  ~9.7x.  UNIT CAVEAT: a TAMPURA
+    "step" = one control-action re-solve; our "plan" = one solve executing a multi-action plan.
+Cross-environment caveat stays (find_dice containment vs our lateral-shadow holding).
+
+DO: (a) trackers+notes record truth [this commit]; (b) eval_plotter figure -> local 166 +- 85;
+(c) results/discussion/conclusion -> 13.7 vs 166 primary + 5.9 vs 57 per-step; (d) THESIS_NOTES
+§21.2/§21.5.
+Refs: results.tex subsec:tampura; discussion.tex sec:disc-tampura; conclusion.tex:10;
+eval_plotter.py plot_tampura_wallclock_comparison; THESIS_NOTES §21; #177; #190; CODEBASE_AUDIT.txt.
+
 --------------------------------------------------------------------------------
 NB (verified, NO issue filed):
  - discussion.tex:121 "an object can be placed view-blind" (TAMPURA) is TRUE — verified from
@@ -472,6 +506,7 @@ OPEN:
   Methods: #175 (shadow-split #102/#103 -- only "by depth" dropped; conditional/surface-resting remain)
   Intro/RW: #193 (move Spatial-Belief to background; T1)
   Results: #199 (task rename), #209 (resolution-floor study + figure)
+  TAMPURA: #213 (Table II is per-step not per-episode; re-derive comparison; T1)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
