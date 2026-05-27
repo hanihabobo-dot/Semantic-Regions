@@ -1,60 +1,80 @@
 % !TEX root = ../main.tex
 
-\newglsgroup{general}{General}
+\newglsgroup{statespace}{State-Space Planning Model}
 
-\glsxtrnewsymbol[description={arbitrary (scalar) variable}, group=general]
-  {arbitrary_scalar}{\ensuremath{(\cdot)}}
-\glsxtrnewsymbol[description={arbitrary vector variable}, group=general]
-  {arbitrary_vector}{\ensuremath{(\bullet)}}
-\glsxtrnewsymbol[description={approximately equal}, group=general]
-  {approximately_equal}{\ensuremath{\approx}}
-\glsxtrnewsymbol[description={tuple of multiple variables}, group=general]
-  {tuple}{\ensuremath{\tuple{\cdot, \cdot, \cdot}}}
-\glsxtrnewsymbol[description={set of real numbers}, group=general]
-  {real_numbers}{\ensuremath{\symbb{R}}}
-\glsxtrnewsymbol[description={expected value of a \ac{rv} $X$}, group=general]
-  {expectation}{\ensuremath{\expectation{X}}}
-\glsxtrnewsymbol[description={probability that an \ac{rv} $X$ takes on the value $x$}, group=general]
-  {probability}{\ensuremath{\probability{X=x}}}
-\glsxtrnewsymbol[description={partial derivative of $f$ with respect to $x$}, group=general]
-  {partial_derivative}{\ensuremath{\frac{\partial f(\bullet)}{\partial x}}}
-\glsxtrnewsymbol[description={partial derivative of $f$ with respect to $x$ evaluated at $\bvec{a}$}, group=general]
-  {evaluated_at}{\ensuremath{\evalat[\bvec{a}] {\frac{\partial f(\bullet)}{\partial x}}}}
-\glsxtrnewsymbol[description={optimal value of $a$ minimizing the expression $f(a)$}, group=general]
-  {argmin}{\ensuremath{\argmin_a f(a)}}
-\glsxtrnewsymbol[description={optimal value of $a$ maximizing the expression $f(a)$}, group=general]
-  {argmax}{\ensuremath{\argmax_a f(a)}}
-\glsxtrnewsymbol[description={mathematical constant, $\uppi \approx 3.142$}, group=general]
-  {pi_constant}{\ensuremath{\uppi}}
-\glsxtrnewsymbol[description={Gaussian normal distribution with mean~$\mu$ and standard deviation~$\sigma$}, group=general]
-  {normal_distribution}{\ensuremath{\symcal{N}(\mu, \sigma)}}
+\glsxtrnewsymbol[description={deterministic state-space model $\langle S, s_0, S_G, Act, A, f \rangle$}, group=statespace]
+  {model_M}{\ensuremath{M}}
+\glsxtrnewsymbol[description={set of states}, group=statespace]
+  {states_S}{\ensuremath{S}}
+\glsxtrnewsymbol[description={a state}, group=statespace]
+  {state_s}{\ensuremath{s}}
+\glsxtrnewsymbol[description={initial state}, group=statespace]
+  {state_s0}{\ensuremath{s_0}}
+\glsxtrnewsymbol[description={successor state of $s$}, group=statespace]
+  {state_sprime}{\ensuremath{s'}}
+\glsxtrnewsymbol[description={set of goal states}, group=statespace]
+  {goal_states_SG}{\ensuremath{S_G}}
+\glsxtrnewsymbol[description={set of all (ground) actions}, group=statespace]
+  {actions_Act}{\ensuremath{Act}}
+\glsxtrnewsymbol[description={actions applicable in state $s$}, group=statespace]
+  {applicable_A}{\ensuremath{A(s)}}
+\glsxtrnewsymbol[description={an action}, group=statespace]
+  {action_a}{\ensuremath{a}}
+\glsxtrnewsymbol[description={deterministic state-transition function}, group=statespace]
+  {transition_f}{\ensuremath{f(a,s)}}
+\glsxtrnewsymbol[description={a plan, i.e.\ a sequence of actions}, group=statespace]
+  {plan_sigma}{\ensuremath{\sigma}}
+\glsxtrnewsymbol[description={a PDDL problem}, group=statespace]
+  {problem_P}{\ensuremath{P}}
 
+\newglsgroup{belief}{Belief and Knowledge}
 
-\newglsgroup{mdp}{Markov Decision Process}
+\glsxtrnewsymbol[description={belief state (set of possible states)}, group=belief]
+  {belief_b}{\ensuremath{b}}
+\glsxtrnewsymbol[description={a proposition (ground atom)}, group=belief]
+  {prop_p}{\ensuremath{p}}
+\glsxtrnewsymbol[description={a literal}, group=belief]
+  {literal_L}{\ensuremath{L}}
+\glsxtrnewsymbol[description={knowledge (K-literal) operator: its argument is known to hold}, group=belief]
+  {knowledge_K}{\ensuremath{K(\cdot)}}
+\glsxtrnewsymbol[description={logical negation}, group=belief]
+  {negation}{\ensuremath{\neg}}
 
-\glsxtrnewsymbol[description={time step index}, group=mdp]
-  {time_step}{\ensuremath{t}}
-\glsxtrnewsymbol[description={set of all states}, group=mdp]
-  {state_space}{\ensuremath{\symcal{S}}}
-\glsxtrnewsymbol[description={set of all actions}, group=mdp]
-  {action_space}{\ensuremath{\symcal{A}}}
-\glsxtrnewsymbol[description={set of all possible rewards}, group=mdp]
-  {reward_space}{\ensuremath{\symcal{R}}}
-\glsxtrnewsymbol[description={state at time $t$, realization of \ac{rv} $S^t$}, group=mdp]
-  {state}{\ensuremath{s}, \ensuremath{s^t}}
-\glsxtrnewsymbol[description={next state at time $t+1$, realization of \ac{rv} $S^{t+1}$}, group=mdp]
-  {next_state}{\ensuremath{s'}, \ensuremath{s^{t+1}}}
-\glsxtrnewsymbol[description={action at time $t$, realization of \ac{rv} $A^t$}, group=mdp]
-  {action}{\ensuremath{a}, \ensuremath{a^t}}
-\glsxtrnewsymbol[description={next action at time $t+1$, realization of \ac{rv} $A^{t+1}$}, group=mdp]
-  {next_action}{\ensuremath{a'}, \ensuremath{a^{t+1}}}
-\glsxtrnewsymbol[description={reward at time $t+1$, realization of \ac{rv} $R^{t+1}$}, group=mdp]
-  {reward}{\ensuremath{r}, \ensuremath{r^{t+1}}}
-\glsxtrnewsymbol[description={state at time $t$}, group=mdp]
-  {state_rv}{\ensuremath{S^t}}
-\glsxtrnewsymbol[description={action at time $t$}, group=mdp]
-  {action_rv}{\ensuremath{A^t}}
-\glsxtrnewsymbol[description={reward at time $t$}, group=mdp]
-  {reward_rv}{\ensuremath{R^t}}
-\glsxtrnewsymbol[description={dynamics function specifying a conditional \ac{pdf} for the next state~$s'$ and reward~$r$ given the current state~$s$ and action~$a$}, group=mdp]
-  {dynamics_function}{\ensuremath{p(s', r \given s, a)}}
+\newglsgroup{podtamp}{Semantic POD-TAMP Model}
+
+\glsxtrnewsymbol[description={semantic POD-TAMP model $\langle \mathcal{S}, \mathcal{S}_0, \mathcal{S}_G, \mathcal{A}, f, \mathcal{O} \rangle$}, group=podtamp]
+  {model_Mcal}{\ensuremath{\mathcal{M}}}
+\glsxtrnewsymbol[description={set of abstract (belief) states}, group=podtamp]
+  {states_Scal}{\ensuremath{\mathcal{S}}}
+\glsxtrnewsymbol[description={set of initial abstract states}, group=podtamp]
+  {states_Scal0}{\ensuremath{\mathcal{S}_0}}
+\glsxtrnewsymbol[description={set of goal states}, group=podtamp]
+  {states_ScalG}{\ensuremath{\mathcal{S}_G}}
+\glsxtrnewsymbol[description={set of abstract action schemas}, group=podtamp]
+  {actions_Acal}{\ensuremath{\mathcal{A}}}
+\glsxtrnewsymbol[description={sensor model}, group=podtamp]
+  {sensor_Ocal}{\ensuremath{\mathcal{O}}}
+\glsxtrnewsymbol[description={set of atomic propositions}, group=podtamp]
+  {atoms_AP}{\ensuremath{\mathcal{AP}}}
+\glsxtrnewsymbol[description={initial belief}, group=podtamp]
+  {belief_b0}{\ensuremath{b_0}}
+\glsxtrnewsymbol[description={goal belief}, group=podtamp]
+  {belief_bg}{\ensuremath{b_g}}
+
+\newglsgroup{boxels}{Semantic Boxels}
+
+\glsxtrnewsymbol[description={set of Semantic Boxels}, group=boxels]
+  {boxel_set}{\ensuremath{\mathcal{BX}_{\text{set}}}}
+\glsxtrnewsymbol[description={a manipulable object}, group=boxels]
+  {object_obj}{\ensuremath{obj}}
+\glsxtrnewsymbol[description={a Boxel (workspace region)}, group=boxels]
+  {boxel}{\ensuremath{Boxel}}
+\glsxtrnewsymbol[description={predicate: object $obj$ is in $Boxel$}, group=boxels]
+  {inboxel}{\ensuremath{\operatorname{InBoxel}}}
+\glsxtrnewsymbol[description={number of candidate regions to search}, group=boxels]
+  {num_regions_N}{\ensuremath{N}}
+
+\newglsgroup{tampura}{TAMPURA Comparison}
+
+\glsxtrnewsymbol[description={probabilistic sparse MDP learned by TAMPURA}, group=tampura]
+  {tampura_sparse_mdp}{\ensuremath{\bar{\mathcal{B}}_\text{sparse}}}
