@@ -232,10 +232,36 @@
 \renewcommand{\lstlistlistingname}{List of Listings}
 
 % Listing style for PDDL
+% The generic Lisp lexer only caught comments and a couple of operators
+% (and/not).  This dedicated PDDL language additionally highlights the
+% :keywords, the logical operators, the type predicates, and the
+% ?-variables, so the structure of an action (parameters / precondition /
+% effect) and its variables stand out.
+\definecolor{pddlkw}{RGB}{0,0,190}       % structural / :keywords
+\definecolor{pddlop}{RGB}{150,30,150}    % logical operators
+\definecolor{pddltype}{RGB}{0,120,120}   % type predicates
+\definecolor{pddlvar}{RGB}{200,85,0}     % ?-variables
+\lstdefinelanguage{PDDLlang}{
+    alsoletter={?:-_},
+    sensitive=true,
+    morecomment=[l]{;},
+    morestring=[b]",
+    morekeywords=[1]{define,domain,problem,stream,:requirements,:strips,
+      :equality,:typing,:derived-predicates,:conditional-effects,
+      :action-costs,:predicates,:functions,:action,:parameters,
+      :precondition,:effect,:derived,:stream,:inputs,:outputs,:certified,
+      :domain,:init,:goal,:objects,:fluents},
+    morekeywords=[2]{and,or,not,when,forall,exists,imply,increase,decrease,either},
+    morekeywords=[3]{Boxel,Obj,Config,Trajectory,Grasp},
+    morekeywords=[4]{?x,?b,?obj,?region,?o,?o1,?o2,?on_obj,?q,?q1,?q2,?t,?g},
+}
 \lstdefinestyle{PDDL}{
-    language=Lisp, % Use Lisp for PDDL-like syntax, often works well for PDDL
+    language=PDDLlang,
     basicstyle=\ttfamily\footnotesize, % Font style and size
-    keywordstyle=\color{blue}\bfseries, % Blue and bold keywords
+    keywordstyle=[1]\color{pddlkw}\bfseries,  % structural / :keywords
+    keywordstyle=[2]\color{pddlop},            % logical operators
+    keywordstyle=[3]\color{pddltype},          % type predicates
+    keywordstyle=[4]\color{pddlvar},           % ?-variables
     commentstyle=\color{green!60!black}\itshape, % Green and italic comments
     stringstyle=\color{purple}, % Purple strings
     showstringspaces=false, % Don't show spaces in strings
