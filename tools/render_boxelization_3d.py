@@ -334,7 +334,7 @@ def _panel(ax, title):
     ax.view_init(elev=28, azim=-55)
     ax.set_axis_off()
     ax.set_xlim(0, W); ax.set_ylim(0, H); ax.set_zlim(0, ZTOP)
-    ax.set_title(title, fontsize=11.5, color=C_TITLE, fontweight="bold", y=0.96)
+    ax.set_title(title, fontsize=26, color=C_TITLE, fontweight="bold", y=0.96)
 
 
 def main():
@@ -349,12 +349,12 @@ def main():
     fig = plt.figure(figsize=(15, 9.5))
     fig.patch.set_facecolor("white")
     specs = [
-        ("(a) Initial scene",               dict()),
-        ("(b) Object-centric bounding",     dict(objbox=True)),
-        ("(c) Occlusion-aware subdivision", dict(objbox=True, occ=True, los=True)),
-        ("(d) Free space: whole workspace", dict(objbox=True, occ=True, free=whole)),
-        ("(e) Free space: recursive split", dict(objbox=True, occ=True, free=free_split)),
-        ("(f) Free space: convex merge",    dict(objbox=True, occ=True, free=free_merged)),
+        ("(a)", dict()),
+        ("(b)", dict(objbox=True)),
+        ("(c)", dict(objbox=True, occ=True, los=True)),
+        ("(d)", dict(objbox=True, occ=True, free=whole)),
+        ("(e)", dict(objbox=True, occ=True, free=free_split)),
+        ("(f)", dict(objbox=True, occ=True, free=free_merged)),
     ]
     for i, (title, opt) in enumerate(specs, 1):
         ax = fig.add_subplot(2, 3, i, projection="3d")
@@ -381,11 +381,13 @@ def main():
         Patch(facecolor="#d4efdf", edgecolor=C_FREE_E, label="Free Space Boxel"),
         Line2D([0], [0], linestyle=(0, (4, 3)), color=C_LOS, label="Line of sight"),
     ]
-    fig.legend(handles=legend, loc="lower center", ncol=7, frameon=False,
-               fontsize=10, bbox_to_anchor=(0.5, 0.015))
+    fig.legend(handles=legend, loc="lower center", ncol=4, frameon=False,
+               fontsize=24, markerscale=1.8, handlelength=2.4,
+               columnspacing=2.2, handletextpad=0.8,
+               bbox_to_anchor=(0.5, 0.01))
     fig.suptitle("Adaptive Semantic Discretization (3-D)", fontsize=16,
                  fontweight="bold", color=C_TITLE, y=0.99)
-    fig.tight_layout(rect=(0, 0.05, 1, 0.96))
+    fig.tight_layout(rect=(0, 0.11, 1, 0.96))
     fig.savefig(out, dpi=190, facecolor="white", bbox_inches="tight")
     print(f"wrote {out}  ({len(free_split)} split -> {len(free_merged)} merged)")
 
