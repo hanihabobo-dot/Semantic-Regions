@@ -385,9 +385,7 @@ def main():
                fontsize=24, markerscale=1.8, handlelength=2.4,
                columnspacing=2.2, handletextpad=0.8,
                bbox_to_anchor=(0.5, 0.01))
-    fig.suptitle("Adaptive Semantic Discretization (3-D)", fontsize=16,
-                 fontweight="bold", color=C_TITLE, y=0.99)
-    fig.tight_layout(rect=(0, 0.11, 1, 0.96))
+    fig.tight_layout(rect=(0, 0.11, 1, 0.99))
     fig.savefig(out, dpi=190, facecolor="white", bbox_inches="tight")
     print(f"wrote {out}  ({len(free_split)} split -> {len(free_merged)} merged)")
 
