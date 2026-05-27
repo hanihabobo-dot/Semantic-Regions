@@ -21,7 +21,7 @@ More formally, a deterministic state-space model can be described as a tuple $M 
 \end{itemize}
 A \textit{solution} or \textit{plan} is then a sequence of actions $\sigma = [a_0, a_1, \dots, a_n]$ such that if $s_i$ is the state before action $a_i$, then $a_i \in A(s_i)$, $s_{i+1} = f(a_i, s_i)$, and the final state $s_{n+1}$ is in $S_G$. Often, we are interested in an \textit{optimal plan}, which could be the shortest sequence of actions or one that minimizes some associated cost.
 
-\paragraph{Compact Representation: STRIPS, and PDDL}
+\paragraph{Compact representation: STRIPS, and PDDL.}
 Explicitly enumerating all possible states $S$ is infeasible for all but the simplest problems. Therefore, planning problems are typically described in a more compact, \textit{factored} representation using a planning language. In this representation, a state is defined by a set of propositions (or ground atoms) that are currently true.
 
 A foundational language for this is \textbf{STRIPS (Stanford Research Institute Problem Solver)} \cite{fikes1971strips}. In STRIPS:
@@ -82,7 +82,7 @@ A PDDL problem $P = \langle \text{Domain}, \text{Instance} \rangle$ thus compact
 Classical planning's assumption of full observability is often violated in robotics. When an agent has incomplete information about the true state of the world, it must reason about its \textit{belief state}.
 
 \subsection{Belief States and K-Literals}
-A belief state represents the agent's current set of possible world states consistent with its history of actions and observations. We refer to the setting this thesis targets as \emph{Partially Observable Deterministic (POD)} planning: the world itself behaves deterministically and the only uncertainty is the agent's incomplete knowledge of the initial situation, which sensing resolves. ``POD'' is a descriptive label we adopt for this setting rather than established terminology in the contingent-planning literature it builds on \cite{bonet2014flexible, albore2009translation, geffner2013concise}. The belief state $b$ is explicitly a set of possible states. Actions transition this set, and observations prune it.
+A belief state represents the agent's current set of possible world states consistent with its history of actions and observations. We refer to the setting this thesis targets as \emph{Partially Observable Deterministic (POD)} planning: the world itself behaves deterministically and the only uncertainty is the agent's incomplete knowledge of the initial situation, which sensing resolves. POD builds on \cite{bonet2014flexible, albore2009translation, geffner2013concise}. The belief state $b$ is explicitly a set of possible states. Actions transition this set, and observations prune it.
 A common way to reason about knowledge in POD planning is through K-literals \cite{bonet2011planning, geffner2013concise}. K-literals make the robot's knowledge about a proposition $p$ explicit. For example:
 \begin{itemize}
     \item $K(p)$ signifies "$p$ is known to be true."
@@ -103,7 +103,7 @@ Task and Motion Planning (TAMP) connects high-level task goals with a robot's ac
 \subsection{PDDLStream for TAMP}
 PDDLStream \cite{garrett2018pddlstream} is a TAMP framework built to bridge this symbolic-continuous gap. It extends the classical Planning Domain Definition Language (PDDL) by introducing the core concept of \textbf{streams}.
 
-\paragraph{Streams: Declarative Procedures for Continuous Parameters}
+\paragraph{Streams: declarative procedures for continuous parameters.}
 A stream in PDDLStream is a procedure that generates or tests values for continuous parameters required by symbolic actions. These parameters might include object poses, robot configurations, grasp transformations, or motion trajectories. Streams have both a procedural and a declarative component:
 \begin{itemize}
     \item \textbf{Procedural Component (Conditional Generator):} This is the actual code (e.g., a Python function) that, given some input values (which can be discrete symbols or other continuous values), produces a (potentially infinite) sequence of output values. For example, an inverse kinematics (IK) stream, given an object, its target pose, and a grasp, would generate a sequence of robot configurations that achieve that end-effector pose. A collision-checking stream, given a trajectory, would test if it's collision-free.
@@ -117,7 +117,7 @@ A stream in PDDLStream is a procedure that generates or tests values for continu
 \end{itemize}
 PDDLStream employs a \textbf{lazy evaluation} strategy. Streams are not called exhaustively beforehand; instead, the symbolic planner calls them "on-demand" when it encounters an action whose preconditions require a continuous parameter to be instantiated or a continuous condition to be tested.
 
-\paragraph{Example PDDLStream Workflow}
+\paragraph{Example PDDLStream workflow.}
 Consider a symbolic action \texttt{(pick ?obj ?p ?g ?q ?t)} (pick object \texttt{?obj} from pose \texttt{?p} using grasp \texttt{?g} via configuration \texttt{?q} along trajectory \texttt{?t}). For this action to be applicable:
 \begin{enumerate}
     \item A stream might first be called to sample a stable \texttt{?p} for \texttt{?obj} on a surface. If successful, it certifies \texttt{(AtPose ?obj ?p)}.
@@ -137,7 +137,7 @@ A robot needs some way to represent the 3D space around it and the objects in it
 \subsection{Discretization of Continuous Space}
 Robots operate in continuous space, but symbolic planners reason over discrete states --- so the continuous space has to be discretized somehow.
 
-\paragraph{Voxel Grids}
+\paragraph{Voxel grids.}
 A common approach to represent 3D environments is to discretize them into a grid of uniform volumetric pixels, or \textbf{voxels}. Each voxel can store information, such as whether it is occupied, free, or unknown. While straightforward, uniform voxel grids can be memory-intensive and computationally expensive for large environments or high resolutions.
 
 \textbf{Octrees} (\cref{fig:octmap_illustration}) \cite{hornung2013octomap} offer a more efficient hierarchical data structure for representing 3D space. An octree is a tree data structure in which each internal (non-leaf) node has exactly eight children, while leaf nodes have none. It starts with a single large voxel encompassing the entire space of interest. If this voxel is not homogeneous (e.g., it contains both free and occupied space), it is recursively subdivided into eight smaller child voxels (octants).
@@ -153,7 +153,7 @@ This subdivision continues until voxels are homogeneous or a minimum resolution/
 
 % However, a limitation of standard Octree construction methods, when applied to planning under partial observability, is their typical reliance on direct sensor measurements (like point clouds) to guide subdivision based on observed point density or occupancy changes. This makes it challenging to use them directly to represent and reason about beliefs in unobserved or occluded regions where specific target objects might be hiding – a key focus for information-gathering plans.
 
-\paragraph{Sidd's Critical Regions}
+\paragraph{Sidd's Critical Regions.}
 To make planning more efficient, space can be divided based on task-relevant meaning rather than uniform geometric criteria. One such approach is the concept of \textbf{Critical Regions (CRs)}, introduced by Molina et al.~\cite{molina2020learn} and later extended by Shah and Srivastava~\cite{shah2022abstractions}. In the original formulation, a critical region is a part of the configuration space with a low probability of being sampled by a uniform sampler yet essential to a solution---narrow passages such as doorways~\cite{molina2020learn}. Shah and Srivastava generalised this to regions where task-relevant features---controller success rates, object visibility, or transition likelihoods---change significantly~\cite{shah2022abstractions}.
 
 In this line of work the regions are not hand-specified: a deep network is trained to \emph{predict} the critical regions of a given environment from that scene's input, and the predictor generalises to environments it was not trained on. Once predicted, a region-based Voronoi diagram (RBVD) partitions the configuration space around the CRs: each point is assigned to the nearest critical region, forming abstract states. Transitions between these abstract states define abstract actions, forming the backbone for hierarchical planning. By focusing computation on these task-relevant regions, this approach scales planning more effectively, but the regions are predicted once per environment and then held fixed; they do not adapt as objects move within a scene during execution.
