@@ -5,7 +5,7 @@
 This chapter builds up the pieces the thesis depends on, ending with PDDLStream and how 3D space is represented for planning.
 
 \section{AI Planning Fundamentals}
-Artificial Intelligence (AI) planning produces a sequence of actions---a plan---that gets from a given initial state to a specified goal \cite{ghallab2004automated}.
+\Ac{ai} planning produces a sequence of actions---a plan---that gets from a given initial state to a specified goal \cite{ghallab2004automated}.
 
 \subsection{State-Space Models in Classical Planning}
 The formal basis for classical planning problems is a \textit{state-space model} \cite{geffner2013concise, hofmann2024learning, ghallab2004automated}. A state-space model defines every possible configuration of the world and how actions move between configurations.
@@ -24,7 +24,7 @@ A \textit{solution} or \textit{plan} is then a sequence of actions $\sigma = [a_
 \paragraph{Compact representation: STRIPS, and PDDL.}
 Explicitly enumerating all possible states $S$ is infeasible for all but the simplest problems. Therefore, planning problems are typically described in a more compact, \textit{factored} representation using a planning language. In this representation, a state is defined by a set of propositions (or ground atoms) that are currently true.
 
-A foundational language for this is \textbf{STRIPS (Stanford Research Institute Problem Solver)} \cite{fikes1971strips}. In STRIPS:
+A foundational language for this is \textbf{\ac{strips}} \cite{fikes1971strips}. In STRIPS:
 \begin{itemize}
     \item \textbf{States} are represented as sets of true propositions (e.g., \texttt{ (on A B), (ontable B), (handempty) }).
     \item \textbf{Actions} are defined by:
@@ -40,7 +40,7 @@ A foundational language for this is \textbf{STRIPS (Stanford Research Institute 
     \item The initial state ($s_0$) is a set of initially true propositions, and the goal ($S_G$) is specified by a set of propositions that must be true in any goal state.
 \end{itemize}
 
-The \textbf{Planning Domain Definition Language (PDDL)} \cite{aeronautiques1998pddl} builds upon and extends the STRIPS representation, providing a more expressive and standardized syntax for a wider range of classical planning problems. In PDDL:
+The \textbf{\ac{pddl}} \cite{aeronautiques1998pddl} builds upon and extends the STRIPS representation, providing a more expressive and standardized syntax for a wider range of classical planning problems. In PDDL:
 \begin{itemize}
     \item \textbf{Domain File} defines:
         \begin{itemize}
@@ -90,23 +90,23 @@ A common way to reason about knowledge in POD planning is through K-literals \ci
 \end{itemize}
 If neither $K(p)$ nor $K(\neg p)$ holds, the truth of $p$ is unknown. Separately, $p$ is "possibly true" whenever $K(\neg p)$ does not hold---which also covers the case where $p$ is known to be true.
 
-K-literals are the basis of a \emph{translation} that compiles a partially observable problem into a classical one \cite{geffner2013concise}. Each literal $L$ of the original problem is replaced by the two fluents $K(L)$ and $K(\neg L)$; in the translated problem these are made true in the initial state only where the agent actually knows the corresponding value, and a literal whose value is unknown contributes neither. The translated problem therefore carries no uncertainty in its initial state and can be solved by an ordinary classical planner, which now searches for a plan that reaches a desired \emph{state of knowledge}---for example $K(\text{goal\_achieved})$---rather than a desired world state. Because the pair $K(L)$ and $K(\neg L)$ together encodes whether the agent knows the truth of $L$, we call such a knowledge fluent a \emph{Know-If Fluent (KIF)}. KIFs are the belief representation used throughout this thesis (\cref{ch:methods}).
+K-literals are the basis of a \emph{translation} that compiles a partially observable problem into a classical one \cite{geffner2013concise}. Each literal $L$ of the original problem is replaced by the two fluents $K(L)$ and $K(\neg L)$; in the translated problem these are made true in the initial state only where the agent actually knows the corresponding value, and a literal whose value is unknown contributes neither. The translated problem therefore carries no uncertainty in its initial state and can be solved by an ordinary classical planner, which now searches for a plan that reaches a desired \emph{state of knowledge}---for example $K(\text{goal\_achieved})$---rather than a desired world state. Because the pair $K(L)$ and $K(\neg L)$ together encodes whether the agent knows the truth of $L$, we call such a knowledge fluent a \emph{\ac{kif}}. \acp{kif} are the belief representation used throughout this thesis (\cref{ch:methods}).
 
 \subsection{Probabilistic vs. Deterministic Partial Observability}
-POD planning differs from planning with Partially Observable Markov Decision Processes (POMDPs) \cite{kaelbling1998planning}---a distinction that matters because we later compare our approach to POMDP-based TAMP. In POMDPs, the world is modeled as a Markov Decision Process (MDP) with probabilistic transitions and observations, and the belief state is a probability distribution over world states. While highly expressive, POMDPs are computationally very demanding. POD planning assumes outcomes and observations are deterministic but unknown. This makes it more tractable than POMDPs, and it fits robotic problems where the uncertainty comes from not knowing the world rather than from actions behaving randomly.
+POD planning differs from planning with \acp{pomdp} \cite{kaelbling1998planning}---a distinction that matters because we later compare our approach to POMDP-based TAMP. In POMDPs, the world is modeled as a \ac{mdp} with probabilistic transitions and observations, and the belief state is a probability distribution over world states. While highly expressive, POMDPs are computationally very demanding. POD planning assumes outcomes and observations are deterministic but unknown. This makes it more tractable than POMDPs, and it fits robotic problems where the uncertainty comes from not knowing the world rather than from actions behaving randomly.
 
 
 \section{Task and Motion Planning (TAMP)}
-Task and Motion Planning (TAMP) connects high-level task goals with a robot's actual physical movements \cite{garrett2021integrated}. The core problem is ensuring that a plan is physically possible. High-level planners often ignore geometry, leading to plans that seem correct but can't be executed. Yet, including all geometric details from the start makes the problem too complex to solve. Combining high-level logic with real-world geometry is the central difficulty of TAMP, and frameworks like PDDLStream exist to bridge it.
+\Ac{tamp} connects high-level task goals with a robot's actual physical movements \cite{garrett2021integrated}. The core problem is ensuring that a plan is physically possible. High-level planners often ignore geometry, leading to plans that seem correct but can't be executed. Yet, including all geometric details from the start makes the problem too complex to solve. Combining high-level logic with real-world geometry is the central difficulty of TAMP, and frameworks like PDDLStream exist to bridge it.
 
 
 \subsection{PDDLStream for TAMP}
-PDDLStream \cite{garrett2018pddlstream} is a TAMP framework built to bridge this symbolic-continuous gap. It extends the classical Planning Domain Definition Language (PDDL) by introducing the core concept of \textbf{streams}.
+PDDLStream \cite{garrett2018pddlstream} is a TAMP framework built to bridge this symbolic-continuous gap. It extends the classical \ac{pddl} by introducing the core concept of \textbf{streams}.
 
 \paragraph{Streams: declarative procedures for continuous parameters.}
 A stream in PDDLStream is a procedure that generates or tests values for continuous parameters required by symbolic actions. These parameters might include object poses, robot configurations, grasp transformations, or motion trajectories. Streams have both a procedural and a declarative component:
 \begin{itemize}
-    \item \textbf{Procedural Component (Conditional Generator):} This is the actual code (e.g., a Python function) that, given some input values (which can be discrete symbols or other continuous values), produces a (potentially infinite) sequence of output values. For example, an inverse kinematics (IK) stream, given an object, its target pose, and a grasp, would generate a sequence of robot configurations that achieve that end-effector pose. A collision-checking stream, given a trajectory, would test if it's collision-free.
+    \item \textbf{Procedural Component (Conditional Generator):} This is the actual code (e.g., a Python function) that, given some input values (which can be discrete symbols or other continuous values), produces a (potentially infinite) sequence of output values. For example, an \ac{ik} stream, given an object, its target pose, and a grasp, would generate a sequence of robot configurations that achieve that end-effector pose. A collision-checking stream, given a trajectory, would test if it's collision-free.
     \item \textbf{Declarative Component (Stream Specification):} This part is described in a PDDL-like syntax and informs  the symbolic planner what the stream does, what inputs it requires, what outputs it produces, and, crucially, what logical conditions (fluents) are associated with these inputs and outputs. This specification includes:
         \begin{itemize}
             \item \texttt{:inputs}: The typed parameters the stream procedure takes.
@@ -154,8 +154,8 @@ This subdivision continues until voxels are homogeneous or a minimum resolution/
 % However, a limitation of standard Octree construction methods, when applied to planning under partial observability, is their typical reliance on direct sensor measurements (like point clouds) to guide subdivision based on observed point density or occupancy changes. This makes it challenging to use them directly to represent and reason about beliefs in unobserved or occluded regions where specific target objects might be hiding – a key focus for information-gathering plans.
 
 \paragraph{Sidd's Critical Regions.}
-To make planning more efficient, space can be divided based on task-relevant meaning rather than uniform geometric criteria. One such approach is the concept of \textbf{Critical Regions (CRs)}, introduced by Molina et al.~\cite{molina2020learn} and later extended by Shah and Srivastava~\cite{shah2022abstractions}. In the original formulation, a critical region is a part of the configuration space with a low probability of being sampled by a uniform sampler yet essential to a solution---narrow passages such as doorways~\cite{molina2020learn}. Shah and Srivastava generalised this to regions where task-relevant features---controller success rates, object visibility, or transition likelihoods---change significantly~\cite{shah2022abstractions}.
+To make planning more efficient, space can be divided based on task-relevant meaning rather than uniform geometric criteria. One such approach is the concept of \textbf{\acp{cr}}, introduced by Molina et al.~\cite{molina2020learn} and later extended by Shah and Srivastava~\cite{shah2022abstractions}. In the original formulation, a critical region is a part of the configuration space with a low probability of being sampled by a uniform sampler yet essential to a solution---narrow passages such as doorways~\cite{molina2020learn}. Shah and Srivastava generalised this to regions where task-relevant features---controller success rates, object visibility, or transition likelihoods---change significantly~\cite{shah2022abstractions}.
 
-In this line of work the regions are not hand-specified: a deep network is trained to \emph{predict} the critical regions of a given environment from that scene's input, and the predictor generalises to environments it was not trained on. Once predicted, a region-based Voronoi diagram (RBVD) partitions the configuration space around the CRs: each point is assigned to the nearest critical region, forming abstract states. Transitions between these abstract states define abstract actions, forming the backbone for hierarchical planning. By focusing computation on these task-relevant regions, this approach scales planning more effectively, but the regions are predicted once per environment and then held fixed; they do not adapt as objects move within a scene during execution.
+In this line of work the regions are not hand-specified: a deep network is trained to \emph{predict} the critical regions of a given environment from that scene's input, and the predictor generalises to environments it was not trained on. Once predicted, a \ac{rbvd} partitions the configuration space around the CRs: each point is assigned to the nearest critical region, forming abstract states. Transitions between these abstract states define abstract actions, forming the backbone for hierarchical planning. By focusing computation on these task-relevant regions, this approach scales planning more effectively, but the regions are predicted once per environment and then held fixed; they do not adapt as objects move within a scene during execution.
 
 Our work combines these techniques, as explained in \cref{ch:methods}.
