@@ -1,0 +1,201 @@
+
+
+nice idea for future. implemt a live demo version where i can say something like pick blue box to the terminal and it will. add as issue. it should support all of our basic actions and goals. pick drop sense stack, find and stack, pick i guess is like holding any way. but the regex should be smart enough to capture the goal or task asked or say ask again, did you mean so and so.
+
+
+fix caption: where the target object may be
+hidden behind others and must be located before it can be retrieved. the target is the cyan cube behind the green cube.
+
+
+
+ currently requires re-tuning hardcoded geometric constants. not true. it requires new actions depending on the goal. 
+
+before acting (Task-Aware Virtual. how does he act? how does his planner look like? look that up
+
+Computing Contingent Plans via
+Fully Observable Non-Deterministic Planning i remember this paper. find where in the emails did we talk about it. 
+
+
+What we add is orthogonal to the replanning loop. never use orthogonal if you are not talking about geometry. 
+
+
+Belief-space replanning [11]
+determinises and replans, as we do, but does not make occlusion a first-class planning entity. yeah that doesnt matter. im not sure that one belongs in related work. feels more like background to me. 
+
+
+This thesis sits at the intersection. avoid marketing language. intersection? say we extend or build upon. 
+
+
+
+
+
+This position yields three concrete advantages over the alternatives above, each carrying
+a cost we state plainly. First, occlusion is first-class, inspectable state: the planner reasons
+over named observed-versus-occluded regions a reader can enumerate, rather than over a
+dense visibility voxel grid feeding a learned statistical effect model, as in TAMPURA’s Find
+Die benchmark [7]; the cost is that the visibility signal populating those regions is currently
+supplied by an oracle rather than a perception module. Second, uncertainty is handled without
+probabilities: knowledge literals record what is known and unknown deterministically, so there
+is no per-controller probability to estimate and no offline model to learn; the cost is that the
+planner cannot judge one action as more likely to succeed than another—it minimises plan
+cost and leans on replanning to recover when an optimistic assumption proves wrong. Third,
+no MDP machinery is required: a lightweight deterministic PDDL layer replaces the learn-asparse-MDP-then-solve-with-LAO* stack of POMDP-based TAMP [7], so there is no learned
+abstraction to mis-estimate; the cost is that optimistic determinise-and-replan is sound only
+while belief reflects observation, an invariant the bounded give-up on unreachable shadows
+(Section 6.6) deliberately relaxes.
+waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaay too long. make it shorter.
+
+
+
+Spatial Belief Representation in TAMP. this section should be greatly reconsiderd. we should ask what is the point of it. maybe it belongs to background, but defintly not related work. 
+
+
+i think theres already a section about octrees and semantic region in background, right? fill that up with any nessary info from this section and then delet the rest. i remember i just wanted to say that we used those two approches for aspariation, and we couldnt just take any of them out of the box during reaserch. im not sure how to say that best or if to say it at all.
+
+ptive Semantic Discretization Process. (a) Initial scene with robot viewpoint
+and objects.  we should generate a new plot where we also inlude two or more other subfigures to document the stages of genrating the freespace. first, all of space, including objects, then recursive spliting, then recursinve merging based on convexcity. 
+
+upate caption by looking at the new image:  Object bounding cuboids enclose
+the visible cubes; red wireframe shadows mark the v
+
+
+gure 4.3: Adaptive semantic partition (left) versus uniform-grid baseline (right) on a matching scene. T. we need to get these figures to be of the same size. also update caption and mention very briefly what every color means. 
+
+
+solve the result by optimistic determinisation and reactive
+replanning (Chapter 3). i dont know what that means. suggest a rephrase.
+
+
+ (untyped domain) -- what is that? what is untyped strpis? 
+
+
+ optimistic planning with replanning on failure is a standard pattern for TAMP under
+partial observability delete. no need to justify or appologize. 
+
+
+
+The reactive-replan trigger. The action log reads “sense shadow_of_purple_object —
+target not here”: execution has rejected the optimistic add-effect, so the loop marks
+that shadow empty in the belief and replans, now searching only the remaining
+shadow. completly wrong.see picture again.
+
+
+
+ holding: the robot must end the episode holding a single target object whose initial pose
+is hidden behind one of a set of occluders. The number of occluders 𝑛occ is the difficulty
+axis (2, 3, 4; see Figure 5.2).
+• stack: the robot must build a stack of cubes to a given height. The stack height ℎ is the
+difficulty axis (2, 3, 4); cube positions are fully observable.
+• find-and-tray-s
+
+dont use the code terms. those are confusing. use find, stack, find and stack instead. 
+
+
+bjects and their occlusion shadows are labelled
+in the overlay. im not sure what that means. read foto again and come up with a better caption
+
+
+era’s rendered RGB-D images. A
+future learned detector red new image. update caption
+
+
+Most successful cells finish in well under a second per call. is this true? 
+
+ the budget exists to catch
+pathological cases rather than as the operating point.  what the fuck does that mean? 
+
+nning budget, without
+exceeding the per-episode replan limit.
+. the per-episode replan limit. there shoulde be no such thing when it comes to the evaluations. it should keep running untill the time ends. keep the three retrys then quite thing. 
+
+
+lure mode: when a cell does not succeed, an exit reason among planner_failed,
+timeout, replan_limit, physics_mismatch, drop_failed, no_summary, and al. why would drop fail lead to an exist? you need to explain that somethime the gripper cloud not drop the object so the gripper state would stay holding a non target object forever, in those cases we exist after just three failed drop events. 
+
+
+, over the subset of cells with non-null values. The two denominators differ by ∼6 % of
+cells (early timeouts without a recorded state)
+
+what does that mean? 
+
+
+workspace is empty
+is known to be empty.
+
+Baselines for Comparison. i think we should consider this as a baseline for uni but for autocel set to smallest obejct in scene. then also a semantic comparison. i think it will perform worse but is still worth tring. to solve action preconditions proplems, reformutalte how these actions are done such that belonging to at least one entitiy like object a or shadow b or free c, means that you can be used in the pddl action. then we would have to rethink how we implement these actions in python. we woudnt do boxel center + 10 cm anymore. 
+
+
+ince finer leaves break placement on the table dimensions used
+here. no one will understand this as it is. you are stating it like its self evident. explain that the way we wrote our action, each object has exactly one boxel. so this was just a design choice. 
+
+
+semantic+mbs0.05 — the same adaptive partition but with the free-space leaf-size
+floor force
+
+isnt that the same value as autosize any way in effect, see code and logs for this. 
+
+
+gure 5.7: Success rate vs 𝑛occ on the find-and-tray-stack goal. Uniform fails almost entirely;
+semantic+mbs0. explain this graph for me, where does the variance come from? 
+
+On the
+stack goal the ratio is steeper (semantic ∼25 vs uniform ∼1340). we dont need free space partioning there. why mention this? 
+
+
+the closest
+analogue to TAMPURA’s published Partial Observability setting . no, that would be holding.
+
+
+remove the words thesis notes from the picture with this caption: d-tray-stack: ours (median + IQR, success-only)
+against TAMPURA’s reported Table II numbers.
+
+also is theirs also succes only? 
+
+5.4.6 Failure modes. we need to invistigate the nosummary casses. all searched and pyisics missmatched shoud both just be part of planner failed. 
+
+print, ≈6–9 cm in our scenes — so the comparison isolates the structural choice rather than
+the resolution. On holding, the adaptive partition produces 25– we should also test a case were its semantic + mbs 0.1
+
+
+y at the cost of more cells in the partition. This is a . not nessaraly true. Need to test that, Maybe we did alreday in some plots. i think they have About the same number or fluent. the Thing is that we merging and re merging. the Minimum size doesnt matter. 
+
+we Need to also plot the number of boxles in uni, semanit, semantic + mbs 0.5, 0.1, 2 * autocell, 1.5 * autocell. 
+
+
+This is a characterisation of the regime,
+not a defect of the method. wtf??? 
+
+ so an object can be placed view-blind. wrong. where did their paper say that or how did we prove it? 
+
+but restoring a blocked view by first moving the obstruction is left to future work (Section 7.1),
+and the current loop instead bounds itself with a give-u. remove. 
+
+
+6.4 Failure modes delete this section.
+orkspaces the ratio would narro -> could narrow
+
+The final approach phase of a pick uses a local inverse-kinematics
+solver that bypasses the planner’s collision checks, on the standard TAMP assumption that the
+short final motion is obstacle-free if the pre-grasp pose is valid. remove this part. 
+
+nner a non-pathological start con. what does that mean? we did it to avoid collisions. 
+
+ The
+symbolic interface also uses string identifiers as proxies for geometric volumes — shadows
+and moved occluders are passed to the planner as named entities rather than as bounding
+boxes or occupancy grids — bridging continuous geometry to discrete planning at the cost of a
+representation that is not purely geometric. remove.
+
+
+. Enabling stacking roughly doubles per-call
+planning time, traced to the conditional-effects requirement on the pick action; this is not true. it takes longer becuase we have a bigger Domain with more Actions. look up what was added to the Domain when we added the stack Goal. 
+
+
+ his regression
+is accepted rather than optimized away, a mitigation having been considered and dropped as out
+of scope. remove.
+
+stale caption: ction. The log line “retry 3/3” marks the third consecutive
+still-blocked sensing attempt on a
+
+we forgot to mention the github and gitlab reposetories for the code. 
