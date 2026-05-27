@@ -503,6 +503,12 @@ user before proceeding:
      released find_dice.  SUPERSEDES the "planning-only" wording in #177 /
      THESIS_NOTES (thesis-prose fix flagged, not done here).  Mirrored in
      CODEBASE_AUDIT.txt.
+     CONFIRMED [2026-05-27] against arXiv 2403.10454 v2 PDF p.15 (Table II screenshot): per-step,
+     incl. sim execution -- definitive.  Source of misconception: the paper states something
+     different than the PDF (v2 PDF caption authoritative).  Thesis framing (author 2026-05-27):
+     BOTH axes, per-episode primary -- (i) same-HW per-episode 13.7 (ours) vs 166 (TAMPURA local) s,
+     42% vs 55%; (ii) per-step ours = wall/plans = 13.676/2.315 = 5.9 s/solve vs paper 57 s/step.
+     Tracked as thesis_audit #213; THESIS_NOTES §21.2/§21.5 updated.
   PHASE 3 -- RUN OUR PLANNER ON THEIR find_dice ENV (GUI), minor code
      adjustments.  Write a NEW domain: COPY pddl/domain_pddlstream.pddl to a
      find_dice variant (e.g. pddl/domain_find_dice.pddl) and tweak it for

@@ -630,11 +630,13 @@ real measurements are sourced inline.
 
 ### 21.2 Planning times
 
-Per-episode planning times reported by TAMPURA (Table II; 20 trials
-each; "anytime — planning can be terminated earlier with lower
-success rates"):
+**Per-step** planning times reported by TAMPURA (Table II of the
+arXiv:2403.10454 **v2** PDF, p.15; 20 trials each; "anytime — planning
+can be terminated earlier with lower success rates"). The caption is
+explicit that these are per-step and *include* simulated controller
+execution — not per-episode, not planning-only:
 
-| Task | Time per episode (s, mean ± std) |
+| Task | Per-step planning time, incl. sim execution (s, mean ± std) |
 | --- | --- |
 | Class Uncertainty | 28 ± 26 |
 | Pose Uncertainty | 21 ± 13 |
@@ -642,6 +644,17 @@ success rates"):
 | Physical Uncertainty | 23 ± 7 |
 | SLAM (manipulation-free) | 31 ± 11 |
 | SLAM (with manipulation) | 129 ± 55 |
+
+Table II caption, verbatim (arXiv v2 PDF p.15):
+
+> "Average and standard deviation of per-step planning times (seconds)
+>  averaged over trials and steps within each trial. These include
+>  execution time of the selected controller in simulation."
+> — Curtis et al. 2024, arXiv:2403.10454 (v2), Table II
+
+So 57 ± 38 s is a *per-step* time including controller execution. An
+earlier reading recorded it as per-episode (see §21.5, thesis_audit
+#213); that was wrong.
 
 Direct quote on the anytime guarantee:
 
@@ -774,29 +787,39 @@ TAMPURA does not discretise placement.
    Either system would benefit from cross-replan caching — audit
    #50(a)/(c) and #62(c) propose this fix on our side; TAMPURA likewise
    re-learns its MDP from scratch each step rather than reusing it.
-5. **The reported comparison: `holding`, per-episode wall-clock like-for-like
-   (audit #177; framing corrected per #190(b), 2026-05-27).** The figure, abstract, results, discussion,
-   and conclusion compare our `holding` task (the `find_dice` analogue:
-   find a hidden object and pick it up) — NOT `find-and-tray-stack`,
-   which adds trays + stacking and is strictly harder. TAMPURA's
-   Table II time (57 ± 38 s, 20 trials) INCLUDES executing the selected
-   controllers in simulation, so it is a PER-EPISODE figure, not planner
-   time alone; the like-for-like quantity is therefore our per-episode
-   WALL-CLOCK (`wall_clock_s`, holding-semantic mean 13.7 s, success-only,
-   right-skewed median 8.5 s), which likewise includes PyBullet execution +
-   replanning. Our planning-only time (7.78 s) is NOT the comparable span ---
-   comparing it to TAMPURA's 57 s repeats the planner-time-vs-per-episode
-   category error of #177's earlier framing. Reliability runs the other way: holding-semantic success
-   is 42 % (127/300) vs TAMPURA's ≥ 63 % (inferred from the 0.63 ± 0.30
-   discounted return, Table I, γ=0.98, binary terminal reward); and
-   `find_dice`'s goal is marginally harder (holding AND at-home; ours is
-   holding only). Conclusion: cheaper end-to-end (13.7 vs 57 s) but less reliable, on a
-   slightly simpler task; the comparison is architectural and runs on
-   different environments, so it benchmarks neither system. The earlier "14.0 s vs 57 s,
-   ~4× faster on find-and-tray-stack" framing was a category error
-   (wall-clock vs planning) on the wrong task; removed. Architectural
-   framing is the planning-machinery split of point 3 (both sample
-   online), not the older "offline Learn-Model" wording.
+5. **The reported comparison: `holding`, two matched axes (audit #177;
+   #190(b); per-step correction #213, 2026-05-27).** The figure, results,
+   discussion, and conclusion compare our `holding` task (the `find_dice`
+   analogue: find a hidden object and pick it up) — NOT `find-and-tray-stack`,
+   which adds trays + stacking and is strictly harder. TAMPURA's Table II
+   57 ± 38 s is **per-step** planning time *including* simulated controller
+   execution (arXiv v2 PDF p.15 caption; §21.2) — NOT per-episode, NOT
+   planning-only. Two axes are reported:
+   - **Per-episode, same hardware (primary; the figure).** Real TAMPURA
+     `find_dice` re-run on this thesis's machine (Ryzen 7 PRO 7730U;
+     `tampura_environments/runs/sweep_2026-05-26.json`, n=20): 166 ± 85 s/ep
+     on successes (n=11), 240 ± 151 s over all 20, success 55 %. Ours,
+     holding-semantic: `wall_clock_s` mean 13.7 s (success-only, median
+     8.5 s), success 42 % (127/300). Both whole-episode, both include
+     execution + replanning, same CPU — ~12× slower per successful episode
+     but more reliable. The local 55 % sits just below the paper's inferred
+     ≥ 63 % (within N=20 noise), confirming a faithful reproduction.
+   - **Per-step (prose reconciliation, vs the published number).** Against
+     TAMPURA's 57 ± 38 s/step, the matched quantity on our side is
+     `wall_clock_s` / `plan_count` = 13.676 / 2.315 = 5.9 s per PDDLStream
+     solve (holding-semantic success-only, avg 2.315 plans/ep,
+     execution-inclusive). ~9.7× cheaper per step. UNIT CAVEAT: a TAMPURA
+     "step" re-solves once per control action; our "plan" solves once and
+     executes a multi-action plan — our step does more work, so this axis is
+     softer than the per-episode one.
+   Reliability runs the other way (42 % vs 55 % local / ≥ 63 % paper);
+   `find_dice`'s goal is also marginally harder (holding AND at-home; ours is
+   holding only). Conclusion: cheaper (per episode and per step) but less
+   reliable, on a slightly simpler task; the comparison is architectural
+   (point 3, both sample online) and runs on different environments, so it
+   benchmarks neither system. The earlier "per-episode 57 s like-for-like"
+   and the older "14.0 s vs 57 s ~4× on find-and-tray-stack" framings were
+   both unit errors and are removed.
 
 **References**: `CODEBASE_AUDIT.txt` #50, #62, #66 (Plan A landed
 2026-05-09 in commit `ce24e84`; Plan C pending on
