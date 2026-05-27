@@ -524,7 +524,7 @@ def plot_boxel_count_breakdown(
                    "shadow": "SHADOW",
                    "free_space": "FREE_SPACE"}
 
-    fig, ax = plt.subplots(figsize=(max(6, 1.8 * len(xs_all)), 5))
+    fig, ax = plt.subplots(figsize=(max(8.5, 1.8 * len(xs_all)), 5))
     for i, variant in enumerate(variants):
         alpha, hatch = _variant_bar_style(variant)
         offsets = [x + (i - (n_variants - 1) / 2) * bar_w for x in xs_all]
@@ -540,10 +540,11 @@ def plot_boxel_count_breakdown(
                    edgecolor="black", linewidth=0.5)
             bottoms = [b + m for b, m in zip(bottoms, means)]
 
-    ax.set_ylabel("boxel count (mean over seeds)")
-    ax.set_title(title)
+    ax.set_ylabel("boxel count (mean over seeds)", fontsize=18)
+    ax.set_title(title, fontsize=20)
+    ax.tick_params(labelsize=15)
     if len(xs_all) > 1:
-        ax.set_xlabel(xlabel)
+        ax.set_xlabel(xlabel, fontsize=18)
         ax.set_xticks(xs_all)
     else:
         # Single-X (rare with audit-#95 stack_height grouping): the
@@ -563,9 +564,9 @@ def plot_boxel_count_breakdown(
                 facecolor="lightgrey", edgecolor="black",
                 alpha=alpha, hatch=hatch, label=variant,
             ))
-    ax.legend(handles=handles, loc="best")
+    ax.legend(handles=handles, loc="best", fontsize=14)
     fig.tight_layout()
-    fig.savefig(out_path, dpi=120)
+    fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"[plotter] wrote {out_path}")
     return out_path
@@ -628,7 +629,7 @@ def plot_boxel_vs_resolution(
     if len(variants_all) < 2:
         print("[plotter] boxel-vs-resolution: <2 variants, skipping")
         return None
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), sharex=True)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.8), sharex=True)
     for ax, (key, lbl) in zip(axes, [("total", "total"),
                                      ("free_space", "free-space")]):
         for goal in sorted(grouped):
@@ -642,13 +643,18 @@ def plot_boxel_vs_resolution(
                 continue
             ax.plot([p[0] for p in pts], [p[1] for p in pts],
                     marker="o", label=goal)
-        ax.set_xlabel("free-space leaf size (cm)")
-        ax.set_ylabel(f"mean {lbl} boxel count (over seeds)")
+        ax.set_xlabel("free-space leaf size (cm)", fontsize=16)
+        # Short, horizontal y-axis label placed above the axis so it does
+        # not collide with the figure suptitle (supervisor review).
+        ax.set_ylabel(f"{lbl} boxel count", fontsize=15, rotation=0, ha="left")
+        ax.yaxis.set_label_coords(0.0, 1.03)
+        ax.tick_params(labelsize=13)
         ax.grid(True, alpha=0.3)
-    axes[0].legend(fontsize=8)
-    fig.suptitle(title)
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=120)
+    axes[0].legend(fontsize=14)
+    fig.suptitle(title, fontsize=20)
+    fig.subplots_adjust(left=0.07, right=0.97, top=0.80, bottom=0.14,
+                        wspace=0.22)
+    fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"[plotter] wrote {out_path}")
     return out_path
@@ -1134,7 +1140,7 @@ def plot_tampura_wallclock_comparison(
         return None
 
     succ_pct = 100.0 * n_success / n_cells if n_cells else 0.0
-    wm, ws, wmed = mean(wall), stdev(wall), median(wall)
+    wm, ws = mean(wall), stdev(wall)
 
     # (label, mean, lo_err, hi_err, n, color); lower error clipped to
     # the bar height so the right-skewed std does not draw below zero.
@@ -1165,28 +1171,23 @@ def plot_tampura_wallclock_comparison(
            color=colors, edgecolor="black", linewidth=0.5)
     for x, (_, c, _, hi, n, _col) in zip(xs, bars):
         ax.text(x, c + hi, f"{c:.1f}s\n(n={n})",
-                ha="center", va="bottom", fontsize=9)
+                ha="center", va="bottom", fontsize=14)
     ax.set_xticks(xs)
-    ax.set_xticklabels([b[0] for b in bars])
-    ax.set_ylabel("time per episode (s)")
-    ax.set_title(title)
+    ax.set_xticklabels([b[0] for b in bars], fontsize=14)
+    ax.tick_params(axis="y", labelsize=14)
+    ax.set_ylabel("time per episode (s)", fontsize=18)
+    ax.set_title(title, fontsize=20)
     # Audit #94 cosmetic — pin the top to 25% above the tallest
     # error-bar reach so the per-bar annotation has guaranteed headroom
     # (set_ylim bottom=0 alone let it clip the matplotlib-auto top).
     _max_top = max(c + hi for _, c, _, hi, _, _ in bars)
     ax.set_ylim(bottom=0, top=_max_top * 1.25)
     ax.grid(True, axis="y", alpha=0.3)
-    # Audit #177 — drop the 20-core hardware caveat (both planners are
-    # single-threaded; THESIS_NOTES §21.1).  State the span mismatch and
-    # the success gap instead.
-    fig.text(0.5, 0.02,
-             f"Ours: mean ± std, success-only (right-skewed; median "
-             f"{wmed:.1f}s).  TAMPURA: mean ± std per episode (Table II, "
-             f"all 20 trials, incl. simulated execution).\n"
-             f"Success: ours {succ_pct:.0f}%, TAMPURA ≥ 63%.",
-             ha="center", fontsize=8, style="italic")
-    fig.tight_layout(rect=[0, 0.10, 1, 1])
-    fig.savefig(out_path, dpi=120)
+    # The explanatory note (span mismatch, right-skew / median, success
+    # gap) now lives in the figure CAPTION rather than as tiny in-figure
+    # text (supervisor review 2026-05-27 — it was unreadable on paper).
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"[plotter] wrote {out_path}")
     return out_path
@@ -1270,14 +1271,16 @@ def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
         bottoms = [b + c for b, c in zip(bottoms, counts)]
 
     ax.set_xticks(xs)
-    ax.set_xticklabels(labels, fontsize=9)
-    ax.set_xlabel("(goal, variant)")
-    ax.set_ylabel("cell count")
-    ax.set_title(title)
+    ax.set_xticklabels(labels, fontsize=13, rotation=20, ha="right")
+    ax.tick_params(axis="y", labelsize=14)
+    ax.set_xlabel("(goal, variant)", fontsize=18)
+    ax.set_ylabel("cell count", fontsize=18)
+    ax.set_title(title, fontsize=20)
     ax.grid(True, axis="y", alpha=0.3)
-    ax.legend(loc="upper right", fontsize=8, title="exit_reason")
+    ax.legend(loc="upper right", fontsize=13, title="exit_reason",
+              title_fontsize=14)
     fig.tight_layout()
-    fig.savefig(out_path, dpi=120)
+    fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"[plotter] wrote {out_path}")
     return out_path
