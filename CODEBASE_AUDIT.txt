@@ -131,7 +131,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
        for accepted geometric / symbolic gaps (including stale shadow AABBs).
 
 ================================================================================
-OPEN ISSUES — #104 #105 #106-#112
+OPEN ISSUES — #104 #105 #106-#113
 ================================================================================
 Issue numbers are DISCOVERY ORDER, not priority — read the TIER label, not the number
 (e.g. #63 is T3 doc work, #81 was T0). If walking the list lowest-first, re-sort by TIER.
@@ -408,12 +408,57 @@ What/Fix: success-rate plots shade +/-1 SAMPLE STD of per-trial 0/1 flags (clipp
 Related: thesis_audit #207; #86; #99.
 
 ================================================================================
+#113. FULL CANONICAL SWEEP RE-RUN -- reproduce all data + add mbs0.01 arm; ensure COMPLETE coverage
+================================================================================
+Status/Priority: OPEN, TIER 1 (regenerates the canonical eval dataset the whole
+   results chapter rests on).  Expensive; run on the eval machine (WSL), gated by
+   available time.  Author-requested 2026-05-27.
+Where: eval_runner.py presets -- SCALABILITY_VS_TIME (semantic min_boxel_size
+   [None, 0.05] + uniform), SCALABILITY_VS_RESOLUTION (#98: random-pairs 0.135/0.18,
+   stack 0.09/0.12), RESOLUTION_MBS01 (#108: mbs0.10).  Run into a FRESH
+   eval_results/sweep_<ts> dir, then promote to the canonical aggregated.csv and
+   regenerate EVERY figure from it.
+Depends: the no_summary pre-flight fix (commit 5bd5f55 -- find-and-tray-stack
+   random-pairs 0-visible seeds now re-roll instead of aborting); the new sweep must
+   show ZERO no_summary cells.
+
+What: the current canonical aggregated.csv (4500 rows, eval_results/sweep_anytime)
+   is NOT one clean full sweep -- it was assembled by merging sub-sweeps (#100) and
+   has gaps / inconsistencies:
+   - the mbs0.10 arm (RESOLUTION_MBS01 / #108 part-a) is NOT in the 4500-row csv
+     (group_boxel_vs_resolution shows only auto/0.05/0.135/0.18 for random-pairs and
+     auto/0.05/0.09/0.12 for stack);
+   - the coarse mbs arms differ per goal (random-pairs 0.135/0.18 vs stack 0.09/0.12),
+     so the resolution axis is not uniform across goals;
+   - 91 find-and-tray-stack random-pairs cells are no_summary holes (0-visible
+     unsatisfiable seeds; root cause + fix in 5bd5f55).
+   The author wants ONE actual full sweep that reproduces all data cleanly AND adds a
+   mbs0.01 (1 cm) fine-end resolution arm.
+
+Fix:
+   - Add 0.01 to the semantic min_boxel_size arms (1 cm: below auto_cell ~6-9 cm AND
+     below the 3.5 cm octree min_resolution, so it probes the FINE extreme of the
+     resolution axis, complementing the coarse 0.135/0.18; expected still flat under
+     the convex free-space merge, which would confirm the plateau spans ~1-18 cm).
+   - Run ALL presets (SCALABILITY_VS_TIME + SCALABILITY_VS_RESOLUTION + RESOLUTION_MBS01
+     + the new 0.01 arm) in ONE sweep into a FRESH output dir -- do NOT rely on
+     --skip-existing merging onto the old partial data.  --timeout 1800 (post-process
+     at shorter wall_clock_s thresholds).
+   - Acceptance: every (goal x {semantic, semantic+mbs{0.01,0.05,0.10,1.5x,2x}, uniform}
+     x 100 corpus seeds x {2,3,4} difficulty) cell PRESENT; ZERO no_summary; promote to
+     the canonical aggregated.csv; regenerate every thesis figure and reconcile the
+     reported numbers (holding 42% / 13.7 s, boxel counts, failure modes, resolution).
+Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no_summary
+   fix); thesis_audit #209 (resolution writeup).  Care: plots ADD -- keep the old sweep
+   dir; read regenerated PNGs before committing.
+
+================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
 Chronological numbers, NOT priority — follow TIER. Closed bodies in git history
 (git log --grep="audit: mark #N") + archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 8 items (bodies above):
+OPEN — 9 items (bodies above):
   #104 T3 — refresh thesis-PDF plots + numbers to post-#100-merge outputs (thesis #121/#168).
   #105 T2 — Wumpus-World baseline (cell-belief search, no shadow geometry) vs uniform/TAMPURA.
   --- batch 2 (2026-05-24 read-through spillover) ---
@@ -426,7 +471,9 @@ OPEN — 8 items (bodies above):
   #110 T3 — live-demo natural-language CLI.
   #111 T3 — remove "THESIS_NOTES" text from the TAMPURA wall-clock plot (thesis #177/#190).
   #112 T3 — (optional) Wilson interval for success-rate plots (thesis #207).
-  TIER tally: one open T1 (#107); zero T0.
+  #113 T1 — FULL canonical sweep re-run: reproduce all data + add mbs0.01 (1 cm) arm; ensure
+       complete coverage (no no_summary holes, mbs0.10 included, uniform per-goal arms); regen figs.
+  TIER tally: two open T1 (#107, #113); zero T0.
 
 CLOSED (one-line; full detail in git / archive):
   #101 [2026-05-25] resolution-axis writeup (thesis aa6ebc6): "Free-space resolution" subsection
