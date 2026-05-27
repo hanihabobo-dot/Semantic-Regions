@@ -67,21 +67,24 @@ is noted in \cref{sec:future_work}.
 \section{Architectural Comparison with TAMPURA}
 \label{sec:disc-tampura}
 
-\Cref{fig:tampura} sets our \texttt{holding} results against TAMPURA's
-reported Partial Observability numbers (Table~II of
-\cite{curtis2024partially}); \texttt{holding} --- find a hidden object
+\Cref{fig:tampura} sets our \texttt{holding} results against real TAMPURA,
+re-run on the same hardware; \texttt{holding} --- find a hidden object
 and pick it up --- is the closest analogue to TAMPURA's \emph{Find Die}
 task. Read carefully, the comparison cuts two ways. On time, TAMPURA's
-57\,$\pm$\,38\,s (Table~II) includes executing the selected controllers in
-simulation, so it is a per-episode figure rather than planner time alone;
-the like-for-like quantity is therefore our per-episode wall-clock (mean
-13.7\,s, success-only, which likewise includes PyBullet execution and
-replanning). On reliability the order runs against us: our holding
-success rate is 42\,\%, below the $\geq$\,63\,\% implied by TAMPURA's
-0.63\,$\pm$\,0.30 discounted return (Table~I). We are no more expensive
-end-to-end but less reliable, on a marginally easier goal --- \emph{Find
-Die} also requires returning home, which ours does not. Beyond the
-numbers, the two systems differ in kind.
+published 57\,$\pm$\,38\,s (the \textit{Partial Observability} column of
+Table~II in \cite{curtis2024partially}) is a \emph{per-step} planning time
+including simulated controller execution, not a per-episode figure; rather
+than compare across mismatched units we re-ran the released \emph{Find Die}
+environment on this thesis's machine, where it takes 166\,$\pm$\,85\,s per
+successful episode against our 13.7\,s wall-clock (success-only) --- roughly
+an order of magnitude apart, end-to-end, on the same CPU. The published
+per-step number tells the same story: our matched per-step cost is 5.9\,s.
+On reliability the order runs against us: our holding success rate is
+42\,\%, below the local TAMPURA run's 55\,\% (itself consistent with the
+$\geq$\,63\,\% implied by its 0.63\,$\pm$\,0.30 discounted return, Table~I).
+We are cheaper end-to-end but less reliable, on a marginally easier goal
+--- \emph{Find Die} also requires returning home, which ours does not.
+Beyond the numbers, the two systems differ in kind.
 
 Both systems sample geometry \emph{online}, inside the planning loop, and
 both rely on the same determinised, Fast Downward--based classical planner
