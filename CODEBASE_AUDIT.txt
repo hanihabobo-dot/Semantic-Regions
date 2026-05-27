@@ -227,6 +227,21 @@ FOR LATER
   separate endpoint-only-ignored set so plan_motion path-checks
   honour the support body while endpoint-checks don't.
 
+- Smart / dynamic action-cost modelling for risk-aware planning.  Action
+  costs are currently static (stack=2, all others=1; see domain.pddl
+  :action-costs and the bias rationale at domain.pddl:73).  Extend this so
+  the planner can weigh a RISKY-but-cheap solution against a GOOD-but-
+  costlier one — the same lever already used to bias place over stack, but
+  applied more broadly (e.g. sensing, placing into shadow-adjacent free
+  cells).  Crucially the cost-giver should UPDATE costs between replans
+  whenever warranted: e.g. raise the cost of re-sensing a region already
+  observed without result, or penalise placements that earlier failed
+  (drop_failed / physics_mismatch) or that land on a line of sight the
+  robot still needs.  Turns the flat unit-cost search into adaptive
+  replanning that learns from the episode's own failure modes.  Conceptual
+  for now; pairs with the bounded give-up / still_blocked logic and the
+  per-occluder shadow bookkeeping.
+
 - POMDP / contingent baseline: large effort; only if time after eval sweep
   (#9–#13).  Thesis-critical fixes are now bounded to #40 [DONE] +
   #36 [DONE] + #49 per ROADMAP; #21 / #47 (still_blocked correctness) are
