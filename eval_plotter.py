@@ -1083,38 +1083,39 @@ def plot_tampura_wallclock_comparison(
     title: str,
     out_path: Path,
 ) -> Optional[Path]:
-    """Bar chart: our holding-task per-episode wall-clock vs TAMPURA's
-    Partial Observability per-episode time (57 ± 38 from
-    arXiv:2403.10454 Table II).
+    """Bar chart: our holding-task per-episode wall-clock vs real TAMPURA
+    find_dice re-run on the SAME hardware (Ryzen 7 PRO 7730U).
 
-    Audit #177 (was #73 TIER C plot 9).  holding is the closest
-    analogue to TAMPURA's hidden-object Find Die task (find a hidden
-    object, pick it up); find-and-tray-stack is strictly harder and was
-    the wrong comparison.  TAMPURA's Table II time INCLUDES executing the
-    selected controllers in simulation, so it is a per-episode figure,
-    not planner time alone; the comparable quantity is therefore our
-    per-episode wall-clock (full episode incl. PyBullet + replanning).
-    The planning sub-component is intentionally NOT plotted.  Two bars,
-    semantic variant only: our wall-clock vs TAMPURA, both mean ± std;
-    the lower whisker is clipped at 0 because our times are right-skewed
-    (mean > median; median reported in the caption).  Reliability runs
-    the other way (ours ~42 %, TAMPURA >= 63 %); see THESIS_NOTES §21 for
-    the architectural framing.
+    Audit #213 (per-step correction to #177/#190).  TAMPURA's published
+    Table II number (57 ± 38 s) is a PER-STEP time including simulated
+    controller execution (arXiv:2403.10454 v2 PDF p.15 caption), NOT
+    per-episode -- so it is NOT plotted here (mixing per-step with
+    per-episode bars is the error this corrects).  Instead this is a clean
+    per-episode comparison on the same machine: our holding-semantic
+    wall-clock (success-only) vs TAMPURA's local find_dice loop time
+    (success-only; runs/sweep_2026-05-26.json).  holding is the find_dice
+    analogue (find a hidden object, pick it up).  Two bars, both mean ± std,
+    success-only; the lower whisker is clipped at 0 because our times are
+    right-skewed (mean > median; median in the caption).  Reliability runs
+    the other way (ours 42 %, TAMPURA local 55 %); the per-step
+    reconciliation (ours ~5.9 s/solve vs 57 s/step) is in the prose; see
+    THESIS_NOTES §21.
     """
-    # TAMPURA Partial Observability — arXiv:2403.10454 Table II
-    # (per-episode time incl. simulated controller execution, mean ± std,
-    # 20 trials).  Success >= 63 % is inferred from the 0.63 ± 0.30
-    # discounted return (Table I, gamma=0.98, binary terminal reward).
-    # Hardcoded; update if the paper revises.
-    TAMPURA_MEAN = 57.0
-    TAMPURA_STD = 38.0
-    TAMPURA_N = 20
+    # TAMPURA find_dice re-run on THIS thesis's hardware (Ryzen 7 PRO
+    # 7730U; runs/sweep_2026-05-26.json, n=20).  Per-episode loop time
+    # (planning + PyBullet execution), SUCCESS-ONLY (n=11) to match our
+    # success-only wall-clock.  Local success 55 % (11/20) reproduces the
+    # paper's inferred >= 63 % within N=20 noise.  The paper's published
+    # 57 ± 38 s is PER-STEP incl. execution (arXiv v2 PDF p.15) -- not
+    # comparable to a per-episode bar, so NOT plotted (audit #213).
+    TAMPURA_MEAN = 166.0
+    TAMPURA_STD = 85.0
+    TAMPURA_N = 11
 
-    # Audit #177 — holding is the find_dice analogue (find a hidden
-    # object, pick it up); find-and-tray-stack was the wrong, harder
-    # task.  TAMPURA's Table II time includes simulated controller
-    # execution (per-episode), so our wall-clock is the comparable span;
-    # collect it for the semantic variant, success-only.
+    # Audit #177/#213 — holding is the find_dice analogue (find a hidden
+    # object, pick it up).  Compare per-episode on the same hardware:
+    # collect our holding-semantic wall-clock, success-only, to match
+    # TAMPURA's success-only per-episode loop time above.
     wall: List[float] = []
     n_cells = 0
     n_success = 0
@@ -1147,7 +1148,7 @@ def plot_tampura_wallclock_comparison(
     bars = [
         ("Ours: wall-clock\n(holding, semantic)",
          wm, min(ws, wm), ws, len(wall), "#1f77b4"),
-        ("TAMPURA: per-episode\n(Partial Obs.)",
+        ("TAMPURA: per-episode\n(find_dice, same HW)",
          TAMPURA_MEAN, min(TAMPURA_STD, TAMPURA_MEAN), TAMPURA_STD,
          TAMPURA_N, "#d62728"),
     ]
@@ -1158,7 +1159,7 @@ def plot_tampura_wallclock_comparison(
             print(f"  {lab.replace(chr(10), ' ')}: "
                   f"{c:.1f} (-{lo:.1f}/+{hi:.1f}) n={n}")
         print(f"  success: ours {succ_pct:.0f}% (n={n_cells}); "
-              f"TAMPURA >= 63% (Table I)")
+              f"TAMPURA local 55% (n=20)")
         return None
 
     fig, ax = plt.subplots(figsize=(8, 5))
