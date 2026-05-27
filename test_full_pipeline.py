@@ -1787,6 +1787,32 @@ if __name__ == "__main__":
     for attempt in range(max_attempts):
         try:
             probe_env = BoxelTestEnv(gui=False, scene_config=scene_cfg)
+            # find-and-tray-stack needs >=1 VISIBLE and >=1 HIDDEN target,
+            # but visibility is a camera-occlusion property (not just
+            # placement), so a constructible scene can still leave every
+            # target occluded.  Probe the role split here -- settle +
+            # oracle perception, exactly as main() does -- and treat a
+            # missing role as a retryable re-roll, instead of letting
+            # main() abort later with no timing_summary (exit_reason
+            # "no_summary").
+            if args.goal == 'find-and-tray-stack':
+                for _ in range(50):
+                    probe_env.step_simulation()
+                probe_env.update_object_positions()
+                probe_visible, _ = probe_env.oracle_detect_objects()
+                probe_targets = [
+                    n for n, info in probe_env.objects.items()
+                    if not info.is_occluder and not info.is_tray
+                    and n not in ("plane", "table", "robot")
+                ]
+                n_vis = sum(1 for t in probe_targets if t in probe_visible)
+                n_hid = len(probe_targets) - n_vis
+                if n_vis < 1 or n_hid < 1:
+                    probe_env.close()
+                    raise RuntimeError(
+                        f"find-and-tray-stack pre-flight: {n_vis} visible / "
+                        f"{n_hid} hidden (need >=1 of each)"
+                    )
             probe_env.close()
             break
         except RuntimeError as e:
@@ -1799,8 +1825,12 @@ if __name__ == "__main__":
             #   hardening (iii) deferred until the assert fires often
             #   enough to warrant plumbing constrain_to_reach into the
             #   helper).
+            # - "find-and-tray-stack pre-flight" from the role probe above
+            #   (a constructible scene perceived with 0 visible or 0 hidden
+            #   targets) -- re-roll past it like an unplaceable seed.
             retryable = any(s in str(e)
-                            for s in ("Could not place", "audit #70"))
+                            for s in ("Could not place", "audit #70",
+                                      "find-and-tray-stack pre-flight"))
             if not retryable or attempt + 1 >= max_attempts:
                 raise
             args.seed = retry_rng.randint(0, 2**31 - 1)
