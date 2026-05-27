@@ -774,21 +774,25 @@ TAMPURA does not discretise placement.
    Either system would benefit from cross-replan caching — audit
    #50(a)/(c) and #62(c) propose this fix on our side; TAMPURA likewise
    re-learns its MDP from scratch each step rather than reusing it.
-5. **The reported comparison: `holding`, planning-time like-for-like
-   (audit #177, 2026-05-24).** The figure, abstract, results, discussion,
+5. **The reported comparison: `holding`, per-episode wall-clock like-for-like
+   (audit #177; framing corrected per #190(b), 2026-05-27).** The figure, abstract, results, discussion,
    and conclusion compare our `holding` task (the `find_dice` analogue:
    find a hidden object and pick it up) — NOT `find-and-tray-stack`,
-   which adds trays + stacking and is strictly harder. The like-for-like
-   time is our per-episode PLANNING time (`total_planning_time_s`,
-   holding-semantic mean 7.78 s, success-only) against TAMPURA's
-   planning-only 57 ± 38 s; our wall-clock (mean 13.7 s) is reported only
-   as full-episode context, as it also includes PyBullet execution +
-   replanning. Reliability runs the other way: holding-semantic success
+   which adds trays + stacking and is strictly harder. TAMPURA's
+   Table II time (57 ± 38 s, 20 trials) INCLUDES executing the selected
+   controllers in simulation, so it is a PER-EPISODE figure, not planner
+   time alone; the like-for-like quantity is therefore our per-episode
+   WALL-CLOCK (`wall_clock_s`, holding-semantic mean 13.7 s, success-only,
+   right-skewed median 8.5 s), which likewise includes PyBullet execution +
+   replanning. Our planning-only time (7.78 s) is NOT the comparable span ---
+   comparing it to TAMPURA's 57 s repeats the planner-time-vs-per-episode
+   category error of #177's earlier framing. Reliability runs the other way: holding-semantic success
    is 42 % (127/300) vs TAMPURA's ≥ 63 % (inferred from the 0.63 ± 0.30
    discounted return, Table I, γ=0.98, binary terminal reward); and
    `find_dice`'s goal is marginally harder (holding AND at-home; ours is
-   holding only). Conclusion: cheaper to plan, less reliable, slightly
-   simpler task — NO speed/quality winner. The earlier "14.0 s vs 57 s,
+   holding only). Conclusion: cheaper end-to-end (13.7 vs 57 s) but less reliable, on a
+   slightly simpler task; the comparison is architectural and runs on
+   different environments, so it benchmarks neither system. The earlier "14.0 s vs 57 s,
    ~4× faster on find-and-tray-stack" framing was a category error
    (wall-clock vs planning) on the wrong task; removed. Architectural
    framing is the planning-machinery split of point 3 (both sample
