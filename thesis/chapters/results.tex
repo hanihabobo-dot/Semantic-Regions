@@ -137,7 +137,7 @@ stack               & uniform          & 301 & 39.2\,\% & 23.84 \\
 \label{tab:headline}
 \end{table}
 
-\subsection{Anytime solve rate}
+\subsection{Anytime Solve Rate}
 \label{subsec:anytime}
 
 \Cref{fig:solved-vs-time} plots cumulative solve rate against wall-clock budget on a log axis. Three observations stand out. First, the semantic curves rise to their final value within $\sim$10--30\,s on every goal, and the additional budget out to 1800\,s buys at most a few extra successes; the operating point is the first few minutes, not the long tail. Second, on stack the \texttt{semantic} and \texttt{semantic+mbs0.05} curves overlap exactly --- the 5\,cm leaf floor changes nothing here. Third, the \texttt{uniform} curve is delayed in onset on every goal and tops out lower; on find-and-tray-stack it never gets off the ground (4 solves out of 300).
@@ -149,7 +149,7 @@ stack               & uniform          & 301 & 39.2\,\% & 23.84 \\
     \label{fig:solved-vs-time}
 \end{figure}
 
-\subsection{Success rate and scene difficulty}
+\subsection{Success Rate and Scene Difficulty}
 \label{subsec:success-rate}
 
 \Cref{fig:success-holding,fig:success-stack,fig:success-fats} show success rate against the difficulty axis for each goal. On holding (\cref{fig:success-holding}), success is roughly flat in $n_\text{occ}\in\{2,3,4\}$: \texttt{semantic} stays at 39--47\,\%, \texttt{semantic+mbs0.05} at 44--48\,\%, \texttt{uniform} at 31--36\,\%. There is no clear scalability degradation in this range, only a $\sim$10\,pp gap between adaptive and uniform partitioning.
@@ -179,7 +179,7 @@ Find-and-tray-stack (\cref{fig:success-fats}) is the discriminating goal: \textt
     \label{fig:success-fats}
 \end{figure}
 
-\subsection{Planning time and scene difficulty}
+\subsection{Planning Time and Scene Difficulty}
 \label{subsec:planning-time}
 
 \Cref{fig:plantime-holding} shows mean success-only planning time on holding against $n_\text{occ}$. The adaptive variants stay below 20\,s across the range; \texttt{uniform} climbs from 21\,s at $n_\text{occ}=2$ to 83\,s at $n_\text{occ}=4$, four to five times the adaptive cost at each point. Planning times on stack and find-and-tray-stack follow the same pattern (semantic 1--2\,s on stack and $\sim$20--50\,s on FATS; uniform 20--220\,s and 25--533\,s respectively).
@@ -191,7 +191,7 @@ Find-and-tray-stack (\cref{fig:success-fats}) is the discriminating goal: \textt
     \label{fig:plantime-holding}
 \end{figure}
 
-\subsection{Representation compactness}
+\subsection{Representation Compactness}
 \label{subsec:compactness}
 
 The cost gap traces back to the size of the representation. \Cref{fig:boxel-count-holding} stacks the OBJECT, SHADOW, and FREE\_SPACE Boxel counts per variant on holding. The adaptive variants produce $\sim$25--43 Boxels total; the uniform variant produces $\sim$300 free-space cells alone. On the stack goal the ratio is steeper (semantic $\sim$25 vs uniform $\sim$1340), and the grounded-fact count scales with it: $\sim$300 facts for the adaptive variants vs 11\,000--14\,000 for uniform across stack heights. Larger init-state $\Rightarrow$ larger PDDL grounding $\Rightarrow$ longer per-call planning time, which is the mechanism behind the timing gap in \cref{fig:plantime-holding}.
@@ -203,7 +203,7 @@ The cost gap traces back to the size of the representation. \Cref{fig:boxel-coun
     \label{fig:boxel-count-holding}
 \end{figure}
 
-\subsection{Free-space resolution}
+\subsection{Free-Space Resolution}
 \label{subsec:resolution}
 
 The adaptive partition has one free parameter: the free-space leaf size. The \texttt{semantic} variant auto-sets it to the largest visible object's footprint plus a 1\,cm margin ($\approx$6--9\,cm, scene-dependent). To check whether this heuristic sits at a sensitive operating point, we swept the leaf size both below auto (the \texttt{semantic+mbs0.05} arm, 5\,cm) and coarser than auto, at 1.5$\times$ and 2$\times$ the auto value, on the same 100-seed scenes. \Cref{fig:boxel-resolution} plots the resulting Boxel count against the leaf size, one line per goal.
@@ -229,7 +229,7 @@ The partition shrinks as the leaf is coarsened above auto --- the free-space Box
     \label{fig:tampura}
 \end{figure}
 
-\subsection{Failure modes}
+\subsection{Failure Modes}
 \label{subsec:failure-modes}
 
 \Cref{fig:failure-modes} stacks the exit reasons across all 9 $(\text{goal}, \text{variant})$ cells. \texttt{planner\_failed} is the dominant failure mode in every condition; \texttt{replan\_limit} appears predominantly on stack; \texttt{timeout} accounts for a small slice of find-and-tray-stack failures. On find-and-tray-stack the \texttt{uniform} bar is almost entirely \texttt{planner\_failed}, consistent with the 1\,\% success rate.
