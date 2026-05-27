@@ -614,47 +614,69 @@ def plot_boxel_vs_resolution(
     out_path: Path,
 ) -> Optional[Path]:
     """Two panels (total | free-space) of mean boxel count vs free-space
-    leaf size, one line per goal.  Each point is one variant, placed at
-    its mean effective leaf size.  Audit #108 part-c / #101.  No-op if
-    fewer than two variants are present."""
-    variants_all = {v for g in grouped.values() for v in g}
+    leaf size, as grouped bars per goal.  Each group is one resolution arm
+    (variant), tick-labelled by its mean effective leaf size in cm.  Audit
+    #108 part-c / #101 / #209.  stack is excluded from this comparison
+    (author, 2026-05-27): its resolution arms use different leaf floors, so
+    the two-goal (find-and-tray-stack, holding) comparison shares one
+    leaf-size axis.  No-op if fewer than two resolution arms are present."""
+    # Author 2026-05-27 — drop stack from the resolution comparison.
+    goals = [g for g in sorted(grouped) if g != "stack"]
+    # Resolution arms present across the kept goals; mean effective leaf
+    # (m) per arm both orders and labels the x-axis.
+    variant_leaf: Dict[str, List[float]] = defaultdict(list)
+    for g in goals:
+        for variant, d in grouped[g].items():
+            if d.get("leaf"):
+                variant_leaf[variant].append(mean(d["leaf"]))
     if not HAVE_MPL:
         print(f"\n=== {title} (matplotlib not available) ===")
-        for goal in sorted(grouped):
-            for variant in sorted(grouped[goal]):
-                p = grouped[goal][variant]
-                print(f"  {goal}/{variant}: leaf={mean(p['leaf'])*100:.1f}cm "
+        for g in goals:
+            for variant in sorted(grouped[g]):
+                p = grouped[g][variant]
+                print(f"  {g}/{variant}: leaf={mean(p['leaf'])*100:.1f}cm "
                       f"total={mean(p['total']):.1f} free={mean(p['free_space']):.1f}")
         return None
-    if len(variants_all) < 2:
-        print("[plotter] boxel-vs-resolution: <2 variants, skipping")
+    if len(variant_leaf) < 2:
+        print("[plotter] boxel-vs-resolution: <2 resolution arms, skipping")
         return None
+    variants = sorted(variant_leaf, key=lambda v: mean(variant_leaf[v]))
+    xlabels = [f"{mean(variant_leaf[v]) * 100:.1f}" for v in variants]
+    xs = list(range(len(variants)))
+    width = 0.8 / max(1, len(goals))
+    # Match the previous line-plot colours (default cycle: find-and-tray-
+    # stack blue, holding orange).
+    goal_colour = {"find-and-tray-stack": "#1f77b4", "holding": "#ff7f0e"}
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.8), sharex=True)
     for ax, (key, lbl) in zip(axes, [("total", "total"),
                                      ("free_space", "free-space")]):
-        for goal in sorted(grouped):
-            pts = []
-            for variant, d in grouped[goal].items():
-                if not d.get("leaf") or not d.get(key):
-                    continue
-                pts.append((mean(d["leaf"]) * 100.0, mean(d[key])))  # cm
-            pts.sort()
-            if not pts:
-                continue
-            ax.plot([p[0] for p in pts], [p[1] for p in pts],
-                    marker="o", label=goal)
+        for gi, goal in enumerate(goals):
+            heights = [mean(grouped[goal][v][key])
+                       if grouped[goal].get(v, {}).get(key) else 0.0
+                       for v in variants]
+            offset = (gi - (len(goals) - 1) / 2.0) * width
+            ax.bar([x + offset for x in xs], heights, width, label=goal,
+                   color=goal_colour.get(goal), edgecolor="black",
+                   linewidth=0.5)
+        ax.set_xticks(xs)
+        ax.set_xticklabels(xlabels, fontsize=13)
         ax.set_xlabel("free-space leaf size (cm)", fontsize=16)
         # Short, horizontal y-axis label placed above the axis so it does
         # not collide with the figure suptitle (supervisor review).
         ax.set_ylabel(f"{lbl} boxel count", fontsize=15, rotation=0, ha="left")
         ax.yaxis.set_label_coords(0.0, 1.03)
         ax.tick_params(labelsize=13)
-        ax.grid(True, alpha=0.3)
-    axes[0].legend(fontsize=14)
+        ax.grid(True, axis="y", alpha=0.3)
+    # Single shared legend outside the right panel.  The bars are tall on
+    # the left of each panel (fine leaf), so an in-axes legend clips them;
+    # placing it outside keeps it clear (bbox_inches="tight" captures it).
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="center left", bbox_to_anchor=(1.0, 0.5),
+               fontsize=14)
     fig.suptitle(title, fontsize=20)
     fig.subplots_adjust(left=0.07, right=0.97, top=0.80, bottom=0.14,
                         wspace=0.22)
-    fig.savefig(out_path, dpi=150)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"[plotter] wrote {out_path}")
     return out_path
