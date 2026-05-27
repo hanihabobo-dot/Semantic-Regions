@@ -1388,7 +1388,7 @@ def plot_solved_vs_time(grouped: Dict[tuple, tuple],
         return None
 
     fig, axes = plt.subplots(1, len(goals),
-                              figsize=(5 * len(goals), 4.6),
+                              figsize=(5 * len(goals), 5.4),
                               sharex=True, sharey=True)
     if len(goals) == 1:
         axes = [axes]
@@ -1421,18 +1421,20 @@ def plot_solved_vs_time(grouped: Dict[tuple, tuple],
         if log_x:
             ax.set_xscale("log")
             ax.set_xlim(right=CAP_S)
-            ax.set_xlabel("wall-clock budget (s, log)")
+            ax.set_xlabel("wall-clock budget (s, log)", fontsize=20)
         else:
             ax.set_xlim(0, CAP_S)
-            ax.set_xlabel("wall-clock budget (s)")
-        ax.set_title(goal)
+            ax.set_xlabel("wall-clock budget (s)", fontsize=20)
+        ax.set_title(goal, fontsize=22)
+        ax.tick_params(labelsize=17)
         ax.grid(True, alpha=0.3)
-        ax.legend(loc="lower right", fontsize=8)
-    axes[0].set_ylabel("instances solved (%)")
+        ax.legend(loc="upper left", fontsize=16)
+    axes[0].set_ylabel("instances solved (%)", fontsize=20)
     axes[0].set_ylim(0, 100)
-    fig.suptitle(title)
+    if title:
+        fig.suptitle(title, fontsize=24)
     fig.tight_layout()
-    fig.savefig(out_path, dpi=120)
+    fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"[plotter] wrote {out_path}")
     return out_path
@@ -1981,14 +1983,12 @@ def main(argv=None) -> int:
             grouped_anytime = group_solved_vs_time(all_rows)
             plot_solved_vs_time(
                 grouped_anytime,
-                title="Cumulative solve rate vs wall-clock budget "
-                      "(anytime / #77)",
+                title=None,
                 out_path=out_dir / "solved_vs_time.png",
             )
             plot_solved_vs_time(
                 grouped_anytime,
-                title="Cumulative solve rate vs wall-clock budget "
-                      "(anytime / #77, linear)",
+                title=None,
                 out_path=out_dir / "solved_vs_time_linear.png",
                 log_x=False,
             )
@@ -2198,14 +2198,12 @@ def main(argv=None) -> int:
         grouped_anytime = group_solved_vs_time(all_rows)
         plot_solved_vs_time(
             grouped_anytime,
-            title="Cumulative solve rate vs wall-clock budget "
-                  "(anytime / #77)",
+            title=None,
             out_path=out_dir / "solved_vs_time.png",
         )
         plot_solved_vs_time(
             grouped_anytime,
-            title="Cumulative solve rate vs wall-clock budget "
-                  "(anytime / #77, linear)",
+            title=None,
             out_path=out_dir / "solved_vs_time_linear.png",
             log_x=False,
         )
