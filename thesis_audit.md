@@ -463,7 +463,7 @@ the TAMPURA "no winner" framing (#177) -- correct the speed-winner wording there
 Refs: abstract.tex:8-15; #177; #211; results.tex; discussion.tex.
 
 ================================================================================
-#213  [T1]  TAMPURA Table II is PER-STEP, not per-episode (arXiv v2 PDF) -- re-derive comparison
+#213  [DONE 2026-05-27] [T1]  TAMPURA Table II is PER-STEP, not per-episode (arXiv v2 PDF) -- re-derive comparison
 ================================================================================
 TRUTH (source: arXiv:2403.10454 v2 PDF p.15, Table II + caption; author screenshot 2026-05-27).
 Caption verbatim: "Average and standard deviation of PER-STEP planning times (seconds) averaged
@@ -489,6 +489,9 @@ Cross-environment caveat stays (find_dice containment vs our lateral-shadow hold
 DO: (a) trackers+notes record truth [this commit]; (b) eval_plotter figure -> local 166 +- 85;
 (c) results/discussion/conclusion -> 13.7 vs 166 primary + 5.9 vs 57 per-step; (d) THESIS_NOTES
 §21.2/§21.5.
+DONE [2026-05-27]: trackers+notes+figure+prose all landed; figure regenerated to 166 +- 85
+same-HW per-episode; results/discussion/conclusion now report 13.7 vs 166 (same HW) + 5.9 vs 57
+per-step.
 Refs: results.tex subsec:tampura; discussion.tex sec:disc-tampura; conclusion.tex:10;
 eval_plotter.py plot_tampura_wallclock_comparison; THESIS_NOTES §21; #177; #190; CODEBASE_AUDIT.txt.
 
@@ -506,11 +509,10 @@ OPEN:
   Methods: #175 (shadow-split #102/#103 -- only "by depth" dropped; conditional/surface-resting remain)
   Intro/RW: #193 (move Spatial-Belief to background; T1)
   Results: #199 (task rename), #209 (resolution-floor study + figure)
-  TAMPURA: #213 (Table II is per-step not per-episode; re-derive comparison; T1)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
 
-DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212, #213. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
