@@ -1410,7 +1410,7 @@ def plot_solved_vs_time(grouped: Dict[tuple, tuple],
                 key=lambda kv: (kv[0][0],
                                 kv[0][1] if kv[0][1] is not None else -1.0)):
             label_base, color = _variant_style(baseline, mbs)
-            label = f"{label_base} ({len(solved)}/{n_total})"
+            label = label_base
             if not solved or n_total == 0:
                 ax.plot([], [], color=color, label=label)
                 continue
@@ -1428,12 +1428,16 @@ def plot_solved_vs_time(grouped: Dict[tuple, tuple],
         ax.set_title(goal, fontsize=22)
         ax.tick_params(labelsize=17)
         ax.grid(True, alpha=0.3)
-        ax.legend(loc="upper left", fontsize=16)
     axes[0].set_ylabel("instances solved (%)", fontsize=20)
     axes[0].set_ylim(0, 100)
+    # Single shared legend below all subplots (the three variants are
+    # identical across goals), so no in-axes box can overlap the curves.
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=len(labels),
+               fontsize=18, frameon=True, bbox_to_anchor=(0.5, 0.0))
     if title:
         fig.suptitle(title, fontsize=24)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.1, 1, 1))
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"[plotter] wrote {out_path}")
