@@ -1775,6 +1775,59 @@ def _plot_single_x_summary(grouped, baseline_grouped, title, ylabel, out_path,
     return out_path
 
 
+def _plot_metric_bars(grouped, baseline_grouped, xs, title, ylabel, out_path,
+                      ylim, series_label, xlabel, main_label_suffix,
+                      baseline_label_suffix):
+    """Grouped-bar form of plot_metric for the discrete difficulty axis
+    (success rate / planning time vs n_occluders | stack_height).  That
+    axis only takes integer values {2, 3, 4}, so bars are the honest
+    rendering; the line form's shaded +/-1-std band misled (it shows the
+    spread ACROSS problem instances, not run-to-run, so overlapping bands
+    made significant differences look insignificant) and is dropped here
+    per supervisor review 2026-05-27.  No error bars; large fonts;
+    categorical integer ticks."""
+    series = [(s, grouped[s], main_label_suffix)
+              for s in sorted(grouped.keys(), key=str)]
+    if baseline_grouped:
+        series += [(s, baseline_grouped[s], baseline_label_suffix)
+                   for s in sorted(baseline_grouped.keys(), key=str)]
+    n = max(len(series), 1)
+    width = 0.8 / n
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    for i, (s_val, xy, suffix) in enumerate(series):
+        means = [mean(xy[x]) if xy.get(x) else 0.0 for x in xs]
+        offsets = [j + (i - (n - 1) / 2.0) * width for j in range(len(xs))]
+        colour = None
+        if series_label == "variant":
+            colour = _VARIANT_COLOUR.get(s_val) or (
+                "#7f7f7f" if s_val == "uniform" else None)
+        ax.bar(offsets, means, width=width, color=colour,
+               edgecolor="black", linewidth=0.4, label=f"{s_val}{suffix}")
+        for j, x_val in enumerate(xs):
+            nn = len(xy[x_val]) if xy.get(x_val) else 0
+            if 0 < nn <= 5:
+                ax.annotate(f"n={nn}", xy=(offsets[j], means[j]),
+                            xytext=(0, 3), textcoords="offset points",
+                            ha="center", fontsize=12, color=colour or "black")
+    ax.set_xticks(range(len(xs)))
+    ax.set_xticklabels([str(x) for x in xs], fontsize=15)
+    ax.tick_params(axis="y", labelsize=15)
+    ax.set_xlabel(xlabel, fontsize=18)
+    ax.set_ylabel(ylabel, fontsize=18)
+    ax.set_title(title, fontsize=20)
+    if ylim:
+        ax.set_ylim(*ylim)
+    else:
+        ax.set_ylim(bottom=0)
+    ax.grid(True, axis="y", alpha=0.3)
+    ax.legend(fontsize=14)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    print(f"[plotter] wrote {out_path}")
+    return out_path
+
+
 def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
                 title: str,
                 ylabel: str,
@@ -1784,7 +1837,8 @@ def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
                 xlabel: str = "n_occluders",
                 baseline_grouped: Optional[Dict] = None,
                 main_label_suffix: str = "",
-                baseline_label_suffix: str = " (baseline)") -> Optional[Path]:
+                baseline_label_suffix: str = " (baseline)",
+                kind: str = "line") -> Optional[Path]:
     # Detect single-X — a line plot 'vs <axis>' with one X value reads
     # as a stray dot, not a graph.  Render as side-by-side bars instead.
     # Stack-subtier of mixed-scene RANDOM_PAIRS_MATRIX hits this (X=0
@@ -1803,6 +1857,12 @@ def plot_metric(grouped: Dict[int, Dict[int, List[float]]],
             _print_text_table(baseline_grouped,
                               f"{title}{baseline_label_suffix}")
         return None
+
+    if kind == "bar":
+        return _plot_metric_bars(
+            grouped, baseline_grouped, sorted(xs_all), title, ylabel,
+            out_path, ylim, series_label, xlabel, main_label_suffix,
+            baseline_label_suffix)
 
     fig, ax = plt.subplots(figsize=(7, 5))
 
@@ -2066,6 +2126,7 @@ def main(argv=None) -> int:
             title=f"Planning time vs scene size (success-only){title_suffix}",
             ylabel="mean total planning time (s)",
             out_path=out_dir / f"planning_time_vs_n_occluders{suffix}.png",
+            kind="bar",
             baseline_grouped=(group_metric(g_baseline, series=series_key,
                                            metric="total_planning_time_s",
                                            success_only=True)
@@ -2081,6 +2142,7 @@ def main(argv=None) -> int:
             ylabel="success rate (over seeds)",
             out_path=out_dir / f"success_rate_vs_n_occluders{suffix}.png",
             ylim=(0.0, 1.05),
+            kind="bar",
             baseline_grouped=(group_success_rate(g_baseline, series=series_key)
                               if g_baseline else None),
             series_label=series_label,
