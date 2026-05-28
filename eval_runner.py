@@ -156,8 +156,10 @@ def _load_corpus_seeds(n: int = 100) -> List[int]:
 # eval corpus (step 0).  Time budget is NOT a matrix axis — run once at
 # --timeout 1800 and post-process aggregated.csv at any shorter
 # wall_clock_s threshold.
-# Cells at 100 corpus seeds: semantic 1800 + uniform 900 = 2700.
-_CORPUS_SEEDS = _load_corpus_seeds(100)
+# Cells at 30 corpus seeds: semantic 540 + uniform 270 = 810.
+# audit #113: reduced 100 -> 30 for the canonical re-run (bump back to
+# 100 to restore the original full-power statistics).
+_CORPUS_SEEDS = _load_corpus_seeds(30)
 
 SCALABILITY_VS_TIME = [
     {  # semantic, occluder-driven goals — resolution swept
@@ -210,10 +212,10 @@ SCALABILITY_VS_TIME = [
 # random-pairs auto_cell ~9 cm so 1.5x / 2x = 0.135 / 0.18 m; stack
 # auto_cell ~6 cm so 1.5x / 2x = 0.09 / 0.12 m.  Uniform arm omitted —
 # its cell size is hard-clamped to auto_cell by audit #66 and cannot
-# move along the resolution axis.  Cell count: 100 corpus seeds x 3
-# difficulty points x 2 random-pairs goals x 2 mbs values = 1200 cells
-# for random-pairs; + 100 x 3 (stack_height) x 1 goal x 2 mbs = 600
-# cells for stack; 1800 cells total.  Output dir defaults to
+# move along the resolution axis.  Cell count: 30 corpus seeds x 3
+# difficulty points x 2 random-pairs goals x 2 mbs values = 360 cells
+# for random-pairs; + 30 x 3 (stack_height) x 1 goal x 2 mbs = 180
+# cells for stack; 540 cells total.  Output dir defaults to
 # eval_results/sweep_<timestamp>_scalability-vs-resolution; pass
 # --output eval_results/sweep_anytime to merge into the existing sweep
 # (--skip-existing reuses already-completed cells safely).
@@ -269,6 +271,63 @@ RESOLUTION_MBS01 = [
     },
 ]
 
+# audit #113 — fine-end resolution arm.  Probes semantic min_boxel_size at
+# 1 cm (0.01) AND 1 mm (0.001): both below auto_cell (~6-9 cm) AND below the
+# 3.5 cm octree min_resolution floor, characterising the FINE extreme of the
+# resolution axis (complement to the coarse 0.135/0.18 rp / 0.09/0.12 stack).
+#
+# BLOWUP WARNING (0.001): FreeSpaceGenerator.generate() subdivides every
+# MIXED node (one straddling an object/shadow boundary) until max_dim <=
+# min_resolution, i.e. to octree depth ~log2(1.0/mbs).  0.035 -> depth 5;
+# 0.01 -> depth 7 (~16x boundary cells, slower but feasible); 0.001 -> depth
+# 10 (~1000x boundary cells), rebuilt every replan -> expect minutes-to-hours
+# of planning and many --timeout 1800 hits.  Those land as exit_reason=
+# "timeout" stub rows (NOT no_summary), so they stay valid data points that
+# document the implementation limit rather than silently corrupting the sweep.
+# Cell count at 30 corpus seeds: 3 x 30 x 2 x 2 = 360 rp + 3 x 30 x 1 x 2 =
+# 180 stack = 540 cells.
+RESOLUTION_FINE = [
+    {  # semantic, occluder-driven goals
+        "n_occluders":        [2, 3, 4],
+        "seed":               _CORPUS_SEEDS,
+        "goal":               ["holding", "find-and-tray-stack"],
+        "baseline":           ["semantic"],
+        "min_boxel_size":     [0.001, 0.01],
+        "unit_costs":         [False],
+        "scene":              ["random-pairs"],
+        "_n_hidden_strategy": "none",
+    },
+    {  # semantic, stack goal
+        "n_occluders":        [2, 3, 4],
+        "n_targets":          [3],
+        "seed":               _CORPUS_SEEDS,
+        "goal":               ["stack"],
+        "baseline":           ["semantic"],
+        "min_boxel_size":     [0.001, 0.01],
+        "unit_costs":         [False],
+        "scene":              ["stack"],
+        "_n_hidden_strategy": "none",
+    },
+]
+
+# audit #113 — THE full canonical sweep.  Unions every resolution arm into
+# one run so a single pass into a FRESH --output dir reproduces EVERY thesis
+# figure (success / planning-time / boxel-count / failure-mode / resolution /
+# plan-count / wallclock-vs-planning / solved-vs-time) from one clean
+# aggregated.csv.  no_summary holes are fixed by the 5bd5f55 pre-flight
+# (find-and-tray-stack random-pairs 0-visible seeds re-roll deterministically).
+#   SCALABILITY_VS_TIME        semantic auto(None)/0.05 + uniform     810
+#   SCALABILITY_VS_RESOLUTION  semantic coarse 0.135/0.18, 0.09/0.12  540
+#   RESOLUTION_MBS01           semantic 0.10                          270
+#   RESOLUTION_FINE            semantic 0.001 + 0.01                  540
+#                                                              total 2160
+CANONICAL_FULL = (
+    SCALABILITY_VS_TIME
+    + SCALABILITY_VS_RESOLUTION
+    + RESOLUTION_MBS01
+    + RESOLUTION_FINE
+)
+
 MATRIX_PRESETS = {
     "scalability":               SCALABILITY_MATRIX,
     "smoke":                     SMOKE_MATRIX,
@@ -277,6 +336,8 @@ MATRIX_PRESETS = {
     "scalability-vs-time":       SCALABILITY_VS_TIME,
     "scalability-vs-resolution": SCALABILITY_VS_RESOLUTION,
     "resolution-mbs01":          RESOLUTION_MBS01,
+    "resolution-fine":           RESOLUTION_FINE,
+    "canonical-full":            CANONICAL_FULL,
 }
 
 
