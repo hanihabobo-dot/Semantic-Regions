@@ -521,7 +521,11 @@ definition at first use (or an explicit "(defined in Sec. 4.x)" forward-ref).
 Refs: abstract.tex; #211; #212; supervisor_comments_20260527.md.
 
 ================================================================================
-#215  [T3] [THESIS]  Abstract: "PDDLStream-based planner" highlighted, no comment -- p.iii (PDF4)
+#215  [DONE 2026-06-01] [T3] [THESIS]  Abstract: "PDDLStream-based planner" highlighted, no comment -- p.iii (PDF4)
+NOTE 2026-06-01: PDDLStream is already defined (background.tex:103 "PDDLStream for TAMP" subsection)
+and is a published, citable framework --- NOT a Boxel-style neologism --- so no abstract definition is
+warranted. Per author decision, added the citation \cite{garrett2018pddlstream} to the abstract at
+first mention. Not actioned as a "define it" item.
 ================================================================================
 [HL-ONLY] no written note. Intent unclear; most likely flags that the descriptor needs
 introduction, or questions "PDDLStream-based" vs the FastDownward backend the system
