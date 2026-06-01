@@ -534,7 +534,11 @@ actually plans with (cf. #241 and the planned FastDownward section, #253). Confi
 Refs: abstract.tex.
 
 ================================================================================
-#216  [T2] [NOW]  Intro: sensing actions do not "succeed" -- p.2 (PDF8)
+#216  [DONE 2026-06-01] [T2] [NOW]  Intro: sensing actions do not "succeed" -- p.2 (PDF8)
+NOTE 2026-06-01: reworded intro:28 and methods:63 from "assumed to succeed" / "succeeds" to
+"yields the outcome the plan expects (optimistic)". methods:79 already used outcome framing
+("assumes the target is found", "true outcome") --- left as-is. Grep over chapters/ found no
+other sensing-success framing (discussion.tex clean).
 ================================================================================
 [INK] "usually there is no 'success' in sensing actions; you just assume a certain
 outcome", on the highlighted clause "---a sensing action is assumed to succeed".
