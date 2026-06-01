@@ -588,7 +588,10 @@ full expansion of STRIPS; use the acronym alone.
 Refs: background.tex.
 
 ================================================================================
-#221  [T3] [THESIS]  Background: bare highlight on "The" -- p.5 (PDF11)
+#221  [SKIPPED 2026-06-01] [T3] [THESIS]  Background: bare highlight on "The" -- p.5 (PDF11)
+NOTE 2026-06-01: skipped per author. Bare highlight on the stop-word "The", no comment; grep found
+no doubled-article typo and ~10 grammatical "The..." sentence starts on the page. Unactionable from
+the ink. Confirm with Till Wed if revisited (mild candidate: background.tex:43 "The PDDL...").
 ================================================================================
 [HL-ONLY] the single word "The" is highlighted with no note. Intent unclear --- likely a
 local wording/typo flag (e.g. a duplicated article or an awkward sentence opening) at that
@@ -596,7 +599,10 @@ spot. Inspect the sentence; confirm with Till Wed if not obvious.
 Refs: background.tex.
 
 ================================================================================
-#222  [T0] [NOW]  Background: is goal_achieved an atom? -- p.7 (PDF13)
+#222  [DONE 2026-06-01] [T0] [NOW]  Background: is goal_achieved an atom? -- p.7 (PDF13)
+NOTE 2026-06-01: replaced the example $K(goal\_achieved)$ (background.tex:93) with a genuine goal
+atom $K(holding(target\_obj))$ --- answers "is it an atom?" (yes), drops the implicit dependence on
+a derived goal_achieved predicate the simplified planner does not define, and matches methods.tex:76.
 ================================================================================
 [TYPED] "is goal-achieved an atom?", on the highlighted "K(goal_achieved)---". Verify and
 make the formalization precise: state whether goal_achieved is an atom (and if so, how it
