@@ -547,7 +547,9 @@ Reword: sensing is modeled by ASSUMING an outcome (optimistic determinisation), 
 Refs: introduction.tex; methods.tex (sense action); discussion.tex:261.
 
 ================================================================================
-#217  [T2] [POLISH]  Intro: briefly explain Know-If Fluents at first mention -- p.3 (PDF9)
+#217  [DONE 2026-06-01] [T2] [POLISH]  Intro: briefly explain Know-If Fluents at first mention -- p.3 (PDF9)
+NOTE 2026-06-01: added an em-dash gloss at intro:34 ("atoms marking whether a Boxel's contents
+are known"), mirroring the abstract wording; full definition stays in Background.
 ================================================================================
 [TYPED] "briefly explain what they are", on "Know-If Fluents over...". Add a one-line
 plain gloss at the first mention in the intro.
