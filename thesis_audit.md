@@ -568,14 +568,20 @@ definition to present a state as a set of atoms up front, without the longer bui
 Refs: background.tex; #180.
 
 ================================================================================
-#219  [T3] [POLISH]  Background: "see before" -- redundant with earlier text -- p.5 (PDF11)
+#219  [SKIPPED 2026-06-01] [T3] [POLISH]  Background: "see before" -- redundant with earlier text -- p.5 (PDF11)
+NOTE 2026-06-01: skipped per author --- redundancy target ambiguous from the ink. Candidates: the
+initial-state/goal concept stated 3x (background.tex:16-17 state-model, :40 STRIPS, :65-66 PDDL),
+or the add/delete re-explanation at :60. Confirm exact location with Till Wed if revisited.
 ================================================================================
 [INK] "see before". The passage repeats something already stated earlier; cut or condense
 and cross-reference instead of restating.
 Refs: background.tex.
 
 ================================================================================
-#220  [T3] [POLISH]  Background: do not expand the STRIPS acronym -- p.5 (PDF11)
+#220  [DONE 2026-06-01] [T3] [POLISH]  Background: do not expand the STRIPS acronym -- p.5 (PDF11)
+NOTE 2026-06-01: changed the only \ac{strips} (background.tex:27) to \acs{strips}, so STRIPS no
+longer expands inline. All other mentions were already plain "STRIPS". Acronym-list entry
+(acronyms.tex:5) keeps the expansion (conventional) per author -- inline fix only.
 ================================================================================
 [INK] "no need to show full name / the acronym lost its original meaning". Drop the
 full expansion of STRIPS; use the acronym alone.
