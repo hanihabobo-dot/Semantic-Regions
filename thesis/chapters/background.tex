@@ -12,17 +12,17 @@ The formal basis for classical planning problems is a \textit{state-space model}
 
 More formally, a deterministic state-space model can be described as a tuple $M = \langle S, s_0, S_G, Act, A, f \rangle$, where:
 \begin{itemize}
-    \item $S$: A set representing all possible \textit{states} the world can be in. For example, in a simple blocksworld problem with two blocks A and B and a table, a state could be "Block A is on Block B, and Block B is on the table, and the robot hand is empty."
-    \item $s_0 \in S$: The specific \textit{initial state} from which planning begins. E.g., "Block A is on the table, Block B is on the table, hand empty."
-    \item $S_G \subseteq S$: The set of \textit{goal states}. Any state in this set satisfies the desired objective. E.g., any state where "Block A is on Block B."
+    \item $S$: A set of all possible \textit{states}, where each state is the set of atoms (ground propositions) true in a configuration of the world. For example, in a blocksworld with blocks A, B and a table, a state could be $\{\texttt{(on A B)}, \texttt{(ontable B)}, \texttt{(handempty)}\}$.
+    \item $s_0 \in S$: The specific \textit{initial state} from which planning begins, e.g.\ $\{\texttt{(ontable A)}, \texttt{(ontable B)}, \texttt{(handempty)}\}$.
+    \item $S_G \subseteq S$: The set of \textit{goal states}---any state satisfying the desired objective, e.g.\ every state containing \texttt{(on A B)}.
     \item $Act$: A set of all possible \textit{actions} the agent can perform. E.g., \textit{pick blockX}, \textit{stack blockX on blockY}.
     \item $A(s) \subseteq Act$: A function that, for any given state $s \in S$, returns the subset of actions from $Act$ that are \textit{applicable} (can be executed) in state $s$. For example, \textit{pick blockA} is applicable only if Block A is clear (nothing on top of it) and the robot hand is empty.
-    \item $f(a, s) \rightarrow s'$: A deterministic \textit{state transition function}. Given a state $s$ and an applicable action $a \in A(s)$, $f(a,s)$ returns the unique successor state $s'$ that results from executing action $a$ in state $s$. For example, if $s$ is "A on table, B on table, hand empty" and $a$ is \textit{pick blockA}, then $s' = f(a,s)$ would be "B on table, hand holding A."
+    \item $f(a, s) \rightarrow s'$: A deterministic \textit{state transition function}. Given a state $s$ and an applicable action $a \in A(s)$, $f(a,s)$ returns the unique successor state $s'$. For example, applying \textit{pick blockA} to $\{\texttt{(ontable A)}, \texttt{(ontable B)}, \texttt{(handempty)}\}$ yields $\{\texttt{(ontable B)}, \texttt{(holding A)}\}$.
 \end{itemize}
 A \textit{solution} or \textit{plan} is then a sequence of actions $\sigma = [a_0, a_1, \dots, a_n]$ such that if $s_i$ is the state before action $a_i$, then $a_i \in A(s_i)$, $s_{i+1} = f(a_i, s_i)$, and the final state $s_{n+1}$ is in $S_G$. Often, we are interested in an \textit{optimal plan}, which could be the shortest sequence of actions or one that minimizes some associated cost.
 
 \paragraph{Compact representation: STRIPS, and PDDL.}
-Explicitly enumerating all possible states $S$ is infeasible for all but the simplest problems. Therefore, planning problems are typically described in a more compact, \textit{factored} representation using a planning language. In this representation, a state is defined by a set of propositions (or ground atoms) that are currently true.
+Explicitly enumerating all states $S$ is infeasible for all but the simplest problems. Planning problems are therefore described compactly in a \textit{factored} representation, using a planning language that specifies states through the atoms that hold and actions through their effects on those atoms.
 
 A foundational language for this is \textbf{\ac{strips}} \cite{fikes1971strips}. In STRIPS:
 \begin{itemize}

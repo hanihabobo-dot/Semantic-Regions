@@ -556,7 +556,10 @@ plain gloss at the first mention in the intro.
 Refs: introduction.tex; #223; #224.
 
 ================================================================================
-#218  [T2] [POLISH]  Background: introduce states directly as sets of atoms -- p.4 (PDF10)
+#218  [DONE 2026-06-01] [T2] [POLISH]  Background: introduce states directly as sets of atoms -- p.4 (PDF10)
+NOTE 2026-06-01: reworked the state-space-model itemize (background.tex:15-20) so a state is
+introduced as a set of ground atoms with atom notation (S, s0, SG, f examples), and trimmed the
+later STRIPS paragraph (:25) that re-introduced "a state is a set of propositions".
 ================================================================================
 [INK] "Directly introduce states as sets of atoms". Streamline the state-model
 definition to present a state as a set of atoms up front, without the longer build-up.
