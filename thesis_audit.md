@@ -502,6 +502,328 @@ NB (verified, NO issue filed):
    no visibility precondition). Optionally add a one-line basis. [code-confirmed]
 
 ================================================================================
+SUPERVISOR REVIEW BATCH --- #214-#253 added 2026-06-01
+================================================================================
+Source: Till Hofmann's annotated PDF (thesis/20260527_hani-thesis-comments.pdf, returned
+2026-05-27) + his cover email (2026-05-31). Full verbatim transcription with page images:
+thesis/supervisor_comments_20260527.md. EVERY annotation is filed below --- including the
+three highlights with no written comment and the bare "?" --- per author request.
+Annotation kind: [INK] handwritten margin note - [TYPED] typed comment on a highlight -
+[HL-ONLY] highlight with no written comment. Pages are PRINTED thesis pages (PDF = printed+6).
+Tiers/dispositions are my triage; re-tier freely. Open questions to raise with Till Wed 2026-06-03.
+
+================================================================================
+#214  [DONE 2026-06-01] [T2] [POLISH]  Abstract: "Semantic Boxel" used before it is defined -- p.iii (PDF4)
+================================================================================
+[INK] "not defined yet", pointing at the highlighted term "Semantic Boxel".
+The thesis's central term appears in the abstract with no gloss. Add a one-clause
+definition at first use (or an explicit "(defined in Sec. 4.x)" forward-ref).
+Refs: abstract.tex; #211; #212; supervisor_comments_20260527.md.
+
+================================================================================
+#215  [T3] [THESIS]  Abstract: "PDDLStream-based planner" highlighted, no comment -- p.iii (PDF4)
+================================================================================
+[HL-ONLY] no written note. Intent unclear; most likely flags that the descriptor needs
+introduction, or questions "PDDLStream-based" vs the FastDownward backend the system
+actually plans with (cf. #241 and the planned FastDownward section, #253). Confirm with Till Wed.
+Refs: abstract.tex.
+
+================================================================================
+#216  [T2] [NOW]  Intro: sensing actions do not "succeed" -- p.2 (PDF8)
+================================================================================
+[INK] "usually there is no 'success' in sensing actions; you just assume a certain
+outcome", on the highlighted clause "---a sensing action is assumed to succeed".
+Reword: sensing is modeled by ASSUMING an outcome (optimistic determinisation), not by
+"succeeding". Align with the sense-action framing in methods + discussion.
+Refs: introduction.tex; methods.tex (sense action); discussion.tex:261.
+
+================================================================================
+#217  [T2] [POLISH]  Intro: briefly explain Know-If Fluents at first mention -- p.3 (PDF9)
+================================================================================
+[TYPED] "briefly explain what they are", on "Know-If Fluents over...". Add a one-line
+plain gloss at the first mention in the intro.
+Refs: introduction.tex; #223; #224.
+
+================================================================================
+#218  [T2] [POLISH]  Background: introduce states directly as sets of atoms -- p.4 (PDF10)
+================================================================================
+[INK] "Directly introduce states as sets of atoms". Streamline the state-model
+definition to present a state as a set of atoms up front, without the longer build-up.
+Refs: background.tex; #180.
+
+================================================================================
+#219  [T3] [POLISH]  Background: "see before" -- redundant with earlier text -- p.5 (PDF11)
+================================================================================
+[INK] "see before". The passage repeats something already stated earlier; cut or condense
+and cross-reference instead of restating.
+Refs: background.tex.
+
+================================================================================
+#220  [T3] [POLISH]  Background: do not expand the STRIPS acronym -- p.5 (PDF11)
+================================================================================
+[INK] "no need to show full name / the acronym lost its original meaning". Drop the
+full expansion of STRIPS; use the acronym alone.
+Refs: background.tex.
+
+================================================================================
+#221  [T3] [THESIS]  Background: bare highlight on "The" -- p.5 (PDF11)
+================================================================================
+[HL-ONLY] the single word "The" is highlighted with no note. Intent unclear --- likely a
+local wording/typo flag (e.g. a duplicated article or an awkward sentence opening) at that
+spot. Inspect the sentence; confirm with Till Wed if not obvious.
+Refs: background.tex.
+
+================================================================================
+#222  [T0] [NOW]  Background: is goal_achieved an atom? -- p.7 (PDF13)
+================================================================================
+[TYPED] "is goal-achieved an atom?", on the highlighted "K(goal_achieved)---". Verify and
+make the formalization precise: state whether goal_achieved is an atom (and if so, how it
+is defined), or rephrase the notation.
+Refs: background.tex.
+
+================================================================================
+#223  [T0] [NOW]  Background: cite the origin of Know-If Fluents -- p.7 (PDF13)
+================================================================================
+[INK] "KIFs were originally introduced by Brewer et al. --- cite!"  (SURNAME to confirm:
+the ink reads "Brewer" OR "Breuer"; no citation for the KIF origin exists anywhere in the
+thesis today.) Find the originating paper and add the citation at first use.
+Refs: background.tex; resources/references.bib; supervisor_comments_20260527.md.
+
+================================================================================
+#224  [T2] [THESIS]  Background: motivate KIFs vs K-literals -- p.7 (PDF13)
+================================================================================
+[INK] "Why KIFs instead of K literals?" Add a sentence motivating the design choice (the
+single Know-If fluent collapses the K(p)/K(not p) pair --- see discussion.tex:258-259).
+Tightly related to #237 (the same KIF-vs-K-literal confusion flagged in Methods).
+Refs: background.tex; discussion.tex:258-259; #237.
+
+================================================================================
+#225  [T2] [NOW]  Related Work: "Sidd's Critical Regions" -- is that the real term? -- p.10 (PDF16)
+================================================================================
+[TYPED] "do they call it that? if not, just call them critical regions", on "Sidd's
+Critical Regions." Verify the source's terminology; most likely drop "Sidd's" and just
+write "critical regions".
+Refs: related-work.tex.
+
+================================================================================
+#226  [T0] [NOW]  Related Work: "combines these techniques" -- you don't learn regions -- p.10 (PDF16)
+================================================================================
+[TYPED] "Is that really correct? You don't learn any regions", on "...combines these
+techniques". Correct the claim --- our method does not learn regions; reword to match what
+the system actually does.
+Refs: related-work.tex.
+
+================================================================================
+#227  [T2] [POLISH]  Related Work: "treated by Geffner and Bonet" is unclear -- p.13 (PDF19)
+================================================================================
+[TYPED] "not sure what this means", on "The underlying models are treated by Geffner and
+Bonet [1...". Reword the sentence so the point is explicit.
+Refs: related-work.tex.
+
+================================================================================
+#228  [T3] [POLISH]  Related Work: add a back-reference to Section 2.2 -- p.13 (PDF19)
+================================================================================
+[INK] "refer back to 2.2". Add a \cref back to Section 2.2 where this material was
+introduced.
+Refs: related-work.tex.
+
+================================================================================
+#229  [T2] [POLISH]  Related Work: "?" on the bounded-give-up sentence -- p.14 (PDF20)
+================================================================================
+[INK] a bare "?" beside the highlighted sentence "...an invariant the bounded give-up on
+unreachable shadows (Section 6.5) deliberately relaxes." Till does not follow the sentence;
+reword for clarity (the forward-ref to 6.5 from Related Work is also awkward this early).
+Refs: related-work.tex.
+
+================================================================================
+#230  [T1] [THESIS]  Related Work: cite the AAAI'25 online critical-regions follow-up -- p.15 (PDF21)
+================================================================================
+[INK] "There is actually a follow-up paper where they modify CRs online --- AAAI '25".
+Locate the AAAI 2025 follow-up that modifies critical regions online, cite it, and update
+the surrounding claim.
+Refs: related-work.tex; resources/references.bib.
+
+================================================================================
+#231  [INFO] [NO ACTION]  Methods: "good intro so far" -- p.16 (PDF22)
+================================================================================
+[INK] positive margin note. Recorded for completeness; no action.
+
+================================================================================
+#232  [T3] [POLISH]  Methods: simplify the (BXset) symbol -- p.16 (PDF22)
+================================================================================
+[TYPED] "Why not just BX?", on the highlighted "(BXset)" (script-B X with the "set"
+subscript). Consider simplifying the notation to "BX".
+Refs: methods.tex.
+
+================================================================================
+#233  [T2] [THESIS]  Methods: separate the concept from the implementation -- p.16 (PDF22)
+================================================================================
+[TYPED] "Try to separate the conceptual description from the implementation", on "It runs
+as a Python stage...". Split conceptual description from implementation detail (the
+"Python stage" wording belongs to the implementation part).
+Refs: methods.tex; #195.
+
+================================================================================
+#234  [INFO] [NO ACTION]  Methods: "good figure!" -- p.17 (PDF23)
+================================================================================
+[INK] positive margin note (on the Methods figure, ~Fig 4.1). Recorded for completeness; no action.
+
+================================================================================
+#235  [T2] [THESIS]  Methods: "Line of sight" legend entry -- "I don't see it" -- p.17 (PDF23)
+================================================================================
+[INK] "I don't see it", pointing at the "Line of sight" legend entry. The legend names a
+line-of-sight element that is not visible in the figure. Make it visible or remove the
+legend entry.
+Refs: methods.tex; the referenced figure + its generator.
+
+================================================================================
+#236  [T3] [NOW]  Methods: Fig 4.2 is not referenced in the text -- p.17 (PDF23)
+================================================================================
+[INK] "This fig is not referenced in the text". Add a \cref to Fig 4.2 from the body.
+Refs: methods.tex.
+
+================================================================================
+#237  [T1] [NOW]  Methods: KIFs vs K-literals -- "I'm confused" -- p.19 (PDF25)
+================================================================================
+[TYPED] "I'm confused, do you use KIFs or K literals?", on "belief carries the K-literal
+K(InBoxel(obj, Boxel))...". The text switches between Know-If Fluents and K-literals.
+Make terminology consistent throughout and point to the clarification in discussion.tex:258-259.
+Refs: methods.tex; discussion.tex:258-259; #224.
+
+================================================================================
+#238  [T1] [THESIS]  Methods: state explicitly that this is simplified POD planning -- p.22 (PDF28)
+================================================================================
+[INK] "So you don't actually do POD planning but a simplified version; this is OK but
+should be discussed more explicitly, especially its limitations." Add an explicit statement
+that the planning is a SIMPLIFIED form of POD planning and spell out its limitations.
+RECURRING THEME (see #239, #248, #251): Till raises this three times.
+Refs: methods.tex; #239; #248.
+
+================================================================================
+#239  [T1] [THESIS]  Methods: a real POD planner (e.g. LW1) has deductive axioms -- p.23 (PDF29)
+================================================================================
+[INK] "This could actually be taken care of by a real POD planner, e.g. LW1 has deductive
+axioms." Note that a full POD planner (he cites LW1 as an example) handles this via
+deductive axioms, which the simplified approach lacks. Part of the recurring theme (#238, #248).
+Refs: methods.tex; #238; #248.
+
+================================================================================
+#240  [T2] [POLISH]  Results: clarify the stack goal -- specific tower or any stack? -- p.24 (PDF30)
+================================================================================
+[INK] "So is it a specific stack, e.g. (on b1 b2) (on b2 b3), or is it any stack of the
+given size?" Clarify whether the stacking goal is a specific ordered tower or any stack of
+the target size.
+Refs: results.tex; #204.
+
+================================================================================
+#241  [T3] [THESIS]  Results: "Software" paragraph highlighted, no comment -- p.26 (PDF32)
+================================================================================
+[HL-ONLY] the paragraph "PyBullet [6]; PDDLStream [10] with the FastDownward classical
+planner backend; Python 3.10." is highlighted with no note. Likely flagged for the planned
+FastDownward / planning-algorithms background section (#253), or wants version detail.
+Confirm with Till Wed.
+Refs: results.tex; #253; #215.
+
+================================================================================
+#242  [T1] [THESIS]  Results: explain the performance degradation (Fig 5.6) -- p.30 (PDF36)
+================================================================================
+[INK] "Explanation for performance degradation!" next to Fig 5.6. Add a textual explanation
+for the degradation the figure shows.
+Refs: results.tex; Fig 5.6.
+
+================================================================================
+#243  [T3] [THESIS]  Results: Fig 5.12 reds are too similar -- p.35 (PDF41)
+================================================================================
+[INK] "These red colors are very similar" on Fig 5.12. Recolor for distinguishability
+(distinct hues / line styles). New image only; never overwrite the old PNG.
+Refs: results.tex; Fig 5.12 + its generator.
+
+================================================================================
+#244  [T2] [POLISH]  Discussion: separate Discussion section -- accepted, optional merge -- p.36 (PDF42)
+================================================================================
+[INK] "I'm not particularly fond of having a separate Discussion section, but it's OK."
+Low priority: optionally fold Discussion into Results/Conclusion. He accepts it as-is.
+Refs: discussion.tex.
+
+================================================================================
+#245  [T2] [THESIS]  Discussion: state the overall conclusion of the comparison -- p.38 (PDF44)
+================================================================================
+[INK] "So what's the overall conclusion of the comparison?" Add an explicit takeaway
+sentence summarizing what the comparison shows.
+Refs: discussion.tex.
+
+================================================================================
+#246  [T0] [NOW]  Discussion: "This is not entirely true." -- p.39 (PDF45)
+================================================================================
+[INK] "This is not entirely true." next to a claim on p.39 (locate the exact sentence ---
+on or near the TAMPURA comparison). Correct the overstatement. See #247, which is the
+adjacent correction on the same page/claim.
+Refs: discussion.tex; #247; #177; #213.
+
+================================================================================
+#247  [T0] [NOW]  Discussion: "You did run TAMPURA, just not on the same problem." -- p.39 (PDF45)
+================================================================================
+[INK] "You did run TAMPURA, just not on the same problem." The text implies TAMPURA was not
+run; in fact it was, on a different problem. Fix the framing. Same locus as #246; ties to
+the TAMPURA-comparison corrections #177/#213.
+Refs: discussion.tex; #246; #177; #213.
+
+================================================================================
+#248  [T1] [THESIS]  Discussion: simplified POD does not scale (missing deductive axioms) -- p.41 (PDF47)
+================================================================================
+[INK] "More importantly, you use a simplified version of POD planning that does not work on
+more complex problems (e.g. because of missing deductive axioms)." State this limitation
+explicitly as a key point of the comparison/limitations. Third instance of the recurring
+theme (#238, #239).
+Refs: discussion.tex; #238; #239.
+
+================================================================================
+#249  [T2] [POLISH]  Conclusion: too much detail -- p.42 (PDF48)
+================================================================================
+[INK] "too much detail for the conclusion". Trim implementation/results detail from the
+conclusion; keep it high-level.
+Refs: conclusion.tex.
+
+================================================================================
+#250  [T2] [THESIS]  Conclusion: future work -- real-robot experiments -- p.43 (PDF49)
+================================================================================
+[INK] "experiments on real robots!" Add real-robot experiments to the future-work outlook.
+Refs: conclusion.tex.
+
+================================================================================
+#251  [T2] [POLISH]  Cross-cutting: redundancy -- things explained multiple times -- (email 2026-05-31)
+================================================================================
+Email: "Some things are explained multiple times and in a redundant way (e.g., how the
+comparison to TAMPURA was done)." De-duplicate; consolidate the TAMPURA-comparison
+explanation into one place and cross-reference instead of repeating.
+Refs: results.tex; discussion.tex; methods.tex; #177; #213.
+
+================================================================================
+#252  [INFO] [NO ACTION]  Overall verdict (email 2026-05-31)
+================================================================================
+Email: "Overall, it reads very well!"; "It's not missing anything major"; "your
+modifications since our last meeting already improved the overall flow." Positive context;
+no action.
+
+================================================================================
+#253  [T3] [THESIS]  Background: add a FastDownward + planning-algorithms section  (AUTHOR-PLANNED, not a Till comment)
+================================================================================
+From Hani's 2026-05-31 reply ("planning to add a section about FastDownward and planning
+algorithms to the background"). Tracked here because it is part of this revision cycle and
+relates to the abstract/software highlights (#215, #241). Remove if not wanted.
+Refs: background.tex; #215; #241.
+
+================================================================================
+#254  [T2] [THESIS]  Define "Boxel" crisply at first body use (intro/methods)  [follow-up to #214]
+================================================================================
+The abstract now defines a Boxel (fix #214: "a cuboidal cell of the workspace"), but the
+body never states plainly what a Boxel is: introduction.tex:33 and methods.tex:16 describe
+how Boxels are GENERATED ("adaptive semantic discretization") without first defining the
+coined unit. Add the same one-line definition at first substantive body use --- most
+naturally methods.tex:16, or intro.tex:33.
+Refs: methods.tex:16; introduction.tex:33; #214; supervisor_comments_20260527.md.
+
+================================================================================
 OPEN ISSUES
 ================================================================================
 OPEN:
@@ -511,6 +833,15 @@ OPEN:
   Results: #199 (task rename), #209 (resolution-floor study + figure)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
+  --- Supervisor review 2026-06-01 (#214-#253; full batch above) -- all OPEN except
+      #231/#234/#252 ([INFO], no action). Discuss open Qs with Till Wed 2026-06-03. ---
+      Correctness (T0): #222 #223 #226 #246 #247
+      Major (T1):       #216 #230 #237 #238 #239 #242 #248  (+#251 redundancy; T2)
+      Recurring theme:  #238/#239/#248 -- "simplified POD planning, state its limits
+                        (missing deductive axioms)" -- Till raises it 3x (p.22/23/41)
+      Bare annotations: #215 #221 #241 (highlight, no comment) #229 (bare "?") -- confirm intent Wed
+      Author-planned:   #253 (FastDownward/planning-algorithms background section)
+      Follow-ups filed: #254 (define Boxel at first body use; spun off from #214)
 
 DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212, #213. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
