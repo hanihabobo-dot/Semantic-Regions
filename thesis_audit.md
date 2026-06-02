@@ -804,7 +804,11 @@ RECURRING THEME (see #239, #248, #251): Till raises this three times.
 Refs: methods.tex; #239; #248.
 
 ================================================================================
-#239  [T1] [THESIS]  Methods: a real POD planner (e.g. LW1) has deductive axioms -- p.23 (PDF29)
+#239  [DONE 2026-06-01] [T1] [THESIS]  Methods: a real POD planner (e.g. LW1) has deductive axioms -- p.23 (PDF29)
+NOTE 2026-06-01: at methods.tex:142 ("sound treatment...left to future work"), added a BRIEF clause
+per Till's note: "a full POD planner with deductive axioms (e.g. LW1 \cite{bonet2014flexible}) could
+express this directly (\cref{sec:limitations})". Kept short on purpose -- the full discussion lives in
+#248 (limitations); this avoids the #251 redundancy while still naming LW1 where Till marked it.
 ================================================================================
 [INK] "This could actually be taken care of by a real POD planner, e.g. LW1 has deductive
 axioms." Note that a full POD planner (he cites LW1 as an example) handles this via
