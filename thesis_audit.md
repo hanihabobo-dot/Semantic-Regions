@@ -873,7 +873,13 @@ the TAMPURA-comparison corrections #177/#213.
 Refs: discussion.tex; #246; #177; #213.
 
 ================================================================================
-#248  [T1] [THESIS]  Discussion: simplified POD does not scale (missing deductive axioms) -- p.41 (PDF47)
+#248  [DONE 2026-06-01] [T1] [THESIS]  Discussion: simplified POD does not scale (missing deductive axioms) -- p.41 (PDF47)
+NOTE 2026-06-01: per author ("also discuss in the limitations"), expanded the "Simplifications
+disclosed" paragraph (discussion.tex:261, sec:limitations) with the explicit simplified-POD-planning
+discussion: full POD planner (LW1 \cite{bonet2014flexible}) has contingent branching + deductive axioms
+the base predicates leave implicit; ours determinises optimistically + replans; suffices for the
+studied tasks but not for problems needing contingent reasoning; ties to the bounded give-up. This is
+the home for the recurring theme (#238 methods framing, #239 methods note kept brief to avoid #251).
 ================================================================================
 [INK] "More importantly, you use a simplified version of POD planning that does not work on
 more complex problems (e.g. because of missing deductive axioms)." State this limitation

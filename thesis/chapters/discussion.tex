@@ -261,4 +261,15 @@ with a value-carrying fluent, an equivalent encoding for the scenarios
 studied (\cref{sec:kif_belief}). The \texttt{sense} action is modeled
 optimistically --- it assumes the target is found --- with reactive
 replanning when execution reveals otherwise, because PDDLStream and
-FastDownward do not support contingent planning (\cref{ch:methods}).
+FastDownward support neither contingent branching nor deductive axioms
+(\cref{ch:methods}). The planning layer is thus a deliberately
+\emph{simplified} form of POD planning: a full POD planner such as LW1
+\cite{bonet2014flexible} produces branching contingent plans and carries
+deductive axioms that infer facts the base predicates leave implicit,
+whereas ours determinises optimistically and repairs by replanning. This
+suffices for the single-target retrieval and stacking tasks studied here,
+where progress never hinges on a deduction the planner cannot make locally;
+it would not suffice for problems that genuinely require contingent
+reasoning --- the unsound bounded give-up above is one symptom, since ruling
+out an unreachable shadow needs exactly the kind of deduction (clear the
+obstruction first) that an axiom-bearing POD planner expresses directly.
