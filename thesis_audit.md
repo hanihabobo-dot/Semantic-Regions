@@ -649,7 +649,13 @@ write "critical regions".
 Refs: related-work.tex.
 
 ================================================================================
-#226  [T0] [NOW]  Related Work: "combines these techniques" -- you don't learn regions -- p.10 (PDF16)
+#226  [DONE 2026-06-01] [T0] [NOW]  Related Work: "combines these techniques" -- you don't learn regions -- p.10 (PDF16)
+NOTE 2026-06-01: actual locus is background.tex (not related-work). Reworded background.tex:161 "Our
+work combines these techniques" -> "borrows the idea of task-relevant spatial regions, but constructs
+Boxels geometrically from detected objects and their occlusions rather than learning a region
+predictor" -- corrects the false implication that we learn regions. ALSO fixed a SECOND "Sidd's
+Critical Regions" heading at background.tex:156 -> "Critical Regions." (the #225 issue's likely true
+locus, same page; the related-work.tex:52 copy was fixed under #225).
 ================================================================================
 [TYPED] "Is that really correct? You don't learn any regions", on "...combines these
 techniques". Correct the claim --- our method does not learn regions; reword to match what
