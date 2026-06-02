@@ -47,13 +47,14 @@ except ImportError:
 EXIT_REASON_COLOUR = {
     "success":          "#2ca02c",   # green
     "planner_failed":   "#d62728",   # red
-    # Audit #99 polish — timeout is the worst-case "ran out of clock"
-    # outcome.  Bumped from dark-red (#7f0000) to vivid red so it
-    # reads clearly red against the brown ``no_summary`` band in a
-    # stack, and pinned to the top of every stack (see
-    # plot_failure_modes ordering below).
-    "timeout":          "#ff1744",   # vivid red
-    "replan_limit":     "#ff7f0e",   # orange
+    # Audit #99 polish pinned timeout (worst-case "ran out of clock") to
+    # the top of every stack (see plot_failure_modes ordering below).
+    # Supervisor #243 — vivid-red timeout read as a second red beside
+    # planner_failed (#d62728) wherever replan_limit was absent; swapped
+    # timeout to orange and replan_limit to the vivid red so the topmost
+    # band is clearly distinct from the planner_failed red.
+    "timeout":          "#ff7f0e",   # orange
+    "replan_limit":     "#ff1744",   # vivid red
     "no_summary":       "#8c564b",   # brown
     "physics_mismatch": "#9467bd",   # purple
     "drop_failed":      "#e377c2",   # pink
