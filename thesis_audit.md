@@ -668,8 +668,10 @@ Refs: related-work.tex.
 ================================================================================
 #227  [DONE 2026-06-01] [T2] [POLISH]  Related Work: "treated by Geffner and Bonet" is unclear -- p.13 (PDF19)
 NOTE 2026-06-01: reworded related-work.tex:30 "The underlying models are treated by Geffner and Bonet"
--> "The formal models these planners rest on---conformant, contingent, and POD planning---are presented
-in Geffner and Bonet's textbook" (names the models, replaces vague "treated").
+-> "The formal models these planners rest on...presented in Geffner and Bonet's textbook" (names the
+models, replaces vague "treated"). 2nd pass (same day): per author, DELETED the sentence entirely --
+it was a low-value textbook pointer and the textbook is cited in Background where the models are
+introduced. The reword is superseded by the deletion.
 ================================================================================
 [TYPED] "not sure what this means", on "The underlying models are treated by Geffner and
 Bonet [1...". Reword the sentence so the point is explicit.
