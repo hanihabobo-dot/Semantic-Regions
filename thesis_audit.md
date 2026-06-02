@@ -840,11 +840,17 @@ references.bib and cited it at results.tex:85; also fixed spelling FastDownward 
 there. One no-space "FastDownward" remains at discussion.tex:264 (deferred to a separate pass).
 
 ================================================================================
-#242  [T1] [THESIS]  Results: explain the performance degradation (Fig 5.6) -- p.30 (PDF36)
+#242  [DONE 2026-06-02] [T1] [THESIS]  Results: explain the performance degradation (Fig 5.6) -- p.30 (PDF36)
 ================================================================================
 [INK] "Explanation for performance degradation!" next to Fig 5.6. Add a textual explanation
 for the degradation the figure shows.
 Refs: results.tex; Fig 5.6.
+NOTE 2026-06-02: Fig 5.6 = fig:success-stack (success vs stack height). Added a two-sentence
+mechanism to the stack paragraph (results.tex:164): success falls with height because each layer
+is another sequential pick-and-place and an off-pose settle forces a replan, so adaptive variants
+fail mainly via replan_limit (cf. fig:failure-modes) not planner failure; uniform collapses faster
+from its ~20x higher per-call planning cost (tab:headline). Mechanism, not interpretation -- the
+gap analysis stays in discussion.tex (not duplicated).
 
 ================================================================================
 #243  [T3] [THESIS]  Results: Fig 5.12 reds are too similar -- p.35 (PDF41)
