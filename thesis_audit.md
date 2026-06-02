@@ -610,7 +610,14 @@ is defined), or rephrase the notation.
 Refs: background.tex.
 
 ================================================================================
-#223  [T0] [NOW]  Background: cite the origin of Know-If Fluents -- p.7 (PDF13)
+#223  [DONE 2026-06-01] [T0] [NOW]  Background: cite the origin of Know-If Fluents -- p.7 (PDF13)
+NOTE 2026-06-01: Till's "Brewer/Breuer et al." matches NO real author. Investigation (per author's
+hint to check who the cited sources credit): the Geffner-Bonet textbook we cite (geffner2013concise,
+pp.69/88) and the LW1 poster (bonet2014flexible) both attribute the K(L)/K(\neg L) translation --- what
+this thesis calls a KIF --- to PALACIOS & GEFFNER (2006 AAAI original / 2009 JAIR). Web searches for
+"Know-If fluent" and for Brewer/Bremer/Breuer/Breuuer in TAMP/POD/planning/AI returned nothing. Added
+\cite{palacios2006compiling} (AAAI 2006, pp.900-905) at background.tex:93. ACTION: confirm the surname
+with Till Wed --- he almost certainly meant Palacios & Geffner.
 ================================================================================
 [INK] "KIFs were originally introduced by Brewer et al. --- cite!"  (SURNAME to confirm:
 the ink reads "Brewer" OR "Breuer"; no citation for the KIF origin exists anywhere in the
