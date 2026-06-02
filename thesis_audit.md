@@ -786,7 +786,13 @@ Make terminology consistent throughout and point to the clarification in discuss
 Refs: methods.tex; discussion.tex:258-259; #224.
 
 ================================================================================
-#238  [T1] [THESIS]  Methods: state explicitly that this is simplified POD planning -- p.22 (PDF28)
+#238  [DONE 2026-06-01] [T1] [THESIS]  Methods: state explicitly that this is simplified POD planning -- p.22 (PDF28)
+NOTE 2026-06-01: at methods.tex:133, scoped the "functionally equivalent to a conditional plan" claim
+to "this single-target search", and added an explicit framing: "a deliberately simplified form of POD
+planning---a single optimistic plan repaired by replanning, rather than the branching contingent plans
+of a full POD planner; suffices for the tasks evaluated here but not for problems that require
+contingent reasoning (\cref{sec:limitations})". Kept lean to avoid #251 redundancy; #239 adds the
+deductive-axioms specifics, #248 is the Discussion side.
 ================================================================================
 [INK] "So you don't actually do POD planning but a simplified version; this is OK but
 should be discussed more explicitly, especially its limitations." Add an explicit statement
