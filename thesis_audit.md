@@ -732,7 +732,10 @@ subscript). Consider simplifying the notation to "BX".
 Refs: methods.tex.
 
 ================================================================================
-#233  [T2] [THESIS]  Methods: separate the concept from the implementation -- p.16 (PDF22)
+#233  [DONE 2026-06-01] [T2] [THESIS]  Methods: separate the concept from the implementation -- p.16 (PDF22)
+NOTE 2026-06-01: moved the implementation detail out of the conceptual section. methods.tex:16 (sec 4.2
+concept) keeps the adaptivity ("re-run as the scene changes"); the "Python stage before each planner
+call, not a PDDLStream procedure" fact moved to the PDDLStream Integration section intro (methods.tex:84).
 ================================================================================
 [TYPED] "Try to separate the conceptual description from the implementation", on "It runs
 as a Python stage...". Split conceptual description from implementation detail (the
