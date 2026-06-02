@@ -1028,6 +1028,19 @@ the interim. Supersedes the #241 cite-in-Results approach.
 Refs: results.tex; #241; #253; #215.
 
 ================================================================================
+#257  [DONE 2026-06-02] [T1] [THESIS]  Background: text cutoff (overfull \hbox) in state-space example  (author/build finding)
+================================================================================
+[AUTHOR] Recompiled PDF showed text running past the right margin on p.10 (background, the
+state-space model bullets): inline-math typewriter state sets did not line-break.
+NOTE 2026-06-02: latexmk log showed three overfull \hbox in background.tex -- lines 16-17 (the
+$s_0$ set, 96pt over, the visible cutoff in the screenshot), 13-15 (the tuple $M=\langle...\rangle$,
+23pt), 20-21 (the $f$ bullet's two sets, 20pt). Added \allowbreak after the commas in the tuple and
+the example sets so they wrap; rendering otherwise unchanged. Recompile confirms all three overfull
+\hbox gone (exit 0, 68pp). Minor 4.7pt overfull at results.tex:153-154 ($n_occ \in \{2,3,4\}$) left
+as-is (sub-visible).
+Refs: background.tex:13,16,20.
+
+================================================================================
 OPEN ISSUES
 ================================================================================
 OPEN:
