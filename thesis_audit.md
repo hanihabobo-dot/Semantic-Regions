@@ -868,11 +868,15 @@ replan_limit, leaving green/red/orange, all distinct). Compiled thesis shows old
 that regen + a results.tex \includegraphics swap to the new PNG.
 
 ================================================================================
-#244  [T2] [POLISH]  Discussion: separate Discussion section -- accepted, optional merge -- p.36 (PDF42)
+#244  [SKIPPED 2026-06-02] [T2] [POLISH]  Discussion: separate Discussion section -- accepted, optional merge -- p.36 (PDF42)
 ================================================================================
 [INK] "I'm not particularly fond of having a separate Discussion section, but it's OK."
 Low priority: optionally fold Discussion into Results/Conclusion. He accepts it as-is.
 Refs: discussion.tex.
+NOTE 2026-06-02: SKIPPED per author "go". Supervisor accepts the separate Discussion section
+as-is ("it's OK"); folding it into Results/Conclusion is a chapter-level restructure
+disproportionate to a T2 polish and would conflict with #245 (an overall-conclusion sentence
+added TO the Discussion). Structure kept.
 
 ================================================================================
 #245  [T2] [THESIS]  Discussion: state the overall conclusion of the comparison -- p.38 (PDF44)
