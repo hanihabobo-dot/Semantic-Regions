@@ -958,12 +958,19 @@ interface -> Boxel layer + POD planner transfer unchanged). Ties to the learned-
 active-sensing future-work items.
 
 ================================================================================
-#251  [T2] [POLISH]  Cross-cutting: redundancy -- things explained multiple times -- (email 2026-05-31)
+#251  [DONE 2026-06-02] [T2] [POLISH]  Cross-cutting: redundancy -- things explained multiple times -- (email 2026-05-31)
 ================================================================================
 Email: "Some things are explained multiple times and in a redundant way (e.g., how the
 comparison to TAMPURA was done)." De-duplicate; consolidate the TAMPURA-comparison
 explanation into one place and cross-reference instead of repeating.
 Refs: results.tex; discussion.tex; methods.tex; #177; #213.
+NOTE 2026-06-02: methods.tex has NO TAMPURA content (that ref was spurious). The real duplication was
+discussion.tex:70-86 re-explaining the same methodology+numbers already in results.tex subsec:tampura
+(:221, with fig:tampura). Condensed the Discussion recap to a headline (cheaper end-to-end, less
+reliable: 13.7 vs 166s, 42 vs 55%) + cross-ref to subsec:tampura/fig:tampura, keeping the unique
+architectural "differ in kind" analysis (:87+). Every removed number remains in results.tex:221.
+Left results.tex:108 (baseline definition) and the threats "different task" paragraph (distinct
+validity angle) as-is.
 
 ================================================================================
 #252  [INFO] [NO ACTION]  Overall verdict (email 2026-05-31)
