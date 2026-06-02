@@ -816,7 +816,11 @@ deductive axioms, which the simplified approach lacks. Part of the recurring the
 Refs: methods.tex; #238; #248.
 
 ================================================================================
-#240  [T2] [POLISH]  Results: clarify the stack goal -- specific tower or any stack? -- p.24 (PDF30)
+#240  [DONE 2026-06-01] [T2] [POLISH]  Results: clarify the stack goal -- specific tower or any stack? -- p.24 (PDF30)
+NOTE 2026-06-01: code-verified answer (run_logger.py:450 "randomised tower"; test_full_pipeline.py
+goal_satisfied handles ('and',('on',a,b),...); boxel_env.py stack_scene spawns identical cubes).
+Clarified results.tex:16: the goal is a concrete conjunction of (on a b) facts (a specific tower),
+generated at random each episode; cubes are identical so which ones form the tower is immaterial.
 ================================================================================
 [INK] "So is it a specific stack, e.g. (on b1 b2) (on b2 b3), or is it any stack of the
 given size?" Clarify whether the stacking goal is a specific ordered tower or any stack of
