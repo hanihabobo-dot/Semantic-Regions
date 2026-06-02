@@ -879,11 +879,17 @@ disproportionate to a T2 polish and would conflict with #245 (an overall-conclus
 added TO the Discussion). Structure kept.
 
 ================================================================================
-#245  [T2] [THESIS]  Discussion: state the overall conclusion of the comparison -- p.38 (PDF44)
+#245  [DONE 2026-06-02] [T2] [THESIS]  Discussion: state the overall conclusion of the comparison -- p.38 (PDF44)
 ================================================================================
 [INK] "So what's the overall conclusion of the comparison?" Add an explicit takeaway
 sentence summarizing what the comparison shows.
 Refs: discussion.tex.
+NOTE 2026-06-02: "the comparison" = the TAMPURA comparison (sec:disc-tampura). Added one summative
+paragraph at the end of that section (after the line-of-sight/representation paragraph, before
+Threats to Validity): a deterministic knowledge-literal planner with replanning is sufficient to
+reach the goal on this task class -- cheaper to run and simpler to model than TAMPURA's learned
+probabilistic policy, though less reliable -- and plans over occlusions a sub-symbolic visibility
+grid leaves implicit. Synthesis of existing threads only; grounded in discussion.tex :85, :116-124, :126.
 
 ================================================================================
 #246  [T0] [NOW]  Discussion: "This is not entirely true." -- p.39 (PDF45)
