@@ -685,7 +685,10 @@ introduced.
 Refs: related-work.tex.
 
 ================================================================================
-#229  [T2] [POLISH]  Related Work: "?" on the bounded-give-up sentence -- p.14 (PDF20)
+#229  [DONE 2026-06-01] [T2] [POLISH]  Related Work: "?" on the bounded-give-up sentence -- p.14 (PDF20)
+NOTE 2026-06-01: per author + supervisor "?", DELETED the confusing trailing clause at
+related-work.tex:37 (", an invariant the bounded give-up on unreachable shadows (\cref{sec:limitations})
+deliberately relaxes."). Sentence now ends at "...sound only while belief reflects observation."
 ================================================================================
 [INK] a bare "?" beside the highlighted sentence "...an invariant the bounded give-up on
 unreachable shadows (Section 6.5) deliberately relaxes." Till does not follow the sentence;
