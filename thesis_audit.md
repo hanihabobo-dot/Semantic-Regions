@@ -698,7 +698,19 @@ reword for clarity (the forward-ref to 6.5 from Related Work is also awkward thi
 Refs: related-work.tex.
 
 ================================================================================
-#230  [T1] [THESIS]  Related Work: cite the AAAI'25 online critical-regions follow-up -- p.15 (PDF21)
+#230  [SKIPPED 2026-06-01] [T1] [THESIS]  Related Work: cite the AAAI'25 online critical-regions follow-up -- p.15 (PDF21)
+NOTE 2026-06-01: skipped per author -- confirm the exact paper with Till Wed. INVESTIGATION: no paper
+literally titled/about "critical regions online" found (web + Srivastava's lab page). The term likely
+drifted (author's hunch): the lab's line went critical regions -> learned abstractions -> option
+invention -> world models. STRONGEST CANDIDATE = Rashmeet Kaur Nayyar & Siddharth Srivastava,
+"Autonomous Option Invention for Continual Hierarchical Reinforcement Learning and Planning", AAAI 2025
+(ojs.aaai.org/index.php/AAAI/article/view/34163) -- right lab, right venue, "Continual" = "online".
+BUT it is temporal OPTIONS + continual state abstraction, NOT spatial critical regions updated online;
+thematic match, not literal. (sns_corl25.pdf = "Learning Symbolic World Models...", CoRL 2025, is a
+different paper -- world-model invention, also not it.) WHEN RESOLVED: (b) scope the static claim to
+\cite{shah2022abstractions} at related-work.tex:52 + background.tex:159 (currently overstates "CRs do
+not adapt"), and optionally add the confirmed AAAI'25 cite as the line's move to continual abstraction.
+Refs: related-work.tex:52; background.tex:159; shah2022abstractions; molina2020learn.
 ================================================================================
 [INK] "There is actually a follow-up paper where they modify CRs online --- AAAI '25".
 Locate the AAAI 2025 follow-up that modifies critical regions online, cite it, and update
@@ -711,7 +723,9 @@ Refs: related-work.tex; resources/references.bib.
 [INK] positive margin note. Recorded for completeness; no action.
 
 ================================================================================
-#232  [T3] [POLISH]  Methods: simplify the (BXset) symbol -- p.16 (PDF22)
+#232  [DONE 2026-06-01] [T3] [POLISH]  Methods: simplify the (BXset) symbol -- p.16 (PDF22)
+NOTE 2026-06-01: dropped the "set" subscript -> $\mathcal{BX}$, in both the inline use (methods.tex:16)
+and the nomenclature rendering (symbols.tex:67, key boxel_set kept). Only occurrence of the symbol.
 ================================================================================
 [TYPED] "Why not just BX?", on the highlighted "(BXset)" (script-B X with the "set"
 subscript). Consider simplifying the notation to "BX".
