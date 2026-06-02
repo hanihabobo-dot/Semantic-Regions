@@ -946,10 +946,16 @@ less reliable, no probabilistic policy). Also "first-class symbolic state" -> "e
 state" (consistent with intro #179 + discussion). Paras 1-2 left as-is.
 
 ================================================================================
-#250  [T2] [THESIS]  Conclusion: future work -- real-robot experiments -- p.43 (PDF49)
+#250  [DONE 2026-06-02] [T2] [THESIS]  Conclusion: future work -- real-robot experiments -- p.43 (PDF49)
 ================================================================================
 [INK] "experiments on real robots!" Add real-robot experiments to the future-work outlook.
 Refs: conclusion.tex.
+NOTE 2026-06-02: added a "Real-robot experiments." paragraph as the closing capstone of Future
+Work (conclusion.tex, after the free-space-merge paragraph): run the system on a physical Franka
+Panda, combining the learned detector + robot-mounted active-sensing camera, exposed to real
+perception noise/calibration/contact; reuses the perception-agnosticism framing (narrow detection
+interface -> Boxel layer + POD planner transfer unchanged). Ties to the learned-perception and
+active-sensing future-work items.
 
 ================================================================================
 #251  [T2] [POLISH]  Cross-cutting: redundancy -- things explained multiple times -- (email 2026-05-31)
