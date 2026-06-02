@@ -625,7 +625,10 @@ thesis today.) Find the originating paper and add the citation at first use.
 Refs: background.tex; resources/references.bib; supervisor_comments_20260527.md.
 
 ================================================================================
-#224  [T2] [THESIS]  Background: motivate KIFs vs K-literals -- p.7 (PDF13)
+#224  [DONE 2026-06-01] [T2] [THESIS]  Background: motivate KIFs vs K-literals -- p.7 (PDF13)
+NOTE 2026-06-01: appended a motivation sentence at background.tex:93 -- the task turns on WHETHER a
+location is known, and the framing enables the compact single-fluent encoding (\cref{sec:kif_belief}).
+Consistent with discussion.tex:258-261. Ties to #237 (Methods KIF/K-literal consistency).
 ================================================================================
 [INK] "Why KIFs instead of K literals?" Add a sentence motivating the design choice (the
 single Know-If fluent collapses the K(p)/K(not p) pair --- see discussion.tex:258-259).
