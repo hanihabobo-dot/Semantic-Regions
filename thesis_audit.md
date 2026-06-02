@@ -748,7 +748,13 @@ Refs: methods.tex; #195.
 [INK] positive margin note (on the Methods figure, ~Fig 4.1). Recorded for completeness; no action.
 
 ================================================================================
-#235  [T2] [THESIS]  Methods: "Line of sight" legend entry -- "I don't see it" -- p.17 (PDF23)
+#235  [SKIPPED 2026-06-01] [T2] [THESIS]  Methods: "Line of sight" legend entry -- "I don't see it" -- p.17 (PDF23)
+NOTE 2026-06-01: skipped per author. DIAGNOSIS (fig:boxelization, generator
+tools/render_boxelization_schematic.py): the LOS dashed rays ARE drawn in panel (c) (_los(), line
+347-351: camera->objects, linestyle (0,(4,3))) but in faint light gray (C_LOS=#95a5a6) at zorder=2,
+i.e. UNDER the occlusion patches (zorder=3) and objects -- so they read as nearly invisible in print
+("I don't see it"). FIX IF REVISITED: raise the LOS zorder above the occlusion/object layers (e.g.
+zorder>=6) and darken/thicken C_LOS; then regenerate boxelization_stages.png and inspect visually.
 ================================================================================
 [INK] "I don't see it", pointing at the "Line of sight" legend entry. The legend names a
 line-of-sight element that is not visible in the figure. Make it visible or remove the
@@ -756,7 +762,10 @@ legend entry.
 Refs: methods.tex; the referenced figure + its generator.
 
 ================================================================================
-#236  [T3] [NOW]  Methods: Fig 4.2 is not referenced in the text -- p.17 (PDF23)
+#236  [DONE 2026-06-01] [T3] [NOW]  Methods: Fig 4.2 is not referenced in the text -- p.17 (PDF23)
+NOTE 2026-06-01: Fig 4.2 = fig:boxelization-real (PyBullet-scene partition), which was only \label'd,
+never \cref'd. Added a \cref at methods.tex:16 alongside the schematic fig:boxelization. Checked the
+other Methods figures: fig:sense-action IS referenced (methods.tex:133), so no further unref'd figures.
 ================================================================================
 [INK] "This fig is not referenced in the text". Add a \cref to Fig 4.2 from the body.
 Refs: methods.tex.
