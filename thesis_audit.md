@@ -626,9 +626,12 @@ Refs: background.tex; resources/references.bib; supervisor_comments_20260527.md.
 
 ================================================================================
 #224  [DONE 2026-06-01] [T2] [THESIS]  Background: motivate KIFs vs K-literals -- p.7 (PDF13)
-NOTE 2026-06-01: appended a motivation sentence at background.tex:93 -- the task turns on WHETHER a
-location is known, and the framing enables the compact single-fluent encoding (\cref{sec:kif_belief}).
-Consistent with discussion.tex:258-261. Ties to #237 (Methods KIF/K-literal consistency).
+NOTE 2026-06-01: appended a motivation sentence at background.tex:93. REVISED per author (the reason
+is fluent economy, verified against domain.pddl:42-45): the domain already carries the value fluent
+obj_at_boxel for geometry, so a single Know-If flag (obj_at_boxel_KIF) replaces the K(L)/K(neg L)
+pair -- one knowledge fluent per fact instead of two, and no mutual-exclusion axioms. Head-to-head
+the counts match ("equivalent encoding", discussion.tex:260), but vs value+K-pair it saves one and
+drops the axioms. Ties to #237 (Methods KIF/K-literal consistency) and #239/#248 (deductive axioms).
 ================================================================================
 [INK] "Why KIFs instead of K literals?" Add a sentence motivating the design choice (the
 single Know-If fluent collapses the K(p)/K(not p) pair --- see discussion.tex:258-259).
