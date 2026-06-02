@@ -838,6 +838,8 @@ Refs: results.tex; #253; #215.
 NOTE 2026-06-02: added the missing Fast Downward citation (Helmert 2006, JAIR 26:191--246) to
 references.bib and cited it at results.tex:85; also fixed spelling FastDownward -> Fast~Downward
 there. One no-space "FastDownward" remains at discussion.tex:264 (deferred to a separate pass).
+SUPERSEDED 2026-06-02 by #256: the author chose to delete the Software paragraph entirely; the
+Fast Downward citation moves to the planned Background section (#253). helmert2006fast bib entry kept.
 
 ================================================================================
 #242  [DONE 2026-06-02] [T1] [THESIS]  Results: explain the performance degradation (Fig 5.6) -- p.30 (PDF36)
@@ -984,6 +986,20 @@ downside of each advantage, clashing with "minimises plan cost" in the same para
 "cost"). 2026-06-01: replaced the 4 downside-sense uses with "limitation" (author's choice over
 "tradeoff"); kept "plan cost". Surfaced while working #229.
 Refs: related-work.tex:37; #229.
+
+================================================================================
+#256  [DONE 2026-06-02] [T2] [THESIS]  Results: delete the "Software" paragraph  (author decision; supersedes #241)
+================================================================================
+[AUTHOR] Per author (2026-06-02): the one-line \paragraph{Software.} in the Experimental Setup
+(results.tex) is redundant and should be removed entirely, not merely cited (cf. #241, which had
+added a Fast Downward citation there).
+NOTE 2026-06-02: deleted the Software paragraph at results.tex ("PyBullet; PDDLStream with the
+Fast Downward classical planner backend; Python 3.10"). Citations preserved elsewhere: PyBullet at
+results.tex:11; PDDLStream at background.tex:104, abstract.tex:7, introduction.tex:5. Fast Downward
+(helmert2006fast) was cited ONLY in this paragraph -- bib entry KEPT (unused for now); its citation
+now belongs to the planned Background Fast Downward section (#253), so Fast Downward is uncited in
+the interim. Supersedes the #241 cite-in-Results approach.
+Refs: results.tex; #241; #253; #215.
 
 ================================================================================
 OPEN ISSUES
