@@ -828,13 +828,16 @@ the target size.
 Refs: results.tex; #204.
 
 ================================================================================
-#241  [T3] [THESIS]  Results: "Software" paragraph highlighted, no comment -- p.26 (PDF32)
+#241  [DONE 2026-06-02] [T3] [THESIS]  Results: "Software" paragraph highlighted, no comment -- p.26 (PDF32)
 ================================================================================
 [HL-ONLY] the paragraph "PyBullet [6]; PDDLStream [10] with the FastDownward classical
 planner backend; Python 3.10." is highlighted with no note. Likely flagged for the planned
 FastDownward / planning-algorithms background section (#253), or wants version detail.
 Confirm with Till Wed.
 Refs: results.tex; #253; #215.
+NOTE 2026-06-02: added the missing Fast Downward citation (Helmert 2006, JAIR 26:191--246) to
+references.bib and cited it at results.tex:85; also fixed spelling FastDownward -> Fast~Downward
+there. One no-space "FastDownward" remains at discussion.tex:264 (deferred to a separate pass).
 
 ================================================================================
 #242  [T1] [THESIS]  Results: explain the performance degradation (Fig 5.6) -- p.30 (PDF36)
