@@ -980,12 +980,19 @@ modifications since our last meeting already improved the overall flow." Positiv
 no action.
 
 ================================================================================
-#253  [T3] [THESIS]  Background: add a FastDownward + planning-algorithms section  (AUTHOR-PLANNED, not a Till comment)
+#253  [DONE 2026-06-02] [T3] [THESIS]  Background: add a FastDownward + planning-algorithms section  (AUTHOR-PLANNED, not a Till comment)
 ================================================================================
 From Hani's 2026-05-31 reply ("planning to add a section about FastDownward and planning
 algorithms to the background"). Tracked here because it is part of this revision cycle and
 relates to the abstract/software highlights (#215, #241). Remove if not wanted.
 Refs: background.tex; #215; #241.
+NOTE 2026-06-02: added subsection 2.1.2 "Classical Planning Algorithms and Fast Downward"
+(background.tex, end of the AI Planning Fundamentals section, before sec:pod; label
+subsec:planning-algorithms). Fuller treatment per author: heuristic state-space search (greedy/A*),
+domain-independent heuristics (delete-relaxation incl. FF; landmarks/LAMA), and Fast Downward's
+SAS+ multi-valued translation + causal graph, framed as PDDLStream's backend. Added 3 bib entries
+(hart1968formal, hoffmann2001ff, richter2010lama). RESOLVES the Fast Downward citation deferred from
+#256 -- helmert2006fast is now cited here, closing the interim uncited gap.
 
 ================================================================================
 #254  [T2] [THESIS]  Define "Boxel" crisply at first body use (intro/methods)  [follow-up to #214]

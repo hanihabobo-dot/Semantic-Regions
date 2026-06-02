@@ -78,6 +78,43 @@ A PDDL problem $P = \langle \text{Domain}, \text{Instance} \rangle$ thus compact
 % )
 % \end{lstlisting}
 % This allows for more expressive and modular domain definitions.
+\subsection{Classical Planning Algorithms and Fast Downward}
+\label{subsec:planning-algorithms}
+Given a compact \ac{pddl} encoding, a planner must search the state space it
+implies for a path from $s_0$ to a goal state. Because that space grows
+exponentially with the number of atoms, modern classical planners treat the
+task as \emph{heuristic state-space search}: they expand states with an
+informed search algorithm---greedy best-first search, or A\textsuperscript{*}
+\cite{hart1968formal} when an optimal plan is required---guided by a heuristic
+that estimates the remaining cost from each state to the goal
+\cite{geffner2013concise}. The performance of such a planner depends almost
+entirely on the quality of this heuristic.
+
+What makes the approach \emph{domain-independent} is that these heuristics are
+derived automatically from the PDDL description rather than supplied by hand.
+The most influential family relaxes the task by ignoring delete-lists; because
+solving even this relaxation optimally is hard, planners use tractable
+approximations such as the max and additive heuristics and the FF heuristic,
+which extracts a plan for the relaxed task and counts its actions
+\cite{hoffmann2001ff, geffner2013concise}. A complementary family reasons over
+\emph{landmarks}---facts that every valid plan must eventually make
+true---and the LAMA planner combines landmark and relaxation heuristics in a
+cost-based anytime search \cite{richter2010lama}.
+
+\textbf{Fast Downward} \cite{helmert2006fast} is the classical planner used as
+the search backend throughout this work; PDDLStream invokes it to solve each
+symbolic planning problem once its streams have supplied the continuous values
+that problem requires. Rather than operate on STRIPS propositions directly,
+Fast Downward first translates the grounded task into a \emph{multi-valued}
+representation (SAS\textsuperscript{+}), in which each variable takes exactly
+one value from a mutually exclusive set instead of many independent Booleans.
+From this encoding it builds a \emph{causal graph} that captures how the
+variables depend on one another, and derives structure-aware heuristics (such
+as the causal-graph heuristic) that guide a best-first search. This pairing of
+an automatic multi-valued translation with structure-exploiting heuristics is
+what lets Fast Downward scale to the grounded planning tasks that arise in
+this work.
+
 \section{Planning under Partial Observability}\label{sec:pod}
 Classical planning's assumption of full observability is often violated in robotics. When an agent has incomplete information about the true state of the world, it must reason about its \textit{belief state}.
 
