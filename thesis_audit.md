@@ -779,6 +779,9 @@ terms (KIF / K-literal / single fluent) together. Consistent with #224 (backgrou
 2nd pass 2026-06-01: re-explained clearer per author -- spells out the three belief cases (known
 true / known false / unknown) and states plainly "the K-literals are the concept, the single flag
 (obj_at_boxel + obj_at_boxel_KIF) is its implementation".
+3rd pass 2026-06-01: flipped to KIF-forward per author ("why have K-literals as the concept?"). Now
+Know-If is the concept; K-literals are demoted to "the standard pair-form that carries this knowledge",
+cited for grounding; single flag is the implementation. Consistent with the #224 background framing.
 ================================================================================
 [TYPED] "I'm confused, do you use KIFs or K literals?", on "belief carries the K-literal
 K(InBoxel(obj, Boxel))...". The text switches between Know-If Fluents and K-literals.
