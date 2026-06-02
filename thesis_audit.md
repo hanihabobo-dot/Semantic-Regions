@@ -853,11 +853,19 @@ from its ~20x higher per-call planning cost (tab:headline). Mechanism, not inter
 gap analysis stays in discussion.tex (not duplicated).
 
 ================================================================================
-#243  [T3] [THESIS]  Results: Fig 5.12 reds are too similar -- p.35 (PDF41)
+#243  [DONE 2026-06-02] [T3] [THESIS]  Results: Fig 5.12 reds are too similar -- p.35 (PDF41)
 ================================================================================
 [INK] "These red colors are very similar" on Fig 5.12. Recolor for distinguishability
 (distinct hues / line styles). New image only; never overwrite the old PNG.
 Refs: results.tex; Fig 5.12 + its generator.
+NOTE 2026-06-02: Fig 5.12 = fig:failure-modes (failure_modes.png); generator eval_plotter.py
+plot_failure_modes via EXIT_REASON_COLOUR. The "similar reds" were planner_failed (#d62728) and
+the vivid-red timeout (#ff1744) adjacent wherever replan_limit was absent. Per author: swapped
+timeout -> orange (#ff7f0e) and replan_limit -> vivid red (#ff1744) so the pinned top band
+(timeout) is distinct from planner_failed red. CODE ONLY committed; thesis PNG deliberately NOT
+regenerated -- user owns the regen with the next data iteration (which drops no_summary and
+replan_limit, leaving green/red/orange, all distinct). Compiled thesis shows old colours until
+that regen + a results.tex \includegraphics swap to the new PNG.
 
 ================================================================================
 #244  [T2] [POLISH]  Discussion: separate Discussion section -- accepted, optional merge -- p.36 (PDF42)
