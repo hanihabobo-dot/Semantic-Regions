@@ -676,7 +676,9 @@ Bonet [1...". Reword the sentence so the point is explicit.
 Refs: related-work.tex.
 
 ================================================================================
-#228  [T3] [POLISH]  Related Work: add a back-reference to Section 2.2 -- p.13 (PDF19)
+#228  [DONE 2026-06-01] [T3] [POLISH]  Related Work: add a back-reference to Section 2.2 -- p.13 (PDF19)
+NOTE 2026-06-01: 2.2 = "Planning under Partial Observability" (background.tex:81), which was unlabeled.
+Added \label{sec:pod} there and a (\cref{sec:pod}) at related-work.tex:30 after "knowledge literals".
 ================================================================================
 [INK] "refer back to 2.2". Add a \cref back to Section 2.2 where this material was
 introduced.
