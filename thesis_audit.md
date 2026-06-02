@@ -933,11 +933,17 @@ theme (#238, #239).
 Refs: discussion.tex; #238; #239.
 
 ================================================================================
-#249  [T2] [POLISH]  Conclusion: too much detail -- p.42 (PDF48)
+#249  [DONE 2026-06-02] [T2] [POLISH]  Conclusion: too much detail -- p.42 (PDF48)
 ================================================================================
 [INK] "too much detail for the conclusion". Trim implementation/results detail from the
 conclusion; keep it high-level.
 Refs: conclusion.tex.
+NOTE 2026-06-02: trimmed conclusion.tex para 3 (contributions/results) -- removed the per-number
+results dump (39.8/1.3, 13.7/166/57, 42/55, the semantic+mbs0.05 null result, the per-step vs
+per-episode unit note) and cross-referenced \cref{ch:results,ch:discussion} for the detail; kept
+both headline findings (ablation: fewer cells + solves what uniform can't; TAMPURA: cheaper but
+less reliable, no probabilistic policy). Also "first-class symbolic state" -> "explicit symbolic
+state" (consistent with intro #179 + discussion). Paras 1-2 left as-is.
 
 ================================================================================
 #250  [T2] [THESIS]  Conclusion: future work -- real-robot experiments -- p.43 (PDF49)
