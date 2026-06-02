@@ -632,6 +632,9 @@ obj_at_boxel for geometry, so a single Know-If flag (obj_at_boxel_KIF) replaces 
 pair -- one knowledge fluent per fact instead of two, and no mutual-exclusion axioms. Head-to-head
 the counts match ("equivalent encoding", discussion.tex:260), but vs value+K-pair it saves one and
 drops the axioms. Ties to #237 (Methods KIF/K-literal consistency) and #239/#248 (deductive axioms).
+2026-06-01 (2nd pass): prose simplified per author to one plain sentence ("keep the belief compact...
+a single flag per fact... instead of two separate knowledge literals"); the axiom angle is kept here
+in the audit but dropped from the thesis sentence for readability.
 ================================================================================
 [INK] "Why KIFs instead of K literals?" Add a sentence motivating the design choice (the
 single Know-If fluent collapses the K(p)/K(not p) pair --- see discussion.tex:258-259).
