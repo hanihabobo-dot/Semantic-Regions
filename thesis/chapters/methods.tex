@@ -13,7 +13,7 @@ Our methodology links abstract belief representation to continuous geometric rea
 \end{enumerate}
 
 \section{Adaptive Semantic Discretization: Generating Boxels}
-We build the Boxel abstraction through a process of \textit{adaptive semantic discretization}. This process dynamically generates a set of Semantic Boxels ($\mathcal{BX}$) by partitioning the workspace based on detected objects and the occlusions they create. It runs as a Python stage before each call to the planner---and is re-run between actions as the scene changes---rather than as a PDDLStream procedure. \Cref{fig:boxelization} illustrates the process.
+We build the Boxel abstraction through a process of \textit{adaptive semantic discretization}. This process dynamically generates a set of Semantic Boxels ($\mathcal{BX}$) by partitioning the workspace based on detected objects and the occlusions they create, and is re-run as the scene changes so the partition stays current. \Cref{fig:boxelization} illustrates the process.
 \begin{figure}[H]
     \centering % Centers the image
     \includegraphics[width=\textwidth]{boxelization_3d.png}
@@ -81,7 +81,7 @@ where:
 The planning problem is to find a sequence of actions from $\mathcal{A}$ that moves the belief state from $b_0 = \mathcal{S}_0$ to a belief state $b_g$ in which every possible state is a goal state (i.e., $b_g \subseteq \mathcal{S}_G$).
 
 \section{PDDLStream Integration}
-This section presents the implemented PDDL domain and streams that realize the model on the belief state over Boxels. For readability the listings show the belief-related fragment of the domain, eliding the geometric and stacking predicates that are not central to this discussion.
+This section presents the implemented PDDL domain and streams that realize the model on the belief state over Boxels. The semantic discretization itself runs as a Python stage before each planner call, rather than as a PDDLStream procedure, so the Boxels enter each solve as fixed inputs. For readability the listings show the belief-related fragment of the domain, eliding the geometric and stacking predicates that are not central to this discussion.
 
 \subsection{PDDL Fluents for Belief Representation}
 The agent's knowledge is represented directly in the PDDL state. The implemented domain is untyped STRIPS, so object categories are themselves predicates, and the belief over object locations is carried by a single Know-If fluent.
