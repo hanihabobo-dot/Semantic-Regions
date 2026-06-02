@@ -636,7 +636,9 @@ Tightly related to #237 (the same KIF-vs-K-literal confusion flagged in Methods)
 Refs: background.tex; discussion.tex:258-259; #237.
 
 ================================================================================
-#225  [T2] [NOW]  Related Work: "Sidd's Critical Regions" -- is that the real term? -- p.10 (PDF16)
+#225  [DONE 2026-06-01] [T2] [NOW]  Related Work: "Sidd's Critical Regions" -- is that the real term? -- p.10 (PDF16)
+NOTE 2026-06-01: dropped the informal "Sidd's" (Siddharth Srivastava) from the bold heading at
+related-work.tex:52 -> "Critical Regions (CRs):". The (CRs) abbreviation it introduces is kept.
 ================================================================================
 [TYPED] "do they call it that? if not, just call them critical regions", on "Sidd's
 Critical Regions." Verify the source's terminology; most likely drop "Sidd's" and just
