@@ -886,6 +886,15 @@ naturally methods.tex:16, or intro.tex:33.
 Refs: methods.tex:16; introduction.tex:33; #214; supervisor_comments_20260527.md.
 
 ================================================================================
+#255  [DONE 2026-06-01] [T3] [POLISH]  Related Work: "cost" overloaded vs "plan cost"  [author finding, not on Till's list]
+================================================================================
+The "three advantages, each with a cost" paragraph (related-work.tex:37) used "cost" for the
+downside of each advantage, clashing with "minimises plan cost" in the same paragraph (two senses of
+"cost"). 2026-06-01: replaced the 4 downside-sense uses with "limitation" (author's choice over
+"tradeoff"); kept "plan cost". Surfaced while working #229.
+Refs: related-work.tex:37; #229.
+
+================================================================================
 OPEN ISSUES
 ================================================================================
 OPEN:
