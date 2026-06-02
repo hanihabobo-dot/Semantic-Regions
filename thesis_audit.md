@@ -666,7 +666,10 @@ the system actually does.
 Refs: related-work.tex.
 
 ================================================================================
-#227  [T2] [POLISH]  Related Work: "treated by Geffner and Bonet" is unclear -- p.13 (PDF19)
+#227  [DONE 2026-06-01] [T2] [POLISH]  Related Work: "treated by Geffner and Bonet" is unclear -- p.13 (PDF19)
+NOTE 2026-06-01: reworded related-work.tex:30 "The underlying models are treated by Geffner and Bonet"
+-> "The formal models these planners rest on---conformant, contingent, and POD planning---are presented
+in Geffner and Bonet's textbook" (names the models, replaces vague "treated").
 ================================================================================
 [TYPED] "not sure what this means", on "The underlying models are treated by Geffner and
 Bonet [1...". Reword the sentence so the point is explicit.
