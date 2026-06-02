@@ -892,20 +892,28 @@ probabilistic policy, though less reliable -- and plans over occlusions a sub-sy
 grid leaves implicit. Synthesis of existing threads only; grounded in discussion.tex :85, :116-124, :126.
 
 ================================================================================
-#246  [T0] [NOW]  Discussion: "This is not entirely true." -- p.39 (PDF45)
+#246  [DONE 2026-06-02] [T0] [NOW]  Discussion: "This is not entirely true." -- p.39 (PDF45)
 ================================================================================
 [INK] "This is not entirely true." next to a claim on p.39 (locate the exact sentence ---
 on or near the TAMPURA comparison). Correct the overstatement. See #247, which is the
 adjacent correction on the same page/claim.
 Refs: discussion.tex; #247; #177; #213.
+NOTE 2026-06-02: DONE with #247 (same locus). The false claim "rather than re-running [their
+code/it]" contradicted discussion.tex's own "we re-ran the released Find Die environment"
+(sec:disc-tampura). Rewrote the Threats paragraph "TAMPURA via published numbers" -> "TAMPURA on a
+different task": we re-ran TAMPURA's Find Die locally + cross-checked published Table II, but did
+NOT run it on our scenes (Find Die is the closest analogue, not the same problem). Also fixed the
+matching "rather than re-running it" at results.tex:108 (baselines) in the same commit. Ties #177/#213.
 
 ================================================================================
-#247  [T0] [NOW]  Discussion: "You did run TAMPURA, just not on the same problem." -- p.39 (PDF45)
+#247  [DONE 2026-06-02] [T0] [NOW]  Discussion: "You did run TAMPURA, just not on the same problem." -- p.39 (PDF45)
 ================================================================================
 [INK] "You did run TAMPURA, just not on the same problem." The text implies TAMPURA was not
 run; in fact it was, on a different problem. Fix the framing. Same locus as #246; ties to
 the TAMPURA-comparison corrections #177/#213.
 Refs: discussion.tex; #246; #177; #213.
+NOTE 2026-06-02: DONE with #246 (same commit) -- see #246 NOTE. Framing now states TAMPURA was
+re-run on its own Find Die task, not on our tabletop problem.
 
 ================================================================================
 #248  [DONE 2026-06-01] [T1] [THESIS]  Discussion: simplified POD does not scale (missing deductive axioms) -- p.41 (PDF47)
