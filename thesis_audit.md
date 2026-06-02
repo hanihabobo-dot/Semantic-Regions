@@ -1046,6 +1046,146 @@ the example sets so they wrap; rendering otherwise unchanged. Recompile confirms
 as-is (sub-visible).
 Refs: background.tex:13,16,20.
 
+################################################################################
+# AUTHOR NOTES 2026-06-02 (from notes/personal notes on Thesis) -- #258-#273
+# Logged, not yet fixed. Already-resolved notes recorded under RESOLVED at end.
+################################################################################
+
+================================================================================
+#258  [T2] [THESIS]  Background: explain what an MDP is, with examples
+================================================================================
+[AUTHOR] "explain what a classical planner is and give examples; same for MDPs." Classical-planner
+half is RESOLVED by #253 (new 2.1.2 with Fast Downward/FF/LAMA). Remaining: Background never defines a
+Markov Decision Process / MDP with examples, yet MDPs are leaned on in the TAMPURA comparison and RW.
+Add a short MDP (and POMDP contrast) explanation in Background, parallel to the classical-planner section.
+Refs: background.tex (2.2.2 / sec:pod); #253; discussion.tex:84-106; related-work.tex:11.
+
+================================================================================
+#259  [T2] [THESIS]  Related Work: clarify "provably optimal ones"
+================================================================================
+[AUTHOR] related-work.tex:11 -- TAMPURA produces "risk-aware, information-gathering plans rather than
+provably optimal ones." What does "provably optimal" mean here and what is it contrasted with? Clarify
+or drop.
+Refs: related-work.tex:11.
+
+================================================================================
+#260  [T2] [THESIS]  Related Work: state how we differ from TAMPURA and Saleem (end of POMDP-TAMP para)
+================================================================================
+[AUTHOR] The POMDP-based-TAMP paragraph (related-work.tex:11-12; TAMPURA + Saleem et al. + Bayes3D)
+ends without saying how THIS thesis differs from TAMPURA and Saleem. Add a differentiation sentence at
+the end of that paragraph.
+Refs: related-work.tex:11-12; curtis2024partially; saleem2024pomdp.
+
+================================================================================
+#261  [T2] [THESIS]  Related Work: verify Ma et al. "separate pre-planning step" claim
+================================================================================
+[AUTHOR] related-work.tex:20 distinguishes us from Ma et al. by "information-gathering becomes a core
+planner action rather than a separate pre-planning step." Do they really do a pre-planning step in
+ma2025task? Verify against the paper and correct if wrong.
+Refs: related-work.tex:20; ma2025task.
+
+================================================================================
+#262  [T2] [THESIS]  Related Work: Contingent-FF and MBP named without citations
+================================================================================
+[AUTHOR] related-work.tex:30 "other POD planners instead search belief space directly, as in
+Contingent-FF and MBP" -- both named with NO \cite (unlike CLG/K-replanner/LW1). Add citations
+(Contingent-FF: Hoffmann & Brafman; MBP: Bertoli et al.) and verify the "search belief space directly"
+characterization.
+Refs: related-work.tex:30.
+
+================================================================================
+#263  [T1] [THESIS]  Related Work: "Object Integrity" octree argument does not apply to our system
+================================================================================
+[AUTHOR] related-work.tex:48 motivates Boxels over octrees via "Object Integrity" (octrees split an
+object across voxels, complicating "pick up object A"). That only holds if Boxels were used to grasp;
+we pick up using a sampled pose (oracle here), not the Boxels. Fix/remove -- it misstates our own design.
+Refs: related-work.tex:48; methods.tex (pick action / pose sampling).
+
+================================================================================
+#264  [T2] [THESIS]  Pose sampling vs (partial) occlusion; relax "hidden" to all-8-corners-occluded
+================================================================================
+[AUTHOR] How are object poses sampled -- can we sample a (partially) hidden object? If so, the visibility
+test could count an object as hidden only when all 8 bounding-box corners are occluded (vs the current
+criterion). Investigate in code, then decide whether to relax the hidden/visible test and update methods.
+Refs: methods.tex (perception/visibility, sense action); pose-sampling stream code.
+
+================================================================================
+#265  [T2] [THESIS]  Methods: fig:boxelization caption "largest occluder" -> "bottom occluder"
+================================================================================
+[AUTHOR] methods.tex:20 panel (a): "fully occluded target (cyan) sitting in the shadow behind the
+largest occluder." It is not the largest occluder, just the bottom one. Correct (verify against the scene).
+Refs: methods.tex:20 (fig:boxelization).
+
+================================================================================
+#266  [T1] [THESIS]  Methods: shadow extends to end of hidden region, not the workspace boundary
+================================================================================
+[AUTHOR] methods.tex:20 panel (c) (and any matching body text): shadow Boxel "swept from the object's
+back face out to the workspace boundary" is wrong -- it extends to the end of the shadow/hidden region
+behind the object, not the workspace boundary. Read the shadow-generation code and describe it correctly.
+Refs: methods.tex:20 (fig:boxelization); shadow-generation code.
+
+================================================================================
+#267  [T2] [THESIS]  Methods: fig:boxelization-real caption "object bounding cuboids" correction
+================================================================================
+[AUTHOR] methods.tex:27: "object bounding cuboids enclose the visible cubes and red wireframe Boxels mark
+the volumes they occlude." Author began a correction ("actually the bounding boxels are...") but the note
+is TRUNCATED -- exact fix TBD; get the author's full correction (what the bounding Boxels actually are).
+Refs: methods.tex:27 (fig:boxelization-real).
+
+================================================================================
+#268  [T2] [THESIS]  Methods: add pseudocode for adaptive semantic discretization
+================================================================================
+[AUTHOR] The 3-step generation (methods.tex:31-37: object bounding, occlusion subdivision, recursive
+octree partition + convex-only merge) would be much clearer as an algorithm/pseudocode block (esp. the
+recursive partition + merge).
+Refs: methods.tex:31-37.
+
+================================================================================
+#269  [T2] [THESIS]  Methods: verify Boxel set is supplied to the planner as static facts in initial state
+================================================================================
+[AUTHOR] methods.tex:38 claims "the completed set of Boxels is supplied to the planner as static facts in
+its initial state." Walk the code and confirm (static facts; initial state) before keeping the claim.
+Refs: methods.tex:38; initial-state construction code.
+
+================================================================================
+#270  [T2] [THESIS]  Results: Figure 5.3 (overhead-camera) caption is outdated
+================================================================================
+[AUTHOR] results.tex:79 (fig:overhead-camera, Figure 5.3) caption is outdated. Identify what changed and
+update it.
+Refs: results.tex:79 (fig:overhead-camera).
+
+================================================================================
+#271  [T2] [THESIS]  Results: exit-reason / failure-mode list needs an update
+================================================================================
+[AUTHOR] results.tex:96 exit-reason list (planner_failed, timeout, replan_limit, physics_mismatch,
+drop_failed, ...) needs updating; ties to #243 (no_summary/replan_limit change in the next data
+iteration). Reconcile with the current exit reasons.
+Refs: results.tex:96; #243.
+
+================================================================================
+#272  [T1] [THESIS]  Results: explain why uniform planning cost grows with n_occ (Fig 5.8)
+================================================================================
+[AUTHOR] Fig 5.8 (fig:plantime-holding): why do uniform scenes cost more / have more cells with more
+occluders? Likely because the uniform variant keeps the object+shadow Boxels and only replaces the
+free-space partition with a uniform grid, so more occluders -> more shadow Boxels -> more facts/cost
+(results.tex:107). Verify and state this explicitly so it "adds up."
+Refs: results.tex (subsec:planning-time, fig:plantime-holding); results.tex:107.
+
+================================================================================
+#273  [T3] [POLISH]  Terminology: find a better word than "cuboid"
+================================================================================
+[AUTHOR] "cuboid" reads awkwardly; find a better term (e.g. box / rectangular cell / axis-aligned box).
+5 uses: abstract.tex, introduction.tex, methods.tex (x3). Apply consistently with the Boxel definition.
+Refs: abstract.tex; introduction.tex; methods.tex.
+
+================================================================================
+RESOLVED (author notes 2026-06-02 -- no new issue):
+  - "explain what a classical planner is + examples" -> DONE in #253 (Background 2.1.2).
+    MDP half carried forward as #258.
+  - results TAMPURA "...rather than re-running it" -> DONE in #246/#247 (now "we re-ran the
+    released Find Die environment locally"); the user's note quotes the pre-fix text.
+================================================================================
+
 ================================================================================
 OPEN ISSUES
 ================================================================================
@@ -1065,6 +1205,11 @@ OPEN:
       Bare annotations: #215 #221 #241 (highlight, no comment) #229 (bare "?") -- confirm intent Wed
       Author-planned:   #253 (FastDownward/planning-algorithms background section)
       Follow-ups filed: #254 (define Boxel at first body use; spun off from #214)
+  --- Author notes 2026-06-02 (#258-#273; full entries above) -- all OPEN.
+      Correctness (T1): #263 (Object-Integrity argument) #266 (shadow-to-boundary) #272 (uniform cost vs n_occ)
+      Verify-in-code:   #264 (pose sampling) #266 (shadow code) #269 (static facts)
+      Captions/outdated:#265 #267 #270 #271      Adds/clarify: #258 #259 #260 #261 #262 #268      Style: #273
+      Resolved (no issue): classical-planner=#253; TAMPURA re-run text=#246/#247
 
 DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212, #213. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
