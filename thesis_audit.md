@@ -776,6 +776,9 @@ NOTE 2026-06-01: added a bridging sentence at methods.tex:61 (sec:kif_belief): "
 exactly this K(L)/K(neg L) pair; the implemented domain represents it more compactly as one flag
 (obj_at_boxel_KIF) together with the location value, an equivalent encoding..." -- ties the three
 terms (KIF / K-literal / single fluent) together. Consistent with #224 (background) and discussion.tex:258-261.
+2nd pass 2026-06-01: re-explained clearer per author -- spells out the three belief cases (known
+true / known false / unknown) and states plainly "the K-literals are the concept, the single flag
+(obj_at_boxel + obj_at_boxel_KIF) is its implementation".
 ================================================================================
 [TYPED] "I'm confused, do you use KIFs or K literals?", on "belief carries the K-literal
 K(InBoxel(obj, Boxel))...". The text switches between Know-If Fluents and K-literals.
