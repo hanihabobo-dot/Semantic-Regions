@@ -995,7 +995,7 @@ SAS+ multi-valued translation + causal graph, framed as PDDLStream's backend. Ad
 #256 -- helmert2006fast is now cited here, closing the interim uncited gap.
 
 ================================================================================
-#254  [T2] [THESIS]  Define "Boxel" crisply at first body use (intro/methods)  [follow-up to #214]
+#254  [DONE 2026-06-02] [T2] [THESIS]  Define "Boxel" crisply at first body use (intro/methods)  [follow-up to #214]
 ================================================================================
 The abstract now defines a Boxel (fix #214: "a cuboidal cell of the workspace"), but the
 body never states plainly what a Boxel is: introduction.tex:33 and methods.tex:16 describe
@@ -1003,6 +1003,12 @@ how Boxels are GENERATED ("adaptive semantic discretization") without first defi
 coined unit. Add the same one-line definition at first substantive body use --- most
 naturally methods.tex:16, or intro.tex:33.
 Refs: methods.tex:16; introduction.tex:33; #214; supervisor_comments_20260527.md.
+NOTE 2026-06-02: intro already defines it at first body use -- introduction.tex:26 "the Semantic
+Boxel: a task-relevant, occlusion-aware cuboid, built from objects' known 3D models" (before the
+:33 contributions bullet the audit cited), so NO intro change. The real gap was methods.tex:16,
+which opened the methods chapter with "We build the Boxel abstraction" without restating the unit;
+prepended the abstract's canonical one-liner "A Boxel is a cuboidal cell of the workspace;" so the
+definition is consistent abstract -> intro -> methods and the methods chapter is self-contained.
 
 ================================================================================
 #255  [DONE 2026-06-01] [T3] [POLISH]  Related Work: "cost" overloaded vs "plan cost"  [author finding, not on Till's list]
