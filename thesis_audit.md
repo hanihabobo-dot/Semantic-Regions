@@ -1488,6 +1488,9 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
       1800s is the per-CELL wall-clock budget (not per-call); timeout now 24% of cells (FATS 31 / stack 24 /
       holding 16), not "rare"; per-call medians stack 1.3 / holding 3.4 / FATS 7.0s (median over successful
       cells); dropped the stale "flat past ~200s"; snapshot-null denominator gap 6% -> 18% (144/810).
+  [x] subsec:compactness: verified vs refreshed boxel_count_breakdown__holding figure -- compactness STANDS.
+      Only tweak: adaptive holding total $\sim$25--43 -> $\sim$22--38 (new 30-seed scenes); uniform ~300 free-space,
+      stack ~25 vs ~1340, and adaptive-vs-uniform fact counts all confirmed within rounding (geometry-derived).
   FOUND BEYOND CATALOG (fix each in its own section):
     - [done] results.tex sec:metrics: dropped "without exceeding the per-episode replan limit" from Success def.
     - [done] results.tex sec:metrics: dropped replan_limit + no_summary from the failure-mode list (cannot occur).
