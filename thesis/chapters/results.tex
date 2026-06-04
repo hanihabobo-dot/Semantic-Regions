@@ -138,12 +138,12 @@ stack               & uniform          & 90 & 35.6\,\% & 924.13 \\
 \subsection{Anytime Solve Rate}
 \label{subsec:anytime}
 
-\Cref{fig:solved-vs-time} plots cumulative solve rate against wall-clock budget on a log axis. Three observations stand out. First, the semantic curves rise to their final value within $\sim$10--30\,s on every goal, and the additional budget out to 1800\,s buys at most a few extra successes; the operating point is the first few minutes, not the long tail. Second, on stack the \texttt{semantic} and \texttt{semantic+mbs0.05} curves overlap exactly --- the 5\,cm leaf floor changes nothing here. Third, the \texttt{uniform} curve is delayed in onset on every goal and tops out lower; on find-and-tray-stack it never gets off the ground (4 solves out of 300).
+\Cref{fig:solved-vs-time} plots cumulative solve rate against wall-clock budget. Three observations stand out. First, with the per-episode replan cap removed the semantic curves rise much more gradually than before, in a goal-dependent way: on stack they reach their $\sim$64\,\% plateau almost immediately (within $\sim$15\,s, matching the 17\,s mean planning time), whereas on holding and find-and-tray-stack they climb steeply through the first $\sim$100\,s and then keep creeping upward toward the 1800\,s budget, tracking the much higher $\sim$124--134\,s mean success-only planning times; the long tail is no longer negligible on these two goals. Second, on stack the \texttt{semantic} and \texttt{semantic+mbs0.05} curves overlap exactly --- the 5\,cm leaf floor changes nothing here. Third, the \texttt{uniform} curve is delayed in onset on every goal and tops out lower: on find-and-tray-stack it no longer fails outright but climbs slowly to 34\,\%, and on stack it stays at zero until $\sim$800\,s before reaching 36\,\%, consistent with its order-of-magnitude higher per-call cost.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{solved_vs_time.png}
-    \caption{Cumulative solve rate vs wall-clock budget (log axis) per $(\text{goal}, \text{variant})$. Almost all solves happen within $\sim$200\,s; \texttt{uniform} starts later and plateaus lower on every goal.}
+    \caption{Cumulative solve rate vs wall-clock budget per $(\text{goal}, \text{variant})$. Semantic solves accrue within $\sim$15\,s on stack but over hundreds of seconds on holding and find-and-tray-stack; \texttt{uniform} starts much later and plateaus lower on every goal.}
     \label{fig:solved-vs-time}
 \end{figure}
 
