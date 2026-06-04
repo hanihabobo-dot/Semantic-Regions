@@ -1468,6 +1468,10 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
   [x] AUTHOR DIRECTIVE (never mention the replan limit): removed all replan-limit/cap references + change-narration
       from prose -- sec:metrics Success def + failure-mode list; subsec:anytime + subsec:planning-time dropped the
       "with the cap removed" framing and the "before / no longer" wording. Thesis presents the system as-is.
+  [x] AUTHOR DIRECTIVE (explain planner_failed; drop physics_mismatch/all_searched jargon): failure-modes caption
+      now glosses planner_failed as the non-timeout failures (no usable plan, or a plan found but execution/search
+      never reached the goal); removed the sub-identifier names from caption + paragraph. Label "planner_failed"
+      kept to match the figure legend; optional figure-legend rename offered to the author.
   FOUND BEYOND CATALOG (fix each in its own section):
     - [done] results.tex sec:metrics: dropped "without exceeding the per-episode replan limit" from Success def.
     - [done] results.tex sec:metrics: dropped replan_limit + no_summary from the failure-mode list (cannot occur).
