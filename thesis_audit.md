@@ -1280,7 +1280,11 @@ add to references.bib; (4) keep the K-literal link as "closely related to" with 
 Refs: background.tex (KIF intro, #223/#224 locus); methods.tex (KIF fluents); references.bib. Related: #223 #224.
 
 ================================================================================
-#279  [T3] [THESIS]  Delete the stray article "the" before PDDL/PDDLStream
+#279  [DONE 2026-06-04] [T3] [THESIS]  Delete the stray article "the" before PDDL/PDDLStream
+NOTE 2026-06-04: removed the stray article in background.tex:99 "extends the classical PDDL" ->
+"extends classical PDDL". The abstract's "a PDDLStream-based planner" (prime candidate) was already
+removed in #275; all other "the PDDL"/"the PDDLStream" uses are grammatically fine. If the author meant
+a different "the", the #277 whole-doc grammar pass will surface it.
 ================================================================================
 [SUPERVISOR 2026-06-04] Author note: "delete the 'the' behind the PDDL." Locate the stray "the" preceding
 PDDL/PDDLStream/STRIPS (a leftover article) and remove it. Verify by grep before editing. Low priority;
