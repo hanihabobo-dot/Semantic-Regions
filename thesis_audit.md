@@ -1507,6 +1507,10 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
   [x] sec:disc-mbs0: holding floor ~4pp -> ~1pp ahead; FATS ~7pp -> ~3pp behind + non-monotonic (70/77/70)
       not "steady degradation"; replan-count claim scoped to FATS only (8.7 vs 7.6; holding mbs05 actually
       replans FEWER, so the "rises on holding" claim was dropped). Mechanism paragraph unchanged.
+  [x] sec:disc-tampura (CENTRAL): opening "order of magnitude cheaper (13.7 vs 166) but less reliable (42 vs 55)"
+      -> "rough parity (144.4 vs 166) and somewhat more reliable (65.6 vs 55)"; closing "cheaper to run ... though
+      less reliably" -> "comparable cost, simpler to model, somewhat more reliably". Architecture/framing paras
+      kept verbatim (data-independent).
   FOUND BEYOND CATALOG (fix each in its own section):
     - [done] results.tex sec:metrics: dropped "without exceeding the per-episode replan limit" from Success def.
     - [done] results.tex sec:metrics: dropped replan_limit + no_summary from the failure-mode list (cannot occur).
