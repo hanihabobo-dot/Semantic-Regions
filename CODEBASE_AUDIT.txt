@@ -462,6 +462,9 @@ RESOLVED 2026-06-04: render_boxelization_schematic.py now ends each occlusion wh
    Applied to BOTH _swept_shadow and silhouette_rays, so panel (c)'s orange shadows AND dashed lines
    of sight terminate at the hidden-region end, matching the #266 caption. py_compile OK. Figure-side
    regeneration of boxelization_3d.png is thesis #274.
+REFINED 2026-06-04 (review follow-up): tuned the figure for legibility -- CAM_Z lowered 7->3.5
+   (SHADOW_REACH 1.17->1.4) and occluders enlarged so the shadows read clearly; the scene keeps all four
+   occluders. The camera-viewpoint + line-of-sight accuracy follow-up is #117.
 Status/Priority: DONE 2026-06-04, TIER 2 (thesis-figure accuracy; no runtime effect). Found 2026-06-04 while
    fixing thesis_audit #266 (panel-c caption).
 Where: tools/render_boxelization_schematic.py:_swept_shadow (~146-162) casts shadow rays to the
@@ -516,12 +519,30 @@ Fix/Investigate: (1) control test -- build multiple SEPARATE single stacks (or t
 Related: thesis_audit.md #281 (thesis-side prose fix); #113 (canonical sweep); #106 (failure taxonomy).
 
 ================================================================================
+#117. [DONE 2026-06-04] fig:boxelization 3-D: camera glyph not at the shadow viewpoint; lines of sight drawn flat
+================================================================================
+RESOLVED 2026-06-04: with the occlusion shadows now finite (#114), the accurate sightlines exposed that
+   render_boxelization_3d.py drew the camera at a different point than the shadow projection -- the glyph
+   sat low and offset (CAM=VIEW+(1.1,-0.3), z~1.25) while shadows/sightlines are cast from VIEW at height
+   CAM_Z (=3.5), a point above the 2 m room, so the shadows looked like they came from outside the scene
+   rather than from the camera. Separately, _los drew the lines of sight FLAT at z=OBJ_H/2 (below the
+   object tops), not as real camera rays. Fix: (1) draw the camera at its true viewpoint (CAM=VIEW) raised
+   to CAM_Z -- a smaller elevated overhead camera on a tall tripod with a visible down-aimed lens; (2) draw
+   each line of sight as the exact camera ray view->table-hit, which provably grazes the object top
+   (z=OBJ_H) and lands at the shadow boundary (z=0); (3) raise the view z-limit (ZVIEW) so the camera shows.
+   Author review 2026-06-04 (the shadow viewpoint "comes from outside the room"). py_compile OK; regenerated
+   + visually verified boxelization_3d.png. Thesis-side figure = #274.
+Status/Priority: DONE 2026-06-04, TIER 2 (thesis-figure accuracy; no runtime effect).
+Where: tools/render_boxelization_3d.py (_camera, _los, CAM, ZVIEW, _panel).
+Related: #114 (finite shadows), #115/#283 (camera glyph), thesis_audit #274 (figure regen).
+
+================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
 Chronological numbers, NOT priority — follow TIER. Closed bodies in git history
 (git log --grep="audit: mark #N") + archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 10 items (bodies above):
+OPEN — 9 items (bodies above):
   #104 T3 — refresh thesis-PDF plots + numbers to post-#100-merge outputs (thesis #121/#168).
   #105 T2 — Wumpus-World baseline (cell-belief search, no shadow geometry) vs uniform/TAMPURA.
   --- batch 2 (2026-05-24 read-through spillover) ---
@@ -536,12 +557,12 @@ OPEN — 10 items (bodies above):
   #112 T3 — (optional) Wilson interval for success-rate plots (thesis #207).
   #113 T1 — FULL canonical sweep re-run: reproduce all data + add mbs0.01 (1 cm) arm; ensure
        complete coverage (no no_summary holes, mbs0.10 included, uniform per-goal arms); regen figs.
-  #114 T2 — schematic over-extends occlusion shadows to workspace BOUNDS (fig:boxelization panel c);
-       real system ends them at the hidden-region end; regen figure. Found via thesis_audit #266/#274.
   TIER tally: two open T1 (#107, #113); zero T0.
 
 CLOSED (one-line; full detail in git / archive):
+  #117 [DONE 2026-06-04] fig:boxelization camera at its true elevated viewpoint + accurate camera-ray lines of sight; regen PNG.
   #115 [DONE 2026-06-04] camera glyph -> tripod-mounted camera in fig:boxelization; regen PNG (thesis #283; 6bcc034).
+  #114 [DONE 2026-06-04] schematic occlusion shadows end at the table-hit, not workspace bounds; regen PNG (thesis #274).
   #116 [KILLED 2026-06-04] stack-degradation experiment dropped; cause taken from supervisor observation
        (arm collides with / can't reach the tall stack, model-free control limit), written into thesis #281.
   #101 [2026-05-25] resolution-axis writeup (thesis aa6ebc6): "Free-space resolution" subsection
