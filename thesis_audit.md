@@ -1215,6 +1215,110 @@ Code-side fix cross-filed as CODEBASE_AUDIT.txt #114.
 Refs: methods.tex:20 (fig:boxelization); thesis/graphics/boxelization_3d.png; tools/render_boxelization_schematic.py (_swept_shadow); CODEBASE_AUDIT.txt #114.
 
 ================================================================================
+#275  [T1] [THESIS]  Abstract: drop the PDDLStream mention
+================================================================================
+[SUPERVISOR 2026-06-04] Remove "PDDLStream" from the abstract. Per Till, whether we use PDDLStream or
+our own TAMP framework does not crucially affect the capabilities claimed, so naming it in the abstract
+is noise. Drop the term (and any "PDDLStream-based"/"the PDDLStream" phrasing) from abstract.tex; the
+implementation detail stays in methods. (Touches the #215 abstract highlight locus.)
+Refs: abstract.tex (impl stays in methods.tex). Related: #279 (stray "the" near PDDL), #215.
+
+================================================================================
+#276  [T1] [THESIS]  Background: present STRIPS first, then DERIVE the state model (don't define it twice)
+================================================================================
+[SUPERVISOR 2026-06-04] Background currently introduces an abstract state model and THEN re-introduces it
+in STRIPS terms. Till: start from STRIPS syntax (states as sets of atoms; action schemas with
+preconditions/add(a)/del(a) as sets of atoms; problem P=<D,I>, domain D=<P,A>, instance I=<O,s0,g>) and
+let the state model S(P) FOLLOW as the semantics (successor f(a,s)=(s\del(a)) U add(a)), so it is defined
+once. Follow the canonical "Classical Planning" presentation Till shared (screenshot/attachment 2026-06-04).
+Refs: background.tex (classical-planning + state-model subsections).
+
+================================================================================
+#277  [T2] [THESIS]  Whole document: fix many small language/grammar errors
+================================================================================
+[SUPERVISOR 2026-06-04] Both reviewers note many small language errors throughout. Suggested approach
+(Marc): run the full thesis text through an LLM for a grammar/style pass, then apply fixes by hand. Scope
+= all chapters + abstract; do NOT change technical meaning. Any wording change that touches a claim gets
+tracked separately.
+Refs: thesis/chapters/*.tex; abstract.tex.
+
+================================================================================
+#278  [T1] [THESIS]  KIFs vs K-literals: not interchangeable; use KIFs consistently + cite their source
+================================================================================
+[SUPERVISOR 2026-06-04] The thesis conflates Know-If Fluents (KIFs) and K-literals and uses them
+interchangeably; Till flags this as a real error (his own prior misunderstanding too). We actually use
+KIFs. They are NOT just a compact form of K-literals: a KIF expresses that we know the VALUE of L, not
+whether L is true or false (you cannot assert "I know L" with a KIF alone). Fix: (1) use
+"KIF"/"Know-If Fluent" consistently everywhere (the PDDL domain uses KIFs, e.g. obj_at_boxel_KIF);
+(2) drop the "compact representation of K-literals" framing; (3) cite the KIF source -- Brenner & Nebel
+(2009), "Continual planning and acting in dynamic multiagent environments", Auton. Agent. Multi-Agent
+Syst. 19(3), https://link.springer.com/article/10.1007/s10458-009-9081-1 (DOI 10.1007/s10458-009-9081-1);
+add to references.bib; (4) keep the K-literal link as "closely related to" with the distinction stated.
+Refs: background.tex (KIF intro, #223/#224 locus); methods.tex (KIF fluents); references.bib. Related: #223 #224.
+
+================================================================================
+#279  [T3] [THESIS]  Delete the stray article "the" before PDDL/PDDLStream
+================================================================================
+[SUPERVISOR 2026-06-04] Author note: "delete the 'the' behind the PDDL." Locate the stray "the" preceding
+PDDL/PDDLStream/STRIPS (a leftover article) and remove it. Verify by grep before editing. Low priority;
+likely subsumed by #275 (abstract) and the #277 language pass if those land first.
+Refs: grep "the PDDL" / "the PDDLStream" / "the STRIPS" across thesis/chapters + abstract.tex.
+
+================================================================================
+#280  [T1] [THESIS]  Related Work/Background (Critical Regions): cite the new DYNAMIC-abstraction paper; "static" claim no longer holds
+================================================================================
+[SUPERVISOR 2026-06-04] Our Critical Regions discussion says the abstraction is predicted once and held
+STATIC. A newer AAIR-Lab paper makes the abstraction DYNAMIC -- it switches abstractions as the goal
+changes (its Fig. 1: coloured areas are abstract states that change with the goal). So the "static" claim
+is no longer true. Fix: cite the new paper and soften/correct the static claim, but KEEP the contrast --
+it is a very different approach (RL-driven, different task, likely not 3D), so ours is not superseded.
+New paper (AAAI'25, AAIR Lab / Nayyar et al. -- VERIFY authors+year):
+https://aair-lab.github.io/Publications/rkn_aaai25.pdf  (alt/less likely AAAI'26: 23127 / NayyarR-ML).
+Add to references.bib. NOTE: published AAAI'25/'26, so prior unawareness is fine -- no panic.
+Refs: related-work.tex (Critical Regions / Limitations of Static Semantic Abstractions); background.tex; references.bib. Related: #225 #226.
+
+================================================================================
+#281  [T1] [THESIS]  Results/Discussion: stack-goal degradation explanation is WRONG (sim/control limit, not planning difficulty)
+================================================================================
+[SUPERVISOR 2026-06-04] The current explanation for stack-goal success degradation with stack height
+(framed as planning difficulty: more pick/place loops -> more chances to fail under the time limit) is
+wrong. Real cause (Till+Marc): a simulation/control limitation -- past a certain height the arm crashes
+into / cannot reach the growing stack (a model-free controller limit), NOT the POD planning. Fix the
+prose once confirmed. Confirmation experiment cross-filed as CODEBASE_AUDIT.txt #116 (build multiple
+SEPARATE stacks side-by-side; if those succeed more often, it is stacking-height/control, unrelated to
+planning; also inspect sim runs for the crash / out-of-reach failure).
+Refs: results.tex (stack success vs height; failure modes); discussion.tex; CODEBASE_AUDIT.txt #116.
+
+================================================================================
+#282  [T1] [THESIS]  Results/Discussion: refresh ALL numbers + conclusions from the NEW sweep
+================================================================================
+[SUPERVISOR 2026-06-04] Current results/discussion numbers, figures, and conclusions (success rates, plan
+times, reliability-vs-TAMPURA, failure-mode plot colours) are from the OLD data; the author now has a new
+sweep. Refresh everything once the canonical sweep lands: re-derive tab:headline, fig:plantime-holding,
+fig:success-*, fig:boxel-count-*, the TAMPURA comparison numbers, and the discussion's reliability claims.
+Failure-mode plot: replan_limit removed (limit dropped) and no_summary was a bug (removed) -> only timeout
++ planner_failed remain (orange + red). Gated on CODEBASE_AUDIT.txt #113 (canonical sweep) and #104.
+Refs: results.tex; discussion.tex; abstract.tex; CODEBASE_AUDIT.txt #113 #104. Related: #199 #209.
+
+================================================================================
+#283  [T2] [THESIS]  fig:boxelization: camera glyph unreadable at print scale (make it look like a camera)
+================================================================================
+[SUPERVISOR 2026-06-04] In boxelization_3d.png the camera marker is just a black box -- indistinguishable
+from objects at print scale (Marc had to zoom ~469%). Make it clearly a camera: add a small tripod, give
+it a distinct shape, or move it outside the task space to mark it as different. Must read on a PRINTED
+page. Figure-code fix cross-filed as CODEBASE_AUDIT.txt #115; regenerate the figure (do NOT overwrite the
+PNG silently; regenerate + visually verify).
+Refs: thesis/graphics/boxelization_3d.png; methods.tex:20 (fig:boxelization); CODEBASE_AUDIT.txt #115. Related: #274 (same figure).
+
+================================================================================
+#284  [T3] [ADMIN]  Check whether a printed thesis copy is required (likely paperless now)
+================================================================================
+[SUPERVISOR 2026-06-04] Confirm the current RWTH submission regulations: whether a physical printout is
+required or submission is now paperless (Marc believes paperless, but verify against current rules;
+printing can be expensive). Action item, not a document change.
+Refs: RWTH / examination-office submission regulations.
+
+================================================================================
 RESOLVED (author notes 2026-06-02 -- no new issue):
   - "explain what a classical planner is + examples" -> DONE in #253 (Background 2.1.2).
     MDP half carried forward as #258.
@@ -1246,6 +1350,13 @@ OPEN:
       Verify-in-code:   #264 (pose sampling) #266 (shadow code) #269 (static facts)
       Captions/outdated:#265 #267 #270 #271      Adds/clarify: #258 #259 #260 #261 #262 #268      Style: #273
       Resolved (no issue): classical-planner=#253; TAMPURA re-run text=#246/#247
+  --- Supervisor review 2026-06-04 (#275-#284; + codebase CODEBASE_AUDIT.txt #115-#116) -- all OPEN. ---
+      Correctness (T1): #275 (drop PDDLStream from abstract) #276 (STRIPS-first, derive state model)
+                        #278 (KIFs != K-literals; cite Brenner&Nebel 2009) #280 (Critical Regions now dynamic)
+                        #281 (stack-degradation cause = sim/control) #282 (refresh all numbers from new sweep)
+      Language (T2):    #277 (whole-doc grammar pass) #283 (camera glyph readable in print; code #115)
+      Low/admin (T3):   #279 (stray "the" near PDDL) #284 (check printing requirement)
+      Cross-filed code: CODEBASE_AUDIT.txt #115 (camera glyph render) #116 (stack-degradation experiment)
 
 DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212, #213. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
