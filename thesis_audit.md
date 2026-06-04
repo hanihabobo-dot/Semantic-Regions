@@ -1229,7 +1229,14 @@ implementation detail stays in methods. (Touches the #215 abstract highlight loc
 Refs: abstract.tex (impl stays in methods.tex). Related: #279 (stray "the" near PDDL), #215.
 
 ================================================================================
-#276  [T1] [THESIS]  Background: present STRIPS first, then DERIVE the state model (don't define it twice)
+#276  [DONE 2026-06-04] [T1] [THESIS]  Background: present STRIPS first, then DERIVE the state model (don't define it twice)
+NOTE 2026-06-04: restructured background.tex sec:2.1.1 to STRIPS-first per Till's canonical form. Now:
+factored representation -> STRIPS (state = set of atoms; action = pre/add/del; applicable iff pre(a)
+subset of s; successor (s\del(a)) U add(a)) -> PDDL syntax P=<D,I> (domain predicates + action schemas,
+kept the stack lstlisting; instance objects/s0/goal) -> state model S(P)=<S,s0,SG,Act,A,f> DERIVED ONCE
+as the semantics. Removed the duplicate upfront model tuple/itemize and the \paragraph heading; kept all
+5 citations, the blocksworld example, the lstlisting+label, and the commented-out derived-predicates
+block; tuple notation matches symbols.tex; STRIPS stays unexpanded (\acs, per #220).
 ================================================================================
 [SUPERVISOR 2026-06-04] Background currently introduces an abstract state model and THEN re-introduces it
 in STRIPS terms. Till: start from STRIPS syntax (states as sets of atoms; action schemas with
