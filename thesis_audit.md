@@ -1361,6 +1361,83 @@ Failure-mode plot: replan_limit removed (limit dropped) and no_summary was a bug
 + planner_failed remain (orange + red). Gated on CODEBASE_AUDIT.txt #113 (canonical sweep) and #104.
 Refs: results.tex; discussion.tex; abstract.tex; CODEBASE_AUDIT.txt #113 #104. Related: #199 #209.
 
+[FINDINGS 2026-06-04 — measured from sweep_full_2026-05-28] Core 3 goals x 3 variants {semantic,
++mbs0.05, uniform} COMPLETE at 90 cells each (30 seeds x 3 difficulties; OLD was 300 = 100 x 3, so
+sample is smaller -> wider CIs). Coarse free-space resolution arms (mbs 0.135/0.18/...) still running,
+so fig:boxel-resolution + the resolution-axis numbers in subsec:resolution / disc-validity are NOT yet
+refreshed (old resolution sweep retained). Figures refreshed from this sweep (old PNGs backed up in
+backups/thesis_graphics_2026-06-04_20-29-58): success_rate_vs_n_occluders__{holding,find-and-tray-stack,
+stack}, planning_time_vs_n_occluders__holding, boxel_count_breakdown__holding, tampura_wallclock_
+comparison, failure_modes, solved_vs_time. Preserved: boxel_count_vs_resolution.
+
+A. ROOT CAUSE (drives nearly every change) — per-episode replan cap REMOVED (code #107); episodes now
+   run to the 1800s wall-clock budget. Effects: mean replan count up 3-6x (holding sem 2.31->12.59,
+   stack sem 1.19->11.14, f-a-t-s sem 3.03->7.59); success-only mean planning time up ~17x (holding sem
+   7.78->134.30s); the replan_limit exit reason DISAPPEARS (0 cells) and those episodes now end in
+   timeout instead.
+
+B. RESULTS (results.tex) — OLD -> NEW (success% / mean success-only plan s):
+   tab:headline (full replace; n_cells 299/300 -> 90):
+     f-a-t-s: sem 39.8/28.37 -> 75.6/124.62 ; mbs05 33.0/21.49 -> 72.2/82.14 ; uni 1.3/156.10 -> 34.4/692.11
+     holding: sem 42.3/7.78  -> 65.6/134.30 ; mbs05 46.3/7.42  -> 66.7/56.64 ; uni 33.3/50.35 -> 47.8/438.53
+     stack:   sem 61.3/1.23  -> 64.4/17.16  ; mbs05 61.3/1.23  -> 64.4/3.10  ; uni 39.2/23.84 -> 35.6/924.13
+   - "semantic vs uniform differ by an order of magnitude or more in BOTH axes" -> in TIME now only stack
+     (~54x); holding ~3.3x, f-a-t-s ~5.6x. Reword to "several-fold (holding/FATS) to >50x (stack)".
+   - subsec:anytime "uniform on FATS never gets off the ground (4/300)" -> FALSE: FATS uniform now
+     31/90 = 34.4%. "semantic curves rise to final value within ~10-30s" -> success-only planning is now
+     ~57-134s; fig:solved_vs_time shifted right (refreshed).
+   - subsec:success-rate per-goal text: holding "sem 39-47 / mbs05 44-48 / uni 31-36" -> sem 60-77 /
+     mbs05 63-70 / uni 43-53. stack "97/74/13, uniform 97/20/1" -> sem 100/80/13.3, uniform 90/16.7/0.
+     FATS "uniform <=2/100, semantic ~40" -> uniform 60/16.7/26.7, semantic 73.3/66.7/86.7
+     (NB semantic FATS no longer flat — rises with n_occ).
+   - subsec:planning-time holding "adaptive <20s, uniform 21->83s" -> adaptive ~85-234s, uniform 302-570s.
+   - subsec:compactness — boxel + init-fact counts ~UNCHANGED (geometry-derived): holding sem ~31 / uni
+     ~329, stack init-facts ~268 vs ~12,100. Compactness story STANDS.
+   - subsec:tampura "our planning mean 7.8s, success 42% vs TAMPURA >=63%" -> planning 134.30s, success
+     65.6%. fig:tampura refreshed.
+   - subsec:failure-modes "planner_failed dominant; replan_limit predominantly on stack" -> replan_limit
+     GONE; no_summary gone; TIMEOUT now dominant. Core-3-variant failure counts (match refreshed fig):
+     timeout 194, planner_failed 96, physics_mismatch 27 (holding only), all_searched 18 (holding only),
+     drop_failed 1 (f-a-t-s). By goal: f-a-t-s=timeout 85/pf 20/drop 1; holding=timeout 44/physmis 27/
+     pf 19/allsrch 18; stack=timeout 65/pf 57. (Refreshed fig:failure-modes renders 3 visible bands —
+     success/planner_failed/timeout — physics_mismatch+all_searched appear folded into planner_failed,
+     consistent with code #106 intent.) Rewrite caption+text: stack now fails via timeout+planner_failed,
+     not replan_limit; FATS uniform is mostly timeout (not planner_failed).
+   - planning-budget para median per-call (0.97 stack / 2.05 find / 2.97 f-a-t-s): re-verify vs new sweep.
+
+C. DISCUSSION (discussion.tex):
+   - sec:disc-semantic-vs-uniform: "uniform still solves about a third" (holding) -> now ~half (47.8%);
+     "find-and-tray-stack ... uniform is effectively broken (1.3%)" -> FALSE, now 34.4% — reframe
+     "broken" as "much weaker but functional"; stack "97->13 vs uniform 97->1" -> 100->13.3 vs 90->0.
+   - sec:disc-mbs0: "holding floor ~4pp ahead; FATS ~7pp behind with degradation as n_occ grows" ->
+     holding mbs05 ~1pp ahead; FATS ~3pp behind and NON-monotonic (70/76.7/70). stack overlap holds.
+   - sec:disc-tampura: CENTRAL CLAIM COLLAPSES. Two framings, both kill "order of magnitude cheaper":
+       (i) wall-clock vs TAMPURA per-episode (fig:tampura axis): OLD 13.7s vs 166s (~12x cheaper) ->
+           NEW 144.4s vs 166s = PARITY (~1.15x).
+       (ii) planning-only vs TAMPURA Table II 57s: our success-only planning 7.78 -> 134.30s = now
+            ~2.3x SLOWER.
+     Reliability flips the other way: success 42% -> 65.6%, i.e. now COMPARABLE-or-BETTER than TAMPURA's
+     ~55-63%. Net: "cheaper-but-less-reliable" -> "comparable/slower-but-more-reliable". Major rewrite of
+     this section + fig:tampura caption. (The architectural/qualitative contrast — deterministic replanning
+     vs learned MDP, plannable occlusion — is data-independent and STANDS.)
+   - sec:disc-validity Resolution-regime para: numbers unchanged for now (resolution arms pending) — flag.
+
+D. CONCLUSION (conclusion.tex):
+   - "solves cluttered scenes the uniform baseline effectively cannot" -> WEAKENED (uniform now solves
+     ~34% of FATS, ~36-48% of holding/stack).
+   - "roughly an order of magnitude cheaper end-to-end, though less reliably" -> INVERTED (now comparable/
+     slower but more reliable) — sync with disc-tampura.
+   - "order of magnitude fewer cells" (compactness) -> STILL HOLDS.
+
+E. LIMITATIONS (sec:limitations) + FUTURE WORK (sec:future_work): no hard eval numbers; qualitative
+   claims unaffected. Bounded give-up still counts as failure (unchanged). Future-work directions unchanged.
+
+F. ALSO (outside the 5 sections but same headline): abstract.tex almost certainly repeats "order of
+   magnitude cheaper / fewer cells" — refresh together with disc-tampura/conclusion.
+
+PENDING (when coarse mbs arms finish): refresh fig:boxel-resolution + subsec:resolution/disc-validity
+resolution numbers, then re-run this same diff against those.
+
 ================================================================================
 #283  [DONE 2026-06-04] [T2] [THESIS]  fig:boxelization: camera glyph unreadable at print scale (make it look like a camera)
 NOTE 2026-06-04: regenerated thesis/graphics/boxelization_3d.png with a tripod-mounted camera. Edited
