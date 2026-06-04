@@ -1504,12 +1504,15 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
   [x] sec:disc-semantic-vs-uniform: holding uniform "about a third" -> "about half" (47.8%); stack adaptive
       97->13 -> 100->13, uniform 97->1 -> 90->0; FATS "effectively broken (1.3%)" -> "much weaker but still
       functional (34.4% vs semantic 75.6%)"; compactness 25-43 -> 22-38, ~320 -> ~300 (match Results).
+  [x] sec:disc-mbs0: holding floor ~4pp -> ~1pp ahead; FATS ~7pp -> ~3pp behind + non-monotonic (70/77/70)
+      not "steady degradation"; replan-count claim scoped to FATS only (8.7 vs 7.6; holding mbs05 actually
+      replans FEWER, so the "rises on holding" claim was dropped). Mechanism paragraph unchanged.
   FOUND BEYOND CATALOG (fix each in its own section):
     - [done] results.tex sec:metrics: dropped "without exceeding the per-episode replan limit" from Success def.
     - [done] results.tex sec:metrics: dropped replan_limit + no_summary from the failure-mode list (cannot occur).
     - [done] results.tex (denominators para): 6% -> 18% (144/810 snapshot-null cells).
     - [done] results.tex (planning-budget para): per-call medians refreshed (1.3/3.4/7.0s); "flat past ~200s" dropped; 1800s is per-cell.
-    - discussion.tex sec:disc-mbs0: "replan count rises slightly on holding and FATS" -> holding mbs05 now LOWER.
+    - [done] discussion.tex sec:disc-mbs0: replan-count claim scoped to FATS (holding mbs05 replans fewer).
     - results.tex subsec:failure-modes: cell-count wording RESOLVED in the 2-variant rewrite (kept "6" = 3 goals x 2 variants).
 
 ================================================================================
