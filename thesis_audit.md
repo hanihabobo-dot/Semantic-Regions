@@ -1124,7 +1124,13 @@ largest occluder." It is not the largest occluder, just the bottom one. Correct 
 Refs: methods.tex:20 (fig:boxelization).
 
 ================================================================================
-#266  [T1] [THESIS]  Methods: shadow extends to end of hidden region, not the workspace boundary
+#266  [DONE 2026-06-04] [T1] [THESIS]  Methods: shadow extends to end of hidden region, not the workspace boundary
+NOTE 2026-06-04: fixed fig:boxelization panel (c) caption (methods.tex:20): "swept ... out to the
+workspace boundary" -> "swept ... along the lines of sight to the far end of the region it occludes,
+where those sightlines meet the table behind it". Matches shadow_calculator.py:76-177 (back-corner
+sightlines hit the table surface = hidden-region end, clamped to the table; height >= object). Body
+text methods.tex:34 was already neutral. The schematic FIGURE still over-extends shadows to the
+workspace BOUNDS -- logged as #274 (code-side CODEBASE_AUDIT.txt #114).
 ================================================================================
 [AUTHOR] methods.tex:20 panel (c) (and any matching body text): shadow Boxel "swept from the object's
 back face out to the workspace boundary" is wrong -- it extends to the end of the shadow/hidden region
@@ -1184,6 +1190,20 @@ Refs: results.tex (subsec:planning-time, fig:plantime-holding); results.tex:107.
 [AUTHOR] "cuboid" reads awkwardly; find a better term (e.g. box / rectangular cell / axis-aligned box).
 5 uses: abstract.tex, introduction.tex, methods.tex (x3). Apply consistently with the Boxel definition.
 Refs: abstract.tex; introduction.tex; methods.tex.
+
+================================================================================
+#274  [T2] [THESIS]  Methods fig:boxelization panel (c): schematic renders shadows to workspace boundary, not hidden-region end
+================================================================================
+[FOUND 2026-06-04 while fixing #266] The figure boxelization_3d.png panel (c) (thesis/graphics/) visibly
+sweeps the orange occlusion Boxels back to the table/workspace edges. Root cause is figure-rendering code:
+render_boxelization_schematic.py _swept_shadow casts shadow rays to the workspace BOUNDS (_ray_box_exit,
+~lines 146-162), a 2-D top-down approximation with no object height, reused by render_boxelization_3d.py.
+The real system (shadow_calculator.py:76-177) ends each shadow where the back-corner sightlines meet the
+table surface (the hidden-region end), clamped to the table. The #266 caption now describes the real
+behaviour, so the figure is the remaining inaccuracy. Fix = regenerate the schematic so panel (c) ends
+shadows at the hidden-region end (do NOT overwrite the PNG silently; regenerate + visually verify).
+Code-side fix cross-filed as CODEBASE_AUDIT.txt #114.
+Refs: methods.tex:20 (fig:boxelization); thesis/graphics/boxelization_3d.png; tools/render_boxelization_schematic.py (_swept_shadow); CODEBASE_AUDIT.txt #114.
 
 ================================================================================
 RESOLVED (author notes 2026-06-02 -- no new issue):
