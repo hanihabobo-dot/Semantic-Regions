@@ -1451,6 +1451,9 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
   [x] subsec:anytime: rewrote the 3 observations (semantic rise ~15s on stack / ~124-134s on holding+FATS;
       uniform FATS solves 34.4% not 4/300; uniform stack 0 -> 36% after ~800s) + caption. Axis wording made
       neutral pending the log -> linear figure change (separate unit, author request).
+  [x] fig:solved-vs-time -> linear x-axis (author request; outside original catalog): repointed the
+      \includegraphics to solved_vs_time_linear.png (already emitted by eval_plotter from this sweep, log_x=False);
+      the log solved_vs_time.png is preserved in thesis/graphics, not deleted.
   FOUND BEYOND CATALOG (fix each in its own section):
     - results.tex sec:metrics: "Success ... without exceeding the per-episode replan limit" -> cap removed (#107).
     - results.tex sec:metrics: failure-mode list still names replan_limit + no_summary (both gone).
