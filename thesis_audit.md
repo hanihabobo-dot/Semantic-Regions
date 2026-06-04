@@ -1094,7 +1094,14 @@ characterization.
 Refs: related-work.tex:30.
 
 ================================================================================
-#263  [T1] [THESIS]  Related Work: "Object Integrity" octree argument does not apply to our system
+#263  [DONE 2026-06-04] [T1] [THESIS]  Related Work: "Object Integrity" octree argument does not apply to our system
+NOTE 2026-06-04: REMOVED the "Object Integrity" bullet (related-work.tex:48) and folded the remaining
+"Lack of Semantic Structure" limitation into prose; fixed "two key limitations" -> "a key limitation".
+Object integrity is not a Boxel-vs-octree discriminator: pick targets an object by identity
+(domain.pddl:158 pick ?o ?b ?g ?q), each object is one object-centric Boxel built at its oracle pose
+(methods.tex:33), and the grasp is a single sampled pose (streams.py:534) -- no "pick voxels 1,2,5"
+case exists. Chose REMOVE over QUALIFY since the grasp frame uses the Boxel center, so a "poses not
+cells" qualifier would be a new inaccuracy.
 ================================================================================
 [AUTHOR] related-work.tex:48 motivates Boxels over octrees via "Object Integrity" (octrees split an
 object across voxels, complicating "pick up object A"). That only holds if Boxels were used to grasp;
