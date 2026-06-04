@@ -1511,6 +1511,9 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
       -> "rough parity (144.4 vs 166) and somewhat more reliable (65.6 vs 55)"; closing "cheaper to run ... though
       less reliably" -> "comparable cost, simpler to model, somewhat more reliably". Architecture/framing paras
       kept verbatim (data-independent).
+  [x] conclusion.tex: "solves cluttered scenes the uniform baseline effectively cannot" -> "solves cluttered
+      FATS scenes far more often than uniform" (75.6 vs 34.4); "order of magnitude cheaper ... though less
+      reliably" -> "comparable end-to-end cost and somewhat more reliably". "Order of magnitude fewer cells" kept.
   FOUND BEYOND CATALOG (fix each in its own section):
     - [done] results.tex sec:metrics: dropped "without exceeding the per-episode replan limit" from Success def.
     - [done] results.tex sec:metrics: dropped replan_limit + no_summary from the failure-mode list (cannot occur).
