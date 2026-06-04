@@ -1454,6 +1454,9 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
   [x] fig:solved-vs-time -> linear x-axis (author request; outside original catalog): repointed the
       \includegraphics to solved_vs_time_linear.png (already emitted by eval_plotter from this sweep, log_x=False);
       the log solved_vs_time.png is preserved in thesis/graphics, not deleted.
+  [x] subsec:success-rate: holding 60-77/63-70/43-53 (~18pp gap, 30 seeds); stack 100/80/13.3 vs 90/16.7/0;
+      FATS uniform 60/16.7/26.7, semantic 73.3/66.7/86.7 (no longer flat), mbs05 70/76.7/70 non-monotonic.
+      Captions updated; fig:success-stack caption left as-is (still accurate).
   FOUND BEYOND CATALOG (fix each in its own section):
     - results.tex sec:metrics: "Success ... without exceeding the per-episode replan limit" -> cap removed (#107).
     - results.tex sec:metrics: failure-mode list still names replan_limit + no_summary (both gone).

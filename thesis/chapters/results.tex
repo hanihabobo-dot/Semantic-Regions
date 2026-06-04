@@ -150,16 +150,16 @@ stack               & uniform          & 90 & 35.6\,\% & 924.13 \\
 \subsection{Success Rate and Scene Difficulty}
 \label{subsec:success-rate}
 
-\Cref{fig:success-holding,fig:success-stack,fig:success-fats} show success rate against the difficulty axis for each goal. On holding (\cref{fig:success-holding}), success is roughly flat in $n_\text{occ}\in\{2,3,4\}$: \texttt{semantic} stays at 39--47\,\%, \texttt{semantic+mbs0.05} at 44--48\,\%, \texttt{uniform} at 31--36\,\%. There is no clear scalability degradation in this range, only a $\sim$10\,pp gap between adaptive and uniform partitioning.
+\Cref{fig:success-holding,fig:success-stack,fig:success-fats} show success rate against the difficulty axis for each goal. On holding (\cref{fig:success-holding}), success does not degrade with $n_\text{occ}\in\{2,3,4\}$ --- if anything it edges up at $n_\text{occ}=4$: \texttt{semantic} runs 60--77\,\%, \texttt{semantic+mbs0.05} 63--70\,\%, \texttt{uniform} 43--53\,\%. There is no scalability collapse in this range, only a $\sim$18\,pp gap between adaptive and uniform partitioning.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.7\textwidth]{success_rate_vs_n_occluders__holding.png}
-    \caption{Success rate vs $n_\text{occ}$ on the holding goal. Adaptive variants (semantic, semantic+mbs0.05) are within seed noise of each other; uniform sits $\sim$10\,pp lower. Each bar is the mean success rate over the $\sim$80--100 seeds at that difficulty (here and in \cref{fig:success-stack,fig:success-fats}).}
+    \caption{Success rate vs $n_\text{occ}$ on the holding goal. Adaptive variants (semantic, semantic+mbs0.05) are within seed noise of each other; uniform sits $\sim$18\,pp lower. Each bar is the mean success rate over the 30 seeds at that difficulty (here and in \cref{fig:success-stack,fig:success-fats}).}
     \label{fig:success-holding}
 \end{figure}
 
-On stack (\cref{fig:success-stack}), the difficulty axis is the stack height. All variants solve $h=2$ trivially (97\,\%); semantic and semantic+mbs0.05 degrade gracefully to 74\,\% at $h=3$ and 13\,\% at $h=4$, while uniform collapses from 97\,\% to 20\,\% to 1\,\%. The semantic and semantic+mbs0.05 curves are indistinguishable seed-for-seed. This decline with height is not a planning effect: the stack goal is fully observable and the planner finds a valid plan to the target tower at every height. It reflects a limit of the simulated manipulation instead. As \cref{sec:limitations} details, execution uses a deliberately simplified manipulation model --- top-down grasps at a single fixed height offset, a hardcoded post-place lift, and collisions that are logged but never trigger a recovery --- so past a few layers the arm can no longer reliably place on or clear the growing tower, and upper-layer placements miss in execution even when the plan itself is sound. Because this ceiling is a property of the simulated arm and not of the partition, it lowers every variant as $h$ grows; uniform falls off fastest, consistent with its order-of-magnitude higher per-call planning cost (\cref{tab:headline}). We read the stack-height limit as an accepted simplification of the manipulation stack rather than a failure of the partitioning or the planner.
+On stack (\cref{fig:success-stack}), the difficulty axis is the stack height. The adaptive variants solve $h=2$ perfectly (100\,\%) and uniform nearly so (90\,\%); semantic and semantic+mbs0.05 then degrade gracefully to 80\,\% at $h=3$ and 13.3\,\% at $h=4$, while uniform collapses from 90\,\% to 16.7\,\% to 0\,\%. The semantic and semantic+mbs0.05 curves are indistinguishable seed-for-seed. This decline with height is not a planning effect: the stack goal is fully observable and the planner finds a valid plan to the target tower at every height. It reflects a limit of the simulated manipulation instead. As \cref{sec:limitations} details, execution uses a deliberately simplified manipulation model --- top-down grasps at a single fixed height offset, a hardcoded post-place lift, and collisions that are logged but never trigger a recovery --- so past a few layers the arm can no longer reliably place on or clear the growing tower, and upper-layer placements miss in execution even when the plan itself is sound. Because this ceiling is a property of the simulated arm and not of the partition, it lowers every variant as $h$ grows; uniform falls off fastest, consistent with its order-of-magnitude higher per-call planning cost (\cref{tab:headline}). We read the stack-height limit as an accepted simplification of the manipulation stack rather than a failure of the partitioning or the planner.
 
 \begin{figure}[H]
     \centering
@@ -168,12 +168,12 @@ On stack (\cref{fig:success-stack}), the difficulty axis is the stack height. Al
     \label{fig:success-stack}
 \end{figure}
 
-Find-and-tray-stack (\cref{fig:success-fats}) is the discriminating goal: \texttt{uniform} succeeds on at most 2 out of 100 cells at every difficulty, whereas \texttt{semantic} stays flat around 40\,\%. The \texttt{semantic+mbs0.05} variant degrades with $n_\text{occ}$ (40\,\% $\to$ 31\,\% $\to$ 28\,\%) on this goal, the only case in the sweep where a finer leaf floor visibly hurts.
+Find-and-tray-stack (\cref{fig:success-fats}) is the most discriminating goal: \texttt{uniform} trails at every difficulty (60.0\,\% / 16.7\,\% / 26.7\,\% at $n_\text{occ}=2/3/4$), whereas \texttt{semantic} is far stronger and no longer flat, rising to 86.7\,\% at $n_\text{occ}=4$ (73.3\,\% / 66.7\,\% / 86.7\,\%). The \texttt{semantic+mbs0.05} variant is non-monotonic here (70.0\,\% / 76.7\,\% / 70.0\,\%) and ends slightly behind \texttt{semantic}, the only goal where the finer leaf floor leaves a visible mark.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.7\textwidth]{success_rate_vs_n_occluders__find-and-tray-stack.png}
-    \caption{Success rate vs $n_\text{occ}$ on the find-and-tray-stack goal. Uniform fails almost entirely; \texttt{semantic+mbs0.05} visibly degrades with $n_\text{occ}$, contrary to its intent.}
+    \caption{Success rate vs $n_\text{occ}$ on the find-and-tray-stack goal. \texttt{uniform} trails the adaptive variants at every difficulty; \texttt{semantic+mbs0.05} is non-monotonic in $n_\text{occ}$ and ends slightly behind \texttt{semantic}.}
     \label{fig:success-fats}
 \end{figure}
 
