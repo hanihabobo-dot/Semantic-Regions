@@ -1495,10 +1495,11 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
       (was 13.7 vs 166 "order of magnitude cheaper"); median 8.5 -> 21.6s; per-step ~11s vs 57s (still cheaper,
       NOT "2.3x slower" -- avoided the #213 per-episode-vs-per-step mismatch); reliability 42 -> 65.6% vs local
       55% (now AHEAD). Net "cheaper-but-less-reliable" -> "parity-on-cost, somewhat-more-reliable". Caption updated.
-  [x] AUTHOR wording (Results): (1) planning-budget per-call sentence -- "calls stay short ... rather than slow
-      calls" was inaccurate (per-call times right-skewed; FATS calls not short, mean>>median; FATS episodes long
-      with FEW replans) -> "median call short, but right-skewed; long episodes from replans + a tail of slower
-      calls". (2) subsec:tampura: dropped before/after "now" ("Reliability now runs in our favour" -> "On
+  [x] AUTHOR wording (Results): (1) planning-budget per-call sentence: my right-skewed rewrite was REVERTED to
+      the original wording per author. MATH CAVEAT (verified): medians 1.3/3.4/7.0s are correct, but the
+      original's "rather than slow calls" is unsupported -- mean/call (total/plans) = 1.5/10.7/16.4s, >> median
+      on holding/FATS, and FATS reaches ~125s with only ~7.6 replans, so slow calls drive the long episodes.
+      Author to revisit the wording. (2) subsec:tampura: dropped before/after "now" ("Reliability now runs in our favour" -> "On
       reliability the comparison favours us") and the "picture is similar / still well under" phrasing.
   [x] sec:disc-semantic-vs-uniform: holding uniform "about a third" -> "about half" (47.8%); stack adaptive
       97->13 -> 100->13, uniform 97->1 -> 90->0; FATS "effectively broken (1.3%)" -> "much weaker but still
