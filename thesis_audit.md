@@ -1444,6 +1444,18 @@ F. ALSO (outside the 5 sections but same headline): abstract.tex almost certainl
 PENDING (when coarse mbs arms finish): refresh fig:boxel-resolution + subsec:resolution/disc-validity
 resolution numbers, then re-run this same diff against those.
 
+APPLIED (2026-06-04, /workflow; one commit per unit):
+  [x] B tab:headline full replace (n_cells 299/300 -> 90) + "order of magnitude in both axes" framing
+      reworded to several-fold (holding ~3.3x, FATS ~5.6x) to >50x (stack); success-rate gap ~1.4-2.2x.
+      Caption notes the new 90 = 30 seeds x 3 difficulties sample.
+  FOUND BEYOND CATALOG (fix each in its own section):
+    - results.tex sec:metrics: "Success ... without exceeding the per-episode replan limit" -> cap removed (#107).
+    - results.tex sec:metrics: failure-mode list still names replan_limit + no_summary (both gone).
+    - results.tex (denominators para): "differ by about 6% of cells" -> re-verify vs new sweep.
+    - results.tex (planning-budget para): per-call medians 0.97/2.05/2.97 + "flat past ~200s" -> re-verify.
+    - discussion.tex sec:disc-mbs0: "replan count rises slightly on holding and FATS" -> holding mbs05 now LOWER.
+    - results.tex subsec:failure-modes: "across all 6 (goal,variant) cells" -> should be 9; confirm vs refreshed fig.
+
 ================================================================================
 #283  [DONE 2026-06-04] [T2] [THESIS]  fig:boxelization: camera glyph unreadable at print scale (make it look like a camera)
 NOTE 2026-06-04: regenerated thesis/graphics/boxelization_3d.png with a tripod-mounted camera. Edited
