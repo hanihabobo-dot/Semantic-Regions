@@ -1474,6 +1474,11 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
       kept to match the figure legend; optional figure-legend rename offered to the author.
   [x] subsec:setup (Scenes and seeds): 100 -> 30 random scenes; headline 2700 -> 810 cells; decoupled the
       resolution-arm count (PENDING earlier 100-seed sweep, reported in subsec:resolution) instead of a mixed ~4500.
+  [x] AUTHOR: rename failure bands to plain words (success / plan failed / timed out) -- regenerated
+      failure_modes_sem_uni.png (relabeled via tools/regen_failure_modes_sem_uni.py; colours carried over) +
+      rewrote sec:metrics Failure-mode def, subsec:failure-modes paragraph + caption to the two plain
+      categories; dropped ALL raw identifiers (planner_failed/timeout/physics_mismatch/all_searched/drop_failed).
+      Legend title still "exit_reason" -- offered to rename to "outcome".
   FOUND BEYOND CATALOG (fix each in its own section):
     - [done] results.tex sec:metrics: dropped "without exceeding the per-episode replan limit" from Success def.
     - [done] results.tex sec:metrics: dropped replan_limit + no_summary from the failure-mode list (cannot occur).
