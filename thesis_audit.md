@@ -1484,11 +1484,15 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
       rewrote sec:metrics Failure-mode def, subsec:failure-modes paragraph + caption to the two plain
       categories; dropped ALL raw identifiers (planner_failed/timeout/physics_mismatch/all_searched/drop_failed).
       Legend title still "exit_reason" -- offered to rename to "outcome".
+  [x] subsec:setup planning-budget para (L83) + metrics denominator (L96): re-derived from the sweep --
+      1800s is the per-CELL wall-clock budget (not per-call); timeout now 24% of cells (FATS 31 / stack 24 /
+      holding 16), not "rare"; per-call medians stack 1.3 / holding 3.4 / FATS 7.0s (median over successful
+      cells); dropped the stale "flat past ~200s"; snapshot-null denominator gap 6% -> 18% (144/810).
   FOUND BEYOND CATALOG (fix each in its own section):
     - [done] results.tex sec:metrics: dropped "without exceeding the per-episode replan limit" from Success def.
     - [done] results.tex sec:metrics: dropped replan_limit + no_summary from the failure-mode list (cannot occur).
-    - results.tex (denominators para): "differ by about 6% of cells" -> re-verify vs new sweep.
-    - results.tex (planning-budget para): per-call medians 0.97/2.05/2.97 + "flat past ~200s" -> re-verify.
+    - [done] results.tex (denominators para): 6% -> 18% (144/810 snapshot-null cells).
+    - [done] results.tex (planning-budget para): per-call medians refreshed (1.3/3.4/7.0s); "flat past ~200s" dropped; 1800s is per-cell.
     - discussion.tex sec:disc-mbs0: "replan count rises slightly on holding and FATS" -> holding mbs05 now LOWER.
     - results.tex subsec:failure-modes: cell-count wording RESOLVED in the 2-variant rewrite (kept "6" = 3 goals x 2 variants).
 
