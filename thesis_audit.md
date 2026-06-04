@@ -1246,7 +1246,15 @@ once. Follow the canonical "Classical Planning" presentation Till shared (screen
 Refs: background.tex (classical-planning + state-model subsections).
 
 ================================================================================
-#277  [T2] [THESIS]  Whole document: fix many small language/grammar errors
+#277  [DONE 2026-06-04] [T2] [THESIS]  Whole document: fix many small language/grammar errors
+NOTE 2026-06-04: conservative chapter-by-chapter language pass (clear errors only, no voice restyling).
+Fixed: introduction.tex (repeated "in practice"); methods.tex (PDDL-fluents KIF cross-ref reconciled with
+sec:kif_belief [a #278 leftover] + "meaningful/semantically meaningful" redundancy); discussion.tex (two
+metaphorical "orthogonal" -> "separate", per the no-orthogonal-outside-geometry rule); background.tex (two
+contractions "can't"->"cannot", "it's"->"it is"). Abstract, related-work, results, conclusion read clean.
+Prose is well-polished overall; remaining content/data issues are tracked separately (#281 stack-degradation
+explanation, #282 stale numbers/replan_limit, #199 task naming), NOT grammar. Any further subtle polish is
+best left to the author's LLM bulk pass (Marc's suggestion).
 ================================================================================
 [SUPERVISOR 2026-06-04] Both reviewers note many small language errors throughout. Suggested approach
 (Marc): run the full thesis text through an LLM for a grammar/style pass, then apply fixes by hand. Scope
