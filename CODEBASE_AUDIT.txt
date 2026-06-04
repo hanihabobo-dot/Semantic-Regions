@@ -472,12 +472,42 @@ Fix: give the schematic a finite shadow depth mimicking the 3-D sightline-hits-t
 Related: thesis_audit.md #274 (figure-side entry); #266 (caption fixed); shadow_calculator.py.
 
 ================================================================================
+#115. CAMERA GLYPH IN fig:boxelization UNREADABLE AT PRINT SCALE (make it look like a camera)
+================================================================================
+Status/Priority: OPEN, TIER 2 (thesis-figure readability; no runtime effect). Supervisor review
+   2026-06-04 (Marc): the camera marker in boxelization_3d.png is just a black box, indistinguishable
+   from objects at print scale (had to zoom ~469% to tell).
+Where: tools/render_boxelization_3d.py (the camera/viewpoint glyph; "Camera (viewpoint)" legend entry)
+   -> thesis/graphics/boxelization_3d.png.
+What: the camera reads as another black cube. On a printed page it must be obviously a camera.
+Fix: make the glyph clearly a camera -- add a small tripod, use a distinct camera shape/icon, and/or
+   move it outside the task space to mark it as different. Regenerate boxelization_3d.png. Plots ADD --
+   do NOT overwrite the existing PNG silently; regenerate and read it visually before committing.
+Related: thesis_audit.md #283 (thesis-side entry); #114 / thesis #274 (same figure, shadow extent).
+
+================================================================================
+#116. DIAGNOSE STACK-GOAL SUCCESS DEGRADATION WITH HEIGHT (sim/control limit vs planning)
+================================================================================
+Status/Priority: OPEN, TIER 1 (underpins correcting a wrong thesis claim, thesis_audit #281).
+   Supervisor review 2026-06-04 (Till + Marc).
+Where: stack-goal eval runs; execution.py (place/stack, IK/reach at height); the stacking controller.
+What: success on the stack goal drops sharply with stack height. The thesis currently explains this as
+   planning difficulty (more pick/place loops). Hypothesis: it is a sim/control limit -- past some height
+   the arm crashes into / cannot reach the growing stack (model-free controller), not the POD planning.
+Fix/Investigate: (1) control test -- build multiple SEPARATE single stacks (or two stacks side by side)
+   instead of one tall stack; if success stays high, the cause is stacking height/control, not planning.
+   (2) Inspect failing sim runs for the failure mode (arm-into-stack collision, inaccurate place pose,
+   out-of-reach at height). Report the confirmed cause back to thesis_audit #281; likely run alongside
+   the canonical sweep (#113).
+Related: thesis_audit.md #281 (thesis-side prose fix); #113 (canonical sweep); #106 (failure taxonomy).
+
+================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
 Chronological numbers, NOT priority — follow TIER. Closed bodies in git history
 (git log --grep="audit: mark #N") + archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 10 items (bodies above):
+OPEN — 12 items (bodies above):
   #104 T3 — refresh thesis-PDF plots + numbers to post-#100-merge outputs (thesis #121/#168).
   #105 T2 — Wumpus-World baseline (cell-belief search, no shadow geometry) vs uniform/TAMPURA.
   --- batch 2 (2026-05-24 read-through spillover) ---
@@ -494,7 +524,12 @@ OPEN — 10 items (bodies above):
        complete coverage (no no_summary holes, mbs0.10 included, uniform per-goal arms); regen figs.
   #114 T2 — schematic over-extends occlusion shadows to workspace BOUNDS (fig:boxelization panel c);
        real system ends them at the hidden-region end; regen figure. Found via thesis_audit #266/#274.
-  TIER tally: two open T1 (#107, #113); zero T0.
+  --- supervisor review 2026-06-04 ---
+  #115 T2 — camera glyph in fig:boxelization unreadable at print scale; make it a camera (tripod / move
+       out of task space) + regen figure. Thesis-side thesis_audit #283.
+  #116 T1 — diagnose stack-goal success degradation with height (sim/control limit vs planning); dual-stack
+       control test + inspect sim failures. Feeds thesis_audit #281; run with sweep #113.
+  TIER tally: three open T1 (#107, #113, #116); zero T0.
 
 CLOSED (one-line; full detail in git / archive):
   #101 [2026-05-25] resolution-axis writeup (thesis aa6ebc6): "Free-space resolution" subsection
