@@ -1369,11 +1369,23 @@ for a thesis submitted now -- submit the PDF digitally via RWTHonline. Caveat: a
 require printed+bound copies (3 to the ZPA) per PROGRAM-SPECIFIC examination regulations; confirm against
 your program's regs and with your examiner/ZPA. Sources: rwth-aachen.de "Registering and Submitting Your
 Thesis"; ITC blog "The Digital Submission of Theses Is Here!" (2024-12). Matches Marc's "paperless now".
-ADDENDUM 2026-06-04 (author shared internal RD wiki "Abschlussarbeit digital abgeben"): confirmed --
-submit via RWTHonline's "Abgabe Abschlussarbeiten" app: upload the thesis PDF + the Eidesstattliche
-Versicherung (statutory declaration) + (only if the combined institute logo is on the cover) a logo-usage
-form, then click SUBMIT (uploading alone does NOT count). PDF format (extra docs as zip); CET deadline;
-must be ZPA-registered; files cannot be changed after submission. Fully digital; no printed copy mentioned.
+ADDENDUM 2026-06-04 (author shared the internal RD wiki "Abschlussarbeit digital abgeben"):
+Link: https://wiki-intern.rwth-aachen.de/spaces/RD/pages/108963485/Abschlussarbeit+digital+abgeben
+  (RWTH-internal; needs RWTH login). It confirms the digital, no-print process and spells it out:
+  - Tool: RWTHonline -> "Abgabe Abschlussarbeiten" (submit-thesis) application. TWO steps -- first UPLOAD
+    the files, then click SUBMIT. Uploading alone does NOT count as handing in; only "Submit" is official.
+  - Required documents: the thesis as a PDF; the Eidesstattliche Versicherung (statutory declaration of
+    authorship); and, ONLY if the combined institute logo appears on the cover, a logo-usage request form.
+    Main categories must be PDF; any extra files go in a zip.
+  - Prerequisite, "ZPA-registered": ZPA = Zentrales Pruefungsamt (RWTH Central Examination Office). You can
+    only submit once your thesis has been formally REGISTERED (Anmeldung der Abschlussarbeit) and approved
+    by the ZPA; that registration fixes the official topic, the examiner(s), and the submission deadline,
+    and only then does the "Abgabe Abschlussarbeiten" app accept your upload. NB: "ZPA-registered" refers
+    to the THESIS being registered, NOT a special PDF format -- the file you upload is just your normal PDF.
+  - Deadlines are in German CET. After you click Submit the files are LOCKED (cannot be changed), so upload
+    the final version -- incl. the #281/#282 sweep-data refresh -- before submitting.
+  - Confidential theses: password-protect the PDF and share access only with the examiner(s) + ZPA.
+  No printed/bound copy is mentioned anywhere -- the process is fully digital.
 ================================================================================
 [SUPERVISOR 2026-06-04] Confirm the current RWTH submission regulations: whether a physical printout is
 required or submission is now paperless (Marc believes paperless, but verify against current rules;
