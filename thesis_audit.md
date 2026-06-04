@@ -1281,12 +1281,11 @@ Refs: background.tex (KIF intro, #223/#224 locus); methods.tex (KIF fluents); re
 
 ================================================================================
 #279  [DONE 2026-06-04] [T3] [THESIS]  Delete the stray article "the" before PDDL/PDDLStream
-NOTE 2026-06-04: author clarified the target is the PDDL-introduction sentence (background.tex:15,
-rendered "The PDDL~[23] ..."): dropped the leading "The" so it reads "\ac{pddl} \cite{} gives this a
-standardized, more expressive syntax...". Reverted my first guess at background.tex:99 ("extends classical
-PDDL" back to the original "extends the classical PDDL") per the author's "only here". The abstract's
-"a PDDLStream-based planner" was already removed in #275; all other "the PDDL"/"the PDDLStream" uses are
-grammatically fine and were left as-is.
+NOTE 2026-06-04: author identified two spots where "the" precedes PDDL as the head noun, both dropped:
+background.tex:15 (PDDL-introduction sentence "The PDDL~[23] ..." -> "PDDL~[23] ...") and background.tex:99
+("extends the classical PDDL" -> "extends classical PDDL"). Left "the PDDL state/description" and "the
+PDDLStream framework/planner/integration" untouched (PDDL/PDDLStream used as an adjective there, so "the"
+is correct). Abstract's "a PDDLStream-based planner" already removed in #275.
 ================================================================================
 [SUPERVISOR 2026-06-04] Author note: "delete the 'the' behind the PDDL." Locate the stray "the" preceding
 PDDL/PDDLStream/STRIPS (a leftover article) and remove it. Verify by grep before editing. Low priority;
