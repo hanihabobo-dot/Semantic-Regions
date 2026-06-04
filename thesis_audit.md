@@ -1517,6 +1517,15 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
   [x] abstract.tex: "(39.8% vs 1.3%)" + "scenes that the uniform baseline effectively cannot" -> "(75.6% vs
       34.4%)" + "scenes far more often than the uniform baseline". "Order of magnitude fewer cells" + "cuts
       per-call planning time" kept. introduction.tex verified clean (no hero numbers).
+  VERIFICATION 2026-06-04: latexmk main.tex builds CLEAN (68 pp, exit 0, no new undefined refs). Rendered PDF
+      (pdftotext) confirms every refreshed value (tab:headline 75.6/34.4/692.11/924.13/...; tampura 144.4 /
+      median 21.6 / 65.6%; failure-modes "timed out"/"plan failed"; budget 24% timeout / 18% snapshot-null;
+      abstract + conclusion synced) and shows NO stale values/jargon (13.7, 28.37, 156.10, "order of magnitude
+      cheaper", "effectively cannot", replan_limit, no_summary, physics_mismatch, all_searched -> all absent).
+  STATUS: all #282 PROSE + the 2 regenerated figures (solved_vs_time_linear, failure_modes_sem_uni) are DONE
+      and verified. ONLY the resolution arms remain PENDING (subsec:resolution + disc-validity "Resolution
+      regime" para + fig:boxel_count_vs_resolution), gated on the still-running coarse mbs sweep. #282 stays
+      OPEN for that remainder.
   FOUND BEYOND CATALOG (fix each in its own section):
     - [done] results.tex sec:metrics: dropped "without exceeding the per-episode replan limit" from Success def.
     - [done] results.tex sec:metrics: dropped replan_limit + no_summary from the failure-mode list (cannot occur).
