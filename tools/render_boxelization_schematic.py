@@ -71,12 +71,15 @@ C_HIDE_E = "#00838f"   # hidden target edge
 W, H = 10.0, 8.0
 VIEW = (0.7, 1.0)
 
-# objects: (cx, cy, w, h, label)
+# objects: (cx, cy, w, h, label). Larger footprints (and the lower camera in
+# CAM_Z below) give the occlusion Boxels a more legible size; obj2 -- the
+# occluder the hidden target sits behind -- is kept in the mid-field so its
+# deeper shadow ends mid-table rather than clamping to the workspace edge.
 OBJECTS = [
-    (3.5, 4.5, 1.0, 0.8, "obj1"),
-    (6.4, 5.9, 1.0, 1.0, "obj2"),
-    (3.3, 1.8, 1.0, 0.7, "obj3"),
-    (7.3, 2.8, 1.0, 0.8, "obj4"),
+    (3.5, 4.5, 1.4, 1.1, "obj1"),
+    (5.3, 4.0, 1.4, 1.4, "obj2"),
+    (3.3, 1.8, 1.4, 1.0, "obj3"),
+    (6.5, 2.6, 1.4, 1.1, "obj4"),
 ]
 # the workspace = the "table" the occlusion rays terminate on (shadow_calculator
 # clamps every ray hit to the table bounds).
@@ -92,9 +95,9 @@ HIDDEN = (4.8, 5.6, 0.6)
 # that table hit lies at  view + SHADOW_REACH * (corner - view), with
 # SHADOW_REACH = z_cam / (z_cam - z_obj). OBJ_Z matches render_boxelization_3d's
 # OBJ_H so the 3-D figure's shadow depth is consistent with its cube height.
-CAM_Z = 7.0
+CAM_Z = 3.5
 OBJ_Z = 1.0
-SHADOW_REACH = CAM_Z / (CAM_Z - OBJ_Z)   # ~1.17
+SHADOW_REACH = CAM_Z / (CAM_Z - OBJ_Z)   # =1.4
 
 
 def _rect_of(c):

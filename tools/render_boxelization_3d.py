@@ -37,22 +37,26 @@ from matplotlib.colors import to_rgba
 # OWN free-space partition (a real octree, below), so it does NOT import the
 # 2-D quad-tree.
 from render_boxelization_schematic import (
-    OBJECTS, VIEW, W, H, _rect_of,
+    OBJECTS, VIEW, CAM_Z, W, H, _rect_of,
     compute_shadows, silhouette_rays,
     C_VIEW, C_OBJ, C_OBJBOX, C_OCC_E, C_FREE_E, C_TITLE, C_LOS,
     C_HIDE_F, C_HIDE_E,
 )
 
-# The 3-D view gets crowded with the tall swept shadow boxes, so it uses ONE
-# fewer occluder than the 2-D figure (drops obj4) and recomputes the shadow /
-# free-space partition from that smaller scene through the shared functions.
-OBJECTS_3D = [o for o in OBJECTS if o[4] != "obj4"]
+# All four occluders are shown. With the finite occlusion shadows (they now end
+# at the table behind each object instead of sweeping to the workspace edge) the
+# 3-D view no longer gets crowded, so it uses the full scene and recomputes the
+# shadow / free-space partition through the shared functions.
+OBJECTS_3D = list(OBJECTS)
 OBJ_RECTS_3D = [_rect_of(o) for o in OBJECTS_3D]
 OCC_RECTS_3D = compute_shadows(OBJECTS_3D)
 
-# camera body position: pulled forward into open table space toward the open
-# front edge, clear of the perimeter walls (it used to sit on the left wall)
-CAM = (VIEW[0] + 1.1, VIEW[1] - 0.3)
+# The camera glyph sits at the ACTUAL shadow viewpoint (VIEW) and is raised to
+# the projection height CAM_Z, so the occlusion shadows and lines of sight
+# genuinely originate from the drawn camera -- a fixed overhead camera looking
+# down at the table -- rather than from an unmarked point above the room.
+CAM = VIEW
+ZVIEW = CAM_Z + 1.0   # z-limit of the view: tall enough to show the raised camera
 
 ZTOP = 2.0           # workspace height; the octree's first z-split lands at the
                      # object top, exposing the free LAYER above the objects
@@ -141,30 +145,34 @@ def _cylinder(ax, base, axis, radius, length, *, fc, ec, alpha, n=24, zorder=9):
 
 
 def _camera(ax):
-    """A small 3-D camera model on a tripod: dark body box + viewfinder bump + a
-    protruding lens cylinder aimed at the scene centre, raised on three splayed
-    legs so it reads as a camera rather than a plain box. Composed from polygons
-    because matplotlib has no camera primitive."""
+    """The fixed overhead camera, drawn at its true viewpoint (VIEW) raised to the
+    projection height CAM_Z so the shadows and lines of sight visibly originate
+    from it. A compact dark body + viewfinder on a tall tripod, with a lens
+    barrel aimed down at the scene so the lens reads in the image. Composed
+    from polygons because matplotlib has no camera primitive."""
     cx, cy = CAM
-    bw, bd, bh, bz = 1.1, 0.7, 0.7, 0.9
-    # tripod: three splayed legs from the body base down to the table
+    bw, bd, bh = 0.95, 0.6, 0.6          # compact body (~half the earlier size)
+    bz = CAM_Z - bh / 2                   # body centred on the camera height CAM_Z
+    # tall tripod from the body base down to the table
     apex = np.array([cx, cy, bz])
     for ang in (90.0, 210.0, 330.0):
-        foot = np.array([cx + 0.95 * np.cos(np.radians(ang)),
-                         cy + 0.95 * np.sin(np.radians(ang)), 0.0])
+        foot = np.array([cx + 0.5 * np.cos(np.radians(ang)),
+                         cy + 0.5 * np.sin(np.radians(ang)), 0.0])
         leg = foot - apex
         length = float(np.linalg.norm(leg))
-        _cylinder(ax, apex, leg / length, 0.07, length, fc="#1b2631",
+        _cylinder(ax, apex, leg / length, 0.06, length, fc="#1b2631",
                   ec="#1b2631", alpha=1.0, zorder=7)                    # tripod leg
     _box(ax, cx - bw / 2, cy - bd / 2, bz, bw, bd, bh, fc=C_VIEW, ec="#1b2631",
          alpha=1.0, lw=0.4, zorder=8, shade=True)                       # body
-    _box(ax, cx - 0.18, cy - 0.15, bz + bh, 0.36, 0.3, 0.18, fc=C_VIEW,
+    _box(ax, cx - 0.15, cy - 0.12, bz + bh, 0.3, 0.24, 0.16, fc=C_VIEW,
          ec="#1b2631", alpha=1.0, lw=0.4, zorder=8, shade=True)         # viewfinder
-    axis = np.array([5.0 - cx, 4.0 - cy, 0.0]); axis /= np.linalg.norm(axis)
-    base = np.array([cx, cy, bz + bh / 2]) + axis * (bd / 2)
-    _cylinder(ax, base, axis, 0.26, 0.5, fc="#566573", ec="#1b2631",
+    # prominent lens barrel aimed down at the scene centre
+    centre = np.array([cx, cy, CAM_Z])
+    axis = np.array([5.0 - cx, 4.0 - cy, 0.0 - CAM_Z]); axis /= np.linalg.norm(axis)
+    base = centre + axis * (bd / 2)
+    _cylinder(ax, base, axis, 0.24, 0.6, fc="#566573", ec="#1b2631",
               alpha=1.0, zorder=9)                                      # lens barrel
-    _cylinder(ax, base + axis * 0.5, axis, 0.20, 0.03, fc="#aed6f1",
+    _cylinder(ax, base + axis * 0.6, axis, 0.19, 0.05, fc="#aed6f1",
               ec="#5dade2", alpha=1.0, zorder=10)                       # lens glass
 
 
@@ -194,11 +202,18 @@ def _occlusion(ax):
 
 
 def _los(ax):
-    z = OBJ_H / 2
+    # Mathematically accurate line of sight: each ray leaves the camera (at VIEW,
+    # height CAM_Z), grazes an object's top silhouette edge (z=OBJ_H) and
+    # continues to where it meets the table (z=0) at the far edge of that object's
+    # shadow. Along the ray the horizontal position at height z is
+    # view + ((CAM_Z - z)/CAM_Z)*(hit - view), which passes through the top corner
+    # at z=OBJ_H and the table hit (= shadow boundary) at z=0.
+    cam = (float(VIEW[0]), float(VIEW[1]), CAM_Z)
     segs = []
     for obj in OBJECTS_3D:
-        for p0, p1 in silhouette_rays(obj):
-            segs.append([(p0[0], p0[1], z), (p1[0], p1[1], z)])
+        for _p0, hit in silhouette_rays(obj):
+            hit = np.array(hit, float)
+            segs.append([cam, (hit[0], hit[1], 0.0)])
     ax.add_collection3d(Line3DCollection(segs, colors=C_LOS, linewidths=1.0,
                                          linestyles=(0, (4, 3)), zorder=2))
 
@@ -340,10 +355,10 @@ def _room(ax):
 
 
 def _panel(ax, title):
-    ax.set_box_aspect((W, H, ZTOP * 1.5))
+    ax.set_box_aspect((W, H, ZVIEW * 1.25))
     ax.view_init(elev=28, azim=-55)
     ax.set_axis_off()
-    ax.set_xlim(0, W); ax.set_ylim(0, H); ax.set_zlim(0, ZTOP)
+    ax.set_xlim(0, W); ax.set_ylim(0, H); ax.set_zlim(0, ZVIEW)
     ax.set_title(title, fontsize=26, color=C_TITLE, fontweight="bold", y=0.96)
 
 
