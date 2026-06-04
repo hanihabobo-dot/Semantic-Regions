@@ -1201,7 +1201,13 @@ Refs: results.tex (subsec:planning-time, fig:plantime-holding); results.tex:107.
 Refs: abstract.tex; introduction.tex; methods.tex.
 
 ================================================================================
-#274  [T2] [THESIS]  Methods fig:boxelization panel (c): schematic renders shadows to workspace boundary, not hidden-region end
+#274  [DONE 2026-06-04] [T2] [THESIS]  Methods fig:boxelization panel (c): schematic renders shadows to workspace boundary, not hidden-region end
+NOTE 2026-06-04: regenerated thesis/graphics/boxelization_3d.png with Windows Python
+(python tools\render_boxelization_3d.py) after the CODEBASE #114 code fix. Visually verified: panel (c)
+orange occlusion Boxels now stop mid-table where the sightlines meet the table (no longer sweeping to the
+workspace edge), the dashed lines of sight end at the same point, and the largest shadow behind the rear
+occluder still encloses the cyan hidden target; the freed edge space now shows as Free Space Boxels in
+(e)-(f). Camera tripod (#283) intact; other panels unchanged. Matches the #266 caption. Code-side = #114.
 ================================================================================
 [FOUND 2026-06-04 while fixing #266] The figure boxelization_3d.png panel (c) (thesis/graphics/) visibly
 sweeps the orange occlusion Boxels back to the table/workspace edges. Root cause is figure-rendering code:
