@@ -1448,6 +1448,9 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
   [x] B tab:headline full replace (n_cells 299/300 -> 90) + "order of magnitude in both axes" framing
       reworded to several-fold (holding ~3.3x, FATS ~5.6x) to >50x (stack); success-rate gap ~1.4-2.2x.
       Caption notes the new 90 = 30 seeds x 3 difficulties sample.
+  [x] subsec:anytime: rewrote the 3 observations (semantic rise ~15s on stack / ~124-134s on holding+FATS;
+      uniform FATS solves 34.4% not 4/300; uniform stack 0 -> 36% after ~800s) + caption. Axis wording made
+      neutral pending the log -> linear figure change (separate unit, author request).
   FOUND BEYOND CATALOG (fix each in its own section):
     - results.tex sec:metrics: "Success ... without exceeding the per-episode replan limit" -> cap removed (#107).
     - results.tex sec:metrics: failure-mode list still names replan_limit + no_summary (both gone).
