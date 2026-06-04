@@ -1323,7 +1323,16 @@ Add to references.bib. NOTE: published AAAI'25/'26, so prior unawareness is fine
 Refs: related-work.tex (Critical Regions / Limitations of Static Semantic Abstractions); background.tex; references.bib. Related: #225 #226.
 
 ================================================================================
-#281  [T1] [THESIS]  Results/Discussion: stack-goal degradation explanation is WRONG (sim/control limit, not planning difficulty)
+#281  [DONE 2026-06-04] [T1] [THESIS]  Results/Discussion: stack-goal degradation explanation is WRONG (sim/control limit, not planning difficulty)
+NOTE 2026-06-04: rewrote the stack-goal degradation explanation in results.tex (the "This decline with
+height is expected..." sentence). Reattributed the success collapse with stack height to a simulation/
+control limit -- the simplified manipulation model (top-down grasps at a fixed height offset, a hardcoded
+post-place lift, collisions logged but never triggering recovery) means the arm cannot reliably place
+on/clear the growing tower past a few layers -- NOT planning difficulty or the replan budget. Cross-refs
+\cref{sec:limitations} ("Manipulation and execution"). Dropped the replan_limit claim (removed under #282)
+and the fig:failure-modes ref in that paragraph; changed no numbers (refresh under #282). discussion.tex
+needed no change: its stack mention explains the semantic/uniform overhead gap, not the wrong replan-budget
+cause. Confirmation experiment CODEBASE #116 KILLED; cause accepted from Till+Marc.
 ================================================================================
 [SUPERVISOR 2026-06-04] The current explanation for stack-goal success degradation with stack height
 (framed as planning difficulty: more pick/place loops -> more chances to fail under the time limit) is
