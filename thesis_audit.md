@@ -1356,7 +1356,14 @@ PNG silently; regenerate + visually verify).
 Refs: thesis/graphics/boxelization_3d.png; methods.tex:20 (fig:boxelization); CODEBASE_AUDIT.txt #115. Related: #274 (same figure).
 
 ================================================================================
-#284  [T3] [ADMIN]  Check whether a printed thesis copy is required (likely paperless now)
+#284  [DONE 2026-06-04] [T3] [ADMIN]  Check whether a printed thesis copy is required (likely paperless now)
+NOTE 2026-06-04: checked current RWTH policy (web). Digital submission via RWTHonline/DivA is now the
+standard and is MANDATORY for theses registered from 2025-10-01 onward (theses registered before that
+could choose digital or printed in agreement with the primary examiner). So no printed copy is expected
+for a thesis submitted now -- submit the PDF digitally via RWTHonline. Caveat: a few programs may still
+require printed+bound copies (3 to the ZPA) per PROGRAM-SPECIFIC examination regulations; confirm against
+your program's regs and with your examiner/ZPA. Sources: rwth-aachen.de "Registering and Submitting Your
+Thesis"; ITC blog "The Digital Submission of Theses Is Here!" (2024-12). Matches Marc's "paperless now".
 ================================================================================
 [SUPERVISOR 2026-06-04] Confirm the current RWTH submission regulations: whether a physical printout is
 required or submission is now paperless (Marc believes paperless, but verify against current rules;
