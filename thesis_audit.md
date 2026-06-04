@@ -1208,6 +1208,11 @@ orange occlusion Boxels now stop mid-table where the sightlines meet the table (
 workspace edge), the dashed lines of sight end at the same point, and the largest shadow behind the rear
 occluder still encloses the cyan hidden target; the freed edge space now shows as Free Space Boxels in
 (e)-(f). Camera tripod (#283) intact; other panels unchanged. Matches the #266 caption. Code-side = #114.
+REFINED 2026-06-04 (review follow-up): enlarged the occluders and lowered the camera (reach 1.4) so the
+shadows read clearly; restored the 4th occluder; redrew the lines of sight as exact camera rays and moved
+the camera to its true elevated viewpoint -- a smaller overhead camera with a visible lens -- so the
+shadows and lines of sight genuinely originate from it. Re-rendered + visually verified. Code-side
+camera/line-of-sight fix = CODEBASE #117.
 ================================================================================
 [FOUND 2026-06-04 while fixing #266] The figure boxelization_3d.png panel (c) (thesis/graphics/) visibly
 sweeps the orange occlusion Boxels back to the table/workspace edges. Root cause is figure-rendering code:
