@@ -1255,7 +1255,18 @@ tracked separately.
 Refs: thesis/chapters/*.tex; abstract.tex.
 
 ================================================================================
-#278  [T1] [THESIS]  KIFs vs K-literals: not interchangeable; use KIFs consistently + cite their source
+#278  [DONE 2026-06-04] [T1] [THESIS]  KIFs vs K-literals: not interchangeable; use KIFs consistently + cite their source
+NOTE 2026-06-04: corrected the KIF/K-literal conflation per Till. Source confirmed: Brenner & Nebel
+(2009), AAMAS 19(3):297-331, DOI 10.1007/s10458-009-9081-1 (user supplied the PDF; it is
+password-protected, so citation confirmed via web search instead). Reframed background.tex sec:2.2.1: a
+KIF (Brenner-Nebel know-whether) records that the agent knows the VALUE of a fact (paired with the value
+fluent), NOT a compacted K(L)/K(neg L) pair; K(L) is know-that; the two are not interchangeable. Added
+@article{brenner2009continual} to references.bib; retitled subsection to "...K-Literals, and Know-If
+Fluents". Consistency pass (our representation now called Know-If Fluents, not K-/knowledge literals):
+methods.tex (:61 belief + pair sentences; :74 AP propositions + example), abstract.tex, conclusion.tex:8,
+discussion.tex (simplifications note), related-work.tex (:30, :37(ii)). Kept "knowledge literals" for the
+GENERAL POD line (CLG/K-replanner/LW1) -- correct. introduction.tex:34 already correct. Did NOT overhaul
+K(...) math notation beyond touched spots, nor discussion.tex:91/116 generic "knowledge-literal".
 ================================================================================
 [SUPERVISOR 2026-06-04] The thesis conflates Know-If Fluents (KIFs) and K-literals and uses them
 interchangeably; Till flags this as a real error (his own prior misunderstanding too). We actually use
