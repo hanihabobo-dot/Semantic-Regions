@@ -1465,9 +1465,12 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
       tools/regen_failure_modes_sem_uni.py; rewrote text+caption: timeout now dominant, no replan_limit
       mention, no mbs0.05. TEMPORARY MISMATCH (author-accepted): this figure shows 2 variants, the rest of
       Results (table + other figures) still shows 3; mbs0.05 removal scope = this figure only for now.
+  [x] AUTHOR DIRECTIVE (never mention the replan limit): removed all replan-limit/cap references + change-narration
+      from prose -- sec:metrics Success def + failure-mode list; subsec:anytime + subsec:planning-time dropped the
+      "with the cap removed" framing and the "before / no longer" wording. Thesis presents the system as-is.
   FOUND BEYOND CATALOG (fix each in its own section):
-    - results.tex sec:metrics: "Success ... without exceeding the per-episode replan limit" -> cap removed (#107).
-    - results.tex sec:metrics: failure-mode list still names replan_limit + no_summary (both gone).
+    - [done] results.tex sec:metrics: dropped "without exceeding the per-episode replan limit" from Success def.
+    - [done] results.tex sec:metrics: dropped replan_limit + no_summary from the failure-mode list (cannot occur).
     - results.tex (denominators para): "differ by about 6% of cells" -> re-verify vs new sweep.
     - results.tex (planning-budget para): per-call medians 0.97/2.05/2.97 + "flat past ~200s" -> re-verify.
     - discussion.tex sec:disc-mbs0: "replan count rises slightly on holding and FATS" -> holding mbs05 now LOWER.
