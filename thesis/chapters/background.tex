@@ -8,45 +8,11 @@ This chapter builds up the pieces the thesis depends on, ending with PDDLStream 
 \Ac{ai} planning produces a sequence of actions---a plan---that gets from a given initial state to a specified goal \cite{ghallab2004automated}.
 
 \subsection{State-Space Models in Classical Planning}
-The formal basis for classical planning problems is a \textit{state-space model} \cite{geffner2013concise, hofmann2024learning, ghallab2004automated}. A state-space model defines every possible configuration of the world and how actions move between configurations.
+Classical planning describes problems in a \textit{factored} representation: states are specified through the atoms that hold and actions through their effects on those atoms, rather than by enumerating every configuration of the world explicitly, which is infeasible for all but the smallest problems \cite{geffner2013concise, ghallab2004automated}.
 
-More formally, a deterministic state-space model can be described as a tuple $M =\allowbreak \langle S, s_0, S_G,\allowbreak Act, A, f \rangle$, where:
-\begin{itemize}
-    \item $S$: A set of all possible \textit{states}, where each state is the set of atoms (ground propositions) true in a configuration of the world. For example, in a blocksworld with blocks A, B and a table, a state could be $\{\texttt{(on A B)}, \texttt{(ontable B)}, \texttt{(handempty)}\}$.
-    \item $s_0 \in S$: The specific \textit{initial state} from which planning begins, e.g.\ $\{\texttt{(ontable A)},\allowbreak \texttt{(ontable B)},\allowbreak \texttt{(handempty)}\}$.
-    \item $S_G \subseteq S$: The set of \textit{goal states}---any state satisfying the desired objective, e.g.\ every state containing \texttt{(on A B)}.
-    \item $Act$: A set of all possible \textit{actions} the agent can perform. E.g., \textit{pick blockX}, \textit{stack blockX on blockY}.
-    \item $A(s) \subseteq Act$: A function that, for any given state $s \in S$, returns the subset of actions from $Act$ that are \textit{applicable} (can be executed) in state $s$. For example, \textit{pick blockA} is applicable only if Block A is clear (nothing on top of it) and the robot hand is empty.
-    \item $f(a, s) \rightarrow s'$: A deterministic \textit{state transition function}. Given a state $s$ and an applicable action $a \in A(s)$, $f(a,s)$ returns the unique successor state $s'$. For example, applying \textit{pick blockA} to $\{\texttt{(ontable A)},\allowbreak \texttt{(ontable B)},\allowbreak \texttt{(handempty)}\}$ yields $\{\texttt{(ontable B)},\allowbreak \texttt{(holding A)}\}$.
-\end{itemize}
-A \textit{solution} or \textit{plan} is then a sequence of actions $\sigma = [a_0, a_1, \dots, a_n]$ such that if $s_i$ is the state before action $a_i$, then $a_i \in A(s_i)$, $s_{i+1} = f(a_i, s_i)$, and the final state $s_{n+1}$ is in $S_G$. Often, we are interested in an \textit{optimal plan}, which could be the shortest sequence of actions or one that minimizes some associated cost.
+A foundational language for this is \textbf{\acs{strips}} \cite{fikes1971strips}. A \textbf{state} is the set of ground atoms (propositions) true in a configuration of the world---for example, in a blocksworld with blocks A, B and a table, $\{\texttt{(on A B)}, \texttt{(ontable B)}, \texttt{(handempty)}\}$. An \textbf{action} $a$ is given by three sets of atoms: preconditions $\mathrm{pre}(a)$, an add-list $\mathrm{add}(a)$, and a delete-list $\mathrm{del}(a)$. Action $a$ is \textit{applicable} in a state $s$ iff $\mathrm{pre}(a) \subseteq s$, and applying it produces the successor state $(s \setminus \mathrm{del}(a)) \cup \mathrm{add}(a)$.
 
-\paragraph{Compact representation: STRIPS, and PDDL.}
-Explicitly enumerating all states $S$ is infeasible for all but the simplest problems. Planning problems are therefore described compactly in a \textit{factored} representation, using a planning language that specifies states through the atoms that hold and actions through their effects on those atoms.
-
-A foundational language for this is \textbf{\acs{strips}} \cite{fikes1971strips}. In STRIPS:
-\begin{itemize}
-    \item \textbf{States} are represented as sets of true propositions (e.g., \texttt{ (on A B), (ontable B), (handempty) }).
-    \item \textbf{Actions} are defined by:
-        \begin{itemize}
-            \item \textit{Preconditions}: A set of propositions that must be true in the current state for the action to be applicable.
-            \item \textit{Effects}: Specified as two lists:
-                \begin{itemize}
-                    \item \textit{Add-list}: A set of propositions that become true after the action is executed.
-                    \item \textit{Delete-list}: A set of propositions that become false (are no longer true) after the action.
-                \end{itemize}
-        \end{itemize}
-    \item The transition function $f(a,s)$ is implicitly defined: the new state $s'$ is obtained by taking state $s$, removing all propositions in the delete-list of $a$, and then adding all propositions in the add-list of $a$.
-    \item The initial state ($s_0$) is a set of initially true propositions, and the goal ($S_G$) is specified by a set of propositions that must be true in any goal state.
-\end{itemize}
-
-The \textbf{\ac{pddl}} \cite{aeronautiques1998pddl} builds upon and extends the STRIPS representation, providing a more expressive and standardized syntax for a wider range of classical planning problems. In PDDL:
-\begin{itemize}
-    \item \textbf{Domain File} defines:
-        \begin{itemize}
-            \item \textit{Types}: Categories for objects (e.g., \texttt{block}, \texttt{robot}).
-            \item \textit{Predicates}: Relations or properties (e.g., \texttt{(on ?x - block ?y - block)}).
-            \item \textit{Action Schemas}: Templates for actions, generalizing STRIPS operators. For instance:
+The \textbf{\ac{pddl}} \cite{aeronautiques1998pddl} gives this a standardized, more expressive syntax, splitting a problem $P = \langle D, I \rangle$ into a domain $D$ and an instance $I$. The \textbf{domain} $D$ declares \textit{predicates} (relations such as \texttt{(on ?x ?y)}) and \textit{action schemas}---parameterized templates that generalize STRIPS operators, e.g.:
             \begin{lstlisting}[style=PDDL,  label=lst:pddl_stack_action]
                 (:action stack
                     :parameters (?obj1 - block ?obj2 - block)
@@ -56,17 +22,9 @@ The \textbf{\ac{pddl}} \cite{aeronautiques1998pddl} builds upon and extends the 
                 )
 
             \end{lstlisting}
+whose negative effects (\texttt{(holding ?obj1)}, \texttt{(clear ?obj2)}) form the delete-list and whose positive effects form the add-list. The \textbf{instance} $I$ lists the \textit{objects}, the \textit{initial state} $s_0$ (the ground atoms true at the start), and the \textit{goal} $g$ (ground atoms required in any goal state). Grounding the schemas---replacing their parameters by objects---yields the ground actions. PDDL also supports features beyond STRIPS, such as conditional effects (\texttt{(when <condition> <effect>)}), numeric fluents, and axioms (derived predicates).
 
-                In STRIPS terms, this action's delete-list contains \texttt{(holding ?obj1)} and \texttt{(clear ?obj2)}, while its add-list contains \texttt{(on ?obj1 ?obj2)}, \texttt{(handempty)}, and \texttt{(clear ?obj1)}.
-        \end{itemize}
-    \item \textbf{Problem File} specifies:
-        \begin{itemize}
-            \item \textit{Objects}: Specific objects (e.g., \texttt{A, B, C - block}).
-            \item \textit{Initial State (\texttt{Init})}: Ground atoms true at the start.
-            \item \textit{Goal (\texttt{G})}: Ground atoms that must be true in a goal state.
-        \end{itemize}
-\end{itemize}
-A PDDL problem $P = \langle \text{Domain}, \text{Instance} \rangle$ thus compactly encodes the state model $S(P)$. Ground actions (action schemas with parameters replaced by specific objects) form the set $Act$. More advanced PDDL versions also support features beyond STRIPS, such as conditional effects (\texttt{(when <condition> <effect>)}), numeric fluents, and axioms (derived predicates).
+This syntax induces a \textit{state model} $S(P) = \langle S, s_0, S_G, Act, A, f \rangle$ as its semantics \cite{geffner2013concise, hofmann2024learning}: $S$ is the set of all states; $s_0 \in S$ the initial state; $Act$ the set of ground actions; $A(s) = \{\, a \in Act : \mathrm{pre}(a) \subseteq s \,\}$ the actions applicable in $s$; $f(a, s) = (s \setminus \mathrm{del}(a)) \cup \mathrm{add}(a)$ the successor state for $a \in A(s)$; and $S_G = \{\, s \in S : g \subseteq s \,\}$ the goal states. A \textit{solution} (or \textit{plan}) is a sequence of actions $\sigma = [a_0, \dots, a_n]$ with $a_i \in A(s_i)$ and $s_{i+1} = f(a_i, s_i)$ that ends in a goal state $s_{n+1} \in S_G$; an \textit{optimal} plan minimizes length or an associated cost.
 %Derived predicates allow the definition of new predicates whose truth values are logically inferred from the base predicates in the current state, rather than being directly changed by action effects. For example, one might define:
 % \begin{lstlisting}[style=PDDL, language=Lisp, basicstyle=\ttfamily\scriptsize]
 % (:derived (block_in_region ?b - block ?r - region)
