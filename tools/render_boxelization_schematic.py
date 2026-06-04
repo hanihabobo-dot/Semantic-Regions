@@ -85,6 +85,17 @@ BOUNDS = (0.0, 0.0, W, H)
 # cannot see it -- the robot must reason about the shadow to find it. (cx, cy, s)
 HIDDEN = (4.8, 5.6, 0.6)
 
+# Camera and object heights, used only to give the top-down occlusion a finite
+# depth. The 2-D figure has no real z, but the real system (shadow_calculator)
+# ends each shadow where the camera's sightline grazing the object's TOP-back
+# edge descends to the table -- not at the workspace edge. By similar triangles
+# that table hit lies at  view + SHADOW_REACH * (corner - view), with
+# SHADOW_REACH = z_cam / (z_cam - z_obj). OBJ_Z matches render_boxelization_3d's
+# OBJ_H so the 3-D figure's shadow depth is consistent with its cube height.
+CAM_Z = 7.0
+OBJ_Z = 1.0
+SHADOW_REACH = CAM_Z / (CAM_Z - OBJ_Z)   # ~1.17
+
 
 def _rect_of(c):
     cx, cy, w, h = c[:4]
@@ -103,25 +114,22 @@ OBJ_RECTS = [_rect_of(o) for o in OBJECTS]
 # ----------------------------------------------- occlusion (shadow) geometry
 # Faithful 2-D port of shadow_calculator.ShadowCalculator.calculate_shadow_boxel
 # (top-down view): from the camera, rays graze each object's far ("back")
-# corners and continue to the workspace boundary; the shadow Boxel is the AABB
-# of {object box U ray-hit points} with its near face clipped to the object's
-# back face, then split around any OTHER object it sweeps over (the slab
-# directly behind that object is dropped as it is occluded twice over). This
-# replaces the hand-placed rectangles the schematic used before.
-def _ray_box_exit(origin, direction, bounds):
-    """Smallest t>0 at which origin + t*direction leaves the bounds box."""
-    x0, y0, x1, y1 = bounds
-    ts = []
-    if direction[0] > 1e-12:
-        ts.append((x1 - origin[0]) / direction[0])
-    elif direction[0] < -1e-12:
-        ts.append((x0 - origin[0]) / direction[0])
-    if direction[1] > 1e-12:
-        ts.append((y1 - origin[1]) / direction[1])
-    elif direction[1] < -1e-12:
-        ts.append((y0 - origin[1]) / direction[1])
-    ts = [t for t in ts if t > 0]
-    return min(ts) if ts else 0.0
+# corners and continue to where they meet the table behind the object -- a
+# finite depth set by the camera and object heights (SHADOW_REACH), clamped to
+# the workspace; the shadow Boxel is the AABB of {object box U ray-hit points}
+# with its near face clipped to the object's back face, then split around any
+# OTHER object it sweeps over (the slab directly behind that object is dropped
+# as it is occluded twice over). This replaces the hand-placed rectangles the
+# schematic used before.
+def _sightline_table_hit(corner):
+    """Top-down point where the camera's sightline grazing this top-edge corner
+    meets the table, clamped to the table bounds. Mimics shadow_calculator's
+    ray-hits-table termination (replaces the old sweep-to-workspace-edge)."""
+    view = np.array(VIEW, float)
+    hit = view + SHADOW_REACH * (np.asarray(corner, float) - view)
+    hit[0] = min(max(hit[0], BOUNDS[0]), BOUNDS[2])
+    hit[1] = min(max(hit[1], BOUNDS[1]), BOUNDS[3])
+    return hit
 
 
 def _corners(cx, cy, w, h):
@@ -139,15 +147,7 @@ def _swept_shadow(obj):
     cam_dir /= np.linalg.norm(cam_dir)
     corners = _corners(cx, cy, w, h)
     back = [c for c in corners if np.dot(c - center, cam_dir) > 0] or list(corners)
-    hits = []
-    for corner in back:
-        d = corner - view
-        d /= np.linalg.norm(d)
-        hit = corner + d * _ray_box_exit(corner, d, BOUNDS)
-        hit[0] = min(max(hit[0], BOUNDS[0]), BOUNDS[2])
-        hit[1] = min(max(hit[1], BOUNDS[1]), BOUNDS[3])
-        hits.append(hit)
-    hits = np.array(hits)
+    hits = np.array([_sightline_table_hit(corner) for corner in back])
     o_min = center - np.array([w / 2, h / 2])
     o_max = center + np.array([w / 2, h / 2])
     s_min = np.minimum(o_min, hits.min(axis=0))
@@ -227,17 +227,16 @@ def compute_shadows(objects=None):
 
 
 def silhouette_rays(obj):
-    """The two camera rays grazing the object's silhouette, continued past it to
-    the workspace boundary -- the line of sight drawn in panel (c)."""
+    """The two camera rays grazing the object's silhouette, continued to where
+    they meet the table behind the object -- the line of sight drawn in panel
+    (c)."""
     cx, cy, w, h, _ = obj
     view = np.array(VIEW, float)
     corners = _corners(cx, cy, w, h)
     angles = [np.arctan2(c[1] - view[1], c[0] - view[0]) for c in corners]
     rays = []
     for idx in (int(np.argmin(angles)), int(np.argmax(angles))):
-        d = corners[idx] - view
-        d /= np.linalg.norm(d)
-        end = view + d * _ray_box_exit(view, d, BOUNDS)
+        end = _sightline_table_hit(corners[idx])
         rays.append(((view[0], view[1]), (end[0], end[1])))
     return rays
 

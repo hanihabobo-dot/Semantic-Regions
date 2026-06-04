@@ -453,9 +453,16 @@ Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no
    dir; read regenerated PNGs before committing.
 
 ================================================================================
-#114. SCHEMATIC OVER-EXTENDS OCCLUSION SHADOWS TO WORKSPACE BOUNDS (fig:boxelization panel c)
+#114. [DONE 2026-06-04] SCHEMATIC OVER-EXTENDS OCCLUSION SHADOWS TO WORKSPACE BOUNDS (fig:boxelization panel c)
 ================================================================================
-Status/Priority: OPEN, TIER 2 (thesis-figure accuracy; no runtime effect). Found 2026-06-04 while
+RESOLVED 2026-06-04: render_boxelization_schematic.py now ends each occlusion where the camera's
+   sightline grazing the object's top-back edge meets the table -- _sightline_table_hit() projects
+   view + SHADOW_REACH*(corner-view) with SHADOW_REACH = z_cam/(z_cam-z_obj) (CAM_Z=7, OBJ_Z=1),
+   clamped to the table -- replacing the old _ray_box_exit sweep to the workspace edge (now removed).
+   Applied to BOTH _swept_shadow and silhouette_rays, so panel (c)'s orange shadows AND dashed lines
+   of sight terminate at the hidden-region end, matching the #266 caption. py_compile OK. Figure-side
+   regeneration of boxelization_3d.png is thesis #274.
+Status/Priority: DONE 2026-06-04, TIER 2 (thesis-figure accuracy; no runtime effect). Found 2026-06-04 while
    fixing thesis_audit #266 (panel-c caption).
 Where: tools/render_boxelization_schematic.py:_swept_shadow (~146-162) casts shadow rays to the
    workspace BOUNDS via _ray_box_exit; this 2-D top-down geometry is reused by
