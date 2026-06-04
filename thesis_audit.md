@@ -1460,13 +1460,18 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
   [x] subsec:planning-time: holding adaptive ~38-234s (not <20s), uniform 302-570s; stack sem 2-31s vs
       uniform 875-1189s; FATS sem 20-253s vs uniform 623-865s. Dropped "scale gracefully"/"four-to-five
       times" (adaptive now non-monotonic, semantic peaks at n_occ=3); representation mechanism kept verbatim.
+  [x] subsec:failure-modes: regenerated to semantic-vs-uniform ONLY (6 bars) per author "just this figure"
+      -> added thesis/graphics/failure_modes_sem_uni.png (3-variant failure_modes.png preserved) via
+      tools/regen_failure_modes_sem_uni.py; rewrote text+caption: timeout now dominant, no replan_limit
+      mention, no mbs0.05. TEMPORARY MISMATCH (author-accepted): this figure shows 2 variants, the rest of
+      Results (table + other figures) still shows 3; mbs0.05 removal scope = this figure only for now.
   FOUND BEYOND CATALOG (fix each in its own section):
     - results.tex sec:metrics: "Success ... without exceeding the per-episode replan limit" -> cap removed (#107).
     - results.tex sec:metrics: failure-mode list still names replan_limit + no_summary (both gone).
     - results.tex (denominators para): "differ by about 6% of cells" -> re-verify vs new sweep.
     - results.tex (planning-budget para): per-call medians 0.97/2.05/2.97 + "flat past ~200s" -> re-verify.
     - discussion.tex sec:disc-mbs0: "replan count rises slightly on holding and FATS" -> holding mbs05 now LOWER.
-    - results.tex subsec:failure-modes: "across all 6 (goal,variant) cells" -> should be 9; confirm vs refreshed fig.
+    - results.tex subsec:failure-modes: cell-count wording RESOLVED in the 2-variant rewrite (kept "6" = 3 goals x 2 variants).
 
 ================================================================================
 #283  [DONE 2026-06-04] [T2] [THESIS]  fig:boxelization: camera glyph unreadable at print scale (make it look like a camera)
