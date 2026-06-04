@@ -1369,6 +1369,11 @@ for a thesis submitted now -- submit the PDF digitally via RWTHonline. Caveat: a
 require printed+bound copies (3 to the ZPA) per PROGRAM-SPECIFIC examination regulations; confirm against
 your program's regs and with your examiner/ZPA. Sources: rwth-aachen.de "Registering and Submitting Your
 Thesis"; ITC blog "The Digital Submission of Theses Is Here!" (2024-12). Matches Marc's "paperless now".
+ADDENDUM 2026-06-04 (author shared internal RD wiki "Abschlussarbeit digital abgeben"): confirmed --
+submit via RWTHonline's "Abgabe Abschlussarbeiten" app: upload the thesis PDF + the Eidesstattliche
+Versicherung (statutory declaration) + (only if the combined institute logo is on the cover) a logo-usage
+form, then click SUBMIT (uploading alone does NOT count). PDF format (extra docs as zip); CET deadline;
+must be ZPA-registered; files cannot be changed after submission. Fully digital; no printed copy mentioned.
 ================================================================================
 [SUPERVISOR 2026-06-04] Confirm the current RWTH submission regulations: whether a physical printout is
 required or submission is now paperless (Marc believes paperless, but verify against current rules;
