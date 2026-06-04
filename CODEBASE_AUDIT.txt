@@ -453,12 +453,31 @@ Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no
    dir; read regenerated PNGs before committing.
 
 ================================================================================
+#114. SCHEMATIC OVER-EXTENDS OCCLUSION SHADOWS TO WORKSPACE BOUNDS (fig:boxelization panel c)
+================================================================================
+Status/Priority: OPEN, TIER 2 (thesis-figure accuracy; no runtime effect). Found 2026-06-04 while
+   fixing thesis_audit #266 (panel-c caption).
+Where: tools/render_boxelization_schematic.py:_swept_shadow (~146-162) casts shadow rays to the
+   workspace BOUNDS via _ray_box_exit; this 2-D top-down geometry is reused by
+   tools/render_boxelization_3d.py (compute_shadows) to render thesis/graphics/boxelization_3d.png.
+What: the schematic sweeps each occlusion Boxel from the object's back face to the workspace edge, so
+   panel (c) shows orange shadows running to the table boundary. The REAL system
+   (shadow_calculator.py:76-177) ends each shadow where the back-corner sightlines meet the table
+   surface (the hidden-region end), clamped to the table; height forced >= object. The #266 caption
+   now describes the real behaviour, leaving the figure as the remaining mismatch.
+Fix: give the schematic a finite shadow depth mimicking the 3-D sightline-hits-table termination
+   (project the back/top-edge sightlines to the table plane) instead of _ray_box_exit-to-BOUNDS;
+   regenerate boxelization_3d.png. Plots ADD -- do NOT overwrite the existing PNG silently; regenerate
+   and read it visually before committing.
+Related: thesis_audit.md #274 (figure-side entry); #266 (caption fixed); shadow_calculator.py.
+
+================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
 Chronological numbers, NOT priority — follow TIER. Closed bodies in git history
 (git log --grep="audit: mark #N") + archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 9 items (bodies above):
+OPEN — 10 items (bodies above):
   #104 T3 — refresh thesis-PDF plots + numbers to post-#100-merge outputs (thesis #121/#168).
   #105 T2 — Wumpus-World baseline (cell-belief search, no shadow geometry) vs uniform/TAMPURA.
   --- batch 2 (2026-05-24 read-through spillover) ---
@@ -473,6 +492,8 @@ OPEN — 9 items (bodies above):
   #112 T3 — (optional) Wilson interval for success-rate plots (thesis #207).
   #113 T1 — FULL canonical sweep re-run: reproduce all data + add mbs0.01 (1 cm) arm; ensure
        complete coverage (no no_summary holes, mbs0.10 included, uniform per-goal arms); regen figs.
+  #114 T2 — schematic over-extends occlusion shadows to workspace BOUNDS (fig:boxelization panel c);
+       real system ends them at the hidden-region end; regen figure. Found via thesis_audit #266/#274.
   TIER tally: two open T1 (#107, #113); zero T0.
 
 CLOSED (one-line; full detail in git / archive):
