@@ -1333,6 +1333,13 @@ prose once confirmed. Confirmation experiment cross-filed as CODEBASE_AUDIT.txt 
 SEPARATE stacks side-by-side; if those succeed more often, it is stacking-height/control, unrelated to
 planning; also inspect sim runs for the crash / out-of-reach failure).
 Refs: results.tex (stack success vs height; failure modes); discussion.tex; CODEBASE_AUDIT.txt #116.
+UPDATE 2026-06-04 (author decision): CODEBASE #116 (the confirmation experiment) is KILLED -- the cause is
+accepted from Till+Marc's observation, so #281 is to be written DIRECTLY, no experiment. TASK: rewrite the
+stack-goal degradation explanation (results.tex:162; check discussion.tex too) to attribute the collapse to
+a simulation/control limit -- past a certain height the arm collides with / cannot reliably reach the
+growing tower (a model-free controller limit) -- NOT planning difficulty or the replan budget. (The current
+text also cites replan_limit, which is being removed under #282.) NEXT-BATCH ORDER: #281 (this) ->
+CODEBASE #114 (shadow-schematic code) -> #274 (regenerate the figure).
 
 ================================================================================
 #282  [T1] [THESIS]  Results/Discussion: refresh ALL numbers + conclusions from the NEW sweep

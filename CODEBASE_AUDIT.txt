@@ -489,9 +489,13 @@ Fix: make the glyph clearly a camera -- add a small tripod, use a distinct camer
 Related: thesis_audit.md #283 (thesis-side entry); #114 / thesis #274 (same figure, shadow extent).
 
 ================================================================================
-#116. DIAGNOSE STACK-GOAL SUCCESS DEGRADATION WITH HEIGHT (sim/control limit vs planning)
+#116. [KILLED 2026-06-04] DIAGNOSE STACK-GOAL SUCCESS DEGRADATION WITH HEIGHT (sim/control limit vs planning)
 ================================================================================
-Status/Priority: OPEN, TIER 1 (underpins correcting a wrong thesis claim, thesis_audit #281).
+KILLED 2026-06-04 (author decision): the dual-stack control experiment is dropped. The cause is taken as
+established from the supervisors' direct observation (Till + Marc): past a certain stack height the arm
+collides with / cannot reliably reach the growing tower -- a model-free controller/sim limit, not POD
+planning. thesis_audit #281 is rewritten directly from that diagnosis, without running the experiment.
+Status/Priority: KILLED 2026-06-04, was TIER 1 (underpinned thesis_audit #281).
    Supervisor review 2026-06-04 (Till + Marc).
 Where: stack-goal eval runs; execution.py (place/stack, IK/reach at height); the stacking controller.
 What: success on the stack goal drops sharply with stack height. The thesis currently explains this as
@@ -510,7 +514,7 @@ SUMMARY — STATUS (updated 2026-05-24)
 Chronological numbers, NOT priority — follow TIER. Closed bodies in git history
 (git log --grep="audit: mark #N") + archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 12 items (bodies above):
+OPEN — 10 items (bodies above):
   #104 T3 — refresh thesis-PDF plots + numbers to post-#100-merge outputs (thesis #121/#168).
   #105 T2 — Wumpus-World baseline (cell-belief search, no shadow geometry) vs uniform/TAMPURA.
   --- batch 2 (2026-05-24 read-through spillover) ---
@@ -527,14 +531,12 @@ OPEN — 12 items (bodies above):
        complete coverage (no no_summary holes, mbs0.10 included, uniform per-goal arms); regen figs.
   #114 T2 — schematic over-extends occlusion shadows to workspace BOUNDS (fig:boxelization panel c);
        real system ends them at the hidden-region end; regen figure. Found via thesis_audit #266/#274.
-  --- supervisor review 2026-06-04 ---
-  #115 T2 — camera glyph in fig:boxelization unreadable at print scale; make it a camera (tripod / move
-       out of task space) + regen figure. Thesis-side thesis_audit #283.
-  #116 T1 — diagnose stack-goal success degradation with height (sim/control limit vs planning); dual-stack
-       control test + inspect sim failures. Feeds thesis_audit #281; run with sweep #113.
-  TIER tally: three open T1 (#107, #113, #116); zero T0.
+  TIER tally: two open T1 (#107, #113); zero T0.
 
 CLOSED (one-line; full detail in git / archive):
+  #115 [DONE 2026-06-04] camera glyph -> tripod-mounted camera in fig:boxelization; regen PNG (thesis #283; 6bcc034).
+  #116 [KILLED 2026-06-04] stack-degradation experiment dropped; cause taken from supervisor observation
+       (arm collides with / can't reach the tall stack, model-free control limit), written into thesis #281.
   #101 [2026-05-25] resolution-axis writeup (thesis aa6ebc6): "Free-space resolution" subsection
        in results.tex + boxel-count-vs-leaf-size figure (#108 part-c, 790cd1e); also thesis #209.
   #98  [2026-05-25] coarse-end resolution sweep (1800 cells, 66a26ed): resolution axis FLAT
