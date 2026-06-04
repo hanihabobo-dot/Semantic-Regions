@@ -1176,7 +1176,16 @@ iteration). Reconcile with the current exit reasons.
 Refs: results.tex:96; #243.
 
 ================================================================================
-#272  [T1] [THESIS]  Results: explain why uniform planning cost grows with n_occ (Fig 5.8)
+#272  [DONE 2026-06-04] [T1] [THESIS]  Results: explain why uniform planning cost grows with n_occ (Fig 5.8)
+NOTE 2026-06-04: added an explanatory passage to subsec:planning-time (results.tex:183) for the n_occ
+slope in fig:plantime-holding. Verified in code: pddlstream_planner.py:452-471 emits a view-blocking
+fact blocks_view_at(obj, free_cell, shadow) for EVERY free cell on a camera->shadow line of sight, per
+shadow per object, so the fact count scales as O(#obj x #free-cells-in-corridor x #shadows). More
+occluders -> more shadows, multiplied by the free-cell count, which uniform_grid.py keeps ~10x larger
+than the adaptive partition -> uniform's steep climb. Refined the author's "more cells" framing to the
+real driver (view-blocking facts ~ shadows x free-cells). Cross-ref subsec:compactness (results.tex:195).
+NOTE: the fig:plantime-holding NUMBERS (21->83 s) are from the OLD sweep and will be refreshed under
+#282; the MECHANISM added here is data-independent and stands.
 ================================================================================
 [AUTHOR] Fig 5.8 (fig:plantime-holding): why do uniform scenes cost more / have more cells with more
 occluders? Likely because the uniform variant keeps the object+shadow Boxels and only replaces the
