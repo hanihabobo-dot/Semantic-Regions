@@ -1288,7 +1288,16 @@ likely subsumed by #275 (abstract) and the #277 language pass if those land firs
 Refs: grep "the PDDL" / "the PDDLStream" / "the STRIPS" across thesis/chapters + abstract.tex.
 
 ================================================================================
-#280  [T1] [THESIS]  Related Work/Background (Critical Regions): cite the new DYNAMIC-abstraction paper; "static" claim no longer holds
+#280  [DONE 2026-06-04] [T1] [THESIS]  Related Work/Background (Critical Regions): cite the new DYNAMIC-abstraction paper; "static" claim no longer holds
+NOTE 2026-06-04: cited the dynamic-abstraction follow-up and softened the "static" claim. Paper (Till's
+primary rkn_aaai25): Nayyar & Srivastava, "Autonomous Option Invention for Continual Hierarchical
+Reinforcement Learning and Planning", AAAI 2025 (vol 39); confirmed via AAAI OJS (article 34163) + web
+search -- user supplied the PDF but it stayed password-protected to the reader, so not read directly.
+Added @inproceedings{nayyar2025option} to references.bib (by shah2022abstractions). related-work.tex:
+retitled "Limitations of Static Semantic Abstractions" -> "...Learned...", scoped the once-per-scene
+behaviour to that formulation, noted later dynamic-abstraction work (RL, not POD-TAMP), kept our
+geometric/no-predictor contrast. background.tex:154: same softening on the trailing "predicted once and
+held fixed" sentence. Alt (less likely, Till): AAAI'26 Context-Sensitive Abstractions -- swap if preferred.
 ================================================================================
 [SUPERVISOR 2026-06-04] Our Critical Regions discussion says the abstraction is predicted once and held
 STATIC. A newer AAIR-Lab paper makes the abstraction DYNAMIC -- it switches abstractions as the goal
