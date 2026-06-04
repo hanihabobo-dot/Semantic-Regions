@@ -141,11 +141,21 @@ def _cylinder(ax, base, axis, radius, length, *, fc, ec, alpha, n=24, zorder=9):
 
 
 def _camera(ax):
-    """A small 3-D camera model: dark body box + viewfinder bump + a protruding
-    lens cylinder aimed at the scene centre. Composed from polygons because
-    matplotlib has no camera primitive."""
+    """A small 3-D camera model on a tripod: dark body box + viewfinder bump + a
+    protruding lens cylinder aimed at the scene centre, raised on three splayed
+    legs so it reads as a camera rather than a plain box. Composed from polygons
+    because matplotlib has no camera primitive."""
     cx, cy = CAM
-    bw, bd, bh, bz = 1.1, 0.7, 0.7, 0.15
+    bw, bd, bh, bz = 1.1, 0.7, 0.7, 0.9
+    # tripod: three splayed legs from the body base down to the table
+    apex = np.array([cx, cy, bz])
+    for ang in (90.0, 210.0, 330.0):
+        foot = np.array([cx + 0.95 * np.cos(np.radians(ang)),
+                         cy + 0.95 * np.sin(np.radians(ang)), 0.0])
+        leg = foot - apex
+        length = float(np.linalg.norm(leg))
+        _cylinder(ax, apex, leg / length, 0.07, length, fc="#1b2631",
+                  ec="#1b2631", alpha=1.0, zorder=7)                    # tripod leg
     _box(ax, cx - bw / 2, cy - bd / 2, bz, bw, bd, bh, fc=C_VIEW, ec="#1b2631",
          alpha=1.0, lw=0.4, zorder=8, shade=True)                       # body
     _box(ax, cx - 0.18, cy - 0.15, bz + bh, 0.36, 0.3, 0.18, fc=C_VIEW,

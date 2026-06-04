@@ -1346,7 +1346,12 @@ Failure-mode plot: replan_limit removed (limit dropped) and no_summary was a bug
 Refs: results.tex; discussion.tex; abstract.tex; CODEBASE_AUDIT.txt #113 #104. Related: #199 #209.
 
 ================================================================================
-#283  [T2] [THESIS]  fig:boxelization: camera glyph unreadable at print scale (make it look like a camera)
+#283  [DONE 2026-06-04] [T2] [THESIS]  fig:boxelization: camera glyph unreadable at print scale (make it look like a camera)
+NOTE 2026-06-04: regenerated thesis/graphics/boxelization_3d.png with a tripod-mounted camera. Edited
+tools/render_boxelization_3d.py _camera(): raised the body onto three splayed legs (foot radius 0.95,
+wider than the body half-width so the tripod is visible) so it reads as a camera rather than a black box.
+Rendered with Windows Python and visually verified the new PNG (camera clearly a tripod-mounted camera,
+lens aimed at the scene; rest of the 6-panel figure unchanged). Code-side = CODEBASE_AUDIT.txt #115.
 ================================================================================
 [SUPERVISOR 2026-06-04] In boxelization_3d.png the camera marker is just a black box -- indistinguishable
 from objects at print scale (Marc had to zoom ~469%). Make it clearly a camera: add a small tripod, give
