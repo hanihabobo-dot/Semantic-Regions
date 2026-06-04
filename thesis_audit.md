@@ -1215,7 +1215,12 @@ Code-side fix cross-filed as CODEBASE_AUDIT.txt #114.
 Refs: methods.tex:20 (fig:boxelization); thesis/graphics/boxelization_3d.png; tools/render_boxelization_schematic.py (_swept_shadow); CODEBASE_AUDIT.txt #114.
 
 ================================================================================
-#275  [T1] [THESIS]  Abstract: drop the PDDLStream mention
+#275  [DONE 2026-06-04] [T1] [THESIS]  Abstract: drop the PDDLStream mention
+NOTE 2026-06-04: abstract.tex -- "into a PDDLStream-based planner (classical search plus continuous
+samplers)~\cite{garrett2018pddlstream}" -> "into a classical TAMP planner" (author's wording). Dropped
+the abstract-level PDDLStream name + citation; garrett2018pddlstream still cited in background.tex:141
+and introduction.tex (no orphan bib). PDDLStream stays in methods/background. The stray "the" of #279 is
+elsewhere (the abstract said "a PDDLStream-based...", not "the").
 ================================================================================
 [SUPERVISOR 2026-06-04] Remove "PDDLStream" from the abstract. Per Till, whether we use PDDLStream or
 our own TAMP framework does not crucially affect the capabilities claimed, so naming it in the abstract
