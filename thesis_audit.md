@@ -1495,6 +1495,11 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
       (was 13.7 vs 166 "order of magnitude cheaper"); median 8.5 -> 21.6s; per-step ~11s vs 57s (still cheaper,
       NOT "2.3x slower" -- avoided the #213 per-episode-vs-per-step mismatch); reliability 42 -> 65.6% vs local
       55% (now AHEAD). Net "cheaper-but-less-reliable" -> "parity-on-cost, somewhat-more-reliable". Caption updated.
+  [x] AUTHOR wording (Results): (1) planning-budget per-call sentence -- "calls stay short ... rather than slow
+      calls" was inaccurate (per-call times right-skewed; FATS calls not short, mean>>median; FATS episodes long
+      with FEW replans) -> "median call short, but right-skewed; long episodes from replans + a tail of slower
+      calls". (2) subsec:tampura: dropped before/after "now" ("Reliability now runs in our favour" -> "On
+      reliability the comparison favours us") and the "picture is similar / still well under" phrasing.
   FOUND BEYOND CATALOG (fix each in its own section):
     - [done] results.tex sec:metrics: dropped "without exceeding the per-episode replan limit" from Success def.
     - [done] results.tex sec:metrics: dropped replan_limit + no_summary from the failure-mode list (cannot occur).
