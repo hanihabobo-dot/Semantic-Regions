@@ -1500,6 +1500,9 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
       with FEW replans) -> "median call short, but right-skewed; long episodes from replans + a tail of slower
       calls". (2) subsec:tampura: dropped before/after "now" ("Reliability now runs in our favour" -> "On
       reliability the comparison favours us") and the "picture is similar / still well under" phrasing.
+  [x] sec:disc-semantic-vs-uniform: holding uniform "about a third" -> "about half" (47.8%); stack adaptive
+      97->13 -> 100->13, uniform 97->1 -> 90->0; FATS "effectively broken (1.3%)" -> "much weaker but still
+      functional (34.4% vs semantic 75.6%)"; compactness 25-43 -> 22-38, ~320 -> ~300 (match Results).
   FOUND BEYOND CATALOG (fix each in its own section):
     - [done] results.tex sec:metrics: dropped "without exceeding the per-episode replan limit" from Success def.
     - [done] results.tex sec:metrics: dropped replan_limit + no_summary from the failure-mode list (cannot occur).
