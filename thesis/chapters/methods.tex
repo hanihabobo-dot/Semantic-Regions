@@ -7,7 +7,7 @@ This chapter presents our approach to bridging abstract belief reasoning and con
 \section{Overview}
 Our methodology links abstract belief representation to continuous geometric reasoning through three components:
 \begin{enumerate}
-    \item \textbf{Adaptive Semantic Discretization:} A dynamic procedure for partitioning the robot's workspace into a set of meaningful Semantic Boxels, i.e. semantically meaningful subspaces, based on detected objects and their known 3D models.
+    \item \textbf{Adaptive Semantic Discretization:} A dynamic procedure for partitioning the robot's workspace into a set of Semantic Boxels---semantically meaningful subspaces---based on detected objects and their known 3D models.
     \item \textbf{A Formal POD-TAMP Model:} A formal model that uses these Boxels as the foundation for its state representation, allowing a POD planner to reason about knowledge and uncertainty regarding object locations and unobstructed spaces.
     \item \textbf{PDDLStream Integration:} An implementation using custom PDDL fluents, actions, and streams that operate on the belief state over Boxels, realizing the formal model in PDDLStream.
 \end{enumerate}
@@ -107,7 +107,7 @@ The agent's knowledge is represented directly in the PDDL state. The implemented
     ; ... further robot, geometry, and stacking predicates
 )
 \end{lstlisting}
-\Cref{sec:kif_belief} describes belief with the two K-literals $K(\operatorname{InBoxel})$ and $K(\neg\operatorname{InBoxel})$. The implemented domain realizes the same belief with a single Know-If fluent: \texttt{obj\_at\_boxel\_KIF} marks that the location of an object relative to a Boxel is \emph{known}, while \texttt{obj\_at\_boxel} carries the value; the absence of the Know-If fluent means the location is still uncertain. The two encodings are logically equivalent, and the single fluent keeps the grounded state smaller.
+A conceptual encoding would use the two K-literals $K(\operatorname{InBoxel})$ and $K(\neg\operatorname{InBoxel})$; the implemented domain instead uses the single Know-If fluent of \cref{sec:kif_belief}: \texttt{obj\_at\_boxel\_KIF} marks that the location of an object relative to a Boxel is \emph{known}, while \texttt{obj\_at\_boxel} carries the value, and the absence of the Know-If fluent means the location is still uncertain. The two encodings are logically equivalent for this boolean case, and the single fluent keeps the grounded state smaller.
 
 \subsection{The Sensing Action}
 Information gathering is realized by a single \texttt{sense} action, which checks whether a target object is present in a given Boxel.
