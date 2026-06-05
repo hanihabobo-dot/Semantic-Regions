@@ -1138,7 +1138,9 @@ behind the object, not the workspace boundary. Read the shadow-generation code a
 Refs: methods.tex:20 (fig:boxelization); shadow-generation code.
 
 ================================================================================
-#267  [T2] [THESIS]  Methods: fig:boxelization-real caption "object bounding cuboids" correction
+#267  [DONE 2026-06-05] [T2] [THESIS]  Methods: fig:boxelization-real caption "object bounding cuboids" correction
+NOTE 2026-06-05: methods.tex:27 caption now says "object Boxels" (not "object bounding cuboids") and states the
+figure is a PyBullet screenshot whose overlaid text labels name each object and the shadow region it casts (commit f32f52f).
 ================================================================================
 [AUTHOR] methods.tex:27: "object bounding cuboids enclose the visible cubes and red wireframe Boxels mark
 the volumes they occlude." Author began a correction ("actually the bounding boxels are...") but the note
@@ -1146,7 +1148,10 @@ is TRUNCATED -- exact fix TBD; get the author's full correction (what the boundi
 Refs: methods.tex:27 (fig:boxelization-real).
 
 ================================================================================
-#268  [T2] [THESIS]  Methods: add pseudocode for adaptive semantic discretization
+#268  [DONE 2026-06-05] [T2] [THESIS]  Methods: add pseudocode for adaptive semantic discretization
+NOTE 2026-06-05: added an algorithm float (alg:discretization) in methods.tex, referenced from the intro line:
+object bounding, occlusion subdivision, then the octree free-space partition + repeat-until-fixpoint convex
+merge. The prose also now states the merge repeats over rounds until no further merges. Compiles clean (commit f32f52f).
 ================================================================================
 [AUTHOR] The 3-step generation (methods.tex:31-37: object bounding, occlusion subdivision, recursive
 octree partition + convex-only merge) would be much clearer as an algorithm/pseudocode block (esp. the
@@ -1194,7 +1199,9 @@ free-space partition with a uniform grid, so more occluders -> more shadow Boxel
 Refs: results.tex (subsec:planning-time, fig:plantime-holding); results.tex:107.
 
 ================================================================================
-#273  [T3] [POLISH]  Terminology: find a better word than "cuboid"
+#273  [DONE 2026-06-05] [T3] [POLISH]  Terminology: find a better word than "cuboid"
+NOTE 2026-06-05: replaced "cuboid"/"cuboidal" with "box" / "box-shaped" / "axis-aligned box" across abstract.tex,
+introduction.tex, and methods.tex (commits f32f52f, bd26797). Code/lstlisting untouched.
 ================================================================================
 [AUTHOR] "cuboid" reads awkwardly; find a better term (e.g. box / rectangular cell / axis-aligned box).
 5 uses: abstract.tex, introduction.tex, methods.tex (x3). Apply consistently with the Boxel definition.
@@ -1582,7 +1589,10 @@ printing can be expensive). Action item, not a document change.
 Refs: RWTH / examination-office submission regulations.
 
 ================================================================================
-#285  [T2] [THESIS]  Background sec:pod: "POD builds on \cite{...}." is a sentence fragment / placeholder
+#285  [DONE 2026-06-05] [T2] [THESIS]  Background sec:pod: "POD builds on \cite{...}." is a sentence fragment / placeholder
+NOTE 2026-06-05: rewritten into a real sentence -- "This deterministic, knowledge-based view of partial
+observability draws on a line of compilation-based planners \cite{bonet2014flexible, albore2009translation,
+geffner2013concise}." (commit 6496690).
 ================================================================================
 [AUTHOR 2026-06-05] background.tex:80 reads: "POD builds on \cite{bonet2014flexible, albore2009translation,
 geffner2013concise}." That is not a sentence -- it states neither WHAT POD takes from these works nor HOW;
@@ -1592,7 +1602,10 @@ or fold the three citations into the surrounding sentences and delete the stub. 
 Refs: background.tex:80 (sec:pod "Belief States, K-Literals, and Know-If Fluents").
 
 ================================================================================
-#286  [T3] [POLISH]  Background: rephrase or cut "a distinction that matters because we later compare..."
+#286  [DONE 2026-06-05] [T3] [POLISH]  Background: rephrase or cut "a distinction that matters because we later compare..."
+NOTE 2026-06-05: dropped the self-referential clause; background.tex:91 now reads "POD planning differs from
+planning with POMDPs \cite{kaelbling1998planning}. In POMDPs, ...", and the subsection already introduces what
+a POMDP is right after (commit 6496690).
 ================================================================================
 [AUTHOR 2026-06-05] background.tex:91 (subsec "Probabilistic vs. Deterministic Partial Observability"):
 "POD planning differs from planning with \acp{pomdp} \cite{kaelbling1998planning}---a distinction that
@@ -1604,7 +1617,11 @@ Author leans (c)/(b). Pick one.
 Refs: background.tex:91; related-work.tex:10 (POMDP-based TAMP Solutions -- the later comparison).
 
 ================================================================================
-#287  [T2] [POLISH]  Whole document: remove em-dashes (---), an AI tell-tale
+#287  [PARTIAL 2026-06-05] [T2] [POLISH]  Whole document: remove em-dashes (---), an AI tell-tale
+NOTE 2026-06-05: em-dashes removed (per-instance commas/parens/colons/period; lstlisting/code comments left)
+from abstract, introduction, background, related-work, methods, conclusion (commits d402a40, ba44225, 81a1ad0,
+e95c819, 8f498b9, 510f7a2). REMAINING: results.tex (~16) and discussion.tex (~36), deferred because both are
+under active #282 editing -- sweep once #282 has settled to avoid conflicts.
 ================================================================================
 [AUTHOR 2026-06-05] The author wants ALL em-dashes ("---" in LaTeX, the long dash) removed from the prose --
 they read as a tell-tale sign of machine-written text. ~97 em-dash occurrences across the 8 chapters
