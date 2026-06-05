@@ -1582,6 +1582,40 @@ printing can be expensive). Action item, not a document change.
 Refs: RWTH / examination-office submission regulations.
 
 ================================================================================
+#285  [T2] [THESIS]  Background sec:pod: "POD builds on \cite{...}." is a sentence fragment / placeholder
+================================================================================
+[AUTHOR 2026-06-05] background.tex:80 reads: "POD builds on \cite{bonet2014flexible, albore2009translation,
+geffner2013concise}." That is not a sentence -- it states neither WHAT POD takes from these works nor HOW;
+it just drops three citations and reads like a leftover placeholder. Fix: rewrite into one real sentence
+that says what the POD setting inherits from them (the knowledge-literal / translation-to-classical line),
+or fold the three citations into the surrounding sentences and delete the stub. One clear sentence, no padding.
+Refs: background.tex:80 (sec:pod "Belief States, K-Literals, and Know-If Fluents").
+
+================================================================================
+#286  [T3] [POLISH]  Background: rephrase or cut "a distinction that matters because we later compare..."
+================================================================================
+[AUTHOR 2026-06-05] background.tex:91 (subsec "Probabilistic vs. Deterministic Partial Observability"):
+"POD planning differs from planning with \acp{pomdp} \cite{kaelbling1998planning}---a distinction that
+matters because we later compare our approach to POMDP-based TAMP." Correct, but the trailing clause reads
+awkwardly (self-referential "we later compare"). Options: (a) rephrase more naturally; (b) delete the
+"a distinction that matters..." clause and check the paragraph still reads well; (c) drop the meta-comment
+and instead introduce what a POMDP is at its first mention, letting the later comparison stand on its own.
+Author leans (c)/(b). Pick one.
+Refs: background.tex:91; related-work.tex:10 (POMDP-based TAMP Solutions -- the later comparison).
+
+================================================================================
+#287  [T2] [POLISH]  Whole document: remove em-dashes (---), an AI tell-tale
+================================================================================
+[AUTHOR 2026-06-05] The author wants ALL em-dashes ("---" in LaTeX, the long dash) removed from the prose --
+they read as a tell-tale sign of machine-written text. ~97 em-dash occurrences across the 8 chapters
+(abstract 1, background 13, related-work 7, methods 13, results 16, discussion 36, conclusion 3,
+introduction 8). Fix: replace each "---" with a comma, parentheses, a colon, or a full stop as the sentence
+needs; this is NOT a blanket find/replace, since the right substitute varies. LEAVE en-dash ranges
+("2--4", page ranges -- those are "--", not "---") and any "---" inside lstlisting/verbatim. Sweep chapter
+by chapter and re-read each rewritten sentence. Large but mechanical.
+Refs: thesis/chapters/*.tex (all 8). Related: #277 (language sweep), #251 (cross-cutting redundancy/polish).
+
+================================================================================
 RESOLVED (author notes 2026-06-02 -- no new issue):
   - "explain what a classical planner is + examples" -> DONE in #253 (Background 2.1.2).
     MDP half carried forward as #258.
