@@ -1641,9 +1641,11 @@ Refs: thesis/chapters/*.tex (all 8). Related: #277 (language sweep), #251 (cross
 ================================================================================
 #288  [DONE 2026-06-06] [T3] [THESIS]  Overhead-camera caption: name the cyan/red Boxels
 ================================================================================
-NOTE 2026-06-06: results.tex fig:overhead-camera caption now names the cyan Free Space Boxels tiling
-the workspace and the red shadow Boxels at the cube cluster (matches fig:boxelization-real colour
-language; verified against overhead_camera_inset.png). Raised in review 2026-06-06. (commit 8a75536)
+NOTE 2026-06-06: results.tex fig:overhead-camera caption now names the Boxels by colour (commit 8a75536),
+then CORRECTED same day: red = object/occluder Boxels, grey = shadow Boxels, cyan = Free Space (per
+visualization._color_for_boxel and the rendered image); the first wording mislabelled red as "shadow".
+The identical red=shadow error in methods.tex fig:boxelization-real was fixed in the same correction.
+Raised in review 2026-06-06.
 Refs: results.tex (fig:overhead-camera); #168.
 
 ================================================================================
