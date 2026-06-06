@@ -111,6 +111,8 @@ where:
 \end{itemize}
 The planning problem is to find a sequence of actions from $\mathcal{A}$ that moves the belief state from $b_0 = \mathcal{S}_0$ to a belief state $b_g$ in which every possible state is a goal state (i.e., $b_g \subseteq \mathcal{S}_G$).
 
+The system implemented in this thesis realises this model only approximately. Rather than solving the POD problem directly, it determinises the sensor model $\mathcal{O}$ optimistically, assuming each sensing action yields the outcome the plan expects, and recovers by reactive replanning (\cref{sec:kif_belief}). The model above therefore states the target semantics, including reaching the goal with certainty; the optimistic determinise-and-replan realisation trades that certainty for tractability, and the soundness limits it incurs are consolidated in \cref{sec:limitations}.
+
 \section{PDDLStream Integration}
 This section presents the implemented PDDL domain and streams that realize the model on the belief state over Boxels. The semantic discretization itself runs as a Python stage before each planner call, rather than as a PDDLStream procedure, so the Boxels enter each solve as fixed inputs. For readability the listings show the belief-related fragment of the domain, eliding the geometric and stacking predicates that are not central to this discussion.
 
