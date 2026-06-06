@@ -414,11 +414,14 @@ optionally switch to a Wilson interval (CODEBASE #112).
 Refs: results.tex; eval_plotter.py (group_success_rate, plot_metric); CODEBASE_AUDIT #112.
 
 ================================================================================
-#208  [T3] [THESIS]  Add the code repository links (GitHub + GitLab)
+#208  [DONE 2026-06-06] [T3] [THESIS]  Add the code repository links (GitHub + GitLab)
 ================================================================================
 The thesis never says where the implementation lives (GitHub + GitLab). Fix: add both URLs
 (author to PROVIDE — do not guess) as a code-availability footnote/statement.
 Refs: introduction.tex / abstract.tex / appendix.tex.
+NOTE 2026-06-06: author provided the GitLab URL; added as a code-availability footnote at the first
+mention of the system in introduction.tex (\url{https://git.rwth-aachen.de/hani.alassiri.alhabboub/pybullet},
+pinned at commit db6f818). No GitHub mirror was provided, so only GitLab is cited. Raised in review 2026-06-06.
 
 ================================================================================
 #209  [T2] [THESIS]  Results: resolution-floor sweep -- effect of min free-space leaf size on total boxel count
@@ -1702,7 +1705,6 @@ OPEN:
   Background: #181 (POD vs contingent-planning naming -- reverted; reconsider, don't equate them)
   Methods: #175 (shadow-split #102/#103 -- only "by depth" dropped; conditional/surface-resting remain)
   Results: #199 (task rename), #209 (resolution-floor study + figure)
-  Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
   --- Supervisor review 2026-06-01 (#214-#253; full batch above) -- all OPEN except
       #231/#234/#252 ([INFO], no action). Discuss open Qs with Till Wed 2026-06-03. ---
@@ -1726,7 +1728,7 @@ OPEN:
       Low/admin (T3):   #279 (stray "the" near PDDL) #284 (check printing requirement)
       Cross-filed code: CODEBASE_AUDIT.txt #115 (camera glyph render) #116 (stack-degradation experiment)
 
-DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212, #213, #288, #289, #290, #291, #292. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #288, #289, #290, #291, #292. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
