@@ -56,10 +56,14 @@ image (never overwrite), keep old regenerable, keep paths sim/<name>.png.
 Refs: introduction.tex; methods.tex; background.tex; results.tex; discussion.tex; thesis/graphics/sim/.
 
 ================================================================================
-#175  [T2] [THESIS]  methods.tex shadow-splitting text vs code (CODEBASE #102/#103)
+#175  [REJECTED 2026-06-06] [T2] [THESIS]  methods.tex shadow-splitting text vs code (CODEBASE #102/#103)
 NOTE 2026-05-25: conditional/surface-resting rewrite REVERTED per author; only the "by depth"
 clause was dropped. The #102 (a non-intersecting occluder casts ONE shadow, no split) and #103
 (only surface-resting occluders cast shadows) reconciliations remain if wanted.
+NOTE 2026-06-06: KILLED per author. Remaining #102/#103 reconciliation declined: #102 is already
+adequately conditional in the prose ("one or more shadow Boxels, split by any intervening visible
+obstacles"); the #103 surface-resting clause was reverted once already and is not reinstated. The earlier
+"by depth" drop stands; no further change.
 ================================================================================
 CODEBASE #102 made the per-occluder depth split CONDITIONAL (a non-intersecting occluder
 casts ONE shadow Boxel; only a shadow overlapping another region splits into near+far +
@@ -1756,7 +1760,6 @@ OPEN ISSUES
 ================================================================================
 OPEN:
   Background: #181 (POD vs contingent-planning naming -- reverted; reconsider, don't equate them)
-  Methods: #175 (shadow-split #102/#103 -- only "by depth" dropped; conditional/surface-resting remain)
   Results: #199 (task rename), #209 (resolution-floor study + figure)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
   --- Supervisor review 2026-06-01 (#214-#253; full batch above) -- all OPEN except
@@ -1781,7 +1784,7 @@ OPEN:
       Low/admin (T3):   #279 (stray "the" near PDDL) #284 (check printing requirement)
       Cross-filed code: CODEBASE_AUDIT.txt #115 (camera glyph render) #116 (stack-degradation experiment)
 
-DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #288, #289, #290, #291, #292, #293, #294, #295, #297. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #288, #289, #290, #291, #292, #293, #294, #295, #297. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined), #175 (shadow #102/#103 reconciliation declined; by-depth drop already done).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
