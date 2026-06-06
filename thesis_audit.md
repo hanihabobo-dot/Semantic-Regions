@@ -1770,6 +1770,9 @@ planning context, Fig 1.1 "Autonomous Behavior in the Wumpus World"); left \cite
 on the percept-rides-on-precondition claim. Author-directed; no new reference needed (Russell & Norvig
 AIMA could be added as the primary origin if wanted).
 Refs: methods.tex:166; geffner2013concise.
+REVISED 2026-06-06: author wants the PRIMARY source. Traced it (Wumpus introduced by Genesereth,
+standardised in Russell & Norvig, AIMA -- what planning texts cite). Added russell2010artificial (AIMA,
+3rd ed., 2010) at "Wumpus World"; geffner2013concise restored to the end concept-cite with albore2009translation.
 
 ================================================================================
 RESOLVED (author notes 2026-06-02 -- no new issue):
