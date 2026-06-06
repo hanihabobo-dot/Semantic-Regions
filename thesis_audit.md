@@ -1687,8 +1687,53 @@ holding (65.6 vs 47.8) and the TAMPURA per-episode comparison (~144 vs 166 s, 65
 policy). Raised in review 2026-06-06. (commit 6587418)
 Refs: abstract.tex; results.tex:tab:headline; subsec:tampura.
 NOTE 2026-06-06: a sixth review follow-up -- add an OCTREE free-space baseline alongside uniform (the
-ablation currently compares only against the weakest baseline) -- is eval-pipeline/sweep work and is
-filed in CODEBASE_AUDIT.txt, not here (per the audit-file split). Pending, to be done last.
+ablation currently compares only against the weakest baseline) -- is eval-pipeline/sweep work.
+It was implemented on main then REVERTED the same day (another eval running; user asked to stop), so it
+is NOT done or tracked here. Revisit when the machine is free, then file in CODEBASE_AUDIT.txt.
+
+================================================================================
+#293  [DONE 2026-06-06] [T0] [THESIS]  Correct TAMPURA discounted-return error bar (0.30 -> 0.07)
+================================================================================
+NOTE 2026-06-06: results.tex:221 stated TAMPURA's holding/Find-Die discounted return as 0.63 +/- 0.30
+(Table I). Per a reference-verification report, Table I reports the standard ERROR (0.63 +/- 0.07); the
++/- 0.30 magnitudes are Table II planning-time std devs. Fixed to 0.63 +/- 0.07 (the >=63% reading is
+unchanged). Applied on the report's authority + author nod; author should glance at Table I to confirm. (commit b12ac51)
+Refs: results.tex:221 (subsec:tampura); curtis2024partially Table I.
+
+================================================================================
+#294  [DONE 2026-06-06] [T2] [THESIS]  Discussion: stack 54x gap is pure grounding cost (occlusion inactive)
+================================================================================
+NOTE 2026-06-06: discussion.tex sec:disc-semantic-vs-uniform now notes that on the fully observable stack
+goal the partition's occlusion structure is inactive (free-space cells act only as placement candidates),
+so the ~54x planning-time gap there is a pure grounding-cost (cell-count) effect, not occlusion reasoning;
+the same partition is reused across all goals for one code path. De-confuses the stack result and reinforces
+the #290 reframe. Author-prompted ("what do you think?"). (commit 8d843f2)
+Refs: discussion.tex:sec:disc-semantic-vs-uniform; results.tex headline (#290).
+
+================================================================================
+#295  [DONE 2026-06-06] [T3] [THESIS]  Add nayyar2025option page numbers
+================================================================================
+NOTE 2026-06-06: references.bib nayyar2025option carried volume only; added number=18, pages=19642--19650
+(AAAI v39 n18), per the reference report. (commit 8abad86)
+Refs: references.bib (nayyar2025option).
+
+================================================================================
+#296  [INFO 2026-06-06] [THESIS]  Reference-verification report triage (37 refs; 1 hard error, attributions re-checked)
+================================================================================
+External AI reference report (author-shared 2026-06-06): all 37 refs exist; one hard error = the TAMPURA
+0.63 number (-> #293). The report's attribution flags were re-checked against source by Claude:
+  - "RBVD" -> Shah & Srivastava: CONFIRMED correct (the paper defines "a region-based Voronoi diagram
+    (RBVD) is a partition ...", arXiv:2202.00907). No change.
+  - SS-Replan ray-casting occlusion: CONFIRMED correct ("the probability of occlusion is estimated by
+    performing ray-casting ... using poses sampled from ?pb2", arXiv:1911.04577). No change.
+  - Brenner & Nebel "know-whether" (KIF attribution, background.tex:88): DEFENSIBLE -- MAPL models a
+    fluent's value as possibly unknown (the know-whether concept); exact term may not be theirs. Left to
+    the author to keep or soften to "building on". NOT changed.
+Cosmetic: nayyar pages added (#295); CoCo-TAMP name already used in body (related-work.tex:22) with the
+paper title in the bib -> OK; PyBullet/PDDLStream dual-dating left as-is (acceptable). The epigraph
+("Everything is Computer / DJT") the report flags as risky for examiners is the author's stylistic call,
+NOT changed.
+Refs: results.tex (subsec:tampura); background.tex:88; related-work.tex:22,32; references.bib.
 
 ================================================================================
 RESOLVED (author notes 2026-06-02 -- no new issue):
@@ -1728,7 +1773,7 @@ OPEN:
       Low/admin (T3):   #279 (stray "the" near PDDL) #284 (check printing requirement)
       Cross-filed code: CODEBASE_AUDIT.txt #115 (camera glyph render) #116 (stack-degradation experiment)
 
-DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #288, #289, #290, #291, #292. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #288, #289, #290, #291, #292, #293, #294, #295. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
