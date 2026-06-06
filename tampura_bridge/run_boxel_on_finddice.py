@@ -62,7 +62,7 @@ def main():
     env = tconfig.get_env(config["task"])(config=config)
     b0, store = env.initialize()
 
-    policy = BoxelPolicy(config, env.problem_spec)
+    policy = BoxelPolicy(config, env.problem_spec, env=env)
     history, store = policy.rollout(env, b0, store)
     logging.info("[BoxelBridge] rollout complete: %d entries", len(history))
 
