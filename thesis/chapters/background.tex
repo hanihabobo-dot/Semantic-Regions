@@ -8,7 +8,7 @@ This chapter builds up the pieces the thesis depends on, ending with PDDLStream 
 \Ac{ai} planning produces a sequence of actions, a plan, that gets from a given initial state to a specified goal \cite{ghallab2004automated}.
 
 \subsection{State-Space Models in Classical Planning}
-Classical planning describes problems in a \textit{factored} representation: states are specified through the atoms that hold and actions through their effects on those atoms, rather than by enumerating every configuration of the world explicitly, which is infeasible for all but the smallest problems \cite{geffner2013concise, ghallab2004automated}.
+Classical planning describes a problem in terms of small facts called \emph{atoms}---individual true-or-false statements about the world, such as ``block A is on block B'' or ``the gripper is empty''. A state is then specified by the atoms that currently hold, and an action by the atoms it makes true or false, rather than by enumerating every possible configuration of the world explicitly---which is infeasible for all but the smallest problems. This compact, \emph{factored} representation is what keeps planning tractable \cite{geffner2013concise, ghallab2004automated}.
 
 A foundational language for this is \textbf{\acs{strips}} \cite{fikes1971strips}. A \textbf{state} is the set of ground atoms (propositions) true in a configuration of the world. For example, in a blocksworld with blocks A, B and a table, a state is $\{\texttt{(on A B)}, \texttt{(ontable B)}, \texttt{(handempty)}\}$. An \textbf{action} $a$ is given by three sets of atoms: preconditions $\mathrm{pre}(a)$, an add-list $\mathrm{add}(a)$, and a delete-list $\mathrm{del}(a)$. Action $a$ is \textit{applicable} in a state $s$ iff $\mathrm{pre}(a) \subseteq s$, and applying it produces the successor state $(s \setminus \mathrm{del}(a)) \cup \mathrm{add}(a)$.
 
@@ -38,40 +38,11 @@ This syntax induces a \textit{state model} $S(P) = \langle S, s_0, S_G, Act, A, 
 % This allows for more expressive and modular domain definitions.
 \subsection{Classical Planning Algorithms and Fast Downward}
 \label{subsec:planning-algorithms}
-Given a compact \ac{pddl} encoding, a planner must search the state space it
-implies for a path from $s_0$ to a goal state. Because that space grows
-exponentially with the number of atoms, modern classical planners treat the
-task as \emph{heuristic state-space search}: they expand states with an
-informed search algorithm (greedy best-first search, or A\textsuperscript{*}
-\cite{hart1968formal} when an optimal plan is required) guided by a heuristic
-that estimates the remaining cost from each state to the goal
-\cite{geffner2013concise}. The performance of such a planner depends almost
-entirely on the quality of this heuristic.
+Given a compact \ac{pddl} encoding, a planner must find a path from the start state $s_0$ to a goal state through the space of states the encoding implies. The difficulty is sheer size: every atom that can independently be true or false doubles the number of possible states, so even modest problems have astronomically many, and they cannot be enumerated. Modern classical planners instead use \emph{heuristic search}. The search explores states one at a time, and at each step a \emph{heuristic}---a fast, approximate estimate of how many actions still separate a state from the goal---tells it which state looks most promising to expand next. Greedy best-first search simply expands whichever state the heuristic rates closest to the goal, trading guaranteed optimality for speed; A\textsuperscript{*} \cite{hart1968formal} instead weighs that estimate against the cost already incurred and returns a provably shortest plan whenever the heuristic never overestimates \cite{geffner2013concise}. In practice a planner is only as good as its heuristic.
 
-What makes the approach \emph{domain-independent} is that these heuristics are
-derived automatically from the PDDL description rather than supplied by hand.
-The most influential family relaxes the task by ignoring delete-lists; because
-solving even this relaxation optimally is hard, planners use tractable
-approximations such as the max and additive heuristics and the FF heuristic,
-which extracts a plan for the relaxed task and counts its actions
-\cite{hoffmann2001ff, geffner2013concise}. A complementary family reasons over
-\emph{landmarks}, facts that every valid plan must eventually make
-true, and the LAMA planner combines landmark and relaxation heuristics in a
-cost-based anytime search \cite{richter2010lama}.
+What makes such planners \emph{domain-independent}---able to tackle any problem written in PDDL without hand-tuning---is that the heuristic is derived automatically from the problem description. The most influential idea is the \emph{delete relaxation}: pretend that actions only ever add facts and never remove them, so nothing already achieved can be undone. This relaxed problem is much easier to solve, and the effort it takes is a good estimate of the true distance to the goal; the max, additive, and FF heuristics are practical ways to compute that estimate, the FF heuristic by extracting a plan for the relaxed problem and counting its actions \cite{hoffmann2001ff, geffner2013concise}. A complementary idea is \emph{landmarks}---facts that every valid plan must make true at some point---whose count gives another distance estimate; the LAMA planner combines landmark and relaxation heuristics in an \emph{anytime} search that finds a first plan quickly and then keeps improving its cost \cite{richter2010lama}.
 
-\textbf{Fast Downward} \cite{helmert2006fast} is the classical planner used as
-the search backend throughout this work; PDDLStream invokes it to solve each
-symbolic planning problem once its streams have supplied the continuous values
-that problem requires. Rather than operate on STRIPS propositions directly,
-Fast Downward first translates the grounded task into a \emph{multi-valued}
-representation (SAS\textsuperscript{+}), in which each variable takes exactly
-one value from a mutually exclusive set instead of many independent Booleans.
-From this encoding it builds a \emph{causal graph} that captures how the
-variables depend on one another, and derives structure-aware heuristics (such
-as the causal-graph heuristic) that guide a best-first search. This pairing of
-an automatic multi-valued translation with structure-exploiting heuristics is
-what lets Fast Downward scale to the grounded planning tasks that arise in
-this work.
+\textbf{Fast Downward} \cite{helmert2006fast} is the classical planner used as the search backend throughout this work; PDDLStream invokes it to solve each symbolic planning problem once its streams have supplied the continuous values that problem requires. Its distinctive step is a change of representation. A STRIPS state is a long list of independent true/false facts, but many of those facts are really mutually exclusive---a given block sits on exactly one thing at a time. Fast Downward detects such groups automatically and rewrites the task in a \emph{multi-valued} form (SAS\textsuperscript{+}), replacing a cluster of related Booleans with a single variable that takes one value from a fixed set---for example \texttt{pos(A)} $\in$ \{\texttt{onB}, \texttt{ontable}, \texttt{inhand}\}. This both shrinks the problem and reveals its structure: Fast Downward builds a \emph{causal graph} recording which variables influence which others, and derives structure-aware heuristics (such as the causal-graph heuristic) that exploit it to guide a best-first search. Pairing this automatic multi-valued translation with structure-exploiting heuristics is what lets Fast Downward scale to the grounded planning tasks that arise in this work.
 
 \section{Planning under Partial Observability}\label{sec:pod}
 Classical planning's assumption of full observability is often violated in robotics. When an agent has incomplete information about the true state of the world, it must reason about its \textit{belief state}.
