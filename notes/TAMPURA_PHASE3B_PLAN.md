@@ -543,3 +543,26 @@ shadow_calculator + free_space_generator in __init__; exposes generate_free_spac
   P2 = instantiate BoxelTestEnv, overwrite env.objects (+spawn matching bodies)
        from their poses; reuses all machinery but adds 2 clients (ambiguity).
 ================================================================================
+
+================================================================================
+APPENDIX B — ITEM 4 DECISION: PERCEPTION WORLD = P1 (single world)
+================================================================================
+Decided 2026-06-06 (user).  Our perception reads THEIR live find_dice world
+directly via an adapter; NO second simulated world.
+
+Rationale: most faithful to GOAL 1/3 ("our perception ON their env").  Their
+state world is client_id=0 (created first by our runner), so default-client p.*
+calls already target their world — but to target THEIR STATE WORLD RELIABLY
+(their env also opens a sim/belief world; pybullet's no-physicsClientId default
+is version-dependent), thread an OPTIONAL physicsClientId through:
+  - boxel_env.oracle_detect_objects  (getBasePositionAndOrientation:1642,
+    getAABB:1651, rayTestBatch:1662)
+  - ShadowCalculator.calculate_shadow_boxel  (rayTestBatch)
+GUARDED shared-core edit: new param defaults to None -> p.* called with NO
+physicsClientId (EXACTLY today's path on our env).  Only when the adapter passes
+a client id does it route to their world.  REVIEWED at ITEM B1-REVIEW.
+
+Adapter (ITEM 6) exposes APPENDIX A (1)-(6) over their world + the fixed sense
+camera (ITEM 5); generate_free_space delegates to a FreeSpaceGenerator on their
+table geometry.  Fallback to P2 ONLY if P1 proves intractable (record why).
+================================================================================
