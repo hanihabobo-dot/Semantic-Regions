@@ -1761,6 +1761,17 @@ goes straight into \section{Adaptive Semantic Discretization}. Author-spotted. N
 Refs: methods.tex:6-13.
 
 ================================================================================
+#299  [DONE 2026-06-06] [T2] [THESIS]  Cite Wumpus World at its mention (geffner2013concise)
+================================================================================
+NOTE 2026-06-06: methods.tex:166 Wumpus-World analogy cited \cite{albore2009translation, geffner2013concise}
+lumped at the sentence end (albore = CLG, not about Wumpus). Moved \cite{geffner2013concise} to attach
+directly to "Wumpus World" (Geffner & Bonet's book frames Wumpus World in the partial-observability
+planning context, Fig 1.1 "Autonomous Behavior in the Wumpus World"); left \cite{albore2009translation}
+on the percept-rides-on-precondition claim. Author-directed; no new reference needed (Russell & Norvig
+AIMA could be added as the primary origin if wanted).
+Refs: methods.tex:166; geffner2013concise.
+
+================================================================================
 RESOLVED (author notes 2026-06-02 -- no new issue):
   - "explain what a classical planner is + examples" -> DONE in #253 (Background 2.1.2).
     MDP half carried forward as #258.
@@ -1797,7 +1808,7 @@ OPEN:
       Low/admin (T3):   #279 (stray "the" near PDDL) #284 (check printing requirement)
       Cross-filed code: CODEBASE_AUDIT.txt #115 (camera glyph render) #116 (stack-degradation experiment)
 
-DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #288, #289, #290, #291, #292, #293, #294, #295, #297, #298. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined), #175 (shadow #102/#103 reconciliation declined; by-depth drop already done).
+DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #288, #289, #290, #291, #292, #293, #294, #295, #297, #298, #299. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined), #175 (shadow #102/#103 reconciliation declined; by-depth drop already done).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
