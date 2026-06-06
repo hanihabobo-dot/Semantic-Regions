@@ -91,7 +91,7 @@ Refs: results.tex; discussion.tex; conclusion.tex; abstract.tex; methods.tex; #1
 #207  [DONE 2026-05-25] [T3]  Success-rate-vs-n_occ caption should state what the band is
 #208  [DONE 2026-06-06] [T3] [THESIS]  Add the code repository links (GitHub + GitLab)
 ================================================================================
-#209  [T2] [THESIS]  Results: resolution-floor sweep -- effect of min free-space leaf size on total boxel count
+#209  [DONE 2026-06-06] [T2] [THESIS]  Results: resolution-floor sweep -- DONE: subsec:resolution ("Free-Space Resolution") + fig:boxel-resolution already present; reports finer=flat (auto already at/above floor), coarser >=1.5x = -30-40% free-space cells, success unmoved. Number refresh from the new sweep is tracked under #282 (resolution arms pending).
 ================================================================================
 results.tex (subsec:compactness ~:194; new subsection+figure). Supplies evidence for #203 and
 justifies #202. ADD a study of how the free-space floor (min_boxel_size) changes TOTAL boxel
