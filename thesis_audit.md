@@ -1085,12 +1085,15 @@ provably optimal solver for the abstract SSP/MDP); the risk-aware/uncertainty po
 twice in the sentence. Author-approved.
 
 ================================================================================
-#260  [T2] [THESIS]  Related Work: state how we differ from TAMPURA and Saleem (end of POMDP-TAMP para)
+#260  [REJECTED 2026-06-06] [T2] [THESIS]  Related Work: state how we differ from TAMPURA and Saleem (end of POMDP-TAMP para)
 ================================================================================
 [AUTHOR] The POMDP-based-TAMP paragraph (related-work.tex:11-12; TAMPURA + Saleem et al. + Bayes3D)
 ends without saying how THIS thesis differs from TAMPURA and Saleem. Add a differentiation sentence at
 the end of that paragraph.
 Refs: related-work.tex:11-12; curtis2024partially; saleem2024pomdp.
+NOTE 2026-06-06: KILLED per author. We already differentiate from TAMPURA (Summary & Research Gap, the
+three-advantages paragraph, and the dedicated Discussion sec:disc-tampura) and from the POMDP line
+generally; another differentiation sentence at related-work.tex:11-12 would be redundant.
 
 ================================================================================
 #261  [T2] [THESIS]  Related Work: verify Ma et al. "separate pre-planning step" claim
@@ -1814,7 +1817,7 @@ OPEN:
       Low/admin (T3):   #279 (stray "the" near PDDL) #284 (check printing requirement)
       Cross-filed code: CODEBASE_AUDIT.txt #115 (camera glyph render) #116 (stack-degradation experiment)
 
-DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #259, #288, #289, #290, #291, #292, #293, #294, #295, #297, #298, #299. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined), #175 (shadow #102/#103 reconciliation declined; by-depth drop already done).
+DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #259, #288, #289, #290, #291, #292, #293, #294, #295, #297, #298, #299. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined), #175 (shadow #102/#103 reconciliation declined; by-depth drop already done), #260 (TAMPURA/Saleem differentiation -- redundant, declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
