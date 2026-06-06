@@ -162,7 +162,7 @@ Refs: related-work.tex (document-wide citation style).
 #256  [DONE 2026-06-02] [T2] [THESIS]  Results: delete the "Software" paragraph  (author decision; supersedes #241)
 #257  [DONE 2026-06-02] [T1] [THESIS]  Background: text cutoff (overfull \hbox) in state-space example  (author/build finding)
 ================================================================================
-#258  [T2] [THESIS]  Background: explain what an MDP is, with examples
+#258  [DONE 2026-06-06] [T2] [THESIS]  Background: explain what an MDP is, with examples -- added MDP definition (states/actions/stochastic transitions/reward; policy; Markov property) + grid-slip example + POMDP extension, in sec:pod "Probabilistic vs. Deterministic" subsec; no new cites (geffner2013/kaelbling1998 reused), no em-dashes.
 ================================================================================
 [AUTHOR] "explain what a classical planner is and give examples; same for MDPs." Classical-planner
 half is RESOLVED by #253 (new 2.1.2 with Fast Downward/FF/LAMA). Remaining: Background never defines a
