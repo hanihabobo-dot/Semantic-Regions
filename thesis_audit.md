@@ -1639,6 +1639,53 @@ by chapter and re-read each rewritten sentence. Large but mechanical.
 Refs: thesis/chapters/*.tex (all 8). Related: #277 (language sweep), #251 (cross-cutting redundancy/polish).
 
 ================================================================================
+#288  [DONE 2026-06-06] [T3] [THESIS]  Overhead-camera caption: name the cyan/red Boxels
+================================================================================
+NOTE 2026-06-06: results.tex fig:overhead-camera caption now names the cyan Free Space Boxels tiling
+the workspace and the red shadow Boxels at the cube cluster (matches fig:boxelization-real colour
+language; verified against overhead_camera_inset.png). Raised in review 2026-06-06. (commit 8a75536)
+Refs: results.tex (fig:overhead-camera); #168.
+
+================================================================================
+#289  [DONE 2026-06-06] [T1] [THESIS]  Approach: flag that the implementation approximates the formal POD model
+================================================================================
+NOTE 2026-06-06: added one paragraph after the Semantic POD-TAMP model definition (methods.tex) stating
+the formal model is the TARGET semantics and the implemented system realises it only approximately
+(optimistic determinise-and-replan), cross-ref sec:kif_belief + sec:limitations. Closes the model-vs-
+implementation credibility gap (formal tuple with sensor model O / certainty goals sat ~30 pp from the
+simplification admission). Raised in review 2026-06-06. (commit 021b284)
+Refs: methods.tex (Semantic POD-TAMP Model Definition); sec:kif_belief; sec:limitations.
+
+================================================================================
+#290  [DONE 2026-06-06] [T2] [THESIS]  Evaluation headline: lead with the success gap, cell-count as mechanism
+================================================================================
+NOTE 2026-06-06: results.tex sec:results-numbers intro reframed to lead with the capability/success gap
+(find-and-tray-stack 75.6 vs 34.4; ~1.4-2.2x across goals) and present the order-of-magnitude fewer cells
++ cheaper calls as the MECHANISM (cheaper calls -> more scenes finish within budget), instead of leading
+with the 54x time multiplier (which can read as proving the obvious). Raised in review 2026-06-06. (commit 5b86ccf)
+Refs: results.tex:sec:results-numbers; subsec:compactness.
+
+================================================================================
+#291  [DONE 2026-06-06] [T3] [THESIS]  Chapter titles match their labels (Approach->Methods, Evaluation->Results)
+================================================================================
+NOTE 2026-06-06: methods.tex titled "Approach" but labelled ch:methods (file methods.tex); results.tex
+titled "Evaluation" but labelled ch:results (file results.tex). Renamed titles to Methods/Results to match
+the codebase convention (template-instructions.tex prescribes no names; filenames+labels do). \cref renders
+"Chapter N" so cross-refs unaffected; no running prose referenced the old titles. Raised in review 2026-06-06. (commit 84ad146)
+Refs: methods.tex:3; results.tex:3.
+
+================================================================================
+#292  [DONE 2026-06-06] [T2] [THESIS]  Abstract: add holding + TAMPURA numbers
+================================================================================
+NOTE 2026-06-06: abstract.tex undersold (carried only the find-and-tray-stack 75.6/34.4 number). Added
+holding (65.6 vs 47.8) and the TAMPURA per-episode comparison (~144 vs 166 s, 65.6 vs 55%, no learned
+policy). Raised in review 2026-06-06. (commit 6587418)
+Refs: abstract.tex; results.tex:tab:headline; subsec:tampura.
+NOTE 2026-06-06: a sixth review follow-up -- add an OCTREE free-space baseline alongside uniform (the
+ablation currently compares only against the weakest baseline) -- is eval-pipeline/sweep work and is
+filed in CODEBASE_AUDIT.txt, not here (per the audit-file split). Pending, to be done last.
+
+================================================================================
 RESOLVED (author notes 2026-06-02 -- no new issue):
   - "explain what a classical planner is + examples" -> DONE in #253 (Background 2.1.2).
     MDP half carried forward as #258.
@@ -1677,7 +1724,7 @@ OPEN:
       Low/admin (T3):   #279 (stray "the" near PDDL) #284 (check printing requirement)
       Cross-filed code: CODEBASE_AUDIT.txt #115 (camera glyph render) #116 (stack-degradation experiment)
 
-DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212, #213. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212, #213, #288, #289, #290, #291, #292. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
