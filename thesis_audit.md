@@ -1537,7 +1537,10 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
       the original wording per author. MATH CAVEAT (verified): medians 1.3/3.4/7.0s are correct, but the
       original's "rather than slow calls" is unsupported -- mean/call (total/plans) = 1.5/10.7/16.4s, >> median
       on holding/FATS, and FATS reaches ~125s with only ~7.6 replans, so slow calls drive the long episodes.
-      Author to revisit the wording. (2) subsec:tampura: dropped before/after "now" ("Reliability now runs in our favour" -> "On
+      RESOLVED 2026-06-06: re-verified (sanity-checked sum(per-call)==sum(total); max call ~1350s holding /
+      ~1606s FATS; 56-58% of holding/FATS planning time from above-median (slow) calls; stack only 7%) and
+      corrected the sentence to "usually short but heavy-tailed; long holding/FATS episodes from the slow-call
+      tail + repeated replanning; stack = many fast calls". (2) subsec:tampura: dropped before/after "now" ("Reliability now runs in our favour" -> "On
       reliability the comparison favours us") and the "picture is similar / still well under" phrasing.
   [x] sec:disc-semantic-vs-uniform: holding uniform "about a third" -> "about half" (47.8%); stack adaptive
       97->13 -> 100->13, uniform 97->1 -> 90->0; FATS "effectively broken (1.3%)" -> "much weaker but still
