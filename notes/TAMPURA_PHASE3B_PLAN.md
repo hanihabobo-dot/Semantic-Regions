@@ -545,6 +545,49 @@ shadow_calculator + free_space_generator in __init__; exposes generate_free_spac
 ================================================================================
 
 ================================================================================
+APPENDIX C — ITEM 9: PERCEPTION PARITY (oracle + boxelization)  [GOAL 3 perception]
+================================================================================
+Claim: on find_dice our oracle + boxelization run the EXACT SAME code (same
+functions, same params) as on our env.  Evidence = code identity + ITEM 7/8 logs.
+
+SAME FUNCTIONS (FindDiceAdapter delegates to the real BoxelTestEnv / module fns;
+no logic forked):
+  - oracle: BoxelTestEnv.oracle_detect_objects (foreign-self).  8-corner AABB
+    raycast, skips {plane,table,robot}.  ITEM 7 log: visible=['cup_0'] hidden=['die'].
+  - shadow: ShadowCalculator.calculate_shadow_boxel.  Surface-rest gate
+    z_min<=table_z+0.01 (:73); back-corner rays; subtract+split.  ITEM 8: 1 shadow.
+  - auto_cell: max_extent+0.01 -> free_space_generator.min_resolution
+    (test_full_pipeline.py:494/527).  ITEM 8 log: auto_cell=0.1081 (cup-driven).
+  - free space: reboxelize_free_space -> adapter.generate_free_space ->
+    FreeSpaceGenerator.generate (octree) -> merge_free_space_cells (CellMerger) ->
+    annotate_free_space_surface.  ITEM 8 log: "Re-boxelize: 0 removed, 9 new".
+  - hide gate test_target_can_hide_in_shadow (streams.py:407): NOT yet exercised
+    (sense unsolved); same function, used in ITEM 13.
+
+DIVERGENCES (each a GOAL-3 note; all are INPUT/SCENE differences, NOT forked code):
+  D1 physics_client: our env -> None (default-client p.*, byte-identical path);
+     find_dice -> their state-world client id.  Guarded param; code path identical.
+  D2 *** CONTAINMENT vs SHADOW *** find_dice hides the die by CONTAINMENT (die
+     under/inside the cup, same XY), while our model casts a line-of-sight SHADOW
+     BEHIND the occluder (footprint subtracted).  So die_in_shadow=False on
+     find_dice (ITEM 8) — the boxelization CODE is identical, but the find_dice
+     SCENE's hiding mechanism differs from our "target behind occluder" scenes.
+     Main GOAL-3 caveat: perception runs the same way; the scene geometry it runs
+     ON is a different hiding mode.  (Bears on ITEM 10 domain + ITEM 13 sense.)
+  D3 table_surface_height: our env 0.625+offset (constant); find_dice 0.01
+     (extracted occluder resting surface).  Same semantics (support plane), same
+     use in gate/clamp; data-driven source only.
+  D4 camera_position: our env fixed (0.1,-0.8,0.7); find_dice = wrist camera eye
+     at the home/sense config (0.179,0.049,0.588).  Same role (one fixed eye).
+  D5 adapter shims: objects/camera/table/generate_free_space/annotate_* supplied
+     by FindDiceAdapter via foreign-self delegation; perception fns unchanged.
+
+VERDICT: oracle + boxelization parity holds at the CODE level (same functions +
+params).  The only substantive difference is D2 (a scene/hiding-mode difference,
+not a perception-code difference), inherent to running on find_dice.
+================================================================================
+
+================================================================================
 APPENDIX B — ITEM 4 DECISION: PERCEPTION WORLD = P1 (single world)
 ================================================================================
 Decided 2026-06-06 (user).  Our perception reads THEIR live find_dice world
