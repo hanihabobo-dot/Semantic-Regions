@@ -43,7 +43,7 @@ NUMBERING  #N is filing order, not priority — read the TIER tag.
 #179  [DONE 2026-05-25] [T2]  Intro contributions: drop TAMPURA from section 1, cut the "first-class state" opener
 #180  [DONE 2026-05-25] [T3]  Background state-model notation: Pi for the tuple is unconventional
 ================================================================================
-#181  [T2] [POLISH]  "POD ... rather than established terminology" -- name the real term (contingent planning)
+#181  [DONE 2026-06-06] [T2] [POLISH]  POD vs contingent-planning naming -- bare hedge already removed in #285/#286 rewrite; current text presents POD as our descriptive label + cites the compilation lit (albore2009/geffner2013) without equating it to contingent planning. No edit (author reverted naming).
 NOTE 2026-05-25: naming attempt REVERTED per author. POD is the problem setting (deterministic
 + partially observable); contingent planning is a SOLUTION family for it (branching plans) and
 not the approach this thesis uses (it determinises-and-replans). Don't equate the two. Original
