@@ -1074,12 +1074,15 @@ Add a short MDP (and POMDP contrast) explanation in Background, parallel to the 
 Refs: background.tex (2.2.2 / sec:pod); #253; discussion.tex:84-106; related-work.tex:11.
 
 ================================================================================
-#259  [T2] [THESIS]  Related Work: clarify "provably optimal ones"
+#259  [DONE 2026-06-06] [T2] [THESIS]  Related Work: clarify "provably optimal ones"
 ================================================================================
 [AUTHOR] related-work.tex:11 -- TAMPURA produces "risk-aware, information-gathering plans rather than
 provably optimal ones." What does "provably optimal" mean here and what is it contrasted with? Clarify
 or drop.
 Refs: related-work.tex:11.
+NOTE 2026-06-06: DROPPED "rather than provably optimal ones" -- unclear and inaccurate (LAO* is a
+provably optimal solver for the abstract SSP/MDP); the risk-aware/uncertainty point is already stated
+twice in the sentence. Author-approved.
 
 ================================================================================
 #260  [T2] [THESIS]  Related Work: state how we differ from TAMPURA and Saleem (end of POMDP-TAMP para)
@@ -1811,7 +1814,7 @@ OPEN:
       Low/admin (T3):   #279 (stray "the" near PDDL) #284 (check printing requirement)
       Cross-filed code: CODEBASE_AUDIT.txt #115 (camera glyph render) #116 (stack-degradation experiment)
 
-DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #288, #289, #290, #291, #292, #293, #294, #295, #297, #298, #299. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined), #175 (shadow #102/#103 reconciliation declined; by-depth drop already done).
+DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #259, #288, #289, #290, #291, #292, #293, #294, #295, #297, #298, #299. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined), #175 (shadow #102/#103 reconciliation declined; by-depth drop already done).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
