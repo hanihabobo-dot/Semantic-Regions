@@ -202,7 +202,7 @@ update it.
 Refs: results.tex:79 (fig:overhead-camera).
 
 ================================================================================
-#271  [T2] [THESIS]  Results: exit-reason / failure-mode list needs an update
+#271  [DONE 2026-06-06] [T2] [THESIS]  Results: exit-reason / failure-mode list -- DONE: already updated (by #282) to the 2 plain categories (timed out / plan failed) in sec:metrics + subsec:failure-modes; old planner_failed/replan_limit/no_summary/physics_mismatch/all_searched/drop_failed all removed.
 ================================================================================
 [AUTHOR] results.tex:96 exit-reason list (planner_failed, timeout, replan_limit, physics_mismatch,
 drop_failed, ...) needs updating; ties to #243 (no_summary/replan_limit change in the next data
