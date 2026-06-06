@@ -1130,7 +1130,7 @@ criterion). Investigate in code, then decide whether to relax the hidden/visible
 Refs: methods.tex (perception/visibility, sense action); pose-sampling stream code.
 
 ================================================================================
-#265  [DONE 2026-06-06] [T2] [THESIS]  Methods: fig:boxelization caption "largest occluder" -> "bottom occluder"
+#265  [REVERTED 2026-06-06] [T2] [THESIS]  Methods: fig:boxelization caption "largest occluder" -> "bottom occluder"
 ================================================================================
 [AUTHOR] methods.tex:20 panel (a): "fully occluded target (cyan) sitting in the shadow behind the
 largest occluder." It is not the largest occluder, just the bottom one. Correct (verify against the scene).
@@ -1138,6 +1138,7 @@ Refs: methods.tex:20 (fig:boxelization).
 NOTE 2026-06-06: methods.tex:20 panel (a) caption "behind the largest occluder" -> "behind the bottom
 occluder" per author (the target hides behind the bottom/front occluder, not the largest). Viewed
 boxelization_3d.png; took the author's scene knowledge for which occluder it is.
+NOTE 2026-06-06 (revert): author reverted this; the caption is restored to "largest occluder". Net change to methods.tex: none.
 
 ================================================================================
 #266  [DONE 2026-06-04] [T1] [THESIS]  Methods: shadow extends to end of hidden region, not the workspace boundary
@@ -1787,7 +1788,7 @@ OPEN:
       Low/admin (T3):   #279 (stray "the" near PDDL) #284 (check printing requirement)
       Cross-filed code: CODEBASE_AUDIT.txt #115 (camera glyph render) #116 (stack-degradation experiment)
 
-DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #265, #288, #289, #290, #291, #292, #293, #294, #295, #297. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined), #175 (shadow #102/#103 reconciliation declined; by-depth drop already done).
+DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #288, #289, #290, #291, #292, #293, #294, #295, #297. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined), #175 (shadow #102/#103 reconciliation declined; by-depth drop already done).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
