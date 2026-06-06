@@ -478,3 +478,68 @@ OUT OF SCOPE THIS PHASE (LATER)
 - >=20-seed eval / head-to-head numbers (PHASE 4 — GATED).
 - Any thesis-text edits (thesis/ is out of scope).
 ================================================================================
+
+================================================================================
+APPENDIX A — ITEM 3: PERCEPTION ADAPTER SURFACE (recon 2026-06-06; code-verified)
+================================================================================
+Exact BoxelTestEnv surface our perception stack touches.  ITEM 6 adapter must
+expose ALL of this (P1), or we instantiate a real BoxelTestEnv (P2).
+
+(1) OBJECT INVENTORY
+  env.objects : Dict[str, ObjectInfo]                          boxel_env.py:509
+    ObjectInfo (boxel_types.py:23): object_id:int  name:str  position:nd[3]
+      orientation:nd[4] xyzw  size:nd[3] (w,h,d)  is_visible:bool
+      is_occluder:bool  is_tray:bool=False
+    oracle SKIPS names {"plane","table","robot"}               boxel_env.py:1639
+
+(2) CAMERA (fixed = our model)
+  env.camera_position : nd[3]   boxel_env.py:459 ;  env.camera_target : nd[3]
+
+(3) TABLE GEOMETRY
+  env.table_surface_height : float (ours 0.625+offset)         boxel_env.py:719
+  env.table_x_range / table_y_range : WIDE logical range (shadow coverage)
+  env._SAFE_TABLE_X_RANGE=(-0.1,0.70) _SAFE_TABLE_Y_RANGE=(-0.40,0.40) :815-816
+    (free-space footprint = SAFE; shadow footprint = WIDE — keep both)
+
+(4) METHODS CALLED ON env
+  env.oracle_detect_objects(check_occlusion=True)              boxel_env.py:1620
+      -> (visible_names, poses); uses self.objects, self.camera_position,
+      DEFAULT-CLIENT p.getBasePositionAndOrientation / getAABB(:1651) /
+      rayTestBatch(:1662).
+  env.generate_free_space(known_obstacles, visualize=False)  (used by reboxelize)
+  env.use_uniform_grid : bool (False = semantic octree)        boxel_env.py:549
+  env.free_space_generator : FreeSpaceGenerator                boxel_env.py:538
+      .min_resolution : float  (SET = effective_cell)   test_full_pipeline.py:527
+
+(5) STANDALONE CONSUMERS (not env methods)
+  ShadowCalculator(camera_position, table_surface_height,    shadow_calculator.py:23
+      table_x_range, table_y_range).calculate_shadow_boxel(obj_boxel:BoxelData,
+      obstacles:List[BoxelData]) ; surface-rest gate z_min<=table_h+0.01 (:73);
+      DEFAULT-CLIENT p.rayTestBatch.
+  BoxelRegistry() (boxel_data.py): .boxels dict of BoxelData OBJECT/SHADOW/
+      FREE_SPACE ; .get_free_space_boxels()
+  reboxelize_free_space(registry, env, boxel_centers:dict, viz,  reboxelize.py:18
+      show_free) -> (new_ids, old_removed_ids)
+  auto_cell = max_extent + 0.01 ; effective_cell = max(uniform,auto) | auto
+      -> env.free_space_generator.min_resolution        test_full_pipeline.py:494-527
+
+(6) BoxelData unit (boxel_data.py): center, extent(half), object_name,
+    boxel_type, created_by_object, id.
+
+(7) PYBULLET CLIENT — CRITICAL (risk #2)
+  oracle(1651,1662) + shadow rayTestBatch pass NO physicsClientId -> DEFAULT
+  client.  THEIR find_dice world is client_id=0 (verified in baseline State),
+  created FIRST by our runner's env.initialize().
+   => with NO second world, default-client calls naturally hit THEIR world.
+   => a real BoxelTestEnv (P2) opens TWO more clients (boxel_env.py:513) ->
+      "default" becomes ambiguous; P2 needs physicsClientId care.
+
+ITEM 4 IMPLICATION: pipeline is bound to a full BoxelTestEnv (builds
+shadow_calculator + free_space_generator in __init__; exposes generate_free_space).
+  P1 = light adapter exposing (1)-(6), generate_free_space delegates to a
+       FreeSpaceGenerator, reads THEIR bodies on the default client.  Faithful,
+       no extra world; reproduces a broad surface; may need a guarded
+       physicsClientId edit if the default-client assumption breaks.
+  P2 = instantiate BoxelTestEnv, overwrite env.objects (+spawn matching bodies)
+       from their poses; reuses all machinery but adds 2 clients (ambiguity).
+================================================================================
