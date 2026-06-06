@@ -1104,13 +1104,17 @@ ma2025task? Verify against the paper and correct if wrong.
 Refs: related-work.tex:20; ma2025task.
 
 ================================================================================
-#262  [T2] [THESIS]  Related Work: Contingent-FF and MBP named without citations
+#262  [DONE 2026-06-06] [T2] [THESIS]  Related Work: Contingent-FF and MBP named without citations
 ================================================================================
 [AUTHOR] related-work.tex:30 "other POD planners instead search belief space directly, as in
 Contingent-FF and MBP" -- both named with NO \cite (unlike CLG/K-replanner/LW1). Add citations
 (Contingent-FF: Hoffmann & Brafman; MBP: Bertoli et al.) and verify the "search belief space directly"
 characterization.
 Refs: related-work.tex:30.
+NOTE 2026-06-06: added \cite for both -- hoffmann2005contingent (Contingent-FF, ICAPS 2005, pp.71-80) and
+bertoli2001planning (MBP, IJCAI 2001), at related-work.tex:30. "Search belief space directly" verified
+(Contingent-FF = heuristic forward search over belief states; MBP = symbolic model checking over belief
+states). Author-approved.
 
 ================================================================================
 #263  [DONE 2026-06-04] [T1] [THESIS]  Related Work: "Object Integrity" octree argument does not apply to our system
@@ -1817,7 +1821,7 @@ OPEN:
       Low/admin (T3):   #279 (stray "the" near PDDL) #284 (check printing requirement)
       Cross-filed code: CODEBASE_AUDIT.txt #115 (camera glyph render) #116 (stack-degradation experiment)
 
-DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #259, #288, #289, #290, #291, #292, #293, #294, #295, #297, #298, #299. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined), #175 (shadow #102/#103 reconciliation declined; by-depth drop already done), #260 (TAMPURA/Saleem differentiation -- redundant, declined).
+DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #259, #262, #288, #289, #290, #291, #292, #293, #294, #295, #297, #298, #299. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined), #175 (shadow #102/#103 reconciliation declined; by-depth drop already done), #260 (TAMPURA/Saleem differentiation -- redundant, declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
