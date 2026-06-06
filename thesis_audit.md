@@ -254,7 +254,7 @@ Refs: introduction.tex:19; #168.
 Folded into #187 (same related-work.tex:24 Bai et al. paragraph).
 
 ================================================================================
-#193  [T1] [THESIS]  Relocate/shrink "Spatial Belief Representation in TAMP" into Background
+#193  [DONE 2026-06-06] [T1] [THESIS]  Relocate/shrink "Spatial Belief Representation in TAMP" into Background
 ================================================================================
 related-work.tex:39-52 (octree + Critical Regions limitations) reads like BACKGROUND, point
 unclear. Intended message is small: octrees and Critical Regions were inspirations, neither
@@ -263,6 +263,12 @@ merge the limitation content into the background subsections, delete the related
 (leave a brief note); decide where the belief-space-replanning sentence (:35) belongs (#188 or
 background).
 Refs: related-work.tex:39-52,35; background.tex:140,156; #182; #188.
+NOTE 2026-06-06: DONE. Deleted the related-work "Spatial Belief Representation in TAMP" section.
+Merged the octree limitation (no semantic occluded-volume) into background's octree paragraph; folded
+the "behind object A" illustration into the Critical Regions paragraph (rest of CR limitation already
+lived there). Left a one-line spatial pointer in related-work's Summary & Research Gap
+(\cref{sec:spatial_representation}, "neither usable out of the box"). Belief-space-replanning sentence
+kept in place per #188 (no move). No \label/\cref/\cite orphaned; clean lualatex compile (69 pp, exit 0).
 
 ================================================================================
 #194  [DONE 2026-05-25] [T2]  Related-work framing: drop marketing voice; cut the over-long "three advantages" paragraph
@@ -1646,7 +1652,6 @@ OPEN ISSUES
 OPEN:
   Background: #181 (POD vs contingent-planning naming -- reverted; reconsider, don't equate them)
   Methods: #175 (shadow-split #102/#103 -- only "by depth" dropped; conditional/surface-resting remain)
-  Intro/RW: #193 (move Spatial-Belief to background; T1)
   Results: #199 (task rename), #209 (resolution-floor study + figure)
   Conclusion/front: #208 (add GitHub+GitLab code links)
   Style (very low priority): #210 (drop author names, cite by number; T3/POLISH)
@@ -1672,7 +1677,7 @@ OPEN:
       Low/admin (T3):   #279 (stray "the" near PDDL) #284 (check printing requirement)
       Cross-filed code: CODEBASE_AUDIT.txt #115 (camera glyph render) #116 (stack-degradation experiment)
 
-DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212, #213. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
+DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #211, #212, #213. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined).
 
 Gating: #141-#156, #130 done — eval write-up (Results/Discussion/abstract/conclusion) is in
 thesis/, chapters clear of internal paths + hardware clutter, front/back matter in place, nine
