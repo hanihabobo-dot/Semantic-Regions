@@ -176,7 +176,7 @@ Refs: background.tex (2.2.2 / sec:pod); #253; discussion.tex:84-106; related-wor
 #262  [DONE 2026-06-06] [T2] [THESIS]  Related Work: Contingent-FF and MBP named without citations
 #263  [DONE 2026-06-04] [T1] [THESIS]  Related Work: "Object Integrity" octree argument does not apply to our system
 ================================================================================
-#264  [T2] [THESIS]  Pose sampling vs (partial) occlusion; relax "hidden" to all-8-corners-occluded
+#264  [DONE 2026-06-06] [T2] [THESIS]  Pose sampling vs (partial) occlusion -- VERIFIED IN CODE: oracle_detect_objects (boxel_env.py:1625) already marks an object visible iff ANY of 8 AABB corners is seen, i.e. hidden iff all 8 occluded (= the proposed criterion; nothing to relax). _hidden_xy_positions (boxel_env.py:1020) samples targets fully hidden (all 8 shrunk corners occluded), so partial occlusion never arises in eval. Added one clarifying sentence to methods.tex (Sensing Action); no code change.
 ================================================================================
 [AUTHOR] How are object poses sampled -- can we sample a (partially) hidden object? If so, the visibility
 test could count an object as hidden only when all 8 bounding-box corners are occluded (vs the current
