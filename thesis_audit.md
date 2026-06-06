@@ -195,7 +195,7 @@ its initial state." Walk the code and confirm (static facts; initial state) befo
 Refs: methods.tex:38; initial-state construction code.
 
 ================================================================================
-#270  [T2] [THESIS]  Results: Figure 5.3 (overhead-camera) caption is outdated
+#270  [DONE 2026-06-06] [T2] [THESIS]  Results: Figure 5.3 overhead-camera caption -- DONE: caption already rewritten (by #288); names cyan/red/grey Boxels, RGB+depth corner insets, oblique viewpoint, oracle detector. Nothing outdated remains.
 ================================================================================
 [AUTHOR] results.tex:79 (fig:overhead-camera, Figure 5.3) caption is outdated. Identify what changed and
 update it.
