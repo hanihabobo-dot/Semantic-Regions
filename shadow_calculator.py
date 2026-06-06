@@ -8,7 +8,7 @@ when shadows intersect with other objects.
 
 import numpy as np
 import pybullet as p
-from typing import List
+from typing import List, Optional
 from boxel_data import BoxelData, BoxelType
 
 
@@ -39,7 +39,8 @@ class ShadowCalculator:
         self.table_y_min, self.table_y_max = table_y_range
     
     def calculate_shadow_boxel(self, obj_boxel: BoxelData,
-                               obstacles: List[BoxelData]) -> List[BoxelData]:
+                               obstacles: List[BoxelData],
+                               physics_client: Optional[int] = None) -> List[BoxelData]:
         """
         Calculate the Shadow Boxel(s) cast by an object, accounting for ray casting and obstacles.
 
@@ -72,6 +73,10 @@ class ShadowCalculator:
         # producers use.)
         if obj_center[2] - obj_extent[2] > self.table_surface_height + 0.01:
             return []
+
+        # Phase 3-B (TAMPURA bridge, P1): optionally target a pybullet client.
+        # None -> rayTestBatch with NO physicsClientId (EXACT path on our env).
+        _pc = {} if physics_client is None else {"physicsClientId": physics_client}
 
         # --- Step 1: Determine Shadow Start (Back Face) ---
         # Direction from camera to object center
@@ -119,7 +124,7 @@ class ShadowCalculator:
         # Batch Ray Test
         # rayTestBatch numThreads=0: let Bullet pick max threads (audit #69).
         # Safe — shadow construction is sequential w.r.t. stepSimulation.
-        results = p.rayTestBatch(corners, ray_ends, numThreads=0)
+        results = p.rayTestBatch(corners, ray_ends, numThreads=0, **_pc)
         
         table_z = self.table_surface_height
         

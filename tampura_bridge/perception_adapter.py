@@ -18,6 +18,7 @@ import numpy as np
 
 from boxel_env import BoxelTestEnv
 from boxel_types import ObjectInfo
+from free_space import FreeSpaceGenerator
 from tampura_environments.panda_utils import pb_utils as pbu
 from tampura_bridge.sense_config import sense_camera_pose, set_sense_config
 
@@ -58,9 +59,14 @@ class FindDiceAdapter:
         self._SAFE_TABLE_Y_RANGE = self.table_y_range
         self.camera_target = self._scene_centroid_target()
 
-        # filled in ITEM 8 (semantic octree path)
+        # semantic octree free-space generator over their table geometry
+        # (ITEM 8).  min_resolution is set to auto_cell by the boxelize pass.
         self.use_uniform_grid = False
-        self.free_space_generator = None
+        self.free_space_generator = FreeSpaceGenerator(
+            self.table_surface_height,
+            table_x_range=self.table_x_range,
+            table_y_range=self.table_y_range,
+        )
 
     def _build_objects(self):
         objects = {}
@@ -92,7 +98,15 @@ class FindDiceAdapter:
     def _extract_table(self):
         aabb = pbu.get_aabb(self.world.floor, client=self.client)
         lo, hi = aabb.lower, aabb.upper
-        table_z = float(hi[2])  # top of the support body
+        # Support surface = where the OCCLUDERS actually rest (their AABB bottom),
+        # not the floor-body top: find_dice objects sit ~1 cm above the floor mesh,
+        # and the shadow surface-resting gate (shadow_calculator:73) needs the cup
+        # bottom <= table_z + 0.01.  Falls back to the floor top if no occluders.
+        occ_bottoms = [
+            float(pbu.get_aabb(o.object_id, client=self.client).lower[2])
+            for o in self.objects.values() if o.is_occluder
+        ]
+        table_z = min(occ_bottoms) if occ_bottoms else float(hi[2])
         return table_z, (float(lo[0]), float(hi[0])), (float(lo[1]), float(hi[1]))
 
     def _scene_centroid_target(self):
@@ -122,6 +136,17 @@ class FindDiceAdapter:
         return BoxelTestEnv.oracle_detect_objects(
             self, check_occlusion=check_occlusion, physics_client=self.client_id
         )
+
+    def generate_free_space(self, known_boxels, visualize=False):
+        """Mirror BoxelTestEnv.generate_free_space (semantic octree path) so
+        reboxelize_free_space can run unchanged on this adapter."""
+        return self.free_space_generator.generate(known_boxels, visualize)
+
+    def annotate_free_space_surface(self, free_boxels):
+        """Foreign-self reuse of BoxelTestEnv.annotate_free_space_surface — it
+        only touches table_surface_height + _SAFE_TABLE_*_RANGE (all exposed
+        here) and is pure geometry, so it runs unchanged on this adapter."""
+        return BoxelTestEnv.annotate_free_space_surface(self, free_boxels)
 
 
 def _main():
