@@ -1617,7 +1617,9 @@ class BoxelTestEnv:
         valid_mask = (points_world[:, 2] > -1.0) & (points_world[:, 2] < 2.0)
         return points_world[valid_mask]
     
-    def oracle_detect_objects(self, check_occlusion: bool = True) -> Tuple[List[str], Dict[str, Tuple[np.ndarray, np.ndarray]]]:
+    def oracle_detect_objects(self, check_occlusion: bool = True,
+                              physics_client: Optional[int] = None
+                              ) -> Tuple[List[str], Dict[str, Tuple[np.ndarray, np.ndarray]]]:
         """
         Oracle function to detect visible objects and their poses.
 
@@ -1632,6 +1634,12 @@ class BoxelTestEnv:
         Returns:
             Tuple of (visible object names, dict of all object poses)
         """
+        # Phase 3-B (TAMPURA bridge, P1): optionally target a specific pybullet
+        # client.  None -> call p.* with NO physicsClientId, i.e. the EXACT
+        # default-client path used on our own env (unchanged).  The find_dice
+        # adapter passes their state-world client id so the oracle reads THEIR world.
+        _pc = {} if physics_client is None else {"physicsClientId": physics_client}
+
         visible_objects = []
         object_poses = {}
         
@@ -1639,7 +1647,7 @@ class BoxelTestEnv:
             if name in ["plane", "table", "robot"]:
                 continue
             
-            pos, orn = p.getBasePositionAndOrientation(obj_info.object_id)
+            pos, orn = p.getBasePositionAndOrientation(obj_info.object_id, **_pc)
             position = np.array(pos)
             orientation = np.array(orn)
             
@@ -1648,7 +1656,7 @@ class BoxelTestEnv:
             
             is_visible = True
             if check_occlusion:
-                aabb_min, aabb_max = p.getAABB(obj_info.object_id)
+                aabb_min, aabb_max = p.getAABB(obj_info.object_id, **_pc)
                 ray_targets = []
                 for x in (aabb_min[0], aabb_max[0]):
                     for y in (aabb_min[1], aabb_max[1]):
@@ -1660,7 +1668,7 @@ class BoxelTestEnv:
                 # (audit #69). Safe — Phase 1/4 calls are sequential w.r.t.
                 # stepSimulation on this client.
                 results = p.rayTestBatch(
-                    [cam] * len(ray_targets), ray_targets, numThreads=0,
+                    [cam] * len(ray_targets), ray_targets, numThreads=0, **_pc
                 )
                 is_visible = any(
                     r[0] == obj_info.object_id for r in results

@@ -16,11 +16,17 @@ if _REPO not in sys.path:
 
 import numpy as np
 
+from boxel_env import BoxelTestEnv
 from boxel_types import ObjectInfo
 from tampura_environments.panda_utils import pb_utils as pbu
 from tampura_bridge.sense_config import sense_camera_pose, set_sense_config
 
 DIE_CATEGORY = "dice"
+
+
+def _client_id(client):
+    # BulletClient wraps the int connection id at ._client; tolerate a raw int.
+    return getattr(client, "_client", client)
 
 
 class FindDiceAdapter:
@@ -36,6 +42,7 @@ class FindDiceAdapter:
     def __init__(self, world, sense_at_home=True):
         self.world = world
         self.client = world.client
+        self.client_id = _client_id(world.client)
         if sense_at_home:
             set_sense_config(world)
         eye, quat = sense_camera_pose(world)
@@ -103,6 +110,19 @@ class FindDiceAdapter:
             o.position = np.array(pos, dtype=float)
             o.orientation = np.array(orn, dtype=float)
 
+    def oracle_detect_objects(self, check_occlusion=True):
+        """Run OUR oracle (BoxelTestEnv.oracle_detect_objects) on their world.
+
+        Foreign-self reuse: that method only touches self.objects and
+        self.camera_position (both exposed here), so calling it with this
+        adapter as ``self`` runs the EXACT same code path as on our env.  We
+        thread their state-world client id so its default-client p.* calls read
+        THEIR world (boxel_env physics_client=None would hit our default client).
+        """
+        return BoxelTestEnv.oracle_detect_objects(
+            self, check_occlusion=check_occlusion, physics_client=self.client_id
+        )
+
 
 def _main():
     import argparse
@@ -153,6 +173,15 @@ def _main():
                 lo[2], hi[2], lo[2] - ad.table_surface_height,
             )
         )
+
+    print("--- ITEM 7: oracle on their scene (fixed home camera) ---")
+    visible, _poses = ad.oracle_detect_objects()
+    hidden = [n for n in ad.objects if n not in visible]
+    print("visible:", visible)
+    print("hidden :", hidden)
+    die_hidden = "die" not in visible
+    cups_visible = all(n in visible for n in ad.objects if n.startswith("cup"))
+    print("die hidden? {}   all cups visible? {}".format(die_hidden, cups_visible))
 
 
 if __name__ == "__main__":
