@@ -420,8 +420,8 @@ The thesis never says where the implementation lives (GitHub + GitLab). Fix: add
 (author to PROVIDE — do not guess) as a code-availability footnote/statement.
 Refs: introduction.tex / abstract.tex / appendix.tex.
 NOTE 2026-06-06: author provided the GitLab URL; added as a code-availability footnote at the first
-mention of the system in introduction.tex (\url{https://git.rwth-aachen.de/hani.alassiri.alhabboub/pybullet},
-pinned at commit db6f818). No GitHub mirror was provided, so only GitLab is cited. Raised in review 2026-06-06.
+mention of the system in introduction.tex (\url{https://git.rwth-aachen.de/hani.alassiri.alhabboub/pybullet}).
+No GitHub mirror was provided, so only GitLab is cited. Raised in review 2026-06-06.
 
 ================================================================================
 #209  [T2] [THESIS]  Results: resolution-floor sweep -- effect of min free-space leaf size on total boxel count
