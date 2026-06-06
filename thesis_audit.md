@@ -420,7 +420,7 @@ The thesis never says where the implementation lives (GitHub + GitLab). Fix: add
 (author to PROVIDE — do not guess) as a code-availability footnote/statement.
 Refs: introduction.tex / abstract.tex / appendix.tex.
 NOTE 2026-06-06: author provided the GitLab URL; added as a code-availability footnote at the first
-mention of the system in introduction.tex (\url{https://git.rwth-aachen.de/hani.alassiri.alhabboub/pybullet}).
+mention of the system in introduction.tex (\url{https://git.rwth-aachen.de/hani.alassiri.alhabboub/Semantic_Space_Abstractions}).
 No GitHub mirror was provided, so only GitLab is cited. Raised in review 2026-06-06.
 
 ================================================================================
