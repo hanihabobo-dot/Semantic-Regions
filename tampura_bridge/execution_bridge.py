@@ -6,8 +6,10 @@ phase a "pick" is a pose-set + weld in their pybullet: teleport the target objec
 into the gripper and fix it there with a constraint (no motion planning). Proves
 the loop; faithful pick/place controllers are a LATER upgrade.
 """
+import math
 import os
 import sys
+import time
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO not in sys.path:
@@ -38,6 +40,62 @@ def execute_simplified_pick(world, obj_body):
     return cid, (tx, ty, tz)
 
 
+def _ik(client, rb, ee, pos, orn):
+    jp = client.calculateInverseKinematics(
+        rb, ee, pos, orn, maxNumIterations=200, residualThreshold=1e-4)
+    return list(jp[:7])
+
+
+def _move_arm(client, rb, arm, target, steps=60, sleep=0.01, attached=None):
+    """Kinematically interpolate the arm joints to `target`, animating the GUI.
+    If `attached` = (obj_body, ee_link, rel_pose), keep that object fixed in the
+    end-effector frame each frame (a grasped object riding with the gripper)."""
+    start = [client.getJointState(rb, i)[0] for i in arm]
+    for s in range(1, steps + 1):
+        a = s / float(steps)
+        for idx, q0, q1 in zip(arm, start, target):
+            client.resetJointState(rb, idx, q0 + a * (q1 - q0))
+        if attached is not None:
+            obj, ee, rel = attached
+            ep, eo = client.getLinkState(rb, ee)[:2]
+            wp, wo = client.multiplyTransforms(ep, eo, rel[0], rel[1])
+            client.resetBasePositionAndOrientation(obj, wp, wo)
+        time.sleep(sleep)
+
+
+def execute_faithful_pick(world, obj_body):
+    """Real reach -> grasp -> lift using OUR IK approach on THEIR Panda (bridge-
+    only; no shared streams refactor).  Targets panda_grasptarget (link 14), arm
+    joints 0-6, fingers 12/13.  Returns (constraint_id, lift_xyz)."""
+    client, rb = world.client, world.robot.body
+    ee = pbu.link_from_name(rb, "panda_grasptarget", client=client)
+    arm, fingers = [0, 1, 2, 3, 4, 5, 6], [12, 13]
+    aabb = pbu.get_aabb(obj_body, client=client)
+    cx = float((aabb.lower[0] + aabb.upper[0]) / 2)
+    cy = float((aabb.lower[1] + aabb.upper[1]) / 2)
+    ztop = float(aabb.upper[2])
+    down = client.getQuaternionFromEuler([math.pi, 0, 0])
+
+    for f in fingers:
+        client.resetJointState(rb, f, 0.04)  # open
+    _move_arm(client, rb, arm, _ik(client, rb, ee, [cx, cy, ztop + 0.10], down), steps=60)
+    _move_arm(client, rb, arm, _ik(client, rb, ee, [cx, cy, ztop + 0.00], down), steps=30)
+
+    # grasp: record object pose in the EE frame, close fingers, weld
+    ep, eo = client.getLinkState(rb, ee)[:2]
+    op, oo = client.getBasePositionAndOrientation(obj_body)
+    inv = client.invertTransform(ep, eo)
+    rel = client.multiplyTransforms(inv[0], inv[1], op, oo)
+    for f in fingers:
+        client.resetJointState(rb, f, 0.015)  # close on the cup
+    cid = client.createConstraint(rb, ee, obj_body, -1, p.JOINT_FIXED,
+                                  [0, 0, 0], [0, 0, 0], [0, 0, 0])
+    _move_arm(client, rb, arm, _ik(client, rb, ee, [cx, cy, ztop + 0.20], down),
+              steps=40, attached=(obj_body, ee, rel))
+    lift = client.getLinkState(rb, ee)[0]
+    return cid, (float(lift[0]), float(lift[1]), float(lift[2]))
+
+
 def _main():
     import argparse
     import logging
@@ -57,7 +115,7 @@ def _main():
     )
     pr.add_argument(
         "--out",
-        default=os.path.join(_REPO, "tampura_bridge", "captures", "item11_pick_held.png"),
+        default=os.path.join(_REPO, "tampura_bridge", "captures", "faithful_pick_held.png"),
     )
     args = pr.parse_args()
     arg_dict = {k: v for k, v in vars(args).items() if v is not None and k != "out"}
@@ -74,9 +132,9 @@ def _main():
     adapter = FindDiceAdapter(world)
     cup = adapter.objects["cup_0"]
     before = pbu.get_pose(cup.object_id, client=world.client)[0]
-    cid, (tx, ty, tz) = execute_simplified_pick(world, cup.object_id)
+    cid, (tx, ty, tz) = execute_faithful_pick(world, cup.object_id)
     after = pbu.get_pose(cup.object_id, client=world.client)[0]
-    print("=== ITEM 11: simplified pick (cup_0) in their world ===")
+    print("=== faithful pick (cup_0) on their robot ===")
     print("cup before:", np.round(before, 4).tolist())
     print("cup after :", np.round(after, 4).tolist(),
           " lifted dz: {:+.4f}".format(after[2] - before[2]), " constraint:", cid)
