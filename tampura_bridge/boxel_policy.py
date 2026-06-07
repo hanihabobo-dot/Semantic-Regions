@@ -20,7 +20,7 @@ from pddlstream.algorithms.meta import solve
 from pddlstream.language.constants import PDDLProblem
 
 from tampura_bridge.perception_adapter import FindDiceAdapter
-from tampura_bridge.execution_bridge import execute_simplified_pick
+from tampura_bridge.execution_bridge import execute_faithful_pick
 from tampura_bridge.boxelize import capture
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -79,14 +79,14 @@ class BoxelPolicy(Policy):
 
         obj_name = pick.args[0] if getattr(pick, "args", None) else "cup_0"
         body = adapter.objects[obj_name].object_id
-        cid, (tx, ty, tz) = execute_simplified_pick(self.env.world, body)
+        cid, (tx, ty, tz) = execute_faithful_pick(self.env.world, body)
         self._held_constraint = cid
         self._picked = True
-        out = os.path.join(_REPO, "tampura_bridge", "captures", "item12_planner_pick.png")
+        out = os.path.join(_REPO, "tampura_bridge", "captures", "item12_planner_faithful_pick.png")
         capture(self.env.world.client, out,
                 [tx + 0.6, ty - 0.6, tz + 0.2], [tx, ty, tz - 0.1])
         info = {"planned_action": str(pick), "executed_pick": obj_name,
                 "constraint": cid, "capture": out}
-        logging.info("[BoxelPolicy] planner emitted %s; executed simplified pick of "
+        logging.info("[BoxelPolicy] planner emitted %s; executed faithful pick of "
                      "%s (constraint %s); capture -> %s", pick, obj_name, cid, out)
         return Action(name="no-op"), info, store
