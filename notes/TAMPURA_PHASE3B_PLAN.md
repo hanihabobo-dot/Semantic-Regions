@@ -3,6 +3,21 @@ T2 PHASE 3-B — IMPLEMENTATION PLAN (Architecture B-full: our pipeline on their
 Handoff plan for an implementing agent.  Authored 2026-06-06.
 ================================================================================
 
+>>> POST-PLAN UPDATE [2026-06-06] — FAITHFUL PICK (supersedes the simplified weld) <<<
+--------------------------------------------------------------------------------
+ITEM 11/12 first delivered the plan's SIMPLIFIED pose-set/weld pick (option b).
+Per user direction afterward, the pick was upgraded to a REAL reach->grasp->lift
+using OUR IK on THEIR Panda — bridge-only (execute_faithful_pick in
+tampura_bridge/execution_bridge.py), NO shared streams/robot_utils refactor (the
+user's eval was running, so shared IK code was kept untouched).
+Feasibility probes: tampura_bridge/_robot_probe.py (their joint/link layout) and
+_ik_probe.py (IK reaches the cup to 0.1 mm).  Index map resolved BY NAME: EE =
+panda_grasptarget (link 14), fingers = 12/13, arm = 0-6 (arm aligns with ours; EE
+11 + fingers [9,10] do NOT).  GOAL 2 captures: captures/item12_planner_faithful_pick.png
++ standalone captures/faithful_pick_held.png.  The simplified weld
+(execute_simplified_pick) is kept in execution_bridge.py for record.
+--------------------------------------------------------------------------------
+
 >>> ITEM 0 RECHECK LOG — appended 2026-06-06 (implementing agent) <<<
 --------------------------------------------------------------------------------
 ITEM 0 done.  Branch decision: STAY ON MAIN (user reconfirmed 2026-06-06).

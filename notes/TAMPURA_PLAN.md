@@ -522,6 +522,33 @@ user before proceeding:
      robot/grasps/IK/motion differ from our streams; our execution loop
      assumes our env API.  Expect adapter work beyond the new .pddl -- the
      new domain is the START of Phase 3, not the whole change.
+     PHASE 3 RESULT [2026-06-06] -- DONE (B-full; demonstrated on GUI to 3 goals;
+     scope user-confirmed).  Our FULL pipeline runs IN their .venv, single process,
+     same pybullet 3.2.7 (import + FastDownward-exec gate passed).  All bridge code
+     is in OUR repo under tampura_bridge/ (never edits their clone); domain variant
+     pddl/domain_find_dice.pddl (relaxed pick + sense-at-home) REALISES the "copy
+     domain + adapt their env" framing above.  Goals delivered:
+       G1  boxelization+shadows overlaid on their scene (captures/item8_*.png).
+       G2  our PDDLStream planner emits the pick; the policy executes a REAL
+           reach->grasp->lift on their Panda via OUR IK (pybullet IK to
+           panda_grasptarget link 14, arm 0-6, fingers 12/13); cup lifted, die
+           revealed (captures/item12_planner_faithful_pick.png).  [Per user: a
+           real pick, NOT the initial simplified pose-set/weld.]
+       G3  oracle+boxelization run the SAME code paths as ours (foreign-self reuse;
+           only a GUARDED optional physics_client on oracle_detect_objects +
+           ShadowCalculator, inert when None); sense legal only at the fixed home
+           config.
+     Perception reads THEIR state world via a P1 adapter (FindDiceAdapter); fixed
+     camera = wrist cam at DEFAULT_ARM_POS.  IK: their arm joints align with ours
+     (0-6); EE/fingers differ (14 / 12,13 vs our 11 / [9,10]) so the bridge
+     resolves them BY NAME -> NO shared IK/streams refactor (keeps a running eval
+     untouched); IK reaches the cup to 0.1 mm.  CONFIRMED (matches the CONTAINMENT
+     note above): their hiding is CONTAINMENT (die under cup) vs our LATERAL shadow.
+     OUT OF SCOPE (LATER): full relocate->sense->pick(die)->home solve; PLACE/
+     go-home + RRT-planned paths (bridge uses straight joint interpolation);
+     belief.update integration (bridge runs the pick directly, returns no-op to
+     their rollout); >=20-seed eval = PHASE 4 (GATED).  Item log:
+     notes/TAMPURA_PHASE3B_PLAN.md.
   PHASE 4 -- EVAL.  Both systems on the SAME env + SAME hardware: success
      rate + time over >= 20 problems/seeds.  Plot ours vs real-TAMPURA
      (Phase 2) -- now same task AND same hardware, removing the
