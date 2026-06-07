@@ -56,6 +56,40 @@ def plan_pick_goal(target_name="cup_0"):
     return next((a for a in plan if a.name == "pick"), None)
 
 
+def plan_solve(adapter, domain_name="domain_find_dice.pddl"):
+    """Run OUR planner on the find_dice variant for the FULL holding-die solve.
+    Returns the plan: relocate the hiding cup -> sense the die -> pick the die ->
+    go home.  Streamless: relaxed pick/place ground from the symbolic init.
+    Seed-generic: cups/die + the hiding cup are derived from the adapter."""
+    domain = _read_domain(domain_name)
+    objs = list(adapter.objects.values())
+    cups = [o for o in objs if o.is_occluder]
+    die = next(o for o in objs if not o.is_occluder)
+    # find_dice hides the die under ONE cup (containment): the cup nearest in XY.
+    hiding = min(cups, key=lambda c: (c.position[0] - die.position[0]) ** 2
+                 + (c.position[1] - die.position[1]) ** 2)
+    cup_b, region, free = "boxel_" + hiding.name, "region_" + die.name, "free_dest"
+    init = [
+        ("Obj", hiding.name), ("Obj", die.name),
+        ("Boxel", cup_b), ("Boxel", region), ("Boxel", free),
+        ("handempty",),
+        ("clear", hiding.name), ("clear", die.name),
+        ("obj_at_boxel", hiding.name, cup_b), ("obj_at_boxel_KIF", hiding.name, cup_b),
+        ("on_table", hiding.name),
+        ("is_shadow", region),
+        ("is_free_space", free), ("on_surface", free),
+        ("blocks_view_at", hiding.name, cup_b, region),
+        ("at_sense_config",),
+    ]
+    goal = ("and", ("holding", die.name), ("at_home",))
+    problem = PDDLProblem(domain, {}, None, {}, init, goal)
+    try:
+        solution = solve(problem, unit_costs=True)
+    except TypeError:
+        solution = solve(problem)
+    return solution[0] or []
+
+
 class BoxelPolicy(Policy):
     """Drives TAMPURA's rollout with our planner.  ITEM 12: plan + execute one
     pick on the first step, then no-op."""
