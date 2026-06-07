@@ -32,10 +32,14 @@ from tampura_environments.panda_utils import pb_utils as pbu
 from tampura_bridge.perception_adapter import FindDiceAdapter
 
 
-def build_object_boxels(adapter):
-    """OBJECT BoxelData from each adapter object's live AABB (cup, die)."""
+def build_object_boxels(adapter, visible_names=None):
+    """OBJECT BoxelData from each VISIBLE adapter object's live AABB.  When
+    visible_names is given, objects not in it (e.g. a die still hidden under a
+    cup) are NOT boxelized -- we only discretize what the camera actually sees."""
     out = []
     for name, o in adapter.objects.items():
+        if visible_names is not None and name not in visible_names:
+            continue
         aabb = pbu.get_aabb(o.object_id, client=adapter.client)
         lo = np.array(aabb.lower, dtype=float)
         hi = np.array(aabb.upper, dtype=float)
@@ -45,10 +49,14 @@ def build_object_boxels(adapter):
     return out
 
 
-def boxelize_scene(adapter):
-    """Full perception pass -> populated BoxelRegistry + auto_cell."""
+def boxelize_scene(adapter, visible_names=None):
+    """Full perception pass -> populated BoxelRegistry + auto_cell.  Only VISIBLE
+    objects are boxelized (visible_names; from our oracle if None), so a hidden
+    die is not discretized until a sense reveals it."""
+    if visible_names is None:
+        visible_names, _ = adapter.oracle_detect_objects()
     registry = BoxelRegistry()
-    for bd in build_object_boxels(adapter):
+    for bd in build_object_boxels(adapter, visible_names):
         registry.add_boxel(bd)
 
     # SHADOWS for occluders: our ShadowCalculator, reading their world via the
