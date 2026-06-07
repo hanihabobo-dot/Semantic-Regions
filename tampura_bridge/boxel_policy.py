@@ -127,6 +127,12 @@ class BoxelPolicy(Policy):
         return capture(self.env.world.client, out, eye,
                        [float(cen[0]), float(cen[1]), float(cen[2])])
 
+    def _capture_at(self, fname, target_xyz, off=(0.5, -0.6, 0.35)):
+        t = [float(target_xyz[0]), float(target_xyz[1]), float(target_xyz[2])]
+        eye = [t[0] + off[0], t[1] + off[1], t[2] + off[2]]
+        out = os.path.join(_REPO, "tampura_bridge", "captures", fname)
+        return capture(self.env.world.client, out, eye, t)
+
     def _place_xy(self, die_pos):
         """A known-free table point to relocate the cup to, farthest from the die
         (uses OUR free-space boxels; seed-generic)."""
@@ -189,7 +195,8 @@ class BoxelPolicy(Policy):
             bb.mark_at_home(belief)
             self._refresh_overlay(sense_at_home=False)
             info["executed"] = "faithful go-home (holding die)"
-            self._capture("phase3c_solve_final.png")
+            die_xyz = world.client.getBasePositionAndOrientation(self._die_body)[0]
+            self._capture_at("phase3c_die_at_home.png", die_xyz)
 
         logging.info("[BoxelPolicy] step %d: %s -> %s", self._step, str(act),
                      info.get("executed", ""))
