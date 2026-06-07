@@ -62,11 +62,6 @@ def main():
     env = tconfig.get_env(config["task"])(config=config)
     b0, store = env.initialize()
 
-    # Part B: remove TAMPURA's POMDP visibility voxels and show OUR boxelization.
-    if config["vis"]:
-        from tampura_bridge.boxelize import suppress_pomdp_and_draw
-        suppress_pomdp_and_draw(env.world)
-
     policy = BoxelPolicy(config, env.problem_spec, env=env)
     history, store = policy.rollout(env, b0, store)
     logging.info("[BoxelBridge] rollout complete: %d entries", len(history))
