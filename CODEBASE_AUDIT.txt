@@ -520,13 +520,52 @@ Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no
      full stack incl. the above.  See #118, notes/THESIS_NOTES.md §§1-21, notes/
      TAMPURA_PLAN.md PHASE 3-C RESULT.
 
+#120. [2026-06-07] [OPEN T0] find_dice BRIDGE IS EXECUTION-UNFAITHFUL -- rebuild it to use
+     OUR real streams + motion planning + collision checking + physics, NOT the kinematic
+     shortcuts.  WHY: the bridge's 20/20 is an ARTIFACT of these shortcuts -- it cannot
+     fail the way the real system does (#119).  This is the heart of a fair comparison.
+     Shortcuts to remove (tampura_bridge/ + pddl/domain_find_dice.pddl):
+     (a) NO STREAMS.  domain_find_dice.pddl RELAXED pick+place to DROP the grasp/config/
+         kin_solution/motion streams; plan_solve grounds from a hand-built symbolic init
+         (we currently use ZERO streams).  FIX: use OUR real streams (grasp-sample,
+         place-sample, motion/kin) so pick/place ground like our normal pipeline (user:
+         "fine to add our streams").
+     (b) NO MOTION PLANNING.  execute_faithful_pick/place/go_home (execution_bridge.py) do
+         straight joint interpolation via pybullet IK (_move_arm); no RRT / path planning.
+         FIX: collision-free motion planning.
+     (c) NO COLLISION CHECKING.  the kinematic moves ignore collisions.  FIX: add it.
+     (d) NO PHYSICS / DYNAMICS.  grasp = rigid weld (createConstraint); place = teleport-
+         to-rest (resetBasePositionAndOrientation).  FIX: real grasp + stepSimulation
+         settling.
+     (e) ORACLE READS GROUND TRUTH.  boxel_env.oracle_detect_objects enumerates EVERY body
+         incl. the hidden die and reads its pybullet AABB (every body has an AABB even when
+         hidden -> it "knows" hidden objects exist).  The bridge now uses segment_visible
+         (render + segmentation, sees only un-occluded bodies) -- correct; do NOT use the
+         ground-truth oracle for visibility.
+     (f) SENSE OVER SYMBOLIC, NOT GEOMETRIC, REGIONS.  the bridge senses "region_cup_X" (a
+         per-cup placeholder), not a real shadow boxel.  find_dice is CONTAINMENT (die UNDER
+         the cup); our lateral-shadow boxels don't contain the die (die_in_shadow=False), so
+         the semantic partition does NOT drive the search -- exhaustive relocate+re-sense
+         does.  FIX: model CONTAINMENT regions (cup footprint volume) so the die lands in a
+         region and the partition drives sensing.  (shadows ARE recomputed each refresh but
+         go unused for localization.)
+     (g) ARM-PARK BEFORE SENSE IS UNPLANNED.  the bridge calls execute_go_home to move the
+         arm clear of the external camera before each sense -- bridge-internal, NOT a PDDL
+         action (the planned go_home is only the final step).  Make sensing principled.
+     (h) FULL OVERLAY REDRAW.  draw_overlay clears all our items + redraws every refresh;
+         could redraw only what changed (perf/cleanup).
+     Until fixed, the bridge benchmarks PLANNING + PERCEPTION only, on idealized execution.
+     See #118, #119, notes/THESIS_NOTES.md, notes/TAMPURA_PLAN.md PHASE 3-C RESULT.
+
 ================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
 Chronological numbers, NOT priority — follow TIER. Closed bodies in git history
 (git log --grep="audit: mark #N") + archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 9 items (bodies above):
+OPEN — 10 items (bodies above):
+  #120 T0 — find_dice bridge execution-unfaithful: add real streams + motion planning +
+       collision checking + physics/dynamics (the heart of a fair TAMPURA comparison).
   #104 T3 — refresh thesis-PDF plots + numbers to post-#100-merge outputs (thesis #121/#168).
   #105 T2 — Wumpus-World baseline (cell-belief search, no shadow geometry) vs uniform/TAMPURA.
   --- batch 2 (2026-05-24 read-through spillover) ---
@@ -541,7 +580,7 @@ OPEN — 9 items (bodies above):
   #112 T3 — (optional) Wilson interval for success-rate plots (thesis #207).
   #113 T1 — FULL canonical sweep re-run: reproduce all data + add mbs0.01 (1 cm) arm; ensure
        complete coverage (no no_summary holes, mbs0.10 included, uniform per-goal arms); regen figs.
-  TIER tally: two open T1 (#107, #113); zero T0.
+  TIER tally: one open T0 (#120); two open T1 (#107, #113).
 
 CLOSED (one-line; full detail in git / archive):
   #117 [DONE 2026-06-04] fig:boxelization camera at its true elevated viewpoint + accurate camera-ray lines of sight; regen PNG.
