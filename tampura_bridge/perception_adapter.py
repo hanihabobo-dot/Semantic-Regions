@@ -15,6 +15,7 @@ if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
 import numpy as np
+import pybullet as p
 
 from boxel_env import BoxelTestEnv
 from boxel_types import ObjectInfo
@@ -40,15 +41,10 @@ class FindDiceAdapter:
     threading.
     """
 
-    def __init__(self, world, sense_at_home=True):
+    def __init__(self, world, sense_at_home=True, camera_mode="external"):
         self.world = world
         self.client = world.client
         self.client_id = _client_id(world.client)
-        if sense_at_home:
-            set_sense_config(world)
-        eye, quat = sense_camera_pose(world)
-        self.camera_position = eye
-        self.camera_quat = quat
 
         self.objects = self._build_objects()
         (self.table_surface_height,
@@ -57,7 +53,22 @@ class FindDiceAdapter:
         # single support surface here -> free-space footprint == shadow footprint
         self._SAFE_TABLE_X_RANGE = self.table_x_range
         self._SAFE_TABLE_Y_RANGE = self.table_y_range
-        self.camera_target = self._scene_centroid_target()
+
+        if camera_mode == "external":
+            # Fixed EXTERNAL RGB-D camera (our system's model): a high-oblique
+            # view aimed at the OCCLUDER centroid (die-independent -- the die's
+            # pose is never used to place it).  Sees the table clearly; a hidden
+            # die stays occluded until its covering cup is relocated.
+            self.camera_target = self._occluder_centroid_target()
+            self.camera_quat = None
+            self.camera_position = self._external_eye()
+        else:  # "wrist": Phase 3-B eye-in-hand at the fixed home config
+            if sense_at_home:
+                set_sense_config(world)
+            eye, quat = sense_camera_pose(world)
+            self.camera_position = eye
+            self.camera_quat = quat
+            self.camera_target = self._scene_centroid_target()
 
         # semantic octree free-space generator over their table geometry
         # (ITEM 8).  min_resolution is set to auto_cell by the boxelize pass.
@@ -67,6 +78,39 @@ class FindDiceAdapter:
             table_x_range=self.table_x_range,
             table_y_range=self.table_y_range,
         )
+
+    def _occluder_centroid_target(self):
+        """Aim point = centroid of the OCCLUDERS (cups) at table height, so the
+        fixed camera is placed without reference to the hidden die's pose."""
+        occ = [o.position[:2] for o in self.objects.values() if o.is_occluder]
+        if occ:
+            cx, cy = np.mean(np.asarray(occ), axis=0)
+        else:
+            cx, cy = self._scene_centroid_target()[:2]
+        return np.array([float(cx), float(cy), self.table_surface_height], dtype=float)
+
+    def _external_eye(self):
+        """High-oblique fixed external eye over the occluder footprint."""
+        c = self.camera_target
+        return np.array([float(c[0]), float(c[1]) - 0.3,
+                         self.table_surface_height + 0.9], dtype=float)
+
+    def segment_visible(self, w=320, h=240):
+        """Genuine visibility: render the fixed external camera and read the
+        segmentation mask -> the set of object NAMES actually seen (real
+        occlusion).  Replaces the AABB-corner oracle, which mis-reports round
+        cups from a clean external view.  A die hidden under a cup is NOT
+        returned until that cup is relocated."""
+        eye = [float(v) for v in self.camera_position]
+        tgt = [float(v) for v in self.camera_target]
+        view = self.client.computeViewMatrix(eye, tgt, [0, 0, 1])
+        proj = self.client.computeProjectionMatrixFOV(60.0, w / float(h), 0.01, 5.0)
+        img = self.client.getCameraImage(w, h, viewMatrix=view, projectionMatrix=proj,
+                                          renderer=p.ER_TINY_RENDERER)
+        seg = np.array(img[4]).reshape(h, w)
+        ids = set(int(v) & ((1 << 24) - 1) for v in np.unique(seg) if v >= 0)
+        id2name = {o.object_id: n for n, o in self.objects.items()}
+        return sorted(id2name[i] for i in ids if i in id2name)
 
     def _build_objects(self):
         objects = {}

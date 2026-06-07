@@ -54,7 +54,7 @@ def boxelize_scene(adapter, visible_names=None):
     objects are boxelized (visible_names; from our oracle if None), so a hidden
     die is not discretized until a sense reveals it."""
     if visible_names is None:
-        visible_names, _ = adapter.oracle_detect_objects()
+        visible_names = adapter.segment_visible()
     registry = BoxelRegistry()
     for bd in build_object_boxels(adapter, visible_names):
         registry.add_boxel(bd)
