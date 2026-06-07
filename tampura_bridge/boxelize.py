@@ -73,9 +73,12 @@ def boxelize_scene(adapter, visible_names=None):
                 registry.add_boxel(sh)
 
     # auto_cell (test_full_pipeline.py:494): tallest/widest object extent + 1 cm.
-    max_extent = max(float(np.max(b.max_corner - b.min_corner))
-                     for b in registry.get_object_boxels())
-    auto_cell = max_extent + 0.01
+    obs = registry.get_object_boxels()
+    if obs:
+        max_extent = max(float(np.max(b.max_corner - b.min_corner)) for b in obs)
+        auto_cell = max_extent + 0.01
+    else:
+        auto_cell = 0.05   # nothing visible (e.g. die held + cups out of frame)
     adapter.free_space_generator.min_resolution = auto_cell
 
     # FREE_SPACE via the exact reboxelize path (through adapter.generate_free_space).
@@ -108,7 +111,8 @@ def draw_registry_on_client(client, registry, fill_opacity=0.4):
     return lines, bodies
 
 
-def draw_overlay(world, fill_opacity=0.4, sense_at_home=True, prev=None):
+def draw_overlay(world, fill_opacity=0.4, sense_at_home=True, prev=None,
+                 camera_eye=None, camera_target=None):
     """Draw OUR boxelization of the CURRENT scene on their state-world GUI,
     ALONGSIDE TAMPURA's own POMDP visibility voxels (we do NOT remove those).
     On a refresh, removes ONLY the items WE drew last time (prev = (line_ids,
@@ -127,10 +131,16 @@ def draw_overlay(world, fill_opacity=0.4, sense_at_home=True, prev=None):
                 client.removeBody(bid)
             except Exception:
                 pass
-    adapter = FindDiceAdapter(world, sense_at_home=sense_at_home)
-    registry, _ = boxelize_scene(adapter)
+    adapter = FindDiceAdapter(world, sense_at_home=sense_at_home,
+                              camera_eye=camera_eye, camera_target=camera_target)
+    # Segment NOW -- after clearing our previous overlay and BEFORE drawing the
+    # new one -- so the render is clean and our phantom boxels never occlude the
+    # real objects in the segmentation.  Return the visible set so the policy
+    # reuses this exact (clean) perception.
+    visible = adapter.segment_visible()
+    registry, _ = boxelize_scene(adapter, visible_names=visible)
     ids = draw_registry_on_client(client, registry, fill_opacity=fill_opacity)
-    return adapter, registry, ids
+    return adapter, registry, ids, visible
 
 
 def capture(client, path, eye, target, w=960, h=720):

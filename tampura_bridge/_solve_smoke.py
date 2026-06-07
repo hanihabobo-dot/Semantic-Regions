@@ -35,9 +35,14 @@ tconfig.setup_logger(config["save_dir"], log_level=logging.WARNING)
 env = tconfig.get_env(config["task"])(config=config)
 env.initialize()
 adapter = FindDiceAdapter(env.world)
-plan = plan_solve(adapter)
-print("plan length:", len(plan))
-for a in plan:
-    print("  ", a.name, a.args)
+visible = adapter.segment_visible()
+cups = [n for n in visible if n != "die"]
+print("visible:", visible)
+plan = plan_solve(adapter, visible)
+print("plan (die hidden):", [(a.name, a.args) for a in plan])
 names = [a.name for a in plan]
-print("PASS" if names == ["pick", "place", "sense", "pick", "go_home"] else "FAIL: " + str(names))
+ok1 = names == ["pick", "place", "sense", "pick", "go_home"]
+giveup = plan_solve(adapter, visible, known_empty=cups)
+print("plan (all cups emptied):", [(a.name, a.args) for a in giveup])
+ok2 = (giveup == [])
+print("PASS" if (ok1 and ok2) else "FAIL")
