@@ -143,7 +143,8 @@ class BoxelPolicy(Policy):
         world = self.env.world
 
         if self._plan is None:
-            self._refresh_overlay(sense_at_home=True)          # initial boxels; voxels cleared
+            execute_go_home(world)                              # start from home (animated; no teleport)
+            self._refresh_overlay(sense_at_home=False)          # initial boxels; voxels cleared
             self._plan = plan_solve(self._adapter)
             self._bodies = {n: o.object_id for n, o in self._adapter.objects.items()}
             self._die_name = next(n for n, o in self._adapter.objects.items()
@@ -169,11 +170,11 @@ class BoxelPolicy(Policy):
             execute_faithful_place(world, self._bodies[obj_name], self._cup_constraint,
                                    place_xy, self._adapter.table_surface_height)
             bb.mark_moved(belief, bb.cup_aliases(belief)[int(obj_name.split("_")[-1])])
-            self._refresh_overlay(sense_at_home=False)
             info["executed"] = "faithful place (cup) -> " + str(
                 tuple(round(v, 3) for v in place_xy))
         elif act.name == "sense":
-            self._refresh_overlay(sense_at_home=True)           # arm home to sense
+            execute_go_home(world)                              # animate to home to sense (no teleport)
+            self._refresh_overlay(sense_at_home=False)          # redraw from home (cup moved, die revealed)
             visible, _ = self._adapter.oracle_detect_objects()
             info["executed"] = "sense @ home; visible=" + str(visible)
             logging.info("[BoxelPolicy] sense from home: die visible? %s "
