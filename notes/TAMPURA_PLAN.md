@@ -544,11 +544,29 @@ user before proceeding:
      resolves them BY NAME -> NO shared IK/streams refactor (keeps a running eval
      untouched); IK reaches the cup to 0.1 mm.  CONFIRMED (matches the CONTAINMENT
      note above): their hiding is CONTAINMENT (die under cup) vs our LATERAL shadow.
-     OUT OF SCOPE (LATER): full relocate->sense->pick(die)->home solve; PLACE/
-     go-home + RRT-planned paths (bridge uses straight joint interpolation);
-     belief.update integration (bridge runs the pick directly, returns no-op to
-     their rollout); >=20-seed eval = PHASE 4 (GATED).  Item log:
+     NOW DONE (PHASE 3-C, 2026-06-07): the full relocate->sense->pick(die)->home
+     solve + faithful PLACE/go-home + belief integration (see PHASE 3-C RESULT
+     below).  STILL OUT OF SCOPE (LATER): RRT-planned paths (bridge uses straight
+     joint interpolation); >=20-seed eval = PHASE 4 (GATED).  Item log:
      notes/TAMPURA_PHASE3B_PLAN.md.
+     PHASE 3-C RESULT [2026-06-07] -- DONE (full find_dice solve; GUI seed 0).
+     OUR pipeline PASSES their holding goal: rollout reward = 1.0 (holding(die) AND
+     at-home).  Sequence driven by OUR planner + OUR faithful IK on their Panda, with
+     fully ANIMATED motion (no teleport -- arm interpolates to home; NO set_sense_config
+     snap): pick(cup) -> place(cup,free) -> sense@home -> pick(die) -> go-home.  PATH B
+     (user-chosen): our faithful execution drives their world; the bridge WRITES the
+     symbolic result into THEIR SceneBelief (tampura_bridge/belief_bridge.py:
+     grasp_body=die alias, current_conf=DEFAULT_ARM_POS, moved+=cup) so their
+     abstract()->get_reward fires (find_dice/env.py:306/1004) -- their env is NEVER
+     edited; the policy no-ops and the rollout's no-op deepcopy carries the writes
+     forward (policy.py:125).  PART B: their dark-blue POMDP voxels
+     (visibility_grid.draw_intervals) cleared + OUR boxelization drawn/refreshed live
+     (boxelize.suppress_pomdp_and_draw).  Planner: relaxed PLACE + new at_home/go_home
+     in pddl/domain_find_dice.pddl; boxel_policy.plan_solve builds a seed-generic
+     symbolic init.  Faithful PLACE + go-home in execution_bridge.py.  Probes
+     _belief_smoke.py + _solve_smoke.py; captures phase3c_initial_boxels.png +
+     phase3c_die_at_home.png (die held at home).  Shared pipeline UNCHANGED (eval-safe).
+     SEED-GENERIC for the gated seed-for-seed PHASE 4.  Commits 5659250..3cdec02 (main).
   PHASE 4 -- EVAL.  Both systems on the SAME env + SAME hardware: success
      rate + time over >= 20 problems/seeds.  Plot ours vs real-TAMPURA
      (Phase 2) -- now same task AND same hardware, removing the

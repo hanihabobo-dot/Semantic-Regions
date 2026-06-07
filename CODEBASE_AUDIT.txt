@@ -467,6 +467,26 @@ Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no
      integration; >=20-seed eval = PHASE 4 (GATED).  Shared-core footprint: 27
      lines / 2 files, inert when physics_client=None.  Log: notes/TAMPURA_PHASE3B_PLAN.md.
 
+#118. [2026-06-07] PHASE 3-C DONE -- OUR pipeline SOLVES TAMPURA's find_dice holding
+     goal (the #114 "full die-solve" follow-on).  GUI seed 0: rollout reward = 1.0
+     (holding(die) AND at-home), driven by OUR planner + OUR faithful IK on their Panda
+     with fully ANIMATED motion (no teleport -- arm interpolates to home; set_sense_config
+     snap removed): pick(cup)->place(cup,free)->sense@home->pick(die)->go-home.  PATH B
+     (user-chosen): our faithful execution drives their world; the bridge WRITES the
+     result into THEIR SceneBelief (tampura_bridge/belief_bridge.py: grasp_body=die alias
+     + current_conf=DEFAULT_ARM_POS + moved) so abstract()->get_reward fires
+     (find_dice/env.py:306/1004) WITHOUT editing their env (policy no-ops; the rollout's
+     no-op deepcopy carries the writes forward).  PART B: dark-blue POMDP voxels
+     (visibility_grid.draw_intervals) removed + OUR boxelization drawn/refreshed live
+     (boxelize.suppress_pomdp_and_draw; removeAllUserDebugItems + tracked phantom removal).
+     Planner: relaxed PLACE + new at_home/go_home in pddl/domain_find_dice.pddl;
+     boxel_policy.plan_solve (seed-generic init).  Faithful PLACE + go-home in
+     execution_bridge.py.  New probes _belief_smoke.py + _solve_smoke.py.  Captures ADD:
+     phase3c_initial_boxels.png, phase3c_die_at_home.png.  Shared pipeline (boxel_env/
+     shadow_calculator/streams/robot_utils) UNCHANGED -- eval-safe.  SEED-GENERIC for the
+     gated seed-for-seed PHASE 4.  Commits 5659250..3cdec02 (main).  PHASE 4 (>=20-seed
+     eval) STILL GATED.
+
 ================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================

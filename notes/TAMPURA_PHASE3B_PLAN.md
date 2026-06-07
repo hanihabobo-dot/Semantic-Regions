@@ -3,6 +3,26 @@ T2 PHASE 3-B — IMPLEMENTATION PLAN (Architecture B-full: our pipeline on their
 Handoff plan for an implementing agent.  Authored 2026-06-06.
 ================================================================================
 
+>>> PHASE 3-C UPDATE [2026-06-07] — FULL find_dice SOLVE (the "LATER" item) <<<
+--------------------------------------------------------------------------------
+DONE on main (commits 5659250..3cdec02).  OUR pipeline PASSES their holding goal:
+GUI seed 0 rollout reward = 1.0 (holding(die) AND at-home), driven by OUR planner +
+OUR faithful IK with fully ANIMATED motion (no teleport -- set_sense_config snap
+removed; arm interpolates to home): pick(cup) -> place(cup,free) -> sense@home ->
+pick(die) -> go-home.
+PATH B (user-chosen): keep our faithful execution; the bridge WRITES the symbolic
+result into THEIR SceneBelief (tampura_bridge/belief_bridge.py) so abstract()->
+get_reward fires (find_dice/env.py:306/1004) -- their env is NEVER edited; the
+policy no-ops and the rollout's no-op deepcopy carries the writes forward.
+PART B: their POMDP voxels (visibility_grid.draw_intervals) cleared + OUR
+boxelization drawn/refreshed live (boxelize.suppress_pomdp_and_draw).
+NEW: faithful PLACE + go-home (execution_bridge.py); relaxed place + at_home/go_home
+in pddl/domain_find_dice.pddl; boxel_policy.plan_solve (seed-generic init); probes
+_belief_smoke.py + _solve_smoke.py; captures phase3c_initial_boxels.png +
+phase3c_die_at_home.png.  Shared pipeline UNCHANGED (eval-safe).  SEED-GENERIC for
+the gated seed-for-seed PHASE 4 (>=20-seed eval STILL GATED).
+--------------------------------------------------------------------------------
+
 >>> POST-PLAN UPDATE [2026-06-06] — FAITHFUL PICK (supersedes the simplified weld) <<<
 --------------------------------------------------------------------------------
 ITEM 11/12 first delivered the plan's SIMPLIFIED pose-set/weld pick (option b).
