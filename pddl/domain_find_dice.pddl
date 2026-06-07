@@ -59,6 +59,7 @@
     ;; --- Robot state ---
     (at_config ?q)
     (at_sense_config)             ; Phase 3-B: arm is at the fixed home/sense config
+    (at_home)                     ; Phase 3-C: arm is at the home config (reward atom)
     (handempty)
     (holding ?o)
     (obj_pose_known ?o)
@@ -172,6 +173,7 @@
       (Obj ?o)
       (Boxel ?region)
       (at_sense_config)                    ; Phase 3-B: sense only from the fixed home config
+      (handempty)                          ; Phase 3-C: sense empty-handed (mirrors their look's Not(holding)) — forces place-before-sense
       (view_clear ?region)
       (not (obj_at_boxel_KIF ?o ?region))  ; Only sense if unknown
     )
@@ -242,6 +244,7 @@
       (forall (?x)
         (when (on ?o ?x)
           (and (not (on ?o ?x)) (clear ?x))))
+      (not (at_home))             ; Phase 3-C: picking moves the arm off home
       (increase (total-cost) 1)
     )
   )
@@ -256,18 +259,16 @@
   ;; release height, drops the object, and at_config should change to
   ;; the lowered config.
   (:action place
-    :parameters (?o ?b ?g ?q)
+    ;; Phase 3-C find_dice: RELAXED to mirror the relaxed pick — grounds from the
+    ;; belief without IK/grasp streams (no ?g/?q/at_config/kin_solution/boxel_fits).
+    ;; Bridge execution is a faithful place via our IK (execute_faithful_place).
+    :parameters (?o ?b)
     :precondition (and
       (Obj ?o)
       (Boxel ?b)
-      (Grasp ?g)
-      (Config ?q)
       (holding ?o)
-      (at_config ?q)
       (is_free_space ?b)
       (on_surface ?b)
-      (boxel_fits ?o ?b)
-      (kin_solution ?o ?b ?g ?q)
     )
     :effect (and
       (handempty)
@@ -276,6 +277,7 @@
       (on_table ?o)               ; audit #41 — place lands ?o on the table
       (not (holding ?o))
       (not (is_free_space ?b))
+      (not (at_home))             ; Phase 3-C: placing moves the arm off home
       (increase (total-cost) 1)
     )
   )
@@ -312,6 +314,26 @@
       (not (holding ?o))
       (not (clear ?on_obj))
       (increase (total-cost) 2)
+    )
+  )
+
+  ;; =========================================================================
+  ;; GO-HOME: return the arm to the fixed home config  (Phase 3-C find_dice)
+  ;; =========================================================================
+  ;; Mirrors TAMPURA's go-home: legal only while holding something; restores
+  ;; (at_home).  pick/place clear (at_home), so the planner places go-home as
+  ;; the final step (any earlier go-home is undone by a later manipulation).
+  ;; The bridge executes it as a faithful arm motion to DEFAULT_ARM_POS.
+  (:action go_home
+    :parameters (?o)
+    :precondition (and
+      (Obj ?o)
+      (holding ?o)
+      (not (at_home))
+    )
+    :effect (and
+      (at_home)
+      (increase (total-cost) 1)
     )
   )
 )
