@@ -19,7 +19,7 @@ import numpy as np
 import pybullet as p
 
 from tampura_environments.panda_utils import pb_utils as pbu
-from tampura_environments.panda_utils.robot import PANDA_TOOL_TIP
+from tampura_environments.panda_utils.robot import DEFAULT_ARM_POS, PANDA_TOOL_TIP
 from tampura_bridge.perception_adapter import FindDiceAdapter
 from tampura_bridge.boxelize import capture
 
@@ -118,6 +118,59 @@ def execute_faithful_pick(world, obj_body, wrist_capture=None):
               steps=40, attached=(obj_body, ee, rel))
     lift = client.getLinkState(rb, ee)[0]
     return cid, (float(lift[0]), float(lift[1]), float(lift[2]))
+
+
+def execute_faithful_place(world, obj_body, constraint_id, place_xy, table_z):
+    """Faithful place: transport the held obj over place_xy, lower, release
+    (remove the grasp constraint + open the fingers), rest it on the table, and
+    retract.  Kinematic (matches execute_faithful_pick).  Returns the rest xyz."""
+    client, rb = world.client, world.robot.body
+    ee = pbu.link_from_name(rb, "panda_grasptarget", client=client)
+    arm, fingers = [0, 1, 2, 3, 4, 5, 6], [12, 13]
+    down = client.getQuaternionFromEuler([math.pi, 0, 0])
+    px, py = float(place_xy[0]), float(place_xy[1])
+
+    aabb = pbu.get_aabb(obj_body, client=client)
+    obj_h = float(aabb.upper[2] - aabb.lower[2])
+    rest_z = float(table_z) + obj_h / 2.0
+    top_z = float(table_z) + obj_h            # EE height with the obj resting
+
+    # grasp transform (obj in the EE frame) so it rides the gripper in transit
+    ep, eo = client.getLinkState(rb, ee)[:2]
+    op, oo = client.getBasePositionAndOrientation(obj_body)
+    inv = client.invertTransform(ep, eo)
+    rel = client.multiplyTransforms(inv[0], inv[1], op, oo)
+
+    _move_arm(client, rb, arm, _ik(client, rb, ee, [px, py, top_z + 0.20], down),
+              steps=40, attached=(obj_body, ee, rel))
+    _move_arm(client, rb, arm, _ik(client, rb, ee, [px, py, top_z + 0.02], down),
+              steps=30, attached=(obj_body, ee, rel))
+
+    client.removeConstraint(constraint_id)
+    for f in fingers:
+        client.resetJointState(rb, f, 0.04)   # open
+    client.resetBasePositionAndOrientation(obj_body, [px, py, rest_z], list(oo))
+
+    _move_arm(client, rb, arm, _ik(client, rb, ee, [px, py, top_z + 0.20], down), steps=30)
+    return (px, py, rest_z)
+
+
+def execute_go_home(world, held_body=None):
+    """Faithful go-home: interpolate the arm joints to DEFAULT_ARM_POS.  If
+    held_body is given (the die in hand), it rides the gripper kinematically so
+    the robot ends holding it at home.  Returns DEFAULT_ARM_POS."""
+    client, rb = world.client, world.robot.body
+    ee = pbu.link_from_name(rb, "panda_grasptarget", client=client)
+    arm = [0, 1, 2, 3, 4, 5, 6]
+    attached = None
+    if held_body is not None:
+        ep, eo = client.getLinkState(rb, ee)[:2]
+        op, oo = client.getBasePositionAndOrientation(held_body)
+        inv = client.invertTransform(ep, eo)
+        rel = client.multiplyTransforms(inv[0], inv[1], op, oo)
+        attached = (held_body, ee, rel)
+    _move_arm(client, rb, arm, list(DEFAULT_ARM_POS), steps=60, attached=attached)
+    return list(DEFAULT_ARM_POS)
 
 
 def _main():
