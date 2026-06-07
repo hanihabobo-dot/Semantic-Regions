@@ -172,8 +172,7 @@
     :precondition (and
       (Obj ?o)
       (Boxel ?region)
-      (at_sense_config)                    ; Phase 3-B: sense only from the fixed home config
-      (handempty)                          ; Phase 3-C: sense empty-handed (mirrors their look's Not(holding)) — forces place-before-sense
+      (handempty)                          ; sense empty-handed: the cup must be RELOCATED away (not just lifted) before sensing, so the fixed external camera's view of the region is genuinely cleared
       (view_clear ?region)
       (not (obj_at_boxel_KIF ?o ?region))  ; Only sense if unknown
     )
