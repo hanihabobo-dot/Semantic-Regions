@@ -63,10 +63,31 @@ def _move_arm(client, rb, arm, target, steps=60, sleep=0.01, attached=None):
         time.sleep(sleep)
 
 
-def execute_faithful_pick(world, obj_body):
+def _save_wrist_image(world, path):
+    """Save the robot's WRIST camera view (robot.get_image) at the current arm
+    config — what the robot actually SEES, distinct from the external vantage."""
+    from PIL import Image
+    from tampura_environments.panda_utils.robot import HEIGHT, WIDTH
+
+    ci = world.robot.get_image(client=world.client)
+    rgb = getattr(ci, "rgbPixels", None)
+    if rgb is None:
+        rgb = ci[0]
+    rgb = np.asarray(rgb, dtype=np.uint8)
+    if rgb.ndim == 1:
+        rgb = rgb.reshape(HEIGHT, WIDTH, 4)
+    rgb = rgb[:, :, :3]
+    ap = os.path.abspath(path)
+    os.makedirs(os.path.dirname(ap), exist_ok=True)
+    Image.fromarray(rgb).save(ap)
+    return ap
+
+
+def execute_faithful_pick(world, obj_body, wrist_capture=None):
     """Real reach -> grasp -> lift using OUR IK approach on THEIR Panda (bridge-
     only; no shared streams refactor).  Targets panda_grasptarget (link 14), arm
-    joints 0-6, fingers 12/13.  Returns (constraint_id, lift_xyz)."""
+    joints 0-6, fingers 12/13.  Returns (constraint_id, lift_xyz).  If
+    wrist_capture is given, save the wrist-camera view at the grasp pose."""
     client, rb = world.client, world.robot.body
     ee = pbu.link_from_name(rb, "panda_grasptarget", client=client)
     arm, fingers = [0, 1, 2, 3, 4, 5, 6], [12, 13]
@@ -80,6 +101,9 @@ def execute_faithful_pick(world, obj_body):
         client.resetJointState(rb, f, 0.04)  # open
     _move_arm(client, rb, arm, _ik(client, rb, ee, [cx, cy, ztop + 0.10], down), steps=60)
     _move_arm(client, rb, arm, _ik(client, rb, ee, [cx, cy, ztop + 0.00], down), steps=30)
+
+    if wrist_capture is not None:
+        _save_wrist_image(world, wrist_capture)  # what the robot SEES at the grasp
 
     # grasp: record object pose in the EE frame, close fingers, weld
     ep, eo = client.getLinkState(rb, ee)[:2]
@@ -117,6 +141,10 @@ def _main():
         "--out",
         default=os.path.join(_REPO, "tampura_bridge", "captures", "faithful_pick_held.png"),
     )
+    pr.add_argument(
+        "--wrist-out",
+        default=os.path.join(_REPO, "tampura_bridge", "captures", "faithful_pick_wrist_view.png"),
+    )
     args = pr.parse_args()
     arg_dict = {k: v for k, v in vars(args).items() if v is not None and k != "out"}
 
@@ -132,7 +160,7 @@ def _main():
     adapter = FindDiceAdapter(world)
     cup = adapter.objects["cup_0"]
     before = pbu.get_pose(cup.object_id, client=world.client)[0]
-    cid, (tx, ty, tz) = execute_faithful_pick(world, cup.object_id)
+    cid, (tx, ty, tz) = execute_faithful_pick(world, cup.object_id, wrist_capture=args.wrist_out)
     after = pbu.get_pose(cup.object_id, client=world.client)[0]
     print("=== faithful pick (cup_0) on their robot ===")
     print("cup before:", np.round(before, 4).tolist())
