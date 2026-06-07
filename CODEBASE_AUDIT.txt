@@ -131,7 +131,7 @@ META-ISSUE — OLD #95 SYSTEMIC PDDL STATE DRIFT (dissolved)
        for accepted geometric / symbolic gaps (including stale shadow AABBs).
 
 ================================================================================
-OPEN ISSUES — #104 #105 #106-#113
+OPEN ISSUES — #104 #105 #106-#114
 ================================================================================
 Issue numbers are DISCOVERY ORDER, not priority — read the TIER label, not the number
 (e.g. #63 is T3 doc work, #81 was T0). If walking the list lowest-first, re-sort by TIER.
@@ -451,6 +451,21 @@ Fix:
 Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no_summary
    fix); thesis_audit #209 (resolution writeup).  Care: plots ADD -- keep the old sweep
    dir; read regenerated PNGs before committing.
+
+#114. [2026-06-06] PHASE 3-B (B-full) DONE -- OUR pipeline on TAMPURA's find_dice.
+     Bridge in tampura_bridge/ (never edits their clone); runs IN their .venv, same
+     pybullet 3.2.7.  GUI to 3 goals: G1 boxelization+shadows on their scene; G2
+     our planner emits the pick and the policy executes a REAL reach->grasp->lift
+     on their Panda via OUR IK (panda_grasptarget link 14, arm 0-6, fingers 12/13)
+     -- per user, a real pick not a weld; G3 oracle+boxelization run the SAME code
+     (foreign-self reuse + GUARDED optional physics_client, inert when None) and
+     sense gated to the fixed home config.  IK note: arm joints align (0-6);
+     EE/fingers differ (14 / 12,13 vs 11 / [9,10]) so the bridge resolves BY NAME
+     -> no shared-streams refactor (eval-safe); IK reaches cup to 0.1 mm.  FINDING:
+     their hiding is CONTAINMENT (die under cup) vs our LATERAL shadow.  OPEN
+     FOLLOW-ONS (LATER): full die-solve; PLACE/go-home + RRT motion; belief.update
+     integration; >=20-seed eval = PHASE 4 (GATED).  Shared-core footprint: 27
+     lines / 2 files, inert when physics_client=None.  Log: notes/TAMPURA_PHASE3B_PLAN.md.
 
 ================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
