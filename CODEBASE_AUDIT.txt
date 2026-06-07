@@ -487,6 +487,39 @@ Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no
      gated seed-for-seed PHASE 4.  Commits 5659250..3cdec02 (main).  PHASE 4 (>=20-seed
      eval) STILL GATED.
 
+#119. [2026-06-07] find_dice/holding SUCCESS CEILING -- failure-mode taxonomy (why our
+     eval success is ~42%, not 100%; THESIS_NOTES §21.5).  IMPORTANT for the comparison:
+     the Phase 3-C bridge hits 20/20 ONLY because it executes KINEMATICALLY (no motion
+     planning, no collision checks, no physics) on guaranteed-solvable scenes; our REAL
+     eval runs the full physical-execution layer, where the failures below occur.  Each
+     item: [THESIS_NOTES § | existing audit # | status].  Consolidated record, NOT a
+     reopen -- most fixes were deferred/wontfix per prior supervisor decisions.
+     (a) Motion-planning fragility: the sampling-based planner fails to find a path for
+         pick/place/relocate when the start config is in contact (esp. after place/stack).
+         [§19 | #36 hardcoded-lift workaround landed | underlying robustness UNTRACKED].
+     (b) Reachability / grasp limits: top-down-only grasp at a fixed 10 cm offset; arm
+         cannot reach some configs incl. tall stacks -> no IK / no path -> failure.
+         [§4,§12,§13 | #116 stack-degradation KILLED | accepted].
+     (c) Collision-blind final approach + no replan on collision: the last 10 cm uses a
+         local IK that bypasses planner collision checks; execution collisions are logged,
+         not replanned -> physical desync / failure. [§12,§16 | #42 DEFERRED].
+     (d) 3-strike give-up on still-blocked shadows: after 3 still_blocked senses the loop
+         marks the shadow not_here and exits "all_searched" (eval counts it as failure).
+         Real fix = re-ground blocks_view_at from current physics. [§18 | #21 log band-aid
+         DONE; #47 real fix DEFERRED OUT OF SCOPE].
+     (e) Sliver-visibility oracle miss: the 8-AABB-corner oracle misses partly-visible
+         occluders, so the planner never gets the option to relocate them. [§1,§14 | #14
+         64-ray fix measured + shelved on branch audit-14-dense-lattice-attempt].
+     (f) Optimistic-sense + replan budget: optimistic sense with reactive replanning under
+         a per-episode replan cap; exhausting it gives up. [§5 | #107 remove replan limit,
+         OPEN T1].
+     NOTE: §2 (perfect-gripper weld -> no slip/drop) and §3 (fixed full-table camera -> no
+     sensing-pose motion) REMOVE failures rather than cause them -- part of why the
+     kinematic bridge number is high.  Caveat for the thesis: bridge 20/20 measures
+     planning+perception under idealized execution on solvable scenes; ~42% measures the
+     full stack incl. the above.  See #118, notes/THESIS_NOTES.md §§1-21, notes/
+     TAMPURA_PLAN.md PHASE 3-C RESULT.
+
 ================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
