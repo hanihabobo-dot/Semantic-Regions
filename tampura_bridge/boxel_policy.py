@@ -23,7 +23,7 @@ from tampura_bridge.perception_adapter import FindDiceAdapter
 from tampura_bridge.execution_bridge import (execute_faithful_pick,
                                              execute_faithful_place,
                                              execute_go_home)
-from tampura_bridge.boxelize import capture, suppress_pomdp_and_draw
+from tampura_bridge.boxelize import capture, draw_overlay
 import tampura_bridge.belief_bridge as bb
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -110,15 +110,15 @@ class BoxelPolicy(Policy):
         self._step = 0
         self._adapter = None
         self._registry = None
-        self._overlay = []
+        self._overlay = None
         self._bodies = {}
         self._die_name = None
         self._cup_constraint = None
         self._die_body = None
 
     def _refresh_overlay(self, sense_at_home=False):
-        self._adapter, self._registry, self._overlay = suppress_pomdp_and_draw(
-            self.env.world, sense_at_home=sense_at_home, prev_ids=self._overlay)
+        self._adapter, self._registry, self._overlay = draw_overlay(
+            self.env.world, sense_at_home=sense_at_home, prev=self._overlay)
 
     def _capture(self, fname):
         cen = self._adapter.camera_target
