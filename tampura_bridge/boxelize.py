@@ -78,39 +78,47 @@ def boxelize_scene(adapter):
 def draw_registry_on_client(client, registry, fill_opacity=0.4):
     """Draw OBJECT/SHADOW (filled phantom + wireframe) and FREE_SPACE (wireframe)
     on THEIR client, so overlays show in the GUI and in getCameraImage.  Returns
-    the list of created phantom body ids (so callers can remove them on redraw)."""
-    bodies = []
+    (line_ids, body_ids) of the items WE created, so a caller can remove exactly
+    our overlay on redraw WITHOUT touching TAMPURA's own debug items (e.g. the
+    POMDP visibility voxels)."""
+    lines, bodies = [], []
     for bd in registry.boxels.values():
         c, e = bd.center, bd.extent
         color = _color_for_boxel(bd)
         corners, edges = wireframe_corners_and_edges(c, e)
         thin = bd.boxel_type in (BoxelType.SHADOW, BoxelType.FREE_SPACE)
         for i, j in edges:
-            client.addUserDebugLine(
+            lines.append(client.addUserDebugLine(
                 list(corners[i]), list(corners[j]), color,
-                1.0 if thin else 2.0, 0)
+                1.0 if thin else 2.0, 0))
         if bd.boxel_type in (BoxelType.OBJECT, BoxelType.SHADOW):
             vs = client.createVisualShape(
                 p.GEOM_BOX, halfExtents=list(e),
                 rgbaColor=[color[0], color[1], color[2], fill_opacity])
             bodies.append(client.createMultiBody(
                 baseMass=0, baseVisualShapeIndex=vs, basePosition=list(c)))
-    return bodies
+    return lines, bodies
 
 
-def suppress_pomdp_and_draw(world, fill_opacity=0.4, sense_at_home=True, prev_ids=()):
-    """Part B: clear TAMPURA's POMDP voxels (addUserDebugLine OOBBs drawn at
-    env.initialize, env.py:874) and any previously-drawn overlay phantoms in
-    prev_ids from their GUI, then (re)draw OUR boxelization of the CURRENT scene.
-    Returns (adapter, registry, phantom_ids); call again with prev_ids=phantom_ids
-    to refresh after the scene changes."""
+def draw_overlay(world, fill_opacity=0.4, sense_at_home=True, prev=None):
+    """Draw OUR boxelization of the CURRENT scene on their state-world GUI,
+    ALONGSIDE TAMPURA's own POMDP visibility voxels (we do NOT remove those).
+    On a refresh, removes ONLY the items WE drew last time (prev = (line_ids,
+    body_ids)) -- never removeAllUserDebugItems -- so the blue voxels survive.
+    Returns (adapter, registry, (line_ids, body_ids))."""
     client = world.client
-    for bid in prev_ids:
-        try:
-            client.removeBody(bid)
-        except Exception:
-            pass
-    client.removeAllUserDebugItems()
+    if prev is not None:
+        prev_lines, prev_bodies = prev
+        for lid in prev_lines:
+            try:
+                client.removeUserDebugItem(lid)
+            except Exception:
+                pass
+        for bid in prev_bodies:
+            try:
+                client.removeBody(bid)
+            except Exception:
+                pass
     adapter = FindDiceAdapter(world, sense_at_home=sense_at_home)
     registry, _ = boxelize_scene(adapter)
     ids = draw_registry_on_client(client, registry, fill_opacity=fill_opacity)
