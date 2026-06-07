@@ -95,6 +95,18 @@ def draw_registry_on_client(client, registry, fill_opacity=0.4):
                 baseMass=0, baseVisualShapeIndex=vs, basePosition=list(c))
 
 
+def suppress_pomdp_and_draw(world, fill_opacity=0.4):
+    """Part B: clear TAMPURA's dark-blue visibility-grid voxels from their
+    state-world GUI (addUserDebugLine OOBBs drawn at env.initialize, env.py:874)
+    and draw OUR boxelization in their place.  Returns (adapter, registry) so a
+    caller can redraw after the scene changes."""
+    world.client.removeAllUserDebugItems()
+    adapter = FindDiceAdapter(world)
+    registry, _ = boxelize_scene(adapter)
+    draw_registry_on_client(world.client, registry, fill_opacity=fill_opacity)
+    return adapter, registry
+
+
 def capture(client, path, eye, target, w=960, h=720):
     from PIL import Image
 
