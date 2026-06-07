@@ -41,7 +41,8 @@ class FindDiceAdapter:
     threading.
     """
 
-    def __init__(self, world, sense_at_home=True, camera_mode="external"):
+    def __init__(self, world, sense_at_home=True, camera_mode="external",
+                 camera_eye=None, camera_target=None):
         self.world = world
         self.client = world.client
         self.client_id = _client_id(world.client)
@@ -56,12 +57,17 @@ class FindDiceAdapter:
 
         if camera_mode == "external":
             # Fixed EXTERNAL RGB-D camera (our system's model): a high-oblique
-            # view aimed at the OCCLUDER centroid (die-independent -- the die's
-            # pose is never used to place it).  Sees the table clearly; a hidden
-            # die stays occluded until its covering cup is relocated.
-            self.camera_target = self._occluder_centroid_target()
+            # view aimed at the OCCLUDER centroid (die-independent).  The pose is
+            # computed once from the INITIAL scene and then passed back in
+            # (camera_eye/camera_target) so the camera stays FIXED as cups are
+            # relocated -- it must not re-aim and lose sight of the die's region.
+            self.camera_target = (np.asarray(camera_target, dtype=float)
+                                  if camera_target is not None
+                                  else self._occluder_centroid_target())
             self.camera_quat = None
-            self.camera_position = self._external_eye()
+            self.camera_position = (np.asarray(camera_eye, dtype=float)
+                                    if camera_eye is not None
+                                    else self._external_eye())
         else:  # "wrist": Phase 3-B eye-in-hand at the fixed home config
             if sense_at_home:
                 set_sense_config(world)

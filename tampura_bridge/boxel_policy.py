@@ -59,32 +59,38 @@ def plan_pick_goal(target_name="cup_0"):
     return next((a for a in plan if a.name == "pick"), None)
 
 
-def plan_solve(adapter, domain_name="domain_find_dice.pddl"):
-    """Run OUR planner on the find_dice variant for the FULL holding-die solve.
-    Returns the plan: relocate the hiding cup -> sense the die -> pick the die ->
-    go home.  Streamless: relaxed pick/place ground from the symbolic init.
-    Seed-generic: cups/die + the hiding cup are derived from the adapter."""
+def plan_solve(adapter, visible, known_empty=(), domain_name="domain_find_dice.pddl"):
+    """Genuine optimistic plan over the CURRENTLY VISIBLE scene -- never uses the
+    die's pose.  die visible -> pick(die)->home; else relocate the next un-emptied
+    visible cup + sense its region (the policy executes through the sense, then
+    re-segments and replans); no candidates -> [] (give up).  Seed-generic."""
     domain = _read_domain(domain_name)
-    objs = list(adapter.objects.values())
-    cups = [o for o in objs if o.is_occluder]
-    die = next(o for o in objs if not o.is_occluder)
-    # find_dice hides the die under ONE cup (containment): the cup nearest in XY.
-    hiding = min(cups, key=lambda c: (c.position[0] - die.position[0]) ** 2
-                 + (c.position[1] - die.position[1]) ** 2)
-    cup_b, region, free = "boxel_" + hiding.name, "region_" + die.name, "free_dest"
-    init = [
-        ("Obj", hiding.name), ("Obj", die.name),
-        ("Boxel", cup_b), ("Boxel", region), ("Boxel", free),
-        ("handempty",),
-        ("clear", hiding.name), ("clear", die.name),
-        ("obj_at_boxel", hiding.name, cup_b), ("obj_at_boxel_KIF", hiding.name, cup_b),
-        ("on_table", hiding.name),
-        ("is_shadow", region),
-        ("is_free_space", free), ("on_surface", free),
-        ("blocks_view_at", hiding.name, cup_b, region),
-        ("at_sense_config",),
-    ]
-    goal = ("and", ("holding", die.name), ("at_home",))
+    if "die" in visible:
+        init = [
+            ("Obj", "die"), ("Boxel", "boxel_die"),
+            ("handempty",), ("clear", "die"),
+            ("obj_at_boxel", "die", "boxel_die"),
+            ("obj_at_boxel_KIF", "die", "boxel_die"),
+            ("on_table", "die"),
+        ]
+    else:
+        cands = [n for n in sorted(visible) if n != "die" and n not in set(known_empty)]
+        if not cands:
+            return []
+        cup = cands[0]
+        cup_b, region, free = "boxel_" + cup, "region_" + cup, "free_dest"
+        init = [
+            ("Obj", cup), ("Obj", "die"),
+            ("Boxel", cup_b), ("Boxel", region), ("Boxel", free),
+            ("handempty",),
+            ("clear", cup), ("clear", "die"),
+            ("obj_at_boxel", cup, cup_b), ("obj_at_boxel_KIF", cup, cup_b),
+            ("on_table", cup),
+            ("is_shadow", region),
+            ("is_free_space", free), ("on_surface", free),
+            ("blocks_view_at", cup, cup_b, region),
+        ]
+    goal = ("and", ("holding", "die"), ("at_home",))
     problem = PDDLProblem(domain, {}, None, {}, init, goal)
     try:
         solution = solve(problem, unit_costs=True)
@@ -94,111 +100,129 @@ def plan_solve(adapter, domain_name="domain_find_dice.pddl"):
 
 
 class BoxelPolicy(Policy):
-    """Phase 3-C: drives TAMPURA's find_dice rollout to a PASSING holding-die
-    episode with OUR pipeline.  On the first step it plans the full solve with
-    plan_solve (relocate cup -> sense -> pick die -> go home) and draws OUR
-    boxelization (POMDP voxels cleared); thereafter it executes ONE planned step
-    per rollout step via our faithful IK execution on their Panda, writing the
-    symbolic result into their SceneBelief (belief_bridge) so their reward fires.
-    Each get_action returns no-op so rollout skips env.step (we drive their world
-    directly); the no-op deepcopy carries our belief writes forward (policy.py:125)."""
+    """Phase 3-C de-cheat: GENUINE sense-plan-replan search on their find_dice
+    env, driven by OUR pipeline.  The die's pose is UNKNOWN until a real render
+    reveals it.  Each cycle OUR planner picks an un-emptied VISIBLE cup; we
+    relocate it (faithful IK pick + place), park the arm clear of the fixed
+    external camera, and SENSE by re-rendering + segmenting.  If the die is
+    genuinely revealed we pick it and go home (success); otherwise that region
+    is marked empty and we replan; if no cups remain we give up (failure ->
+    reward stays 0).  Belief/reward is written ONLY on a real grasp.  get_action
+    returns no-op so the rollout's deepcopy carries our writes (policy.py:125)."""
 
     def __init__(self, config, problem_spec, **kwargs):
         super().__init__(config, problem_spec, **kwargs)
         self.env = kwargs.get("env")
-        self._plan = None
-        self._step = 0
+        self._overlay = None
+        self._cam_eye = None          # fixed external camera, locked on first build
+        self._cam_target = None
         self._adapter = None
         self._registry = None
-        self._overlay = None
-        self._bodies = {}
-        self._die_name = None
-        self._cup_constraint = None
+        self._subplan = None
+        self._subidx = 0
+        self._known_empty = []
+        self._used_places = []
+        self._held_cup_name = None
+        self._held_cup_body = None
+        self._held_constraint = None
         self._die_body = None
+        self._done = False
+        self._failed = False
 
-    def _refresh_overlay(self, sense_at_home=False):
-        self._adapter, self._registry, self._overlay = draw_overlay(
-            self.env.world, sense_at_home=sense_at_home, prev=self._overlay)
+    def _refresh_overlay(self):
+        self._adapter, self._registry, self._overlay, visible = draw_overlay(
+            self.env.world, sense_at_home=False, prev=self._overlay,
+            camera_eye=self._cam_eye, camera_target=self._cam_target)
+        if self._cam_eye is None:                       # lock the fixed camera once
+            self._cam_eye = self._adapter.camera_position
+            self._cam_target = self._adapter.camera_target
+        return visible
 
-    def _capture(self, fname):
-        cen = self._adapter.camera_target
-        eye = [float(cen[0]) + 0.45, float(cen[1]) - 0.45, float(cen[2]) + 0.5]
+    def _capture(self, fname, target=None, off=(0.5, -0.6, 0.35)):
+        cen = target if target is not None else self._adapter.camera_target
+        eye = [float(cen[0]) + off[0], float(cen[1]) + off[1], float(cen[2]) + off[2]]
         out = os.path.join(_REPO, "tampura_bridge", "captures", fname)
         return capture(self.env.world.client, out, eye,
                        [float(cen[0]), float(cen[1]), float(cen[2])])
 
-    def _capture_at(self, fname, target_xyz, off=(0.5, -0.6, 0.35)):
-        t = [float(target_xyz[0]), float(target_xyz[1]), float(target_xyz[2])]
-        eye = [t[0] + off[0], t[1] + off[1], t[2] + off[2]]
-        out = os.path.join(_REPO, "tampura_bridge", "captures", fname)
-        return capture(self.env.world.client, out, eye, t)
-
-    def _place_xy(self, die_pos):
-        """A known-free table point to relocate the cup to, farthest from the die
-        (uses OUR free-space boxels; seed-generic)."""
+    def _next_place_xy(self):
+        """A known-free table spot to set a relocated cup aside -- farthest from
+        the occluder centroid, spread from spots already used (die-independent)."""
+        cen = self._adapter.camera_target
         frees = self._registry.get_free_space_boxels()
-        if frees:
-            b = max(frees, key=lambda f: (f.center[0] - die_pos[0]) ** 2
-                    + (f.center[1] - die_pos[1]) ** 2)
-            return (float(b.center[0]), float(b.center[1]))
-        return (float(die_pos[0]), float(die_pos[1]) - 0.18)
+        avail = [f for f in frees if all(
+            (f.center[0] - u[0]) ** 2 + (f.center[1] - u[1]) ** 2 > 0.01
+            for u in self._used_places)]
+        pool = avail or frees
+        if pool:
+            b = max(pool, key=lambda f: (f.center[0] - cen[0]) ** 2
+                    + (f.center[1] - cen[1]) ** 2)
+            xy = (float(b.center[0]), float(b.center[1]))
+        else:
+            xy = (float(cen[0]), float(cen[1]) - 0.25 - 0.1 * len(self._used_places))
+        self._used_places.append(xy)
+        return xy
+
+    def _replan(self, visible):
+        self._subplan = plan_solve(self._adapter, visible, self._known_empty)
+        self._subidx = 0
+        if not self._subplan:
+            self._failed = True
 
     def get_action(self, belief, store):
-        if self.env is None:
+        if self.env is None or self._done or self._failed:
             return Action(name="no-op"), {}, store
         world = self.env.world
 
-        if self._plan is None:
-            execute_go_home(world)                              # start from home (animated; no teleport)
-            self._refresh_overlay(sense_at_home=False)          # initial boxels; voxels cleared
-            self._plan = plan_solve(self._adapter)
-            self._bodies = {n: o.object_id for n, o in self._adapter.objects.items()}
-            self._die_name = next(n for n, o in self._adapter.objects.items()
-                                  if not o.is_occluder)
-            self._die_body = self._bodies[self._die_name]
-            bb.mark_away(belief)                                 # arm about to leave home
-            logging.info("[BoxelPolicy] plan: %s", [str(a) for a in self._plan])
-            self._capture("phase3c_initial_boxels.png")
+        if self._subplan is None:                       # first step: perceive + plan
+            execute_go_home(world)                      # arm clear of the camera (animated)
+            visible = self._refresh_overlay()
+            self._capture("phase3c_genuine_initial.png")
+            bb.mark_away(belief)
+            self._replan(visible)
+            logging.info("[BoxelPolicy] GENUINE search; initial plan: %s",
+                         [str(a) for a in (self._subplan or [])])
+            if self._failed:
+                return Action(name="no-op"), {"failed": "no visible cups"}, store
 
-        if not self._plan or self._step >= len(self._plan):
-            return Action(name="no-op"), {}, store
+        act = self._subplan[self._subidx]
+        arg0 = act.args[0] if act.args else None
+        info = {"action": str(act), "known_empty": list(self._known_empty)}
 
-        act = self._plan[self._step]
-        obj_name = act.args[0] if act.args else None
-        info = {"planned_action": str(act), "step": self._step}
-
-        if act.name == "pick" and obj_name != self._die_name:
-            self._cup_constraint, _ = execute_faithful_pick(world, self._bodies[obj_name])
-            info["executed"] = "faithful pick (cup) " + obj_name
+        if act.name == "pick" and arg0 != "die":
+            self._held_cup_name = arg0
+            self._held_cup_body = self._adapter.objects[arg0].object_id
+            self._held_constraint, _ = execute_faithful_pick(world, self._held_cup_body)
+            self._subidx += 1
         elif act.name == "place":
-            die_pos = self._adapter.objects[self._die_name].position
-            place_xy = self._place_xy(die_pos)
-            execute_faithful_place(world, self._bodies[obj_name], self._cup_constraint,
-                                   place_xy, self._adapter.table_surface_height)
-            bb.mark_moved(belief, bb.cup_aliases(belief)[int(obj_name.split("_")[-1])])
-            info["executed"] = "faithful place (cup) -> " + str(
-                tuple(round(v, 3) for v in place_xy))
+            xy = self._next_place_xy()
+            execute_faithful_place(world, self._held_cup_body, self._held_constraint,
+                                   xy, self._adapter.table_surface_height)
+            self._subidx += 1
         elif act.name == "sense":
-            execute_go_home(world)                              # animate to home to sense (no teleport)
-            self._refresh_overlay(sense_at_home=False)          # redraw from home (cup moved, die revealed)
-            visible, _ = self._adapter.oracle_detect_objects()
-            info["executed"] = "sense @ home; visible=" + str(visible)
-            logging.info("[BoxelPolicy] sense from home: die visible? %s "
-                         "(optimistic-sense + replan; converges immediately for a "
-                         "single-occluder scene)", self._die_name in visible)
-        elif act.name == "pick" and obj_name == self._die_name:
+            execute_go_home(world)                      # park arm clear of the external camera
+            visible = self._refresh_overlay()           # re-render the relocated scene (clean segment)
+            revealed = "die" in visible
+            if revealed:
+                self._die_body = self._adapter.objects["die"].object_id
+            elif self._held_cup_name and self._held_cup_name not in self._known_empty:
+                self._known_empty.append(self._held_cup_name)
+            self._replan(visible)                       # revealed -> [pick die, home]; else next cup / give up
+            info["sensed_after"] = self._held_cup_name
+            info["die_revealed"] = revealed
+            logging.info("[BoxelPolicy] sensed after relocating %s: die_revealed=%s; "
+                         "known_empty=%s", self._held_cup_name, revealed, self._known_empty)
+        elif act.name == "pick" and arg0 == "die":
             execute_faithful_pick(world, self._die_body)
             bb.mark_holding(belief, bb.die_alias(belief))
-            info["executed"] = "faithful pick (die) " + obj_name
+            self._subidx += 1
         elif act.name == "go_home":
             execute_go_home(world, held_body=self._die_body)
             bb.mark_at_home(belief)
-            self._refresh_overlay(sense_at_home=False)
-            info["executed"] = "faithful go-home (holding die)"
+            self._done = True
+            self._refresh_overlay()
             die_xyz = world.client.getBasePositionAndOrientation(self._die_body)[0]
-            self._capture_at("phase3c_die_at_home.png", die_xyz)
+            self._capture("phase3c_genuine_die_at_home.png", die_xyz)
+            info["success"] = True
 
-        logging.info("[BoxelPolicy] step %d: %s -> %s", self._step, str(act),
-                     info.get("executed", ""))
-        self._step += 1
         return Action(name="no-op"), info, store
