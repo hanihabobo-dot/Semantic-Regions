@@ -444,7 +444,7 @@ def detect_execution_collisions(robot_id: int,
 
 def solve_ik(robot_id: int, target_pos: np.ndarray,
              target_orn=None, physics_client: int = 0,
-             seed=None):
+             seed=None, robot: 'RobotModel' = None):
     """
     Null-space IK with configurable seed for consistent results.
 
@@ -487,25 +487,26 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
     orn_list = (target_orn.tolist() if isinstance(target_orn, np.ndarray)
                 else list(target_orn))
 
-    seed_poses = (list(seed) if seed is not None else list(REST_POSES))
+    rm = robot if robot is not None else _DEFAULT_PANDA
+    seed_poses = (list(seed) if seed is not None else list(rm.rest_poses))
 
     saved = None
     with RenderingLock(physics_client):
         try:
             saved = [p.getJointState(robot_id, i,
                                      physicsClientId=physics_client)[0]
-                     for i in ARM_JOINT_INDICES]
+                     for i in rm.arm_joints]
 
-            for i, angle in zip(ARM_JOINT_INDICES, seed_poses):
+            for i, angle in zip(rm.arm_joints, seed_poses):
                 p.resetJointState(robot_id, i, angle,
                                   physicsClientId=physics_client)
 
             joint_positions = p.calculateInverseKinematics(
-                robot_id, END_EFFECTOR_LINK,
+                robot_id, rm.ee_link,
                 target_pos.tolist(), orn_list,
-                lowerLimits=JOINT_LIMITS_LOW.tolist(),
-                upperLimits=JOINT_LIMITS_HIGH.tolist(),
-                jointRanges=JOINT_RANGES.tolist(),
+                lowerLimits=rm.joint_low.tolist(),
+                upperLimits=rm.joint_high.tolist(),
+                jointRanges=rm.joint_ranges.tolist(),
                 restPoses=seed_poses,
                 maxNumIterations=100,
                 residualThreshold=1e-4,
@@ -520,24 +521,24 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
             # 0.1 rad tolerance (~5.7°) accommodates PyBullet's iterative IK
             # solver, which can slightly overshoot joint limits.  Solutions
             # within tolerance are clipped; beyond it they're rejected.
-            if np.any(arm_joints < JOINT_LIMITS_LOW - 0.1) or \
-               np.any(arm_joints > JOINT_LIMITS_HIGH + 0.1):
+            if np.any(arm_joints < rm.joint_low - 0.1) or \
+               np.any(arm_joints > rm.joint_high + 0.1):
                 return None
 
-            return np.clip(arm_joints, JOINT_LIMITS_LOW, JOINT_LIMITS_HIGH)
+            return np.clip(arm_joints, rm.joint_low, rm.joint_high)
 
         except Exception as e:
             logger.warning("solve_ik failed for pos=%s: %s", target_pos.tolist(), e)
             return None
         finally:
             if saved is not None:
-                for i, angle in zip(ARM_JOINT_INDICES, saved):
+                for i, angle in zip(rm.arm_joints, saved):
                     p.resetJointState(robot_id, i, angle,
                                       physicsClientId=physics_client)
 
 
 def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
-                      steps: int = 60):
+                      steps: int = 60, robot: 'RobotModel' = None):
     """
     Smoothly interpolate joint positions from the current state to
     *target_joints*.
@@ -549,22 +550,23 @@ def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
         steps: Number of interpolation steps.
     """
     import time
-    current = [p.getJointState(robot_id, i)[0] for i in range(7)]
+    rm = robot if robot is not None else _DEFAULT_PANDA
+    current = [p.getJointState(robot_id, j)[0] for j in rm.arm_joints]
     for t in range(steps):
         alpha = (t + 1) / steps
         interp = [(1 - alpha) * c + alpha * tgt
                    for c, tgt in zip(current, target_joints)]
-        for i in range(7):
+        for idx, j in enumerate(rm.arm_joints):
             # 240 N·m is the Franka Emika Panda's peak joint torque for
             # joints 1-4 (per datasheet); sufficient for position control.
-            p.setJointMotorControl2(robot_id, i, p.POSITION_CONTROL,
-                                    targetPosition=interp[i], force=240)
+            p.setJointMotorControl2(robot_id, j, p.POSITION_CONTROL,
+                                    targetPosition=interp[idx], force=240)
         p.stepSimulation()
         if gui:
             time.sleep(1 / 120)
 
 
-def open_gripper(robot_id: int, gui: bool = False):
+def open_gripper(robot_id: int, gui: bool = False, robot: 'RobotModel' = None):
     """Open the Panda gripper to URDF max (0.04 m per finger).
 
     Audit #81 2026-05-15: switched from POSITION_CONTROL to
@@ -593,22 +595,24 @@ def open_gripper(robot_id: int, gui: bool = False):
     _release_and_verify_drop.
     """
     import time
-    p.resetJointState(robot_id, FINGER_JOINTS[0], 0.04)
-    p.resetJointState(robot_id, FINGER_JOINTS[1], 0.04)
+    rm = robot if robot is not None else _DEFAULT_PANDA
+    p.resetJointState(robot_id, rm.finger_joints[0], rm.open_finger_pos)
+    p.resetJointState(robot_id, rm.finger_joints[1], rm.open_finger_pos)
     for _ in range(80):
-        p.setJointMotorControl2(robot_id, FINGER_JOINTS[0],
+        p.setJointMotorControl2(robot_id, rm.finger_joints[0],
                                 p.POSITION_CONTROL,
-                                targetPosition=0.04, force=200)
-        p.setJointMotorControl2(robot_id, FINGER_JOINTS[1],
+                                targetPosition=rm.open_finger_pos, force=200)
+        p.setJointMotorControl2(robot_id, rm.finger_joints[1],
                                 p.POSITION_CONTROL,
-                                targetPosition=0.04, force=200)
+                                targetPosition=rm.open_finger_pos, force=200)
         p.stepSimulation()
         if gui:
             time.sleep(1 / 120)
 
 
 def close_gripper(robot_id: int, gui: bool = False,
-                  target_finger_pos: float = 0.01, force: float = 10):
+                  target_finger_pos: float = 0.01, force: float = 10,
+                  robot: 'RobotModel' = None):
     """Close the Panda gripper to ``target_finger_pos`` per finger.
 
     Audit #81 refine 2026-05-15: force dropped 50 N -> 10 N and the
@@ -633,12 +637,13 @@ def close_gripper(robot_id: int, gui: bool = False,
     whatever the target says, no longer pushing through.
     """
     import time
+    rm = robot if robot is not None else _DEFAULT_PANDA
     for _ in range(30):
-        p.setJointMotorControl2(robot_id, FINGER_JOINTS[0],
+        p.setJointMotorControl2(robot_id, rm.finger_joints[0],
                                 p.POSITION_CONTROL,
                                 targetPosition=target_finger_pos,
                                 force=force)
-        p.setJointMotorControl2(robot_id, FINGER_JOINTS[1],
+        p.setJointMotorControl2(robot_id, rm.finger_joints[1],
                                 p.POSITION_CONTROL,
                                 targetPosition=target_finger_pos,
                                 force=force)
