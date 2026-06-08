@@ -271,6 +271,38 @@ def faithful_place(streams, world, model, obj_name, obj_body, cid, place_pos,
     return _current_config(client, rb, model, "post_place"), status
 
 
+def faithful_go_home(streams, world, model, q_start, gui, held_body=None):
+    """Collision-checked return to the rest config (DEFAULT_ARM_POS), via OUR
+    streams -- our pipeline's go_home is plan_motion(current -> rest) + follow.
+    A held object rides along: held_body_ids repositions it (at its live EE-frame
+    offset) for the path collision checks, and the JOINT_FIXED weld physically
+    carries it during the follow.  Returns (q_final, status); status "ok", else
+    honest "no_path"."""
+    client, rb = world.client, world.robot.body
+    held = frozenset({held_body}) if held_body is not None else frozenset()
+    held_offset = None
+    if held_body is not None:
+        # Live EE->object offset in the EE frame, in the convention
+        # is_config_collision_free expects (it places the held body at
+        # multiplyTransforms(ee, -offset)); keeps die-in-hand checks exact.
+        ee_pos, ee_orn = client.getLinkState(rb, model.ee_link)[:2]
+        obj_pos = client.getBasePositionAndOrientation(held_body)[0]
+        inv = client.invertTransform(ee_pos, ee_orn)
+        rel = client.multiplyTransforms(inv[0], inv[1], obj_pos, [0, 0, 0, 1])[0]
+        held_offset = np.array([-rel[0], -rel[1], -rel[2]])
+    q0 = RobotConfig(joint_positions=q_start.joint_positions, name="q_prehome",
+                     ignored_body_ids=held, held_body_ids=held,
+                     grasp_ee_offset=held_offset)
+    home = RobotConfig(joint_positions=np.array(model.rest_poses), name="q_home",
+                       ignored_body_ids=held, held_body_ids=held,
+                       grasp_ee_offset=held_offset)
+    mp = list(streams.plan_motion(q0, home))
+    if not mp:
+        return None, "no_path"
+    follow_trajectory(rb, model, mp[0][0], gui)
+    return _current_config(client, rb, model, "post_home"), "ok"
+
+
 def _main():
     import argparse
     import random
@@ -330,6 +362,10 @@ def _main():
         print("place_xy:", tuple(round(v, 3) for v in place_xy),
               " status:", pstatus)
         print("cup z: %.4f (held) -> %.4f (placed)" % (z1, z2))
+
+        qh, hstatus = faithful_go_home(streams, world, model, q_after,
+                                       gui=bool(args.vis))
+        print("=== faithful go_home (streams) ===  status:", hstatus)
 
     cen = adapter.camera_target
     saved = capture(world.client, args.out,
