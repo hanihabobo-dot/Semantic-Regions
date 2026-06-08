@@ -143,16 +143,22 @@ def faithful_pick(streams, world, model, obj_name, obj_boxel_id, q_start, gui,
 
     # All IK up front (before physics): a post-grasp solve_pose_ik would
     # resetJointState-jitter the arm while welded and corrupt the grasp.
+    # Chain the solves so the whole pick stays in ONE IK branch -- approach
+    # seeded from the start config, contact from approach, lift from contact
+    # (mirrors execution.execute_pick's seeded contact IK, audit #37/#38).
+    # Unchained, each pose lands in an independent min-FK-error branch and the
+    # base joint swings ~144deg between approach and contact for a 10 cm descent
+    # -- the non-physical motion the #120 re-exam caught.
     approach_ee = np.array([cx, cy, top_z + approach_clearance])
     contact_ee = np.array([cx, cy, top_z - 0.005])
-    q_app = streams.solve_pose_ik(approach_ee, orn)
+    q_app = streams.solve_pose_ik(approach_ee, orn, seed=q_start.joint_positions)
     if q_app is None:
         return None, None, "no_approach_ik"
-    q_con = streams.solve_pose_ik(contact_ee, orn)
+    q_con = streams.solve_pose_ik(contact_ee, orn, seed=q_app)
     if q_con is None:
         return None, None, "no_contact_ik"
     q_lift = streams.solve_pose_ik(contact_ee + np.array([0.0, 0.0, lift_height]),
-                                   orn)
+                                   orn, seed=q_con)
 
     q_app_cfg = RobotConfig(joint_positions=q_app, name="q_pick_approach",
                             ignored_body_ids=frozenset({obj_body}),
