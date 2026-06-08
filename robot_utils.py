@@ -6,6 +6,9 @@ here once. Every module that needs robot parameters imports from this file.
 """
 
 import logging
+from dataclasses import dataclass, field
+from typing import Tuple
+
 import numpy as np
 import pybullet as p
 
@@ -48,6 +51,48 @@ _PANDA_IGNORED_SELF_PAIRS = frozenset({
 
 
 _PANDA_GRIPPER_LINKS = frozenset({6, 7, 8, 9, 10, 11})
+
+
+# =============================================================================
+# Robot model — robot-agnostic parameterization (audit #120, guarded)
+# =============================================================================
+# OUR pipeline targets a single fixed Panda URDF, so the indices/limits above
+# are module-level constants.  The TAMPURA find_dice bridge (approach ii) runs
+# these same IK / collision / control primitives on TAMPURA's Panda, whose
+# gripper-ward layout differs (finger joints [12, 13], panda_grasptarget link
+# 14, vs our [9, 10] / 11).  RobotModel carries every robot-specific quantity
+# the primitives in this module and streams.py need; _DEFAULT_PANDA reproduces
+# OUR constants exactly.
+#
+# EVAL-SAFETY: this is INERT scaffolding.  Nothing reads RobotModel yet, and
+# every primitive will keep defaulting to the module constants (== _DEFAULT_PANDA)
+# when no model is passed, so our pipeline's behaviour stays byte-identical.
+# The bridge builds a RobotModel for TAMPURA's Panda and threads it through.
+
+@dataclass(frozen=True)
+class RobotModel:
+    """Robot-specific joint/link indices and limits for the IK / collision /
+    control primitives in this module and the streams in streams.py.
+
+    Defaults reproduce OUR Panda (the module constants above).  A caller on a
+    differently-loaded Panda (e.g. the find_dice bridge) builds one with that
+    robot's indices/limits — typically queried live from the URDF, not
+    hardcoded."""
+    arm_joints: Tuple[int, ...] = tuple(ARM_JOINT_INDICES)
+    finger_joints: Tuple[int, ...] = tuple(FINGER_JOINTS)
+    ee_link: int = END_EFFECTOR_LINK
+    joint_low: np.ndarray = field(default_factory=lambda: JOINT_LIMITS_LOW.copy())
+    joint_high: np.ndarray = field(default_factory=lambda: JOINT_LIMITS_HIGH.copy())
+    joint_ranges: np.ndarray = field(default_factory=lambda: JOINT_RANGES.copy())
+    rest_poses: Tuple[float, ...] = tuple(REST_POSES)
+    ignored_self_pairs: frozenset = field(
+        default_factory=lambda: frozenset(_PANDA_IGNORED_SELF_PAIRS))
+    gripper_links: frozenset = field(
+        default_factory=lambda: frozenset(_PANDA_GRIPPER_LINKS))
+    open_finger_pos: float = 0.04
+
+
+_DEFAULT_PANDA = RobotModel()
 
 
 # =============================================================================
