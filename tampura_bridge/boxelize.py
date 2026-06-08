@@ -70,6 +70,11 @@ def boxelize_scene(adapter, visible_names=None):
             obstacles = [x for x in objs if x.id != ob.id]
             for sh in shadow_calc.calculate_shadow_boxel(
                     ob, obstacles, physics_client=adapter.client_id):
+                # Record which occluder cast this shadow so the streamful planner
+                # (planner_boxel) emits blocks_view_at(ob, ob, sh) -- without it
+                # view_clear(sh) is true from the start and the planner would
+                # sense without relocating the cup (audit #120).
+                sh.created_by_boxel_id = ob.id
                 registry.add_boxel(sh)
 
     # auto_cell (test_full_pipeline.py:494): tallest/widest object extent + 1 cm.
