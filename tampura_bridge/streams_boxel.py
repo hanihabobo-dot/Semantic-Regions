@@ -590,25 +590,37 @@ class BoxelStreams:
                          grasp.name, z)
             yield (grasp,)
     
-    def solve_pose_ik(self, ee_pos, ee_orn, tol=0.01):
+    def solve_pose_ik(self, ee_pos, ee_orn, tol=0.01, seed=None):
         """Multi-seed, FK-verified IK placing the EE at (ee_pos, ee_orn).
 
-        Returns the joint array with the smallest FK position error within
-        ``tol`` (m), else None (an honest 'unreachable').  TAMPURA's
-        panda_grasptarget link needs seed diversity + FK verification: a
-        single-seed null-space solve returns joint-limit-valid configs that do
-        NOT actually reach the target (audit #120).  Used by the bridge
-        executor for the approach / contact / lift poses."""
+        Among the IK seeds' solutions that reach within ``tol`` (m), returns:
+          * with ``seed`` given -- the one CLOSEST (max joint delta) to ``seed``,
+            so chained approach/contact/lift solves stay in ONE IK branch
+            instead of jumping branches between poses (the ~144deg base-joint
+            swing that made the pick look non-physical, audit #120 re-exam);
+          * with ``seed`` None -- the smallest-FK-error config (unchanged).
+        Returns None if nothing reaches within ``tol`` (an honest 'unreachable').
+
+        TAMPURA's panda_grasptarget link needs seed diversity + FK verification:
+        a single-seed null-space solve returns joint-limit-valid configs that do
+        NOT actually reach the target (audit #120).  Used by the bridge executor
+        for the approach / contact / lift poses; the executor seeds contact from
+        the approach config and lift from the contact config (mirrors
+        execution.execute_pick's seeded contact IK, audit #37/#38)."""
         ee_pos = np.asarray(ee_pos, dtype=float)
         orn = np.asarray(ee_orn, dtype=float)
         pc = self.physics_client
-        best_q, best_err = None, tol
+        seeds = list(self._ik_seeds())
+        if seed is not None:
+            # Try the reference config FIRST so the solver can stay in its branch.
+            seeds.insert(0, list(np.asarray(seed, dtype=float)))
+        candidates = []                       # (fk_err, q) for configs within tol
         with RenderingLock(pc):
             saved = [p.getJointState(self.robot_id, j, physicsClientId=pc)[0]
                      for j in self.robot.arm_joints]
             try:
-                for seed in self._ik_seeds():
-                    for j, a in zip(self.robot.arm_joints, seed):
+                for s in seeds:
+                    for j, a in zip(self.robot.arm_joints, s):
                         p.resetJointState(self.robot_id, j, a, physicsClientId=pc)
                     sol = p.calculateInverseKinematics(
                         self.robot_id, self.robot.ee_link,
@@ -626,12 +638,18 @@ class BoxelStreams:
                         p.getLinkState(self.robot_id, self.robot.ee_link,
                                        physicsClientId=pc)[0])
                     err = float(np.linalg.norm(achieved - ee_pos))
-                    if err < best_err:
-                        best_err, best_q = err, q
+                    if err < tol:
+                        candidates.append((err, q))
             finally:
                 for j, a in zip(self.robot.arm_joints, saved):
                     p.resetJointState(self.robot_id, j, a, physicsClientId=pc)
-        return best_q
+        if not candidates:
+            return None
+        if seed is not None:
+            seed_arr = np.asarray(seed, dtype=float)
+            return min(candidates,
+                       key=lambda c: float(np.max(np.abs(c[1] - seed_arr))))[1]
+        return min(candidates, key=lambda c: c[0])[1]
 
     # =========================================================================
     # STREAM 3: Plan Motion (RRT-Connect with shortcut smoothing)
