@@ -64,7 +64,16 @@ def main():
 
     policy = BoxelPolicy(config, env.problem_spec, env=env)
     history, store = policy.rollout(env, b0, store)
+    if policy._done:
+        result, reason = "SUCCESS", ""
+    elif policy._failed:
+        result, reason = "FAILURE", getattr(policy, "_fail_reason", "?") or "?"
+    else:
+        result, reason = "INCOMPLETE", ""
     logging.info("[BoxelBridge] rollout complete: %d entries", len(history))
+    logging.info("[BoxelBridge] seed=%s RESULT=%s %s",
+                 config["global_seed"], result, reason)
+    print("RESULT seed=%s %s %s" % (config["global_seed"], result, reason))
 
 
 if __name__ == "__main__":
