@@ -6,9 +6,6 @@ here once. Every module that needs robot parameters imports from this file.
 """
 
 import logging
-from dataclasses import dataclass, field
-from typing import Tuple
-
 import numpy as np
 import pybullet as p
 
@@ -51,48 +48,6 @@ _PANDA_IGNORED_SELF_PAIRS = frozenset({
 
 
 _PANDA_GRIPPER_LINKS = frozenset({6, 7, 8, 9, 10, 11})
-
-
-# =============================================================================
-# Robot model — robot-agnostic parameterization (audit #120, guarded)
-# =============================================================================
-# OUR pipeline targets a single fixed Panda URDF, so the indices/limits above
-# are module-level constants.  The TAMPURA find_dice bridge (approach ii) runs
-# these same IK / collision / control primitives on TAMPURA's Panda, whose
-# gripper-ward layout differs (finger joints [12, 13], panda_grasptarget link
-# 14, vs our [9, 10] / 11).  RobotModel carries every robot-specific quantity
-# the primitives in this module and streams.py need; _DEFAULT_PANDA reproduces
-# OUR constants exactly.
-#
-# EVAL-SAFETY: this is INERT scaffolding.  Nothing reads RobotModel yet, and
-# every primitive will keep defaulting to the module constants (== _DEFAULT_PANDA)
-# when no model is passed, so our pipeline's behaviour stays byte-identical.
-# The bridge builds a RobotModel for TAMPURA's Panda and threads it through.
-
-@dataclass(frozen=True)
-class RobotModel:
-    """Robot-specific joint/link indices and limits for the IK / collision /
-    control primitives in this module and the streams in streams.py.
-
-    Defaults reproduce OUR Panda (the module constants above).  A caller on a
-    differently-loaded Panda (e.g. the find_dice bridge) builds one with that
-    robot's indices/limits — typically queried live from the URDF, not
-    hardcoded."""
-    arm_joints: Tuple[int, ...] = tuple(ARM_JOINT_INDICES)
-    finger_joints: Tuple[int, ...] = tuple(FINGER_JOINTS)
-    ee_link: int = END_EFFECTOR_LINK
-    joint_low: np.ndarray = field(default_factory=lambda: JOINT_LIMITS_LOW.copy())
-    joint_high: np.ndarray = field(default_factory=lambda: JOINT_LIMITS_HIGH.copy())
-    joint_ranges: np.ndarray = field(default_factory=lambda: JOINT_RANGES.copy())
-    rest_poses: Tuple[float, ...] = tuple(REST_POSES)
-    ignored_self_pairs: frozenset = field(
-        default_factory=lambda: frozenset(_PANDA_IGNORED_SELF_PAIRS))
-    gripper_links: frozenset = field(
-        default_factory=lambda: frozenset(_PANDA_GRIPPER_LINKS))
-    open_finger_pos: float = 0.04
-
-
-_DEFAULT_PANDA = RobotModel()
 
 
 # =============================================================================
@@ -150,8 +105,7 @@ def is_config_collision_free(robot_id: int, joint_positions,
                               allow_gripper_collisions: bool = False,
                               log_collisions: bool = True,
                               held_body_ids=None,
-                              held_body_ee_offset=None,
-                              robot: 'RobotModel' = None) -> bool:
+                              held_body_ee_offset=None) -> bool:
     """
     Check whether a 7-DOF arm configuration is collision-free.
 
@@ -206,21 +160,20 @@ def is_config_collision_free(robot_id: int, joint_positions,
         ignored_bodies = frozenset()
     if held_body_ids is None:
         held_body_ids = frozenset()
-    rm = robot if robot is not None else _DEFAULT_PANDA
 
     saved = None
     saved_held = {}
     with RenderingLock(physics_client):
         try:
             saved = [p.getJointState(robot_id, i, physicsClientId=physics_client)[0]
-                     for i in rm.arm_joints]
+                     for i in ARM_JOINT_INDICES]
 
-            for i, angle in zip(rm.arm_joints, joint_positions):
+            for i, angle in zip(ARM_JOINT_INDICES, joint_positions):
                 p.resetJointState(robot_id, i, angle,
                                   physicsClientId=physics_client)
 
             if held_body_ids:
-                ee_state = p.getLinkState(robot_id, rm.ee_link,
+                ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK,
                                          computeForwardKinematics=True,
                                          physicsClientId=physics_client)
                 ee_pos, ee_orn = ee_state[4], ee_state[5]
@@ -250,7 +203,7 @@ def is_config_collision_free(robot_id: int, joint_positions,
 
                 if body_a == robot_id and body_b == robot_id:
                     pair = (min(link_a, link_b), max(link_a, link_b))
-                    if pair not in rm.ignored_self_pairs:
+                    if pair not in _PANDA_IGNORED_SELF_PAIRS:
                         if log_collisions:
                             logger.debug("collision: self-contact links (%d, %d)",
                                          link_a, link_b)
@@ -264,7 +217,7 @@ def is_config_collision_free(robot_id: int, joint_positions,
                     continue
                 if robot_link == -1:
                     continue
-                if allow_gripper_collisions and robot_link in rm.gripper_links:
+                if allow_gripper_collisions and robot_link in _PANDA_GRIPPER_LINKS:
                     continue
 
                 if log_collisions:
@@ -291,7 +244,7 @@ def is_config_collision_free(robot_id: int, joint_positions,
             return True
         finally:
             if saved is not None:
-                for i, angle in zip(rm.arm_joints, saved):
+                for i, angle in zip(ARM_JOINT_INDICES, saved):
                     p.resetJointState(robot_id, i, angle,
                                       physicsClientId=physics_client)
             for hid, (pos, orn) in saved_held.items():
@@ -304,8 +257,7 @@ def is_path_collision_free(robot_id: int, q_start, q_end,
                             ignored_bodies=None,
                             allow_gripper_collisions: bool = False,
                             held_body_ids=None,
-                            held_body_ee_offset=None,
-                            robot: 'RobotModel' = None) -> bool:
+                            held_body_ee_offset=None) -> bool:
     """
     Check a straight-line joint-space path for collisions.
 
@@ -343,8 +295,7 @@ def is_path_collision_free(robot_id: int, q_start, q_end,
                                             allow_gripper_collisions=allow_gripper_collisions,
                                             log_collisions=False,
                                             held_body_ids=held_body_ids,
-                                            held_body_ee_offset=held_body_ee_offset,
-                                            robot=robot):
+                                            held_body_ee_offset=held_body_ee_offset):
                 return False
         return True
 
