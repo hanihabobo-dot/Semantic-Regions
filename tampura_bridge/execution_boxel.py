@@ -34,7 +34,8 @@ if _REPO not in sys.path:
 
 from tampura_environments.panda_utils import pb_utils as pbu
 
-from tampura_bridge.robot_utils_boxel import close_gripper, move_robot_smooth
+from tampura_bridge.robot_utils_boxel import (close_gripper, move_robot_smooth,
+                                              open_gripper)
 from tampura_bridge.streams_boxel import RobotConfig
 
 
@@ -196,6 +197,80 @@ def faithful_pick(streams, world, model, obj_name, obj_boxel_id, q_start, gui,
     return _current_config(client, rb, model, "post_pick"), cid, "ok"
 
 
+def faithful_place(streams, world, model, obj_name, obj_body, cid, place_pos,
+                   q_start, gui, table_z, approach_clearance=0.10):
+    """Real transport -> lower -> release -> settle -> retract of the HELD
+    obj_name to place_pos, via OUR streams on their robot.  Mirrors
+    execution.execute_place: release height from the held object's live
+    geometry (land its bottom on the table), collision-checked transport with
+    the held object attached, gentle release, drop verification.  All IK is
+    chained (approach seeded from start, release from approach, retract from
+    release) and solved UP FRONT so the welded arm never resetJointState-jitters
+    mid-transport.  Returns (q_final, status); status "ok", else an honest
+    failure: "no_approach_ik" / "no_release_ik" / "no_path" / "drop_failed".
+    place_pos is an (x, y) table spot (a known-free boxel centre)."""
+    import time
+    client, rb = world.client, world.robot.body
+    grasp = list(streams.sample_grasp(obj_name))[0][0]
+    orn = grasp.orientation
+
+    # Release height from the held object's live geometry (mirrors
+    # execute_place): lower the EE so the object's bottom lands on the table.
+    haabb = pbu.get_aabb(obj_body, client=client)
+    obj_half_h = float(haabb.upper[2] - haabb.lower[2]) / 2.0
+    obj_z = client.getBasePositionAndOrientation(obj_body)[0][2]
+    ee_z = client.getLinkState(rb, model.ee_link)[0][2]
+    ee_to_obj_z = obj_z - ee_z
+    release_z = (table_z + obj_half_h) - ee_to_obj_z
+
+    px, py = float(place_pos[0]), float(place_pos[1])
+    approach_ee = np.array([px, py, release_z + approach_clearance])
+    release_ee = np.array([px, py, release_z])
+
+    # All IK up front, chained -> one branch (see faithful_pick).
+    q_app = streams.solve_pose_ik(approach_ee, orn, seed=q_start.joint_positions)
+    if q_app is None:
+        return None, "no_approach_ik"
+    q_rel = streams.solve_pose_ik(release_ee, orn, seed=q_app)
+    if q_rel is None:
+        return None, "no_release_ik"
+    q_ret = streams.solve_pose_ik(approach_ee, orn, seed=q_rel)  # retract back up
+
+    # Collision-checked transport of the HELD object to the approach pose
+    # (held_body_ids -> the object is repositioned along the path and checked
+    # for environment collisions; grasp_ee_offset places it below the EE).
+    q_app_cfg = RobotConfig(joint_positions=q_app, name="q_place_approach",
+                            ignored_body_ids=frozenset({obj_body}),
+                            held_body_ids=frozenset({obj_body}),
+                            grasp_ee_offset=grasp.position)
+    mp = list(streams.plan_motion(q_start, q_app_cfg))
+    if not mp:
+        return None, "no_path"
+
+    # Transport -> approach -> lower to release.
+    follow_trajectory(rb, model, mp[0][0], gui)
+    _drive_to(rb, model, q_app, gui)
+    _drive_to(rb, model, q_rel, gui)
+
+    # Release: open the gripper, remove the weld, let the object settle
+    # (mirrors execute_place's open + removeConstraint + settle).
+    open_gripper(rb, gui, robot=model)
+    client.removeConstraint(cid)
+    for _ in range(60):
+        p.stepSimulation()
+        if gui:
+            time.sleep(1 / 240)
+
+    # Honest drop verification: the object's bottom must rest on the table.
+    obj_bottom = float(pbu.get_aabb(obj_body, client=client).lower[2])
+    status = "ok" if abs(obj_bottom - table_z) < 0.02 else "drop_failed"
+
+    # Retract straight up for headroom (post-place lift).
+    if q_ret is not None:
+        _drive_to(rb, model, q_ret, gui)
+    return _current_config(client, rb, model, "post_place"), status
+
+
 def _main():
     import argparse
     import random
@@ -211,7 +286,7 @@ def _main():
     pr.add_argument("--vis", type=int, default=1)
     pr.add_argument("--save-dir", default="/tmp/boxel_faithful_pick")
     pr.add_argument("--out", default=os.path.join(
-        _REPO, "tampura_bridge", "captures", "faithful_pick_streams.png"))
+        _REPO, "tampura_bridge", "captures", "faithful_pick_place_streams.png"))
     args = pr.parse_args()
     arg_dict = {k: v for k, v in vars(args).items() if v is not None and k != "out"}
 
@@ -240,6 +315,21 @@ def _main():
     print("cup:", cup.object_name, " status:", status, " constraint:", cid)
     print("cup z: %.4f -> %.4f  (lifted %+.4f)  final EE_z: %.4f"
           % (z0, z1, z1 - z0, ee_z))
+
+    if status == "ok":
+        cen = adapter.camera_target
+        frees = registry.get_free_space_boxels()
+        place_b = max(frees, key=lambda f: (f.center[0] - cen[0]) ** 2
+                      + (f.center[1] - cen[1]) ** 2)
+        place_xy = (float(place_b.center[0]), float(place_b.center[1]))
+        q_after, pstatus = faithful_place(
+            streams, world, model, cup.object_name, obj_body, cid, place_xy,
+            q_final, gui=bool(args.vis), table_z=adapter.table_surface_height)
+        z2 = world.client.getBasePositionAndOrientation(obj_body)[0][2]
+        print("=== faithful place (streams) on their Panda ===")
+        print("place_xy:", tuple(round(v, 3) for v in place_xy),
+              " status:", pstatus)
+        print("cup z: %.4f (held) -> %.4f (placed)" % (z1, z2))
 
     cen = adapter.camera_target
     saved = capture(world.client, args.out,
