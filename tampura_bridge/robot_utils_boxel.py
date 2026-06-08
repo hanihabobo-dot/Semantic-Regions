@@ -1,0 +1,647 @@
+"""
+Franka Panda robot constants and low-level control utilities — BRIDGE COPY.
+
+BRIDGE COPY (audit #120): a fork of the shared robot_utils.py used ONLY by the
+TAMPURA find_dice bridge (tampura_bridge/).  It adds a RobotModel dataclass and
+threads it through the IK / collision primitives so they can run on TAMPURA's
+Panda (finger joints [12,13], panda_grasptarget link 14) instead of our fixed
+URDF.  Defaults reproduce OUR Panda exactly.  The shared robot_utils.py is left
+untouched so the eval sweep, which imports it, is unaffected; keep this in sync
+manually if the shared module changes.
+
+All joint limits, rest poses, and link indices for the Panda arm are defined
+here once. Every module that needs robot parameters imports from this file.
+"""
+
+import logging
+from dataclasses import dataclass, field
+from typing import Tuple
+
+import numpy as np
+import pybullet as p
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Franka Panda Constants (from the Franka Emika Panda datasheet)
+# =============================================================================
+
+ARM_JOINT_INDICES = [0, 1, 2, 3, 4, 5, 6]
+FINGER_JOINTS = [9, 10]  # panda_finger_joint1, panda_finger_joint2
+END_EFFECTOR_LINK = 11   # panda_grasptarget
+
+JOINT_LIMITS_LOW = np.array([
+    -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973
+])
+JOINT_LIMITS_HIGH = np.array([
+    2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973
+])
+JOINT_RANGES = JOINT_LIMITS_HIGH - JOINT_LIMITS_LOW
+
+REST_POSES = [0, -0.785, 0, -2.356, 0, 1.571, 0.785]
+
+
+# =============================================================================
+# Low-level control utilities
+# =============================================================================
+
+# =============================================================================
+# Collision checking for motion planning
+# =============================================================================
+
+# Self-collision pairs to ignore: adjacent links in the Panda kinematic chain
+# plus finger/hand pairs that naturally overlap.
+_PANDA_IGNORED_SELF_PAIRS = frozenset({
+    (-1, 0), (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6),
+    (6, 7), (7, 8), (8, 9), (8, 10), (9, 10), (9, 11), (10, 11),
+})
+
+
+_PANDA_GRIPPER_LINKS = frozenset({6, 7, 8, 9, 10, 11})
+
+
+# =============================================================================
+# Robot model — robot-agnostic parameterization (audit #120, guarded)
+# =============================================================================
+# OUR pipeline targets a single fixed Panda URDF, so the indices/limits above
+# are module-level constants.  The TAMPURA find_dice bridge (approach ii) runs
+# these same IK / collision / control primitives on TAMPURA's Panda, whose
+# gripper-ward layout differs (finger joints [12, 13], panda_grasptarget link
+# 14, vs our [9, 10] / 11).  RobotModel carries every robot-specific quantity
+# the primitives in this module and streams.py need; _DEFAULT_PANDA reproduces
+# OUR constants exactly.
+#
+# EVAL-SAFETY: this is INERT scaffolding.  Nothing reads RobotModel yet, and
+# every primitive will keep defaulting to the module constants (== _DEFAULT_PANDA)
+# when no model is passed, so our pipeline's behaviour stays byte-identical.
+# The bridge builds a RobotModel for TAMPURA's Panda and threads it through.
+
+@dataclass(frozen=True)
+class RobotModel:
+    """Robot-specific joint/link indices and limits for the IK / collision /
+    control primitives in this module and the streams in streams.py.
+
+    Defaults reproduce OUR Panda (the module constants above).  A caller on a
+    differently-loaded Panda (e.g. the find_dice bridge) builds one with that
+    robot's indices/limits — typically queried live from the URDF, not
+    hardcoded."""
+    arm_joints: Tuple[int, ...] = tuple(ARM_JOINT_INDICES)
+    finger_joints: Tuple[int, ...] = tuple(FINGER_JOINTS)
+    ee_link: int = END_EFFECTOR_LINK
+    joint_low: np.ndarray = field(default_factory=lambda: JOINT_LIMITS_LOW.copy())
+    joint_high: np.ndarray = field(default_factory=lambda: JOINT_LIMITS_HIGH.copy())
+    joint_ranges: np.ndarray = field(default_factory=lambda: JOINT_RANGES.copy())
+    rest_poses: Tuple[float, ...] = tuple(REST_POSES)
+    ignored_self_pairs: frozenset = field(
+        default_factory=lambda: frozenset(_PANDA_IGNORED_SELF_PAIRS))
+    gripper_links: frozenset = field(
+        default_factory=lambda: frozenset(_PANDA_GRIPPER_LINKS))
+    open_finger_pos: float = 0.04
+
+
+_DEFAULT_PANDA = RobotModel()
+
+
+# =============================================================================
+# Reference-counted rendering lock
+# =============================================================================
+# PyBullet's COV_ENABLE_RENDERING toggle forces an OpenGL buffer swap.
+# During planning, IK and collision-check functions are called thousands of
+# times — each wrapping its resetJointState calls with rendering off/on.
+# The high-frequency toggling causes visible scene flickering (audit #60).
+#
+# RenderingLock is a nestable context manager backed by a global counter.
+# The first acquire (0 → 1) disables rendering; the last release (1 → 0)
+# re-enables it.  Inner acquires/releases are no-ops.  Wrapping the entire
+# planning phase with one outer lock eliminates all intermediate toggles.
+#
+# Assumes a single PyBullet physics client (true for this codebase).
+
+_rendering_lock_count = 0
+
+
+class RenderingLock:
+    """Nestable context manager that suppresses PyBullet rendering toggles.
+
+    Usage::
+
+        with RenderingLock(physics_client):
+            # rendering is disabled here; nested locks are no-ops
+            ...
+        # rendering re-enabled when the outermost lock exits
+    """
+
+    def __init__(self, physics_client: int = 0):
+        self.physics_client = physics_client
+
+    def __enter__(self):
+        global _rendering_lock_count
+        if _rendering_lock_count == 0:
+            p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0,
+                                       physicsClientId=self.physics_client)
+        _rendering_lock_count += 1
+        return self
+
+    def __exit__(self, *exc):
+        global _rendering_lock_count
+        _rendering_lock_count -= 1
+        if _rendering_lock_count == 0:
+            p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1,
+                                       physicsClientId=self.physics_client)
+        return False
+
+
+def is_config_collision_free(robot_id: int, joint_positions,
+                              physics_client: int = 0,
+                              ignored_bodies=None,
+                              allow_gripper_collisions: bool = False,
+                              log_collisions: bool = True,
+                              held_body_ids=None,
+                              held_body_ee_offset=None,
+                              robot: 'RobotModel' = None) -> bool:
+    """
+    Check whether a 7-DOF arm configuration is collision-free.
+
+    Saves the robot's current joint state, sets the query configuration,
+    runs broadphase + narrowphase collision detection, then restores the
+    original state.  Contacts are filtered:
+
+    * Self-contacts between adjacent / structurally overlapping links
+      (defined in ``_PANDA_IGNORED_SELF_PAIRS``) are ignored.
+    * The base link (-1) is excluded — it is fixed and rests on the
+      mounting surface.
+    * Bodies listed in *ignored_bodies* (e.g. a held object) are skipped.
+    * When *allow_gripper_collisions* is True, collisions between the
+      gripper links (7-11: wrist flange, hand, fingers, grasptarget)
+      and non-robot bodies are also ignored.  Use this for pick/place
+      endpoint checks where the gripper must enter cluttered space.
+
+    When *held_body_ids* is provided, those bodies are repositioned to
+    follow the end-effector at the hypothetical configuration and checked
+    for environment collisions.  ``resetJointState`` does not move
+    constraint-attached bodies, so we manually compute the EE world
+    pose and teleport each held body there before collision detection.
+
+    Rendering is managed via ``RenderingLock`` — safe to call both
+    standalone and from within an outer lock (e.g. planning phase).
+
+    Args:
+        robot_id:                 PyBullet body ID of the robot.
+        joint_positions:          Sequence of 7 target joint angles.
+        physics_client:           PyBullet physics client ID.
+        ignored_bodies:           Optional set/frozenset of body IDs to skip.
+        allow_gripper_collisions: If True, exempt gripper links from
+                                  environment collision reporting.
+        log_collisions:           If True, log the first collision found
+                                  at DEBUG level.
+        held_body_ids:            Optional set/frozenset of body IDs
+                                  attached to the gripper.  These are
+                                  repositioned to the EE pose and checked
+                                  for environment collisions.
+        held_body_ee_offset:      Optional [x, y, z] offset from the EE
+                                  to the held object center (the grasp
+                                  clearance).  The held body is placed at
+                                  ``ee_pos - offset`` in the EE frame.
+                                  Without this, the body is placed at the
+                                  EE origin, which is too high for
+                                  top-down grasps.
+
+    Returns:
+        True if the configuration has no disallowed contacts.
+    """
+    if ignored_bodies is None:
+        ignored_bodies = frozenset()
+    if held_body_ids is None:
+        held_body_ids = frozenset()
+    rm = robot if robot is not None else _DEFAULT_PANDA
+
+    saved = None
+    saved_held = {}
+    with RenderingLock(physics_client):
+        try:
+            saved = [p.getJointState(robot_id, i, physicsClientId=physics_client)[0]
+                     for i in rm.arm_joints]
+
+            for i, angle in zip(rm.arm_joints, joint_positions):
+                p.resetJointState(robot_id, i, angle,
+                                  physicsClientId=physics_client)
+
+            if held_body_ids:
+                ee_state = p.getLinkState(robot_id, rm.ee_link,
+                                         computeForwardKinematics=True,
+                                         physicsClientId=physics_client)
+                ee_pos, ee_orn = ee_state[4], ee_state[5]
+
+                if held_body_ee_offset is not None:
+                    offset_local = [-held_body_ee_offset[0],
+                                    -held_body_ee_offset[1],
+                                    -held_body_ee_offset[2]]
+                    held_pos, held_orn = p.multiplyTransforms(
+                        ee_pos, ee_orn, offset_local, [0, 0, 0, 1])
+                else:
+                    held_pos, held_orn = ee_pos, ee_orn
+
+                for hid in held_body_ids:
+                    saved_held[hid] = p.getBasePositionAndOrientation(
+                        hid, physicsClientId=physics_client)
+                    p.resetBasePositionAndOrientation(
+                        hid, ee_pos, ee_orn,
+                        physicsClientId=physics_client)
+
+            p.performCollisionDetection(physicsClientId=physics_client)
+            contacts = p.getContactPoints(bodyA=robot_id,
+                                          physicsClientId=physics_client)
+
+            for c in contacts:
+                body_a, body_b, link_a, link_b = c[1], c[2], c[3], c[4]
+
+                if body_a == robot_id and body_b == robot_id:
+                    pair = (min(link_a, link_b), max(link_a, link_b))
+                    if pair not in rm.ignored_self_pairs:
+                        if log_collisions:
+                            logger.debug("collision: self-contact links (%d, %d)",
+                                         link_a, link_b)
+                        return False
+                    continue
+
+                other = body_b if body_a == robot_id else body_a
+                robot_link = link_a if body_a == robot_id else link_b
+
+                if other in ignored_bodies:
+                    continue
+                if robot_link == -1:
+                    continue
+                if allow_gripper_collisions and robot_link in rm.gripper_links:
+                    continue
+
+                if log_collisions:
+                    logger.debug("collision: robot link %d <-> body %d (link %d)",
+                                 robot_link,
+                                 other,
+                                 link_b if body_a == robot_id else link_a)
+                return False
+
+            for hid in held_body_ids:
+                held_contacts = p.getContactPoints(bodyA=hid,
+                                                   physicsClientId=physics_client)
+                for c in held_contacts:
+                    other = c[2] if c[1] == hid else c[1]
+                    if other == robot_id:
+                        continue
+                    if other in ignored_bodies:
+                        continue
+                    if log_collisions:
+                        logger.debug("collision: held body %d <-> body %d",
+                                     hid, other)
+                    return False
+
+            return True
+        finally:
+            if saved is not None:
+                for i, angle in zip(rm.arm_joints, saved):
+                    p.resetJointState(robot_id, i, angle,
+                                      physicsClientId=physics_client)
+            for hid, (pos, orn) in saved_held.items():
+                p.resetBasePositionAndOrientation(
+                    hid, pos, orn, physicsClientId=physics_client)
+
+
+def is_path_collision_free(robot_id: int, q_start, q_end,
+                            physics_client: int = 0, n_checks: int = 8,
+                            ignored_bodies=None,
+                            allow_gripper_collisions: bool = False,
+                            held_body_ids=None,
+                            held_body_ee_offset=None,
+                            robot: 'RobotModel' = None) -> bool:
+    """
+    Check a straight-line joint-space path for collisions.
+
+    Evaluates *n_checks* evenly-spaced configurations (including the
+    endpoints) along the linear interpolation from *q_start* to *q_end*.
+
+    Args:
+        robot_id:        PyBullet body ID of the robot.
+        q_start:         Start joint positions (array-like, length 7).
+        q_end:           End joint positions (array-like, length 7).
+        physics_client:  PyBullet physics client ID.
+        n_checks:        Number of intermediate configurations to test.
+                         Default 8 matches BoxelStreams.RRT_EDGE_CHECKS —
+                         see the RRT-Connect parameter block in streams.py
+                         for the empirical-tuning rationale.
+        ignored_bodies:  Optional set/frozenset of body IDs to skip.
+        allow_gripper_collisions: If True, exempt gripper/wrist links
+            from environment collision reporting (same as in
+            is_config_collision_free).
+        held_body_ids:   Optional set/frozenset of body IDs attached to
+            the gripper, passed through to is_config_collision_free.
+        held_body_ee_offset: Optional [x, y, z] grasp offset, passed
+            through to is_config_collision_free.
+
+    Returns:
+        True if every sampled configuration is collision-free.
+    """
+    q_s = np.asarray(q_start, dtype=float)
+    q_e = np.asarray(q_end, dtype=float)
+    with RenderingLock(physics_client):
+        for t in np.linspace(0.0, 1.0, n_checks):
+            q = (1.0 - t) * q_s + t * q_e
+            if not is_config_collision_free(robot_id, q, physics_client,
+                                            ignored_bodies,
+                                            allow_gripper_collisions=allow_gripper_collisions,
+                                            log_collisions=False,
+                                            held_body_ids=held_body_ids,
+                                            held_body_ee_offset=held_body_ee_offset,
+                                            robot=robot):
+                return False
+        return True
+
+
+# =============================================================================
+# Runtime collision monitoring (execution phase)
+# =============================================================================
+
+def detect_execution_collisions(robot_id: int,
+                                physics_client: int = 0,
+                                held_body_id: int = None,
+                                support_body_ids: frozenset = frozenset(),
+                                label: str = "",
+                                body_names: dict = None) -> list:
+    """
+    Check the live simulation state for collisions and print any found.
+
+    Unlike the planning-time ``is_config_collision_free``, this operates
+    on the *actual* physics state — no joint save/restore or body
+    repositioning is needed because ``stepSimulation`` already keeps
+    constrained bodies in the correct position.
+
+    Args:
+        robot_id:         PyBullet body ID of the robot.
+        physics_client:   PyBullet physics client ID.
+        held_body_id:     Body ID currently attached to the gripper via
+                          constraint, or None if the gripper is empty.
+        support_body_ids: Body IDs of surfaces to ignore (table, ground).
+        label:            Context string printed with each collision
+                          (e.g. "move to free_001").
+        body_names:       Optional {body_id: name} dict for readable output.
+
+    Returns:
+        List of collision description strings (empty = no collisions).
+    """
+    if body_names is None:
+        body_names = {}
+
+    def _name(bid):
+        return body_names.get(bid, f"body_{bid}")
+
+    p.performCollisionDetection(physicsClientId=physics_client)
+
+    collisions = []
+    skip = support_body_ids | ({held_body_id} if held_body_id is not None else set())
+
+    contacts = p.getContactPoints(bodyA=robot_id, physicsClientId=physics_client)
+    for c in contacts:
+        body_a, body_b, link_a, link_b = c[1], c[2], c[3], c[4]
+        if body_a == robot_id and body_b == robot_id:
+            pair = (min(link_a, link_b), max(link_a, link_b))
+            if pair in _PANDA_IGNORED_SELF_PAIRS:
+                continue
+            msg = f"robot self-collision links ({link_a}, {link_b})"
+            collisions.append(msg)
+            continue
+        other = body_b if body_a == robot_id else body_a
+        robot_link = link_a if body_a == robot_id else link_b
+        if other in skip or robot_link == -1:
+            continue
+        msg = f"robot link {robot_link} <-> {_name(other)}"
+        collisions.append(msg)
+
+    if held_body_id is not None:
+        held_name = _name(held_body_id)
+        held_contacts = p.getContactPoints(bodyA=held_body_id,
+                                           physicsClientId=physics_client)
+        for c in held_contacts:
+            other = c[2] if c[1] == held_body_id else c[1]
+            if other == robot_id or other in support_body_ids:
+                continue
+            if other == held_body_id:
+                continue
+            msg = f"{held_name} (held) <-> {_name(other)}"
+            collisions.append(msg)
+
+    if collisions:
+        tag = f" [{label}]" if label else ""
+        for msg in collisions:
+            print(f"    *** COLLISION{tag}: {msg} ***")
+        logger.warning("execution collisions%s: %s", tag, collisions)
+
+    return collisions
+
+
+# =============================================================================
+# Inverse kinematics
+# =============================================================================
+
+def solve_ik(robot_id: int, target_pos: np.ndarray,
+             target_orn=None, physics_client: int = 0,
+             seed=None):
+    """
+    Null-space IK with configurable seed for consistent results.
+
+    Saves the robot's current joint state, resets to ``seed`` (or
+    ``REST_POSES`` if no seed is given) to give the iterative solver
+    a deterministic starting point, runs IK with null-space bias, then
+    restores the original state.
+
+    Without a seed the call is independent of where execution left the
+    arm — critical for fresh replans.  With a seed the call preserves
+    the IK branch the seed already lives in — used by execute_pick /
+    execute_place / execute_stack to lower the arm a couple of
+    centimetres into contact without snapping to a different IK
+    solution between move and contact (audit #37 / #38).
+
+    Applies the same validation as ``BoxelStreams._pybullet_ik()`` in
+    streams.py: null-check, joint-limit check (0.1 rad tolerance), and
+    clipping.  Returns ``None`` on failure so callers can handle it.
+
+    Args:
+        robot_id: PyBullet body ID of the robot.
+        target_pos: Desired end-effector position [x, y, z].
+        target_orn: Desired orientation as quaternion [x, y, z, w] or
+                    any sequence accepted by PyBullet.
+                    Defaults to gripper pointing straight down.
+        physics_client: PyBullet physics client ID.
+        seed:   Optional joint-angle seed (length 7, list or ndarray).
+                When provided, the solver resets the model to ``seed``
+                and uses it as ``restPoses`` for the null-space bias —
+                so the returned solution stays in the same IK branch.
+                When ``None`` (default), behaviour is identical to the
+                previous version: reset to ``REST_POSES``.
+
+    Returns:
+        Array of 7 joint angles, or ``None`` if IK failed.
+    """
+    if target_orn is None:
+        target_orn = p.getQuaternionFromEuler([0, np.pi, 0])
+
+    orn_list = (target_orn.tolist() if isinstance(target_orn, np.ndarray)
+                else list(target_orn))
+
+    seed_poses = (list(seed) if seed is not None else list(REST_POSES))
+
+    saved = None
+    with RenderingLock(physics_client):
+        try:
+            saved = [p.getJointState(robot_id, i,
+                                     physicsClientId=physics_client)[0]
+                     for i in ARM_JOINT_INDICES]
+
+            for i, angle in zip(ARM_JOINT_INDICES, seed_poses):
+                p.resetJointState(robot_id, i, angle,
+                                  physicsClientId=physics_client)
+
+            joint_positions = p.calculateInverseKinematics(
+                robot_id, END_EFFECTOR_LINK,
+                target_pos.tolist(), orn_list,
+                lowerLimits=JOINT_LIMITS_LOW.tolist(),
+                upperLimits=JOINT_LIMITS_HIGH.tolist(),
+                jointRanges=JOINT_RANGES.tolist(),
+                restPoses=seed_poses,
+                maxNumIterations=100,
+                residualThreshold=1e-4,
+                physicsClientId=physics_client,
+            )
+
+            if joint_positions is None or len(joint_positions) < 7:
+                return None
+
+            arm_joints = np.array(joint_positions[:7])
+
+            # 0.1 rad tolerance (~5.7°) accommodates PyBullet's iterative IK
+            # solver, which can slightly overshoot joint limits.  Solutions
+            # within tolerance are clipped; beyond it they're rejected.
+            if np.any(arm_joints < JOINT_LIMITS_LOW - 0.1) or \
+               np.any(arm_joints > JOINT_LIMITS_HIGH + 0.1):
+                return None
+
+            return np.clip(arm_joints, JOINT_LIMITS_LOW, JOINT_LIMITS_HIGH)
+
+        except Exception as e:
+            logger.warning("solve_ik failed for pos=%s: %s", target_pos.tolist(), e)
+            return None
+        finally:
+            if saved is not None:
+                for i, angle in zip(ARM_JOINT_INDICES, saved):
+                    p.resetJointState(robot_id, i, angle,
+                                      physicsClientId=physics_client)
+
+
+def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
+                      steps: int = 60):
+    """
+    Smoothly interpolate joint positions from the current state to
+    *target_joints*.
+
+    Args:
+        robot_id: PyBullet body ID of the robot.
+        target_joints: Sequence of 7 target joint angles.
+        gui: If True, sleep between steps for real-time visualisation.
+        steps: Number of interpolation steps.
+    """
+    import time
+    current = [p.getJointState(robot_id, i)[0] for i in range(7)]
+    for t in range(steps):
+        alpha = (t + 1) / steps
+        interp = [(1 - alpha) * c + alpha * tgt
+                   for c, tgt in zip(current, target_joints)]
+        for i in range(7):
+            # 240 N·m is the Franka Emika Panda's peak joint torque for
+            # joints 1-4 (per datasheet); sufficient for position control.
+            p.setJointMotorControl2(robot_id, i, p.POSITION_CONTROL,
+                                    targetPosition=interp[i], force=240)
+        p.stepSimulation()
+        if gui:
+            time.sleep(1 / 120)
+
+
+def open_gripper(robot_id: int, gui: bool = False):
+    """Open the Panda gripper to URDF max (0.04 m per finger).
+
+    Audit #81 2026-05-15: switched from POSITION_CONTROL to
+    resetJointState.  Audit #79's 200 N / 80 steps still lost the
+    fight against cube-pad friction at grasping width — fingers
+    stalled before reaching 0.04 and the pads kept grazing the cube
+    during retraction, dragging it laterally with the arm (seed-999
+    log run_2026-05-15_18-57-21 lines 188-190, 277-279:
+    constraint_gone=True robot_contacts=[2] AFTER open_gripper).
+    resetJointState teleports the fingers to URDF max instantly,
+    bypassing the motor controller's force ceiling AND eliminating
+    the sliding-pad retraction transient.  Sim-only behaviour but
+    acceptable for a thesis-grade release primitive per audit body
+    Step 2 mode (b) ("resetJointState directly to 0.04 ... bypasses
+    motor controller entirely — sim-only acceptable").
+
+    User direction 2026-05-15: "make sure addconstraint is actually
+    removed and that we dont sample a letting go grasp but really
+    just open up as maximally as we can."
+
+    A short POSITION_CONTROL hold (80 steps @ 240 Hz ~ 0.33 s) keeps
+    the fingers pinned at 0.04 while the cube falls under gravity and
+    settles; without the hold, transient pad-cube reaction forces
+    during the fall could drift the joint back inward.  Caller adds
+    further settle time via base_settle_steps in
+    _release_and_verify_drop.
+    """
+    import time
+    p.resetJointState(robot_id, FINGER_JOINTS[0], 0.04)
+    p.resetJointState(robot_id, FINGER_JOINTS[1], 0.04)
+    for _ in range(80):
+        p.setJointMotorControl2(robot_id, FINGER_JOINTS[0],
+                                p.POSITION_CONTROL,
+                                targetPosition=0.04, force=200)
+        p.setJointMotorControl2(robot_id, FINGER_JOINTS[1],
+                                p.POSITION_CONTROL,
+                                targetPosition=0.04, force=200)
+        p.stepSimulation()
+        if gui:
+            time.sleep(1 / 120)
+
+
+def close_gripper(robot_id: int, gui: bool = False,
+                  target_finger_pos: float = 0.01, force: float = 10):
+    """Close the Panda gripper to ``target_finger_pos`` per finger.
+
+    Audit #81 refine 2026-05-15: force dropped 50 N -> 10 N and the
+    target is now a kwarg so the caller can pass cube_half_width
+    instead of a fixed deep-inside target.  Previously target=0.01
+    drove the pads to a 0.02 m gap — 2 cm INSIDE a 4 cm cube — and
+    50 N kept driving them inward against the contact stop, producing
+    the visible "smashing" in seed-999 GUI playback and a deeply
+    pressed contact state that persisted across the audit #81
+    resetJointState release (cube grazing pads on next motion).
+
+    User direction 2026-05-15: "when the gripper closes it should
+    only close a tinly little bit, otherwise it's wide open ... we
+    dont want objects floating in the air but we also dont want
+    smashing."
+
+    The JOINT_FIXED constraint added in execute_pick provides all the
+    grip stability during motion; close_gripper is only responsible
+    for the visual grasp and giving the contact-points verify-gate
+    something to measure.  10 N motor budget is far above the ~0.5 N
+    needed to support a 50 g cube; the cube-pad contact settles at
+    whatever the target says, no longer pushing through.
+    """
+    import time
+    for _ in range(30):
+        p.setJointMotorControl2(robot_id, FINGER_JOINTS[0],
+                                p.POSITION_CONTROL,
+                                targetPosition=target_finger_pos,
+                                force=force)
+        p.setJointMotorControl2(robot_id, FINGER_JOINTS[1],
+                                p.POSITION_CONTROL,
+                                targetPosition=target_finger_pos,
+                                force=force)
+        p.stepSimulation()
+        if gui:
+            time.sleep(1 / 120)
