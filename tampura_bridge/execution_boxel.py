@@ -113,7 +113,7 @@ def _drive_to(rb, model, q, gui, force=240.0, tol=0.005, max_settle=600):
 
 def faithful_pick(streams, world, model, obj_name, obj_boxel_id, q_start, gui,
                   grasp_finger_pos=None, approach_clearance=0.10,
-                  lift_height=0.20):
+                  lift_height=0.20, table_z=None):
     """Real reach -> grasp -> lift of obj_name on their robot, via OUR streams.
 
     sample_grasp -> solve_pose_ik (approach / contact / lift, all solved UP
@@ -166,8 +166,14 @@ def faithful_pick(streams, world, model, obj_name, obj_boxel_id, q_start, gui,
     # Unchained, each pose lands in an independent min-FK-error branch and the
     # base joint swings ~144deg between approach and contact for a 10 cm descent
     # -- the non-physical motion the #120 re-exam caught.
+    contact_z = top_z - 0.005
+    if table_z is not None:
+        # Don't drive the finger tips (~3.5 cm below grasptarget) into the table
+        # when picking a SHORT object (e.g. the die) -- mirrors execute_pick's
+        # min_contact_z = table_z + 0.035 floor (audit #81).
+        contact_z = max(contact_z, table_z + 0.035)
     approach_ee = np.array([cx, cy, top_z + approach_clearance])
-    contact_ee = np.array([cx, cy, top_z - 0.005])
+    contact_ee = np.array([cx, cy, contact_z])
     q_app = streams.solve_pose_ik(approach_ee, orn, seed=q_start.joint_positions)
     if q_app is None:
         return None, None, "no_approach_ik"
