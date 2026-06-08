@@ -557,6 +557,43 @@ Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no
      Until fixed, the bridge benchmarks PLANNING + PERCEPTION only, on idealized execution.
      See #118, #119, notes/THESIS_NOTES.md, notes/TAMPURA_PLAN.md PHASE 3-C RESULT.
 
+     PROGRESS [2026-06-08] -- approach (ii): port OUR streams onto THEIR Panda in bridge-side
+     COPIES; shared streams.py/robot_utils.py stay byte-pristine for the live eval sweep.
+     Built: robot_utils_boxel.py (+RobotModel), streams_boxel.py (robot-agnostic IK/collision/
+     motion + solve_pose_ik), tampura_robot.build_robot_model (queries their live Panda: arm
+     0-6, fingers 12,13, ee=panda_grasptarget link 14), _streams_smoke.build_streams,
+     execution_boxel.faithful_pick.  Streams smoke PASSES; faithful_pick on seed 0 does a
+     collision-checked reach -> grasp -> +0.20 m lift that reveals the die (status "ok").
+     SCENE ADAPTATIONS (needed to manipulate their LOOK-ONLY scene; runtime-only, their URDF/
+     clone untouched -- disclosed for comparison fairness):
+       1. their cups AND dice are STATIC (mass=-1; TAMPURA only LOOKS behind cups, never
+          picks).  faithful_pick makes the grasped object dynamic (changeDynamics mass=0.1)
+          first, else welding the arm to a static body anchors the arm to the world.
+       2. their Panda hand frames (panda_hand/handv/tool_tip/camera) carry NO inertial data ->
+          PyBullet gives each mass=1 (~5 kg phantom hand) -> unphysical control.
+          fix_phantom_masses zeros links [8,9,10,11] (fingers 12,13 + grasptarget 14 untouched).
+       3. panda_grasptarget IK needs multi-seed + FK verification: a single-seed null-space
+          solve returns joint-limit-valid configs that DON'T reach the target -> solve_pose_ik.
+     PICK RE-EXAM [2026-06-08] -- faithfulness pass vs shared execution.execute_pick (pick
+     "looked weird" in GUI); 4 bridge-side fixes, commits 805cbac/9ad647c/05dab36/d324349:
+       - IK BRANCH-JUMP (the "weird"): approach/contact/lift were 3 independent rest-seeded
+         solve_pose_ik picking min-FK-error -> base joint swung ~144deg (2.52 rad) between
+         approach and contact for a 10 cm descent.  FIX: solve_pose_ik gains a seed arg (return
+         the within-tol config CLOSEST to seed); faithful_pick seeds contact from approach,
+         lift from contact -> one branch (swing 2.52 -> 0.16 rad).  Mirrors execute_pick's
+         seeded contact IK (#37/#38).
+       - SMASHING: close_gripper used a fixed 0.015 target (inside the cup wall, motor grinding
+         the contact stop).  FIX: target = object half-width max(0.005, obj_hw) (== execute_pick,
+         #81 anti-smash).
+       - UNPHYSICAL FORCE: _drive_to used 1500 N.  FIX: 240 N (Panda datasheet, ==
+         move_robot_smooth); converges now that phantom masses are zeroed.
+       OPEN parity gaps (defer): (i) contact-z lacks execute_pick's table_z+0.035 floor --
+       harmless for the tall cup, needed before faithful_pick is used on the SHORT die;
+       (ii) post-pick lift 0.20 m vs execute_pick's 0.10 m -- drop to 0.10 once faithful_place
+       transports the cup away.
+     REMAINING: faithful_place -> faithful_go_home -> wire into BoxelPolicy -> honest run ->
+     seeds 0-19 (PHASE 4 >=20-seed canonical eval GATED).
+
 ================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
