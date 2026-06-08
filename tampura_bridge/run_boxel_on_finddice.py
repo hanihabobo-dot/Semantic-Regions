@@ -28,6 +28,7 @@ from tampura.config import config as tconfig
 import tampura_environments  # noqa: F401 — import registers the find_dice env
 
 from tampura_bridge.boxel_policy import BoxelPolicy
+from tampura_bridge.boxelize import suppress_tampura_visibility_voxels
 
 DEFAULT_CONFIG = "./env_configs/find_dice.yml"  # relative to their env repo (cwd)
 
@@ -59,6 +60,7 @@ def main():
         config["task"], config["vis"], config["global_seed"], config["max_steps"],
     )
 
+    suppress_tampura_visibility_voxels()  # no blue POMDP voxel grid in the GUI
     env = tconfig.get_env(config["task"])(config=config)
     b0, store = env.initialize()
 

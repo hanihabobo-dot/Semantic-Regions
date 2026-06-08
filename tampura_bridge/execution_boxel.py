@@ -5,8 +5,9 @@ streams_boxel.py) + robot_utils_boxel primitives.
 
 Replaces the kinematic execution_bridge.execute_faithful_pick (IK pose-set +
 teleport).  Every arm motion here is a TRAJECTORY from OUR plan_motion
-(collision-checked RRT / linear), followed under velocity-capped position
-control -- there is no hand-scripted joint move.  A pick is:
+(collision-checked RRT / linear), replayed with smooth position-control
+interpolation (move_robot_smooth) exactly as our pipeline executes a `move`
+action -- there is no hand-scripted joint move.  A pick is:
 
     sample_grasp -> chained FK-verified IK (approach / contact / lift)
     -> plan_motion + follow (transit to approach, then descend to contact)
@@ -49,7 +50,8 @@ if _REPO not in sys.path:
 
 from tampura_environments.panda_utils import pb_utils as pbu
 
-from tampura_bridge.robot_utils_boxel import close_gripper, open_gripper
+from tampura_bridge.robot_utils_boxel import (close_gripper, move_robot_smooth,
+                                              open_gripper)
 from tampura_bridge.streams_boxel import RobotConfig
 
 
@@ -105,35 +107,41 @@ def _weld(client, rb, ee_link, obj_body):
         list(rel_pos), [0, 0, 0], parentFrameOrientation=list(rel_orn))
 
 
-def follow_trajectory(rb, model, traj, gui, max_steps_per_wp=250, tol=0.01,
-                      final_tol=0.005, max_velocity=1.0, force=240.0):
-    """Drive the arm through a planned trajectory's waypoints under velocity-
-    capped position control, stepping physics each tick.  EVERY target is a
-    PLANNED waypoint from plan_motion -- there is no hand-scripted motion.
+def follow_trajectory(rb, model, traj, gui, steps=30):
+    """Replay a planned trajectory's waypoints with smooth interpolation -- the
+    same way our pipeline executes a `move` action (test_full_pipeline move
+    dispatch): for each waypoint after the start, move_robot_smooth linearly
+    interpolates the arm to it over ``steps`` substeps under POSITION_CONTROL
+    (force 240 N, the Panda's peak joint torque), stepping physics each tick.
+    EVERY target is a PLANNED waypoint from plan_motion -- there is no hand-
+    scripted motion.  Streaming the waypoints this way (no decelerate-and-settle
+    at each one, no velocity cap) gives continuous motion instead of the discrete
+    step-pause-step of a converge-at-each-waypoint follower.
 
-    The arm converges to EACH waypoint (within ``tol`` rad, ``final_tol`` for the
-    endpoint) before moving on, capped at ``max_steps_per_wp`` ticks per waypoint
-    -- so it actually tracks the planned path and reaches the planned endpoint
-    (e.g. the contact pose) instead of lagging behind and stopping short.
-    maxVelocity keeps the motion gentle (no momentum lunges).  A grasped object
-    rides via its JOINT_FIXED constraint."""
+    A streamed move can undershoot the FINAL waypoint by a few mm -- harmless for
+    transit, but it makes a descent stop short of a small object's grasp pose
+    (the die's fingers would close on air).  So after streaming, briefly hold the
+    endpoint target until the arm converges onto it (or a short cap): the planned
+    contact / release pose is then actually reached before the gripper acts.
+    This settle is near-instant for transit (already on target) -- the only
+    visible convergence is the arm pressing the last mm into the grasp pose.  A
+    grasped object rides via its JOINT_FIXED constraint."""
     wps = traj.waypoints
     if not wps:
         return
-    for k, wp in enumerate(wps):
-        target = np.asarray(wp.joint_positions, dtype=float)
-        wp_tol = final_tol if k == len(wps) - 1 else tol
-        for _ in range(max_steps_per_wp):
-            cur = np.array([p.getJointState(rb, j)[0] for j in model.arm_joints])
-            if np.max(np.abs(cur - target)) < wp_tol:
-                break
-            for idx, j in enumerate(model.arm_joints):
-                p.setJointMotorControl2(rb, j, p.POSITION_CONTROL,
-                                        targetPosition=float(target[idx]),
-                                        force=force, maxVelocity=max_velocity)
-            p.stepSimulation()
-            if gui:
-                time.sleep(1 / 120)
+    for wp in wps[1:]:
+        move_robot_smooth(rb, wp.joint_positions, gui, steps=steps, robot=model)
+    final = np.asarray(wps[-1].joint_positions, dtype=float)
+    for _ in range(120):
+        cur = np.array([p.getJointState(rb, j)[0] for j in model.arm_joints])
+        if np.max(np.abs(cur - final)) < 0.004:
+            break
+        for idx, j in enumerate(model.arm_joints):
+            p.setJointMotorControl2(rb, j, p.POSITION_CONTROL,
+                                    targetPosition=float(final[idx]), force=240.0)
+        p.stepSimulation()
+        if gui:
+            time.sleep(1 / 240)
 
 
 def _plan_follow(streams, rb, model, q_from, q_to, gui):
@@ -150,7 +158,7 @@ def _plan_follow(streams, rb, model, q_from, q_to, gui):
 
 
 def execute_pick(streams, world, model, obj_name, obj_boxel_id, q_start, gui,
-                  approach_clearance=0.10, lift_height=0.20):
+                  approach_clearance=0.10, lift_height=0.06):
     """Real reach -> grasp -> lift of obj_name on their robot, via OUR streams.
 
     Both the transit-to-approach and the descent-to-contact are motion-planned
@@ -199,6 +207,12 @@ def execute_pick(streams, world, model, obj_name, obj_boxel_id, q_start, gui,
     q_con = streams.solve_pose_ik(contact_ee, orn, seed=q_app)
     if q_con is None:
         return None, None, "no_contact_ik"
+    # lift_height must raise the held cup clear of whatever it occludes before
+    # the transport (find_dice hides the die UNDER the cup), so it is sized to
+    # the scene, not the cosmetic ~0.10 m headroom of our execute_pick: the cup
+    # bottom (~table) must clear the die top (~5 cm above the cup bottom here),
+    # hence 0.06 m.  A smaller lift leaves the cup overlapping the die and the
+    # transport would bulldoze it sideways instead of revealing it in place.
     q_lift = streams.solve_pose_ik(contact_ee + np.array([0.0, 0.0, lift_height]),
                                    orn, seed=q_con)
 
@@ -326,7 +340,7 @@ def execute_place(streams, world, model, obj_name, obj_body, cid, place_pos,
     # lift (q_ret is release_xy at +approach_clearance) well within the IK
     # neighbourhood, so it needs no collision-planned path.  Clearing the object
     # here is exactly what lets the next (motion-planned) go_home start from a
-    # collision-free pose.  Still velocity-capped via follow_trajectory.
+    # collision-free pose.  Followed smoothly via follow_trajectory.
     if q_ret is not None:
         q_rel_now = _current_config(client, rb, model, "q_place_at_release")
         q_ret_cfg = RobotConfig(joint_positions=q_ret, name="q_place_retract")
@@ -366,7 +380,7 @@ def _main():
     from tampura.config import config as tconfig
     import tampura_environments  # noqa: F401 -- registers the find_dice env
     from tampura_bridge._streams_smoke import build_streams
-    from tampura_bridge.boxelize import capture
+    from tampura_bridge.boxelize import capture, suppress_tampura_visibility_voxels
 
     pr = argparse.ArgumentParser(description="audit #120: pick on their Panda via our streams")
     pr.add_argument("--config", default="./env_configs/find_dice.yml")
@@ -382,6 +396,7 @@ def _main():
     random.seed(config["global_seed"])
     np.random.seed(config["global_seed"])
 
+    suppress_tampura_visibility_voxels()  # no blue POMDP voxel grid in the GUI
     env = tconfig.get_env(config["task"])(config=config)
     env.initialize()
     world = env.world
