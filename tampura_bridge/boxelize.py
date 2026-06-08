@@ -90,8 +90,9 @@ def draw_registry_on_client(client, registry, fill_opacity=0.4):
     """Draw OBJECT/SHADOW (filled phantom + wireframe) and FREE_SPACE (wireframe)
     on THEIR client, so overlays show in the GUI and in getCameraImage.  Returns
     (line_ids, body_ids) of the items WE created, so a caller can remove exactly
-    our overlay on redraw WITHOUT touching TAMPURA's own debug items (e.g. the
-    POMDP visibility voxels)."""
+    our overlay on redraw WITHOUT touching any other debug items in the scene.
+    (TAMPURA's blue POMDP visibility voxels are not drawn at all -- they are
+    suppressed at env init by suppress_tampura_visibility_voxels.)"""
     lines, bodies = [], []
     for bd in registry.boxels.values():
         c, e = bd.center, bd.extent
@@ -111,13 +112,28 @@ def draw_registry_on_client(client, registry, fill_opacity=0.4):
     return lines, bodies
 
 
+def suppress_tampura_visibility_voxels():
+    """Stop TAMPURA's find_dice env from rendering its blue POMDP visibility-
+    voxel grid in the GUI.  Their env draws it via VoxelGrid.draw_intervals
+    (find_dice/env.py initialize() and vis_updated_belief); no-opping that method
+    BEFORE the env is built means the voxels are never drawn -- the grid does not
+    flash up and then get cleared, it simply never renders.  Only the rendering
+    is suppressed: the occupancy belief (update_visibility / set_free) is
+    untouched, and draw_intervals' return value is unused at every call site, so
+    the no-op is safe.  Their clone is NOT edited -- this is a runtime
+    monkeypatch, called from our entry points before env.initialize()."""
+    from tampura_environments.panda_utils.voxel_utils import VoxelGrid
+    VoxelGrid.draw_intervals = lambda self, *a, **k: None
+
+
 def draw_overlay(world, fill_opacity=0.4, sense_at_home=True, prev=None,
                  camera_eye=None, camera_target=None):
-    """Draw OUR boxelization of the CURRENT scene on their state-world GUI,
-    ALONGSIDE TAMPURA's own POMDP visibility voxels (we do NOT remove those).
+    """Draw OUR boxelization of the CURRENT scene on their state-world GUI.
     On a refresh, removes ONLY the items WE drew last time (prev = (line_ids,
-    body_ids)) -- never removeAllUserDebugItems -- so the blue voxels survive.
-    Returns (adapter, registry, (line_ids, body_ids))."""
+    body_ids)) -- never removeAllUserDebugItems -- so any other debug items in
+    the scene are left intact.  (TAMPURA's blue POMDP visibility voxels are not
+    drawn at all: suppress_tampura_visibility_voxels no-ops their renderer at
+    env init.)  Returns (adapter, registry, (line_ids, body_ids))."""
     client = world.client
     if prev is not None:
         prev_lines, prev_bodies = prev
