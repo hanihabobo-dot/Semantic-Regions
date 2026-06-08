@@ -105,7 +105,7 @@ def _drive_to(rb, model, q, gui, force=1500.0, tol=0.005, max_settle=600):
 
 
 def faithful_pick(streams, world, model, obj_name, obj_boxel_id, q_start, gui,
-                  grasp_finger_pos=0.015, approach_clearance=0.10,
+                  grasp_finger_pos=None, approach_clearance=0.10,
                   lift_height=0.20):
     """Real reach -> grasp -> lift of obj_name on their robot, via OUR streams.
 
@@ -140,6 +140,16 @@ def faithful_pick(streams, world, model, obj_name, obj_boxel_id, q_start, gui,
     cx = float((aabb.lower[0] + aabb.upper[0]) / 2)
     cy = float((aabb.lower[1] + aabb.upper[1]) / 2)
     top_z = float(aabb.upper[2])
+    # Close target = object half-width along the finger-closing axis (smaller of
+    # the XY half-widths) so the pads settle ON the surface under the gentle 10 N
+    # budget instead of driving INTO it -- mirrors execution.execute_pick's
+    # max(0.005, cube_hw) (audit #81 anti-smash).  A fixed deep target (the old
+    # 0.015) pushed the pads inside the cup wall and kept the motor grinding
+    # against the contact stop.  An explicit grasp_finger_pos still overrides.
+    obj_hw = min(aabb.upper[0] - aabb.lower[0],
+                 aabb.upper[1] - aabb.lower[1]) / 2.0
+    finger_target = (grasp_finger_pos if grasp_finger_pos is not None
+                     else max(0.005, obj_hw))
 
     # All IK up front (before physics): a post-grasp solve_pose_ik would
     # resetJointState-jitter the arm while welded and corrupt the grasp.
@@ -171,7 +181,7 @@ def faithful_pick(streams, world, model, obj_name, obj_boxel_id, q_start, gui,
     follow_trajectory(rb, model, mp[0][0], gui)
     _drive_to(rb, model, q_app, gui)
     _drive_to(rb, model, q_con, gui)
-    close_gripper(rb, gui, target_finger_pos=grasp_finger_pos, robot=model)
+    close_gripper(rb, gui, target_finger_pos=finger_target, robot=model)
     cid = _weld(client, rb, model.ee_link, obj_body)
     for _ in range(20):                       # let the weld settle before lifting
         p.stepSimulation()
