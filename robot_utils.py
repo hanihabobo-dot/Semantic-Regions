@@ -150,7 +150,8 @@ def is_config_collision_free(robot_id: int, joint_positions,
                               allow_gripper_collisions: bool = False,
                               log_collisions: bool = True,
                               held_body_ids=None,
-                              held_body_ee_offset=None) -> bool:
+                              held_body_ee_offset=None,
+                              robot: 'RobotModel' = None) -> bool:
     """
     Check whether a 7-DOF arm configuration is collision-free.
 
@@ -205,20 +206,21 @@ def is_config_collision_free(robot_id: int, joint_positions,
         ignored_bodies = frozenset()
     if held_body_ids is None:
         held_body_ids = frozenset()
+    rm = robot if robot is not None else _DEFAULT_PANDA
 
     saved = None
     saved_held = {}
     with RenderingLock(physics_client):
         try:
             saved = [p.getJointState(robot_id, i, physicsClientId=physics_client)[0]
-                     for i in ARM_JOINT_INDICES]
+                     for i in rm.arm_joints]
 
-            for i, angle in zip(ARM_JOINT_INDICES, joint_positions):
+            for i, angle in zip(rm.arm_joints, joint_positions):
                 p.resetJointState(robot_id, i, angle,
                                   physicsClientId=physics_client)
 
             if held_body_ids:
-                ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK,
+                ee_state = p.getLinkState(robot_id, rm.ee_link,
                                          computeForwardKinematics=True,
                                          physicsClientId=physics_client)
                 ee_pos, ee_orn = ee_state[4], ee_state[5]
@@ -248,7 +250,7 @@ def is_config_collision_free(robot_id: int, joint_positions,
 
                 if body_a == robot_id and body_b == robot_id:
                     pair = (min(link_a, link_b), max(link_a, link_b))
-                    if pair not in _PANDA_IGNORED_SELF_PAIRS:
+                    if pair not in rm.ignored_self_pairs:
                         if log_collisions:
                             logger.debug("collision: self-contact links (%d, %d)",
                                          link_a, link_b)
@@ -262,7 +264,7 @@ def is_config_collision_free(robot_id: int, joint_positions,
                     continue
                 if robot_link == -1:
                     continue
-                if allow_gripper_collisions and robot_link in _PANDA_GRIPPER_LINKS:
+                if allow_gripper_collisions and robot_link in rm.gripper_links:
                     continue
 
                 if log_collisions:
@@ -289,7 +291,7 @@ def is_config_collision_free(robot_id: int, joint_positions,
             return True
         finally:
             if saved is not None:
-                for i, angle in zip(ARM_JOINT_INDICES, saved):
+                for i, angle in zip(rm.arm_joints, saved):
                     p.resetJointState(robot_id, i, angle,
                                       physicsClientId=physics_client)
             for hid, (pos, orn) in saved_held.items():
@@ -302,7 +304,8 @@ def is_path_collision_free(robot_id: int, q_start, q_end,
                             ignored_bodies=None,
                             allow_gripper_collisions: bool = False,
                             held_body_ids=None,
-                            held_body_ee_offset=None) -> bool:
+                            held_body_ee_offset=None,
+                            robot: 'RobotModel' = None) -> bool:
     """
     Check a straight-line joint-space path for collisions.
 
@@ -340,7 +343,8 @@ def is_path_collision_free(robot_id: int, q_start, q_end,
                                             allow_gripper_collisions=allow_gripper_collisions,
                                             log_collisions=False,
                                             held_body_ids=held_body_ids,
-                                            held_body_ee_offset=held_body_ee_offset):
+                                            held_body_ee_offset=held_body_ee_offset,
+                                            robot=robot):
                 return False
         return True
 
