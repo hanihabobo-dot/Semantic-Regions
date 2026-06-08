@@ -220,6 +220,12 @@ class BoxelStreams:
         # tighter values rarely improve the solution but slow planning).
         self.ik_max_iterations = 100
         self.ik_residual_threshold = 1e-4
+        # FK-verification tolerance (m): compute_kin rejects any IK config whose
+        # forward kinematics misses the target by more than this (audit #120).
+        # TAMPURA's panda_grasptarget EE returns limit-valid null-space solutions
+        # that do NOT actually reach the target; without this the planner would
+        # certify unreachable pick/place configs.  Matches solve_pose_ik's tol.
+        self.ik_fk_tol = 0.01
     
     IK_NUM_SEEDS = 8
 
@@ -317,6 +323,19 @@ class BoxelStreams:
                     return None
 
                 arm_joints = np.clip(arm_joints, self.robot.joint_low, self.robot.joint_high)
+
+                # 6. FK verification (audit #120): a limit-valid null-space
+                #    solution on TAMPURA's panda_grasptarget EE can still miss the
+                #    target.  Reject configs whose forward kinematics don't reach
+                #    ee_pos within ik_fk_tol, so compute_kin never certifies an
+                #    unreachable pick/place config to the planner (mirrors
+                #    solve_pose_ik).  The finally block restores the saved state.
+                for i, angle in zip(self.robot.arm_joints, arm_joints):
+                    p.resetJointState(self.robot_id, i, angle, physicsClientId=pc)
+                achieved = np.asarray(p.getLinkState(
+                    self.robot_id, self.robot.ee_link, physicsClientId=pc)[0])
+                if float(np.linalg.norm(achieved - np.asarray(ee_pos))) > self.ik_fk_tol:
+                    return None
 
                 return RobotConfig(joint_positions=arm_joints)
 
