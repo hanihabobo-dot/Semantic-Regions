@@ -14,6 +14,7 @@ import argparse
 import logging
 import os
 import random
+import sys
 import time
 
 import numpy as np
@@ -37,6 +38,13 @@ config = tconfig.load_config(config_file=arg_dict["config"], arg_dict=arg_dict)
 random.seed(config["global_seed"])
 np.random.seed(config["global_seed"])
 tconfig.setup_logger(config["save_dir"], log_level=logging.WARNING)
+if os.environ.get("STRM_DEBUG"):
+    _lg = logging.getLogger("tampura_bridge.streams_boxel")
+    _lg.setLevel(logging.DEBUG)
+    _h = logging.StreamHandler(sys.stdout)
+    _h.setLevel(logging.DEBUG)
+    _h.setFormatter(logging.Formatter("STRM %(message)s"))
+    _lg.addHandler(_h)
 
 env = tconfig.get_env(config["task"])(config=config)
 env.initialize()

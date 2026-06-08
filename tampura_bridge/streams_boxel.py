@@ -215,11 +215,13 @@ class BoxelStreams:
         self._grasp_counter = 0
         
         # IK solver parameters (PyBullet's iterative Jacobian-based IK).
-        # 100 iterations is the PyBullet recommended default; convergence
-        # threshold 1e-4 m balances precision vs speed (empirically tuned —
-        # tighter values rarely improve the solution but slow planning).
-        self.ik_max_iterations = 100
-        self.ik_residual_threshold = 1e-4
+        # 300 iterations / 1e-5 m matches solve_pose_ik (the execution IK): on
+        # TAMPURA's panda_grasptarget EE the 100-iter default lands short of the
+        # FK-verification tolerance for off-centre targets (lateral shadow / free
+        # boxel centres), so the FK gate rejected reachable configs and compute_kin
+        # certified nothing -- multi-cup find_dice scenes then had no plan (#120).
+        self.ik_max_iterations = 300
+        self.ik_residual_threshold = 1e-5
         # FK-verification tolerance (m): compute_kin rejects any IK config whose
         # forward kinematics misses the target by more than this (audit #120).
         # TAMPURA's panda_grasptarget EE returns limit-valid null-space solutions
