@@ -590,6 +590,49 @@ class BoxelStreams:
                          grasp.name, z)
             yield (grasp,)
     
+    def solve_pose_ik(self, ee_pos, ee_orn, tol=0.01):
+        """Multi-seed, FK-verified IK placing the EE at (ee_pos, ee_orn).
+
+        Returns the joint array with the smallest FK position error within
+        ``tol`` (m), else None (an honest 'unreachable').  TAMPURA's
+        panda_grasptarget link needs seed diversity + FK verification: a
+        single-seed null-space solve returns joint-limit-valid configs that do
+        NOT actually reach the target (audit #120).  Used by the bridge
+        executor for the approach / contact / lift poses."""
+        ee_pos = np.asarray(ee_pos, dtype=float)
+        orn = np.asarray(ee_orn, dtype=float)
+        pc = self.physics_client
+        best_q, best_err = None, tol
+        with RenderingLock(pc):
+            saved = [p.getJointState(self.robot_id, j, physicsClientId=pc)[0]
+                     for j in self.robot.arm_joints]
+            try:
+                for seed in self._ik_seeds():
+                    for j, a in zip(self.robot.arm_joints, seed):
+                        p.resetJointState(self.robot_id, j, a, physicsClientId=pc)
+                    sol = p.calculateInverseKinematics(
+                        self.robot_id, self.robot.ee_link,
+                        ee_pos.tolist(), orn.tolist(),
+                        maxNumIterations=300, residualThreshold=1e-5,
+                        physicsClientId=pc)
+                    q = np.array(sol[:7])
+                    if np.any(q < self.robot.joint_low - 0.1) or \
+                       np.any(q > self.robot.joint_high + 0.1):
+                        continue
+                    q = np.clip(q, self.robot.joint_low, self.robot.joint_high)
+                    for j, a in zip(self.robot.arm_joints, q):
+                        p.resetJointState(self.robot_id, j, a, physicsClientId=pc)
+                    achieved = np.asarray(
+                        p.getLinkState(self.robot_id, self.robot.ee_link,
+                                       physicsClientId=pc)[0])
+                    err = float(np.linalg.norm(achieved - ee_pos))
+                    if err < best_err:
+                        best_err, best_q = err, q
+            finally:
+                for j, a in zip(self.robot.arm_joints, saved):
+                    p.resetJointState(self.robot_id, j, a, physicsClientId=pc)
+        return best_q
+
     # =========================================================================
     # STREAM 3: Plan Motion (RRT-Connect with shortcut smoothing)
     # =========================================================================
