@@ -82,14 +82,20 @@ def follow_trajectory(rb, model, traj, gui, steps_per_wp=10):
                           steps=steps_per_wp, robot=model)
 
 
-def _drive_to(rb, model, q, gui, force=1500.0, tol=0.005, max_settle=600):
+def _drive_to(rb, model, q, gui, force=240.0, tol=0.005, max_settle=600):
     """Position-control the arm to config q: command the full target every step
     until the joints converge within `tol` (rad) or max_settle steps.
 
     A bare move_robot_smooth only ramps the target over a few steps and never
     holds it, so the arm is left mid-motion and never settles onto the IK target
     (worse on their robot until fix_phantom_masses lightens the hand).  Holding
-    to convergence makes the contact / lift poses physical."""
+    to convergence makes the contact / lift poses physical.
+
+    Force is the Panda's ~240 N datasheet peak joint torque (== move_robot_smooth,
+    robot_utils_boxel).  Earlier this used 1500 N to overpower the ~5 kg phantom
+    hand; with fix_phantom_masses zeroing those frames the physical 240 N now
+    converges, and the lower force no longer masks control bugs (audit #120
+    re-exam)."""
     import time
     qa = np.asarray(q, dtype=float)
     for _ in range(max_settle):
