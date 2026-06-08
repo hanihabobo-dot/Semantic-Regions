@@ -20,9 +20,10 @@ from pddlstream.algorithms.meta import solve
 from pddlstream.language.constants import PDDLProblem
 
 from tampura_bridge.perception_adapter import FindDiceAdapter
-from tampura_bridge.execution_bridge import (execute_faithful_pick,
-                                             execute_faithful_place,
-                                             execute_go_home)
+from tampura_bridge.execution_boxel import (faithful_pick, faithful_place,
+                                            faithful_go_home,
+                                            fix_phantom_masses)
+from tampura_bridge._streams_smoke import build_streams
 from tampura_bridge.boxelize import capture, draw_overlay
 import tampura_bridge.belief_bridge as bb
 
@@ -128,6 +129,10 @@ class BoxelPolicy(Policy):
         self._die_body = None
         self._done = False
         self._failed = False
+        self._gui = bool(config["vis"])
+        self._streams = None          # OUR streams on their Panda (built once)
+        self._model = None            # their-Panda RobotModel
+        self._q_current = None        # live arm config threaded across actions
 
     def _refresh_overlay(self):
         self._adapter, self._registry, self._overlay, visible = draw_overlay(
@@ -175,7 +180,13 @@ class BoxelPolicy(Policy):
         world = self.env.world
 
         if self._subplan is None:                       # first step: perceive + plan
-            execute_go_home(world)                      # arm clear of the camera (animated)
+            if self._streams is None:                   # build OUR streams on their Panda once
+                self._adapter, self._registry, self._model, self._streams, _ = \
+                    build_streams(world)
+                fix_phantom_masses(world.client, world.robot.body)
+                self._q_current = self._streams.home_config
+            self._q_current, _ = faithful_go_home(      # arm clear of the camera
+                self._streams, world, self._model, self._q_current, self._gui)
             visible = self._refresh_overlay()
             self._capture("phase3c_genuine_initial.png")
             bb.mark_away(belief)
@@ -192,15 +203,32 @@ class BoxelPolicy(Policy):
         if act.name == "pick" and arg0 != "die":
             self._held_cup_name = arg0
             self._held_cup_body = self._adapter.objects[arg0].object_id
-            self._held_constraint, _ = execute_faithful_pick(world, self._held_cup_body)
+            q_new, cid, pst = faithful_pick(
+                self._streams, world, self._model, arg0, "boxel_" + arg0,
+                self._q_current, self._gui,
+                table_z=self._adapter.table_surface_height)
+            info["pick_status"] = pst
+            if pst != "ok":
+                self._failed = True
+                return Action(name="no-op"), info, store
+            self._q_current, self._held_constraint = q_new, cid
             self._subidx += 1
         elif act.name == "place":
             xy = self._next_place_xy()
-            execute_faithful_place(world, self._held_cup_body, self._held_constraint,
-                                   xy, self._adapter.table_surface_height)
+            q_new, pst = faithful_place(
+                self._streams, world, self._model, self._held_cup_name,
+                self._held_cup_body, self._held_constraint, xy,
+                self._q_current, self._gui,
+                table_z=self._adapter.table_surface_height)
+            info["place_status"] = pst
+            if pst != "ok":
+                self._failed = True
+                return Action(name="no-op"), info, store
+            self._q_current = q_new
             self._subidx += 1
         elif act.name == "sense":
-            execute_go_home(world)                      # park arm clear of the external camera
+            self._q_current, _ = faithful_go_home(      # park arm clear of the external camera
+                self._streams, world, self._model, self._q_current, self._gui)
             visible = self._refresh_overlay()           # re-render the relocated scene (clean segment)
             revealed = "die" in visible
             if revealed:
@@ -213,11 +241,21 @@ class BoxelPolicy(Policy):
             logging.info("[BoxelPolicy] sensed after relocating %s: die_revealed=%s; "
                          "known_empty=%s", self._held_cup_name, revealed, self._known_empty)
         elif act.name == "pick" and arg0 == "die":
-            execute_faithful_pick(world, self._die_body)
+            q_new, cid, pst = faithful_pick(
+                self._streams, world, self._model, "die", "boxel_die",
+                self._q_current, self._gui,
+                table_z=self._adapter.table_surface_height)
+            info["pick_status"] = pst
+            if pst != "ok":
+                self._failed = True
+                return Action(name="no-op"), info, store
+            self._q_current, self._held_constraint = q_new, cid
             bb.mark_holding(belief, bb.die_alias(belief))
             self._subidx += 1
         elif act.name == "go_home":
-            execute_go_home(world, held_body=self._die_body)
+            self._q_current, _ = faithful_go_home(
+                self._streams, world, self._model, self._q_current, self._gui,
+                held_body=self._die_body)
             bb.mark_at_home(belief)
             self._done = True
             self._refresh_overlay()
