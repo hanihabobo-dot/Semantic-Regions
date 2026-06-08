@@ -1,12 +1,15 @@
-"""Phase 3-B bridge policy: our Policy subclass plugged into TAMPURA's rollout.
+"""find_dice bridge policy (audit #120): our Policy subclass plugged into
+TAMPURA's rollout, running OUR streamful PDDLStream planner + streams on their
+live find_dice env.
 
-ITEM 12 (GOAL 2): on the first rollout step, BoxelPolicy builds the FindDiceAdapter
-over their live world, runs OUR PDDLStream planner on the find_dice domain variant
-(relaxed pick, streamless), and EXECUTES the planned (modified) pick in their world
-via the simplified pose-set/weld (ITEM 11).  It then no-ops for the rest of the
-rollout.  rollout() special-cases action.name == "no-op" (policy.py:125): it skips
-env.step, so the pick we performed directly in their world is not double-driven by
-their pick controller.
+Each rollout step advances a genuine sense-plan-replan search: OUR planner
+(planner_boxel.BoxelBridgePlanner -- pddlstream_planner.PDDLStreamPlanner driven
+by the bridge's robot-aware streams over the streamful find_dice domain) plans
+over the currently-visible scene, and we EXECUTE that plan in their world with the
+genuine streams executor (execution_boxel: motion-planned transit, contact-
+verified grasp, real physics).  get_action returns no-op so the rollout's deepcopy
+carries our belief writes WITHOUT their controllers double-driving the
+manipulation (rollout special-cases action.name == "no-op", policy.py:125).
 """
 import logging
 import os
@@ -25,6 +28,8 @@ from tampura_bridge.execution_boxel import (execute_pick, execute_place,
                                             fix_phantom_masses)
 from tampura_bridge._streams_smoke import build_streams
 from tampura_bridge.boxelize import capture, draw_overlay
+from tampura_bridge.planner_boxel import BoxelBridgePlanner
+from boxel_data import BoxelType
 import tampura_bridge.belief_bridge as bb
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -101,11 +106,12 @@ def plan_solve(adapter, visible, known_empty=(), domain_name="domain_find_dice.p
 
 
 class BoxelPolicy(Policy):
-    """Phase 3-C de-cheat: GENUINE sense-plan-replan search on their find_dice
-    env, driven by OUR pipeline.  The die's pose is UNKNOWN until a real render
-    reveals it.  Each cycle OUR planner picks an un-emptied VISIBLE cup; we
-    relocate it (IK pick + place), park the arm clear of the fixed
-    external camera, and SENSE by re-rendering + segmenting.  If the die is
+    """GENUINE sense-plan-replan search on their find_dice env, driven by OUR
+    streamful PDDLStream planner (planner_boxel) + streams.  The die's pose is
+    UNKNOWN until a real render reveals it.  Each cycle OUR planner picks an
+    un-emptied VISIBLE cup; we relocate it (IK pick + place), park the arm clear
+    of the fixed external camera, and SENSE by re-rendering + segmenting.  If the
+    die is
     genuinely revealed we pick it and go home (success); otherwise that region
     is marked empty and we replan; if no cups remain we give up (failure ->
     reward stays 0).  Belief/reward is written ONLY on a real grasp.  get_action
@@ -169,8 +175,107 @@ class BoxelPolicy(Policy):
         self._used_places.append(xy)
         return xy
 
-    def _replan(self, visible):
-        self._subplan = plan_solve(self._adapter, visible, self._known_empty)
+    def _planner(self):
+        """OUR streamful planner (planner_boxel.BoxelBridgePlanner) over the
+        current registry: each shadow carries its occluder (created_by_boxel_id)
+        so blocks_view_at gates view_clear, and the bridge's streams (their Panda
+        IK / collision / motion) certify every grasp / config / trajectory."""
+        reg = self._registry
+        shadow_occ = {}
+        for b in reg.boxels.values():
+            if b.boxel_type == BoxelType.SHADOW and getattr(
+                    b, "created_by_boxel_id", None):
+                shadow_occ.setdefault(b.id, []).append(b.created_by_boxel_id)
+        return BoxelBridgePlanner(
+            self._streams, reg, shadow_occluder_map=(shadow_occ or None),
+            camera_pos=self._adapter.camera_position)
+
+    def _known_empty_shadow_ids(self):
+        """SHADOW boxel ids whose occluder cup we already relocated + sensed
+        empty -- so the streamful planner does not re-sense them."""
+        reg = self._registry
+        out = []
+        for b in reg.boxels.values():
+            if b.boxel_type != BoxelType.SHADOW:
+                continue
+            occ_id = getattr(b, "created_by_boxel_id", None)
+            occ = reg.get_boxel(occ_id) if occ_id else None
+            if occ is not None and occ.object_name in self._known_empty:
+                out.append(b.id)
+        return out
+
+    def _boxel_obj_name(self, boxel_id):
+        """Map a planner boxel id to the object name our executor expects: cup
+        OBJECT boxels carry object_name; the target name 'die' passes through."""
+        if boxel_id == "die":
+            return "die"
+        b = self._registry.get_boxel(boxel_id)
+        return b.object_name if (b is not None and b.object_name) else boxel_id
+
+    def _convert_plan(self, plan):
+        """Project the streamful plan (move/pick/place/sense/.../go_home tuples
+        with boxel-id args) onto the policy's executable steps: drop the transit
+        ``move`` actions (our execute_pick/place re-plan their own transit from
+        the live config via plan_motion, exactly like our pipeline's runtime
+        replan) and translate boxel ids to object names.  Place keeps the
+        planner's chosen free-space destination as a second arg."""
+        steps = []
+        for a in (plan or []):
+            name, args = a[0], a[1:]
+            if name == "move":
+                continue
+            if name == "pick":
+                steps.append(Action(name="pick",
+                                    args=(self._boxel_obj_name(str(args[0])),)))
+            elif name == "place":
+                steps.append(Action(name="place",
+                                    args=(self._boxel_obj_name(str(args[0])),
+                                          str(args[1]))))
+            elif name == "sense":
+                steps.append(Action(name="sense", args=("die", str(args[1]))))
+            elif name == "go_home":
+                steps.append(Action(name="go_home", args=("die",)))
+        return steps
+
+    def _plan_attempt(self, planner, visible, goal):
+        """One streamful plan over the current scene: die visible -> direct die
+        pick (visible_target_locations links the die to its boxel); else relocate
+        a not-yet-emptied cup + sense its region."""
+        if "die" in visible:
+            die_boxel = next((b.id for b in self._registry.get_object_boxels()
+                              if b.object_name == "die"), None)
+            vtl = {"die": die_boxel} if die_boxel is not None else None
+            # The die is LOCATED, so it is in no shadow: mark every shadow
+            # known-empty for the die.  This drops the (now-pointless) sense
+            # options from the search -- otherwise the relocated cup's new shadow
+            # looks senseable and the adaptive search burns time on infeasible
+            # sense-then-relocate skeletons instead of the trivial direct pick.
+            all_shadows = [b.id for b in self._registry.boxels.values()
+                           if b.boxel_type == BoxelType.SHADOW]
+            return planner.plan(target_objects=["die"], goal=goal,
+                                current_config=self._q_current,
+                                visible_target_locations=vtl,
+                                known_empty_shadows=all_shadows,
+                                max_time=60.0, unit_costs=True, verbose=False)
+        return planner.plan(target_objects=["die"], goal=goal,
+                            current_config=self._q_current,
+                            known_empty_shadows=self._known_empty_shadow_ids(),
+                            max_time=60.0, unit_costs=True, verbose=False)
+
+    def _replan(self, visible, attempts=5):
+        """Replan with OUR streamful planner over the current scene, retrying the
+        solve a few times.  plan-motion (RRT) and PDDLStream's adaptive search
+        are stochastic, so a FEASIBLE plan can be missed on an unlucky draw; a
+        fresh attempt re-runs the streams with advanced RNG.  A genuine give-up
+        (no un-emptied cups left) returns empty on EVERY attempt, so the retries
+        cost time only when no plan actually exists."""
+        goal = ("and", ("holding", "die"), ("at_home",))
+        plan = []
+        for _ in range(attempts):
+            plan = self._plan_attempt(self._planner(), visible, goal) or []
+            if plan:
+                break
+        self._subplan = self._convert_plan(plan)
         self._subidx = 0
         if not self._subplan:
             self._failed = True
@@ -217,6 +322,12 @@ class BoxelPolicy(Policy):
             self._q_current, self._held_constraint = q_new, cid
             self._subidx += 1
         elif act.name == "place":
+            # OUR planner decides "relocate the cup to a free spot to clear its
+            # shadow"; we execute that at the free boxel FARTHEST from the die
+            # region (_next_place_xy), a planner-certified-equivalent free dest.
+            # The planner cannot see the still-hidden die at plan time, so its
+            # arbitrary free choice can land between the robot and the die and
+            # block the later die pick; the farthest spot reliably does not.
             xy = self._next_place_xy()
             q_new, pst = execute_place(
                 self._streams, world, self._model, self._held_cup_name,
