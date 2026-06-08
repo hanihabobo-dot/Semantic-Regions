@@ -20,8 +20,8 @@ from pddlstream.algorithms.meta import solve
 from pddlstream.language.constants import PDDLProblem
 
 from tampura_bridge.perception_adapter import FindDiceAdapter
-from tampura_bridge.execution_boxel import (faithful_pick, faithful_place,
-                                            faithful_go_home,
+from tampura_bridge.execution_boxel import (execute_pick, execute_place,
+                                            execute_go_home,
                                             fix_phantom_masses)
 from tampura_bridge._streams_smoke import build_streams
 from tampura_bridge.boxelize import capture, draw_overlay
@@ -104,7 +104,7 @@ class BoxelPolicy(Policy):
     """Phase 3-C de-cheat: GENUINE sense-plan-replan search on their find_dice
     env, driven by OUR pipeline.  The die's pose is UNKNOWN until a real render
     reveals it.  Each cycle OUR planner picks an un-emptied VISIBLE cup; we
-    relocate it (faithful IK pick + place), park the arm clear of the fixed
+    relocate it (IK pick + place), park the arm clear of the fixed
     external camera, and SENSE by re-rendering + segmenting.  If the die is
     genuinely revealed we pick it and go home (success); otherwise that region
     is marked empty and we replan; if no cups remain we give up (failure ->
@@ -187,7 +187,7 @@ class BoxelPolicy(Policy):
                     build_streams(world)
                 fix_phantom_masses(world.client, world.robot.body)
                 self._q_current = self._streams.home_config
-            self._q_current, _ = faithful_go_home(      # arm clear of the camera
+            self._q_current, _ = execute_go_home(      # arm clear of the camera
                 self._streams, world, self._model, self._q_current, self._gui)
             visible = self._refresh_overlay()
             self._capture("phase3c_genuine_initial.png")
@@ -205,10 +205,9 @@ class BoxelPolicy(Policy):
         if act.name == "pick" and arg0 != "die":
             self._held_cup_name = arg0
             self._held_cup_body = self._adapter.objects[arg0].object_id
-            q_new, cid, pst = faithful_pick(
+            q_new, cid, pst = execute_pick(
                 self._streams, world, self._model, arg0, "boxel_" + arg0,
-                self._q_current, self._gui,
-                table_z=self._adapter.table_surface_height)
+                self._q_current, self._gui)
             info["pick_status"] = pst
             if pst != "ok":
                 self._failed = True
@@ -219,7 +218,7 @@ class BoxelPolicy(Policy):
             self._subidx += 1
         elif act.name == "place":
             xy = self._next_place_xy()
-            q_new, pst = faithful_place(
+            q_new, pst = execute_place(
                 self._streams, world, self._model, self._held_cup_name,
                 self._held_cup_body, self._held_constraint, xy,
                 self._q_current, self._gui,
@@ -233,7 +232,7 @@ class BoxelPolicy(Policy):
             self._q_current = q_new
             self._subidx += 1
         elif act.name == "sense":
-            self._q_current, _ = faithful_go_home(      # park arm clear of the external camera
+            self._q_current, _ = execute_go_home(      # park arm clear of the external camera
                 self._streams, world, self._model, self._q_current, self._gui)
             visible = self._refresh_overlay()           # re-render the relocated scene (clean segment)
             revealed = "die" in visible
@@ -247,10 +246,9 @@ class BoxelPolicy(Policy):
             logging.info("[BoxelPolicy] sensed after relocating %s: die_revealed=%s; "
                          "known_empty=%s", self._held_cup_name, revealed, self._known_empty)
         elif act.name == "pick" and arg0 == "die":
-            q_new, cid, pst = faithful_pick(
+            q_new, cid, pst = execute_pick(
                 self._streams, world, self._model, "die", "boxel_die",
-                self._q_current, self._gui,
-                table_z=self._adapter.table_surface_height)
+                self._q_current, self._gui)
             info["pick_status"] = pst
             if pst != "ok":
                 self._failed = True
@@ -261,7 +259,7 @@ class BoxelPolicy(Policy):
             bb.mark_holding(belief, bb.die_alias(belief))
             self._subidx += 1
         elif act.name == "go_home":
-            self._q_current, _ = faithful_go_home(
+            self._q_current, _ = execute_go_home(
                 self._streams, world, self._model, self._q_current, self._gui,
                 held_body=self._die_body)
             bb.mark_at_home(belief)
