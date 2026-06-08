@@ -133,6 +133,7 @@ class BoxelPolicy(Policy):
         self._streams = None          # OUR streams on their Panda (built once)
         self._model = None            # their-Panda RobotModel
         self._q_current = None        # live arm config threaded across actions
+        self._fail_reason = None      # honest failure cause for per-seed reporting
 
     def _refresh_overlay(self):
         self._adapter, self._registry, self._overlay, visible = draw_overlay(
@@ -173,6 +174,7 @@ class BoxelPolicy(Policy):
         self._subidx = 0
         if not self._subplan:
             self._failed = True
+            self._fail_reason = "no_plan_or_candidates"
 
     def get_action(self, belief, store):
         if self.env is None or self._done or self._failed:
@@ -210,6 +212,8 @@ class BoxelPolicy(Policy):
             info["pick_status"] = pst
             if pst != "ok":
                 self._failed = True
+                self._fail_reason = "pick_%s_%s" % (arg0, pst)
+                logging.info("[BoxelPolicy] pick(%s) FAILED: %s", arg0, pst)
                 return Action(name="no-op"), info, store
             self._q_current, self._held_constraint = q_new, cid
             self._subidx += 1
@@ -223,6 +227,8 @@ class BoxelPolicy(Policy):
             info["place_status"] = pst
             if pst != "ok":
                 self._failed = True
+                self._fail_reason = "place_%s" % pst
+                logging.info("[BoxelPolicy] place FAILED: %s", pst)
                 return Action(name="no-op"), info, store
             self._q_current = q_new
             self._subidx += 1
@@ -248,6 +254,8 @@ class BoxelPolicy(Policy):
             info["pick_status"] = pst
             if pst != "ok":
                 self._failed = True
+                self._fail_reason = "pick_die_%s" % pst
+                logging.info("[BoxelPolicy] pick(die) FAILED: %s", pst)
                 return Action(name="no-op"), info, store
             self._q_current, self._held_constraint = q_new, cid
             bb.mark_holding(belief, bb.die_alias(belief))
