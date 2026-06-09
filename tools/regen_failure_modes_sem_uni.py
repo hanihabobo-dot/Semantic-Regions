@@ -56,7 +56,7 @@ DETAIL = {
     "timeout":          "timed out",
     "all_searched":     "blocked from view",
     "drop_failed":      "manipulation failed",
-    "physics_mismatch": "execution mismatch",
+    "physics_mismatch": "false success",
 }
 ep.plot_failure_modes(
     _relabel(ep.group_failure_modes(rows, fold=False), DETAIL),
