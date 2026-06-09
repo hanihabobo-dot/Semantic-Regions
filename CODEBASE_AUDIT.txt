@@ -640,6 +640,26 @@ Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no
      DATA: eval_results/sweep_full_2026-05-28 (aggregated.csv filter goal=holding &
      exit_reason=physics_mismatch; cells/ per-cell logs). HANDOFF: author will take this in a NEW
      session via a handoff prompt AFTER the thesis-audit issues (with #121); do NOT solve now.
+     AUTHOR NOTES 2026-06-10 (capture in full):
+       (1) CONTRADICTION to resolve. The manipulation model is described as a rigid constraint weld
+           ("cannot slip or be dropped in transit", §6.5 / methods §4.5) -- yet HOLDING fails via
+           physics_mismatch. So the failure is NOT a transit drop: either the grasp never properly
+           took (the constraint attaches but _verify_holding finds the target not actually held), or
+           the "no slip/drop" claim is too strong. Pin down which. (Thesis §4.5 wording softened
+           2026-06-10 to "attached ... while it is carried" + "target not actually grasped", but the
+           ROOT mechanism is still open.)
+       (2) COUNTERINTUITIVE -- and this is the heart of it. The physics failure mode appears ONLY in
+           holding, NEVER in stack or find-and-tray-stack. We would EXPECT it in STACK (toppling
+           towers), not holding. Strong smell that stack toppling is being SILENTLY UNCAUGHT -- a real
+           false-success HOLE: _verify_cube_on too lenient, or the check runs at a moment the tower is
+           still standing, or stack failures exit via timeout/no-plan BEFORE the physics check runs.
+       (3) So #122 is really TWO questions: "why does holding produce false successes?" AND "why does
+           stack NOT?" The ABSENCE of stack false-successes is itself suspicious. CONFIRM the verifier
+           actually fires by deliberately toppling a completed stack and checking it is flagged.
+       (4) Likely shares a root with #121 (uniform knocks down stacks -> no-plan): a mid-execution
+           knock-down on stack breaks the plan -> planner_failed (never reaches the physics check),
+           whereas a fake grasp on holding survives to the check -> physics_mismatch. Same manipulation
+           fragility, two different exit reasons. Both = likely implementation errors in grasp/stack.
 
 ================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
