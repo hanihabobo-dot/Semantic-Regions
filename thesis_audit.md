@@ -460,7 +460,31 @@ APPLIED 2026-06-09 (batch mode; main; one commit per group):
       REMAINING: backward-reasoning restructure; dense L26 (camera done, naming/beliefs/target-found
       pending); L5 citation verify.
   BLOCKED on author: #311 (supervisor names+titles), #312 (registered title confirm).
-  GATED on framing #334: #310 naming sweep + framing-dependent intro/overview rewrites (#300/#303/#318).
+  GATED on framing #334: framing-dependent intro/overview rewrites (#300/#303/#318).
+
+APPLIED 2026-06-09 (cont.):
+  [x] #307 + #327 + #329 methods §4.4/§4.5: contingent-plan / CLG-LW1 guarantee stated; explicit
+      "does NOT certify b_g subset S_G"; Daniel's optimistic-determinisation qualifier; "tractable"
+      softened; removed false bounded-convergence claim + added "relocated objects emit no new
+      shadows". Commit e562e52.
+  [x] #311 + #312 front matter: Supervised-by -> Till Hofmann, Daniel Swoboda; title kept as
+      registered (author-confirmed). Commit 0ad40c8.
+  [x] #310 naming sweep: "Semantic Boxel"->"Boxel", "Semantic POD-TAMP"->"POD-TAMP" across 9 files +
+      glossary. Registered title + descriptive "semantic discretization" + domain.pddl kept. Framing B
+      author-confirmed. Commit 0ad40c8.
+  [x] #308 (PART): metrics para reconciled (planning 134.30 vs end-to-end 144.4 = DIFFERENT metrics,
+      ~10s execution NOT negligible -> false "negligible" claim dropped); §6.3 CPU contradiction fixed
+      (local re-run same-machine; 2.5-vs-2.0 GHz scoped to TAMPURA PUBLISHED only). Commit 1e86112.
+      HW ground truth: TAMPURA Xeon Gold 6248 @2.5GHz (paper); ours 8-core ~2.0GHz; local re-run on ours.
+      REMAINING #308(a) -- BLOCKED on data/decision: §5.4.5 (subsec:resolution) success rates are the
+      OLD 100-seed resolution sweep (1x holding 42.3 / fats 39.8 / stack 61.3 = OLD Table values),
+      clashing with the NEW 30-seed Table (65.6 / 75.6 / 64.4). Fix = refresh the resolution sweep, OR
+      reframe to report leaf-size INSENSITIVITY qualitatively without stale absolute success numbers.
+      #282/#209-gated.
+  REMAINING BIG (need authoring/data; not started): #300 Boxel pseudocode, #301 stream impls, #302
+  sense-plan-act loop pseudocode, #303 §4.1 flowchart/overview, #304 manipulation model up front, #305
+  scene generation, #306 TAMPURA-indirect pass, #309 §5/§6 reorg, #314 abstract, #316 intro restructure,
+  #318 contributions, #331 anytime rewrite, #333 threats wording, #326 belief->KIF wording.
 
 --- CROSS-CUTTING / MAJOR (email + heaviest annotations) ---
 
