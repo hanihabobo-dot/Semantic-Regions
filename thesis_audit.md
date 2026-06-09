@@ -442,6 +442,26 @@ follow as #314-#334.
 HEADLINE (email): the symbolic layer is over-represented; integration / perception /
 engineering is under-represented. "If you address these things, we're in a good shape."
 
+APPLIED 2026-06-09 (batch mode; main; one commit per group):
+  [x] #317 + #288 camera: "overhead camera" -> "fixed camera" across intro/methods/results/
+      discussion/conclusion; true geometry (front-oblique, eye(0.1,-0.8,0.7)->target(0.1,0,0.5),
+      pitch ~-14 deg, boxel_env.py:38-39,453) stated once in results perception para; dropped
+      "observes the whole table at once". Commit 6f90819. DONE.
+  [x] #321 (part): dropped unused "numeric fluents"; "is what lets FD scale"->"helps FD handle";
+      conditional-effects KEEP confirmed. Commit 0431e5c. REMAINING: FD->PDDLStream forward-ref (minor).
+  [x] #322 (part): KIF know-whether now cites Petrick&Bacchus PKS [petrick2002planning]+Brenner&Nebel;
+      either/or already correct (no edit). Commit 0431e5c. DONE.
+  [x] #323: streams introduce objects (existence/identity) not just params; IK multi-valued ->
+      generator yields a sequence. [AUTHOR Q] answered. Commit 0431e5c. DONE.
+  [x] #324 (part): "deep network"->"learned model"; rephrased "to make planning more efficient".
+      Commit 0431e5c. REMAINING: L98 "often reduces" (KEEP qualifier, do NOT remove), cut-last-two
+      (ambiguous/old-PDF), voxel "not in symbolic planning" qualifier.
+  [x] #316 (part): em-dash appositive merged; "full observability of the world state". Commit 6f90819.
+      REMAINING: backward-reasoning restructure; dense L26 (camera done, naming/beliefs/target-found
+      pending); L5 citation verify.
+  BLOCKED on author: #311 (supervisor names+titles), #312 (registered title confirm).
+  GATED on framing #334: #310 naming sweep + framing-dependent intro/overview rewrites (#300/#303/#318).
+
 --- CROSS-CUTTING / MAJOR (email + heaviest annotations) ---
 
 #300  [T1] [THESIS]  Boxel algorithm never defined -- add PSEUDOCODE, put it FRONTWARDS
