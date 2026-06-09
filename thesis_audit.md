@@ -517,7 +517,13 @@ simplifications kept (overlap to be trimmed under #309). Also relabeled physics_
 #305 DONE 2026-06-10 (commit 7a3a6be): §5.1 "Scene generation" paragraph (seed-deterministic
 occluder+target placement, targets hidden behind occluders along sightlines, post-spawn raycast
 verify + seed re-roll; stack visible-only). Faithful to boxel_env.random_pairs_scene/scalability_scene.
-Remaining integration: #303 (main-loop flowchart + name motion planner/perception in §4 chapter intro).
+#303 DONE 2026-06-10 (commit 1344890): chapter intro now names motion planner (RRT) + IK + grasps +
+perception (raycast/oracle) + the sense-plan-act loop; "abstract belief reasoning" -> "discrete belief
+over workspace regions"; "symbolic facts" -> "Know-If fluents"; POD TAMP -> POD-TAMP. Flowchart skipped
+(alg:sense-plan-act covers the loop).
+=== INTEGRATION BATCH (Daniel email majors) COMPLETE: #300 #302 #303 #304 #305 #306 #307 #308 #310 #311 #312. ===
+Remaining supervisor batch = line-edits (#314 abstract opener, #316 intro restructure, #318, #319, #325,
+#326, #330, #331, #333) + #309 (§5/§6 structural reorg) + #313 (epigraph website variant). #334 framing = B (done).
 
 --- CROSS-CUTTING / MAJOR (email + heaviest annotations) ---
 
