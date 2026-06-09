@@ -489,6 +489,15 @@ APPLIED 2026-06-09 (cont.):
   scene generation, #306 TAMPURA-indirect pass, #309 §5/§6 reorg, #314 abstract, #316 intro restructure,
   #318 contributions, #331 anytime rewrite, #333 threats wording, #326 belief->KIF wording.
 
+UPDATE 2026-06-09 (review r2): #300 ALREADY DONE -- the Boxel pseudocode exists as
+alg:discretization (methods.tex L31-57: object bounding -> occlusion subdivision -> octree ->
+convex merge; faithful to free_space.py / cell_merger.py). It is the ONLY algorithm float in the
+thesis; a fresh draft would have duplicated it. Daniel's "add a pseudocode algorithm" was on the
+OLD PDF that predated it. Re-scoped GENUINE integration gaps: #302 (outer sense-plan-act loop has
+NO pseudocode -- real gap; §4.5 prose only), #304 (manipulation model only in §6.5), #305 (scene-
+generation approach thin in §5.1 -- verify), #303 (no main-loop flowchart; motion planner +
+perception model not named in the chapter intro).
+
 --- CROSS-CUTTING / MAJOR (email + heaviest annotations) ---
 
 #300  [T1] [THESIS]  Boxel algorithm never defined -- add PSEUDOCODE, put it FRONTWARDS
