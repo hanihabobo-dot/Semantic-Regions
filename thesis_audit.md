@@ -501,6 +501,14 @@ perception model not named in the chapter intro).
 (alg:sense-plan-act), faithful to test_full_pipeline.py L912-1279 / reboxelize.py / execution.py
 handle_sense_action. Build green 72pp. Remaining integration: #303 (flowchart/motion+perception),
 #304 (manipulation model up front), #305 (scene-gen approach).
+FAILURE-MODE BREAKDOWN DONE 2026-06-09 (commits 061bec0 plotter + be5150a thesis): once §4.6 + §5.2
+name specific give-up reasons, the failure-mode graph was re-expanded (reversing the #282 fold).
+eval_plotter.group_failure_modes gained fold=False (default True keeps the 3-variant pipeline);
+regen_failure_modes_sem_uni.py now also emits failure_modes_sem_uni_detailed.png (plain labels: timed
+out / no plan found / searched all regions / execution mismatch; manipulation-give-up = 0 cells in
+sem/uni so absent). §5.2 metric def + §5.4 text/caption rewritten; fig:failure-modes -> detailed PNG;
+old simplified PNG kept regenerable (read visually before commit). Build 73pp. CODEBASE: plotter fold
+param at eval_plotter.py group_failure_modes.
 
 --- CROSS-CUTTING / MAJOR (email + heaviest annotations) ---
 
