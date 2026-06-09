@@ -514,7 +514,10 @@ paragraph: top-down fixed-offset grasp, rigid constraint attach, place/stack set
 planner-invisible lift, physics-checked success so false successes count as failures). §6.5 full
 simplifications kept (overlap to be trimmed under #309). Also relabeled physics_mismatch ->
 "false success" in the failure graph (caught fake successes; commit 59627d8).
-Remaining integration: #305 (scene generation), #303 (flowchart + name motion planner/perception).
+#305 DONE 2026-06-10 (commit 7a3a6be): §5.1 "Scene generation" paragraph (seed-deterministic
+occluder+target placement, targets hidden behind occluders along sightlines, post-spawn raycast
+verify + seed re-roll; stack visible-only). Faithful to boxel_env.random_pairs_scene/scalability_scene.
+Remaining integration: #303 (main-loop flowchart + name motion planner/perception in §4 chapter intro).
 
 --- CROSS-CUTTING / MAJOR (email + heaviest annotations) ---
 
