@@ -509,6 +509,12 @@ out / no plan found / searched all regions / execution mismatch; manipulation-gi
 sem/uni so absent). §5.2 metric def + §5.4 text/caption rewritten; fig:failure-modes -> detailed PNG;
 old simplified PNG kept regenerable (read visually before commit). Build 73pp. CODEBASE: plotter fold
 param at eval_plotter.py group_failure_modes.
+#304 DONE 2026-06-09 (commit 8ba4541): manipulation model introduced up front (methods §4.5
+paragraph: top-down fixed-offset grasp, rigid constraint attach, place/stack settle-under-gravity +
+planner-invisible lift, physics-checked success so false successes count as failures). §6.5 full
+simplifications kept (overlap to be trimmed under #309). Also relabeled physics_mismatch ->
+"false success" in the failure graph (caught fake successes; commit 59627d8).
+Remaining integration: #305 (scene generation), #303 (flowchart + name motion planner/perception).
 
 --- CROSS-CUTTING / MAJOR (email + heaviest annotations) ---
 
