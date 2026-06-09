@@ -54,7 +54,7 @@ ep.plot_failure_modes(
 DETAIL = {
     "planner_failed":   "no plan found",
     "timeout":          "timed out",
-    "all_searched":     "searched all regions",
+    "all_searched":     "blocked from view",
     "drop_failed":      "manipulation failed",
     "physics_mismatch": "execution mismatch",
 }

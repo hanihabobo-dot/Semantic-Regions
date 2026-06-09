@@ -1301,6 +1301,12 @@ def plot_failure_modes(grouped: Dict[tuple, Dict[str, int]],
                label=reason)
         bottoms = [b + c for b, c in zip(bottoms, counts)]
 
+    # Author request 2026-06-09 — dashed vertical separators at goal
+    # boundaries so each goal's (semantic, uniform) pair reads as a group.
+    for i in range(1, len(keys)):
+        if keys[i][0] != keys[i - 1][0]:
+            ax.axvline(i - 0.5, color="0.4", linewidth=1.0, linestyle="--")
+
     ax.set_xticks(xs)
     ax.set_xticklabels(labels, fontsize=14, rotation=30, ha="right")
     ax.tick_params(axis="y", labelsize=14)
