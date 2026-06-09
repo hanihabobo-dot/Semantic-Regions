@@ -497,6 +497,10 @@ OLD PDF that predated it. Re-scoped GENUINE integration gaps: #302 (outer sense-
 NO pseudocode -- real gap; §4.5 prose only), #304 (manipulation model only in §6.5), #305 (scene-
 generation approach thin in §5.1 -- verify), #303 (no main-loop flowchart; motion planner +
 perception model not named in the chapter intro).
+#302 DONE 2026-06-09 (commit 4f3aa25): added §4.6 "The Sense-Plan-Act Loop" + Algorithm 2
+(alg:sense-plan-act), faithful to test_full_pipeline.py L912-1279 / reboxelize.py / execution.py
+handle_sense_action. Build green 72pp. Remaining integration: #303 (flowchart/motion+perception),
+#304 (manipulation model up front), #305 (scene-gen approach).
 
 --- CROSS-CUTTING / MAJOR (email + heaviest annotations) ---
 
