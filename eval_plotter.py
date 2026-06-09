@@ -1224,14 +1224,21 @@ def plot_tampura_wallclock_comparison(
 _PLANNER_FAILED_ALIASES = {"physics_mismatch", "drop_failed", "all_searched"}
 
 
-def group_failure_modes(rows: List[dict]
+def group_failure_modes(rows: List[dict],
+                        fold: bool = True
                         ) -> Dict[tuple, Dict[str, int]]:
     """``{(goal, variant): {exit_reason: count}}``.
 
     Audit #73 TIER B plot 6 data prep; audit #99 — sub-key is variant
     not baseline so the (find-and-tray-stack, semantic) bar height no
-    longer doubles up the mbs=None + mbs=0.05 cells.  The execution/search
-    exit reasons in ``_PLANNER_FAILED_ALIASES`` are counted as planner_failed.
+    longer doubles up the mbs=None + mbs=0.05 cells.
+
+    When ``fold`` is True (default; the main 3-variant pipeline) the
+    execution/search exit reasons in ``_PLANNER_FAILED_ALIASES`` are counted
+    as planner_failed.  With ``fold=False`` every exit reason is kept as its
+    own category — used by the thesis sem/uni figure, which (author request,
+    2026-06-09) shows the give-up reasons broken out so the graph matches the
+    failure modes the text names.
     """
     out: Dict = defaultdict(lambda: defaultdict(int))
     for r in rows:
@@ -1241,7 +1248,7 @@ def group_failure_modes(rows: List[dict]
             key = "success"
         else:
             key = r.get("exit_reason") or "unknown"
-            if key in _PLANNER_FAILED_ALIASES:
+            if fold and key in _PLANNER_FAILED_ALIASES:
                 key = "planner_failed"
         out[(goal, variant)][key] += 1
     return out
