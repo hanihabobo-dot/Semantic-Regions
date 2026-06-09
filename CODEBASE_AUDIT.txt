@@ -594,13 +594,31 @@ Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no
      REMAINING: faithful_place -> faithful_go_home -> wire into BoxelPolicy -> honest run ->
      seeds 0-19 (PHASE 4 >=20-seed canonical eval GATED).
 
+#121. [2026-06-09] [OPEN T2] STACK-UNIFORM FAILS VIA "no plan found", NOT TIMEOUT -- WHY?
+     The detailed failure-mode breakdown (failure_modes_sem_uni_detailed.png, 2026-06-09) shows an
+     anomaly the author flagged: on the STACK goal, uniform fails MORE than semantic overall, but
+     mostly via "no plan found" (planner_failed) with FEWER timeouts than semantic -- uniform stack
+     ~48 no-plan / ~7 timeout vs semantic ~2 no-plan / ~30 timeout (90 cells each). Counter-intuitive:
+     the BIGGER grounded domain (uniform stack init facts ~12,100 vs semantic ~268, thesis #282) fails
+     FAST (planner returns None) rather than exhausting the 1800 s budget.
+     INVESTIGATE: (1) success-only mean plan time is stack semantic 17.16 s vs uniform 924.13 s
+     (summary_table_aggregate.csv) -- successful uniform stacks ~54x slower; what is the mean/median
+     plan time on the FAILED (planner_failed) uniform-stack cells? (2) Does planner.plan return None
+     quickly (Fast Downward proves the grounded task unsolvable, or a stream iteration/budget cap
+     trips) rather than timing out? (3) Is "no plan found" genuine unsolvability, a grounding blow-up
+     that aborts, or stream exhaustion? Then decide whether §5.4 needs a sentence explaining it
+     (currently it just states the split).
+     DATA: eval_results/sweep_full_2026-05-28 (cells/ per-cell logs + aggregated.csv); plotter
+     group_failure_modes (eval_plotter.py). HANDOFF: author will take this in a NEW session via a
+     handoff prompt AFTER the thesis-audit issues are finished -- do NOT solve now.
+
 ================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
 Chronological numbers, NOT priority — follow TIER. Closed bodies in git history
 (git log --grep="audit: mark #N") + archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 10 items (bodies above):
+OPEN — 11 items (bodies above):
   #120 T0 — find_dice bridge execution-unfaithful: add real streams + motion planning +
        collision checking + physics/dynamics (the heart of a fair TAMPURA comparison).
   #104 T3 — refresh thesis-PDF plots + numbers to post-#100-merge outputs (thesis #121/#168).
@@ -617,6 +635,10 @@ OPEN — 10 items (bodies above):
   #112 T3 — (optional) Wilson interval for success-rate plots (thesis #207).
   #113 T1 — FULL canonical sweep re-run: reproduce all data + add mbs0.01 (1 cm) arm; ensure
        complete coverage (no no_summary holes, mbs0.10 included, uniform per-goal arms); regen figs.
+  --- batch 3 (2026-06-09 thesis review) ---
+  #121 T2 — stack-uniform fails via "no plan found" not timeout (fewer timeouts than semantic);
+       investigate failed-cell plan times + whether it's unsolvability vs grounding blow-up.
+       HANDOFF (new session, after the thesis-audit issues).
   TIER tally: one open T0 (#120); two open T1 (#107, #113).
 
 CLOSED (one-line; full detail in git / archive):
