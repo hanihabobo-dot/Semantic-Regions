@@ -612,13 +612,35 @@ Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no
      group_failure_modes (eval_plotter.py). HANDOFF: author will take this in a NEW session via a
      handoff prompt AFTER the thesis-audit issues are finished -- do NOT solve now.
 
+#122. [2026-06-09] [OPEN T2] "FALSE SUCCESS" (physics_mismatch) IS HOLDING-ONLY -- WHY?
+     physics_mismatch = the symbolic goal was reached but _verify_goal_physics failed, so the run is
+     counted as a FAILURE not a success (success = symbolic_ok AND not physics_failures,
+     test_full_pipeline.py:1617-1619). The detailed failure-mode breakdown (2026-06-09) shows it
+     occurs ONLY on the HOLDING goal: 36 cells (semantic 7, +mbs0.05 9, +mbs0.135 5, +mbs0.18 4,
+     uniform 11), and ZERO on stack / find-and-tray-stack. Odd: a toppled tower on stack should also
+     be a physics_mismatch, yet stack never produces one.
+     HYPOTHESIS: holding's verifier is _verify_holding (is the TARGET actually grasped?), and the
+     target is the just-revealed HIDDEN object behind occluders, so its grasp is less reliable than
+     the clean visible-cube grasps in stack/fats; meanwhile stack uses _verify_cube_on, which may be
+     more lenient, or stack failures manifest as timeout/no-plan BEFORE the verify step. INVESTIGATE:
+     which verifier fires; whether the target grasp slips during the post-pick lift; whether stack
+     toppling is silently uncaught (a real false-success hole).
+     REPRO SEEDS (goal=holding, exit_reason=physics_mismatch; sweep_full_2026-05-28; mostly n_occ=2):
+       0,4,15,19,20,34,36,39,43,44,45,48,59,63,75,87,92  (17 distinct seeds, 36 cells).
+       Quick starters (semantic, n_occ=2): seed 0 (4 plans, 20.2 s); seed 34 (auto mbs, 1 plan,
+       6.0 s). Uniform outlier: seed 43 (n_occ=2, 1351 s wall-clock). Re-run one with the GUI to
+       watch the target grasp fail.
+     DATA: eval_results/sweep_full_2026-05-28 (aggregated.csv filter goal=holding &
+     exit_reason=physics_mismatch; cells/ per-cell logs). HANDOFF: author will take this in a NEW
+     session via a handoff prompt AFTER the thesis-audit issues (with #121); do NOT solve now.
+
 ================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
 Chronological numbers, NOT priority — follow TIER. Closed bodies in git history
 (git log --grep="audit: mark #N") + archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 11 items (bodies above):
+OPEN — 12 items (bodies above):
   #120 T0 — find_dice bridge execution-unfaithful: add real streams + motion planning +
        collision checking + physics/dynamics (the heart of a fair TAMPURA comparison).
   #104 T3 — refresh thesis-PDF plots + numbers to post-#100-merge outputs (thesis #121/#168).
@@ -639,6 +661,9 @@ OPEN — 11 items (bodies above):
   #121 T2 — stack-uniform fails via "no plan found" not timeout (fewer timeouts than semantic);
        investigate failed-cell plan times + whether it's unsolvability vs grounding blow-up.
        HANDOFF (new session, after the thesis-audit issues).
+  #122 T2 — "false success" (physics_mismatch) is holding-only (36 cells, 0 on stack/fats);
+       investigate why _verify_holding catches fake grasps but stack toppling is never flagged.
+       Repro seeds logged. HANDOFF (new session, with #121, after the thesis-audit issues).
   TIER tally: one open T0 (#120); two open T1 (#107, #113).
 
 CLOSED (one-line; full detail in git / archive):
