@@ -799,6 +799,15 @@ K(p) / K(~p) / neither=unknown, never both) and KIF-vs-K-literal is already dist
 L59 attributes know-whether to "Brenner and Nebel"; know-whether/know-if originates with
 Petrick & Bacchus PKS (2002/2004) -- ADD that as the source (keep Brenner&Nebel for the
 continual/assumption-based usage). Needs a references.bib entry for Petrick & Bacchus PKS.
+UPDATE 2026-06-09 (review r2): the supervisor's "either/or, not both" actually targets the
+TRANSLATION sentence (L59: "each literal replaced by the two fluents K(L), K(neg L)"), NOT the
+K(p) definition. Rewrote it: two SEPARATE fluents, jointly consistent (never both true) but not
+exhaustive (unknown = both false); two needed since K(neg L) != not-K(L). VERIFIED by subagent
+vs Palacios&Geffner AAAI2006 p.901 Def.1 + JAIR2009 §4/App.B -- all four sub-claims SUPPORTED
+(B stated as "jointly consistent", enforced by construction, hence that term over "mutually
+exclusive"). Impl confirmed single-KIF: domain.pddl:42-45 (obj_at_boxel + obj_at_boxel_KIF, no
+K(neg) pred) + sense effect :115-129; methods.tex:135. Petrick pages 212-222 added. Commits
+f453396 + (this). DONE.
 Refs: background.tex §2.2; references.bib (Petrick PKS 2002); #278 #210. Annotation p.6.
 
 #323  [T0] [THESIS]  Background §2.3 (p.7): complexity argument wrong + stream definition + IK "sequence"
