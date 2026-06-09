@@ -608,6 +608,13 @@ Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no
      trips) rather than timing out? (3) Is "no plan found" genuine unsolvability, a grounding blow-up
      that aborts, or stream exhaustion? Then decide whether §5.4 needs a sentence explaining it
      (currently it just states the split).
+     AUTHOR HYPOTHESIS 2026-06-09: uniform likely KNOCKS DOWN STACKS more often during execution and
+     recovers poorly, so the replan from the scattered state returns no plan (planner_failed) rather
+     than timing out -- a likely IMPLEMENTATION ERROR in stacking/recovery, not genuine unsolvability.
+     This fits the data: a mid-execution knock-down breaks the plan -> planner_failed (the symbolic
+     goal is never reached, so it is NOT physics_mismatch/#122, which needs symbolic success first);
+     #121 and #122 may share a manipulation-fragility root. CHECK the failed stack-uniform cells' logs
+     for knocked-down-stack states and whether the post-knockdown state has no valid plan.
      DATA: eval_results/sweep_full_2026-05-28 (cells/ per-cell logs + aggregated.csv); plotter
      group_failure_modes (eval_plotter.py). HANDOFF: author will take this in a NEW session via a
      handoff prompt AFTER the thesis-audit issues are finished -- do NOT solve now.
