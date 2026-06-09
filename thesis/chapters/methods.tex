@@ -168,3 +168,42 @@ This belief update is observation-driven: the reading from a \texttt{sense} acti
 One bounded exception to this observation-driven belief update concerns regions that cannot be observed at all: if the line of sight to a shadow remains blocked after a fixed number of sensing attempts, that shadow is marked empty without ever being directly observed. This keeps the planner progressing when a region is effectively unreachable, but it is unsound: the region could still hold the target. A sound treatment, which would re-ground the view-blocking facts so the planner first clears the obstruction, is left to future work. The shortcut is needed because our Know-If encoding can only assume an outcome and repair it by replanning; a full POD planner with deductive axioms (e.g.\ LW1 \cite{bonet2014flexible}) could instead \emph{derive} emptiness, through an axiom such as ``a region is known empty once all of it has been observed clear'': the conclusion would then follow from the accumulated observations rather than from an optimistic guess (\cref{sec:limitations}).
 
 The sense action calls no streams. Because a fixed camera observes the scene, no robot sensing configuration has to be sampled, and the only geometric precondition is the derived predicate \texttt{(view\_clear ?region)}, which holds when no object blocks the line of sight to the region. Streams instead serve the manipulation actions: the domain declares \texttt{sample-grasp}, \texttt{plan-motion}, \texttt{compute-kin}, and \texttt{compute-stack-kin}, so that an action such as \texttt{pick} requires a valid grasp, an inverse-kinematics solution, and a collision-free motion, each certified by a stream.
+
+\section{The Sense--Plan--Act Loop}
+\label{sec:sense-plan-act}
+The Boxel partition, the Know-If belief (\cref{sec:kif_belief}), and the PDDLStream domain above are driven by an outer sense--plan--act loop (\cref{alg:sense-plan-act}). Because the \texttt{sense} action is optimistic, a plan is valid only until an observation contradicts it, so the loop interleaves planning, execution, and belief update, replanning whenever reality diverges from the optimistic assumption. Boxelization (\cref{alg:discretization}) runs once at the start and again whenever the partition goes stale: after a placement consumes a free cell, or when sensing reveals a previously hidden object that needs its own shadow Boxel. The loop is time-bounded rather than replan-bounded: it ends when the goal holds, the planner returns no plan, every reachable region has been searched, or the per-cell wall-clock budget is exhausted.
+
+\begin{algorithm}[H]
+\caption{Sense--Plan--Act Loop (reactive replanning)}
+\label{alg:sense-plan-act}
+\begin{algorithmic}[1]
+\Require scene, goal $g$, wall-clock budget $T$
+\Ensure success, or a give-up / timeout reason
+  \State detect visible objects; build $\mathcal{BX}$ with \cref{alg:discretization}
+  \State $belief \gets$ every shadow Boxel marked \texttt{unknown}
+  \State $q \gets$ home configuration
+  \While{$g$ is not satisfied \textbf{and} the elapsed time is below $T$}
+    \If{$g$ is a search goal \textbf{and} no \texttt{unknown} shadow remains}
+      \State \Return target-not-found \Comment{every reachable region searched}
+    \EndIf
+    \If{the partition is stale}\Comment{a placement consumed a cell, or a new occluder appeared}
+      \State re-boxelize the free space \Comment{octree split + convex merge, diffed}
+    \EndIf
+    \State $\pi \gets$ plan for $g$ from $belief$ and $q$ \Comment{optimistic: \texttt{sense} assumes the target is found}
+    \If{$\pi$ is empty}
+      \State \Return planner-failed
+    \EndIf
+    \For{each action $a$ in $\pi$}\Comment{execute until reality disagrees}
+      \State execute $a$ in the world and update $q$
+      \If{$a$ is a \texttt{sense} action}
+        \State observe the region by ray-casting from the fixed camera
+        \State update $belief$ \Comment{target found, region known-empty, or a new occluder revealed}
+        \If{the observation contradicts the optimistic assumption}
+          \State \textbf{break} \Comment{abandon the rest of $\pi$ and replan}
+        \EndIf
+      \EndIf
+    \EndFor
+  \EndWhile
+  \State \Return success
+\end{algorithmic}
+\end{algorithm}
