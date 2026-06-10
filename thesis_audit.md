@@ -574,7 +574,10 @@ Remaining supervisor batch = line-edits (#314 abstract opener, #316 intro restru
 
 --- CROSS-CUTTING / MAJOR (email + heaviest annotations) ---
 
-#300  [T1] [THESIS]  Boxel algorithm never defined -- add PSEUDOCODE, put it FRONTWARDS
+#300  [DONE 2026-06-10 -- VERIFIED resolved by prior work, no edit] [T1] [THESIS]  Boxel algorithm never defined -- add PSEUDOCODE, put it FRONTWARDS
+RESOLVED: methods 4.1 opens with the Boxel definition and carries Algorithm 1 "Adaptive
+Semantic Discretization" (object bounding -> occlusion subdivision -> octree free-space
+partition -> convex merge); background 2.4 builds voxels -> octrees -> CRs as the lead-in.
 [EMAIL] "The Boxel algorithm is never properly defined -- this is YOUR key contribution.
 Put it frontwards. A competent reader cannot reimplement the core method from Chapter 4
 as written. Add a pseudocode algorithm." Also p.16 "FOCUS ON THIS!" (core-contribution
@@ -604,7 +607,7 @@ primitives? Motion planner used? Perception model?"; p.7 stream-description corr
 planner, compute-kin (planning IK), grasp execution, and the perception/detection model.
 Refs: methods.tex; appendix.tex. EMAIL bullet 2; annotation p.16.
 
-#302  [T1] [THESIS]  Outer sense-plan-act loop never introduced -- pseudocode for belief update + replan trigger
+#302  [DONE 2026-06-09 (commit 4f3aa25), see note above] [T1] [THESIS]  Outer sense-plan-act loop never introduced -- pseudocode for belief update + replan trigger
 [EMAIL] "How does the outer sense-plan-act loop work? Never properly introduced.
 Pseudocode for belief update and replan triggering? Boxelisation when? Pseudocode would
 help here." Fix: an explicit main-loop description + pseudocode -- when boxelisation runs,
@@ -612,7 +615,7 @@ how the KIF belief updates on an observation, what triggers a replan. Pairs with
 (flowchart) and #307 (honest framing of what the loop actually guarantees).
 Refs: methods.tex §4.1/§4.5. EMAIL bullet 5.
 
-#303  [T1] [THESIS]  §4.1 Overview is disconnected -- add high-level idea + main-loop flowchart + integration
+#303  [DONE 2026-06-10 (commit 1344890), see note above] [T1] [THESIS]  §4.1 Overview is disconnected -- add high-level idea + main-loop flowchart + integration
 p.16 (heaviest page): "this whole section is lacking. All feels very disconnected. No
 proper introduction of the high-level idea, algorithms, integration, flow-chart of the
 main loop. All very under-represented." + "What about motion primitives / motion planner /
@@ -622,7 +625,7 @@ planner & perception model in the overview. Note p.16 "Arguably the framework as
 your contribution" -- reframe "integrate these into a POD-TAMP framework through ...".
 Refs: methods.tex §4.1. Annotation p.16.
 
-#304  [T1] [THESIS]  Introduce the simplified manipulation model UP FRONT (not first in §6.5)
+#304  [DONE 2026-06-09 (commit 8ba4541), see note above] [T1] [THESIS]  Introduce the simplified manipulation model UP FRONT (not first in §6.5)
 [EMAIL] "What's the manipulation model? You name some in 6.5... that's way too late."
 Also p.31 "This is key!" + "It reads as if the planner is limited, but it's the execution.
 That's why it's important to properly introduce the simplified manipulation model" (readers
@@ -632,14 +635,19 @@ manipulation/execution, not planning. Cross-ref #281 (same cause). NB p.31 "Your
 could be better" is NOT an action item (see #332).
 Refs: methods.tex; results.tex stack-success; discussion.tex §6.5; #281. EMAIL bullet 6.
 
-#305  [T1] [THESIS]  Scene generation never described -- add the approach (pseudocode/diagram)
+#305  [DONE 2026-06-10 (commit 7a3a6be), see note above] [T1] [THESIS]  Scene generation never described -- add the approach (pseudocode/diagram)
 [EMAIL] "How are scenes generated, what's the approach here? Pseudocode? Diagram?" Also
 p.32 "tasks and environments are not introduced at all" + p.25 reorder (#309). Fix: a
 setup subsection describing how scenes/seeds are generated (seed-generic; reuses TAMPURA's
 20 seeds for find_dice), with a diagram or short pseudocode.
 Refs: results.tex §5 setup. EMAIL bullet 4; annotations p.25/p.32.
 
-#306  [T1] [THESIS]  TAMPURA comparison is INDIRECT -- say so from the start; don't push our numbers favorably
+#306  [DONE 2026-06-10 (commits 9ad3d20, 0a4d56e)] [T1] [THESIS]  TAMPURA comparison is INDIRECT -- say so from the start; don't push our numbers favorably
+RESOLVED: abstract quotes the published-implied >=63% (not the local 55%); 6.4.8 flags the
+local re-run as possibly under-representing TAMPURA; every 55% mention now paired with the
+published figure; 'favours us'/'somewhat more reliable' -> 'comparable reliability'
+throughout. DISCOUNTED-RETURN sub-item: 0.63+-0.07 verified against arXiv 2403.10454
+Table I -- the supervisor's 0.30 annotation was mistaken; #293 stands, no regression.
 [EMAIL] "The comparison to TAMPURA is indirect -- make that VERY clear from the get-go and
 whenever you compare these numbers." Also p.35: "the local re-run may UNDER-represent
 TAMPURA" (running it on our machine disadvantages it); "It seems like you're pushing your
@@ -654,7 +662,11 @@ and flag the local run may disadvantage them; reconcile the CPU framing with #30
 Refs: results.tex §5.4.5/§5.4.6; discussion.tex; fig:tampura; #293. EMAIL bullet 7;
 annotations p.34/p.35/p.39.
 
-#307  [T1] [THESIS]  Own the Know-If literals upfront + DROP-IN §4.4 POD-model replacement (Daniel's text)
+#307  [DONE 2026-06-10 (commit e838398; bulk via prior passes)] [T1] [THESIS]  Own the Know-If literals upfront + DROP-IN §4.4 POD-model replacement (Daniel's text)
+RESOLVED: 4.3 already carried Daniel's drop-in in substance (contingent-solver guarantee,
+optimistic determinisation, 'does NOT certify b_g subset S_G'); e838398 adds the missing
+S0 (|S0|>1, sensing shrinks belief) and SG (belief-containment) details and the upfront
+ownership sentence in 4.2 (KIFs are bookkeeping; sensing+replanning do the work).
 [EMAIL] "Be honest about the Know-If literals: they are helpers to make things more
 readable; the sensing actions and re-planning do the actual hard work. That was agreed
 between us and is fine, nothing is broken, but it needs to be owned upfront." This is the
@@ -703,7 +715,13 @@ current "[21]"; cite [13] -- see #321):
   b_g subset S_G over all states in the belief.
 Refs: methods.tex §4.4/§4.5; introduction.tex p.1/p.3; #289 #329 #321. EMAIL para "Know-If".
 
-#308  [T0] [THESIS]  §5/§6 number + CPU inconsistencies (the TRUE threats to validity)
+#308  [DONE 2026-06-10 -- VERIFIED resolved by prior work, no edit] [T0] [THESIS]  §5/§6 number + CPU inconsistencies (the TRUE threats to validity)
+RESOLVED, all four sub-items verified against current text: (a) metrics paragraph
+reconciles 134.30s planning vs 144.4s end-to-end (execution adds ~10s); (b) resolution
+section carries new-sweep numbers (66.1/69.0% etc., not 42.3/40.3/45.7); (c) overhead no
+longer called negligible, quantified instead; (d) one CPU story (per-episode pair same
+machine; Xeon-vs-Ryzen named only for the published per-step figure, flagged as favouring
+TAMPURA).
 [EMAIL] "Several inconsistencies in Section 5 and 6 (among each other and with cited
 papers): CPU claims, reported metrics for supposedly the same approaches with different
 numbers. These are the true threats to validity -- rectify them." Concrete catches:
@@ -746,7 +764,11 @@ Three structural notes:
     bounded give-up, resolution regime appear in both).
 Refs: results.tex §5; discussion.tex §6.4/§6.5. Annotations p.25/p.37/p.40.
 
-#310  [T2] [THESIS]  Document-wide: DROP "Semantic" -> "Boxels" / "POD-TAMP"
+#310  [DONE 2026-06-10 -- VERIFIED resolved by prior work, no edit] [T2] [THESIS]  Document-wide: DROP "Semantic" -> "Boxels" / "POD-TAMP"
+RESOLVED: grep over all chapters finds no "Semantic Boxel" / "Semantic POD" compounds.
+The title keeps "Semantic Space Abstractions" (registered title, #312); "Adaptive Semantic
+Discretization" (algorithm name) and the "semantic" eval-variant name (#330) are distinct
+terms, not the flagged compounds.
 RECURS p.3 ("keep using 'semantic' here -- why? Implies it's an extension of a previous
 concept. Why not just boxels?"), again p.3 ("also semantic pod tamp"), p.20 ("why
 'Semantic'? -- suggestion in my email"), abstract, methods. Daniel's §4.4 drop-in (#307)
@@ -755,12 +777,17 @@ already uses bare "Boxel"/"POD". Fix: remove "Semantic" from "Semantic Boxel" an
 used before defined). Document-wide find + per-instance read.
 Refs: all chapters; #214. Annotations p.3/p.20 + email.
 
-#311  [T0] [ADMIN]  Supervisor names missing -- add Till Hofmann and Daniel Swoboda
+#311  [DONE 2026-06-10 -- VERIFIED resolved by prior work, no edit] [T0] [ADMIN]  Supervisor names missing -- add Till Hofmann and Daniel Swoboda
+RESOLVED: main.tex defines \supervisor{Till Hofmann, Daniel Swoboda} and
+resources/title-page.tex:45 renders it.
 p.40 + EMAIL closing. The supervisors' names are absent from the title page / front matter.
 Add: Till Hofmann, Daniel Swoboda. MUST-FIX.
 Refs: thesis/ title page / front matter.
 
-#312  [T0] [ADMIN]  Title must MATCH the registered title exactly
+#312  [BLOCKED on author 2026-06-10] [T0] [ADMIN]  Title must MATCH the registered title exactly
+STATUS: main.tex title is "Semantic Space Abstractions for Partially Observable
+Deterministic Task and Motion Planning". Only the author can check this against the
+registration form -- confirm and flip to DONE, or fix the title before submission.
 [EMAIL] "Make sure the title matches what we registered -- I'm pretty sure it needs to be
 exactly the same as on the registration form. A title change can be requested with the
 examination board ahead of time, but don't count on getting it done before Wednesday
@@ -817,7 +844,11 @@ state") and the em-dash bullet was covered by #287's intro pass; the other five 
   - "instead": small wording edit near "This thesis develops a system."
 Refs: introduction.tex p.1; #287.
 
-#317  [T1] [THESIS]  Intro p.2 (Fig 1.1 + over-claims): camera, POD-before-definition, belief-state claim
+#317  [DONE 2026-06-10 (commit b681f1f; camera wording via prior passes)] [T1] [THESIS]  Intro p.2 (Fig 1.1 + over-claims): camera, POD-before-definition, belief-state claim
+RESOLVED: overhead-camera wording already gone (fixed camera, oblique, in front of and
+slightly above); b681f1f softens the belief-state claim (discrete belief over regions, not
+full probabilistic belief), expands POD at first use in the research question, and replaces
+the generic 'space is part of the planning problem' with the specific symbolic-state claim.
   - OVERHEAD CAMERA (also EMAIL bullet 3, factual): "Fixed overhead camera is literally not
     correct -- the camera is not placed overhead." Caption arrow "implies full obs. from
     top" -- a fixed overhead cam implies full observability from above, in tension with the
@@ -847,7 +878,7 @@ Refs: introduction.tex p.3; #307 #310.
 Underlined; "maybe doesn't say much". Rephrase or cut.
 Refs: background.tex.
 
-#320  [T0] [THESIS]  Background §2.1.1 STRIPS: stop mixing STRIPS syntax with the planning model
+#320  [DONE 2026-06-10 -- VERIFIED resolved by prior work (#276), no edit] [T0] [THESIS]  Background §2.1.1 STRIPS: stop mixing STRIPS syntax with the planning model
 p.4: "Bit short -- either drop and integrate with 2.1.1, or extend." Daniel scratched "A
 foundational language for this is" and wrote after STRIPS: "is a common language to
 express ...". CORE correction: "you are mixing STRIPS syntax and the typical planning model
@@ -863,7 +894,10 @@ and the state model S(P)=<S,s0,SG,Act,A,f> cited to geffner2013concise + hofmann
 (Till's own formulation) at L27. The p.4 annotation was on the OLD PDF. REMAINING: verify only.
 Refs: background.tex §2.1.1; the PDDL (stack) listing. Annotation p.4.
 
-#321  [T0] [THESIS]  Background §2.1 Fast Downward (p.5): citation + relevance + over-claims cluster
+#321  [DONE 2026-06-10 (commit af0a7d8; bulk via prior passes)] [T0] [THESIS]  Background §2.1 Fast Downward (p.5): citation + relevance + over-claims cluster
+RESOLVED: citation/numeric-fluents/scaling-claim sub-items verified already applied;
+af0a7d8 closes the last residual (PDDLStream forward-reference now points at new label
+sec:tamp).
   - "[21] does not define this" -- AUTHOR: Till likely means [13] (Garrett et al., Online
     Replanning), but that uses POMDPs; the CORRECT source is Hoffmann & Geffner. VERIFY and
     fix (the §4.4 drop-in already attributes the state model to Geffner & Bonet [13]).
@@ -890,7 +924,7 @@ most modern planners handle this domain); (c) L45 forward-references PDDLStream 
 defines it -- add a pointer or rephrase.
 Refs: background.tex §2.1; references.bib ([13]/Hoffmann&Geffner); #307. Annotation p.5.
 
-#322  [T0] [THESIS]  Background §2.2 (p.6): K-literal either/or + KIF attribution + citation style
+#322  [DONE 2026-06-10 (commits f453396 + r2 rewrite, see body)] [T0] [THESIS]  Background §2.2 (p.6): K-literal either/or + KIF attribution + citation style
   - "not quite correct -- either/or, not both": a K-literal is known-true, known-false, OR
     unknown -- NOT both. Fix the explanation. [AUTHOR Q] (author wants to understand/verify
     the source before editing.)
@@ -917,7 +951,10 @@ K(neg) pred) + sense effect :115-129; methods.tex:135. Petrick pages 212-222 add
 f453396 + (this). DONE.
 Refs: background.tex §2.2; references.bib (Petrick PKS 2002); #278 #210. Annotation p.6.
 
-#323  [T0] [THESIS]  Background §2.3 (p.7): complexity argument wrong + stream definition + IK "sequence"
+#323  [DONE 2026-06-10 (commit e208c70; bulk via prior passes)] [T0] [THESIS]  Background §2.3 (p.7): complexity argument wrong + stream definition + IK "sequence"
+RESOLVED: complexity reframe, stream existence/identity correction, and IK candidate-pool
+wording verified already applied; e208c70 closes the residual TAMP opener ('ignore
+geometry' -> abstraction omits geometry; 'from the start' framing dropped).
   - "Delete-relaxed classical planning is still PSPACE-complete. Not the argument": the
     passage "while highly expressive, POMDPs are ... from actions behaving randomly." POD
     planning (delete-relaxed classical) is still PSPACE-complete, so "POMDP intractable / POD
@@ -936,7 +973,10 @@ Refs: background.tex §2.2; references.bib (Petrick PKS 2002); #278 #210. Annota
     asked what it actually does.)
 Refs: background.tex §2.3; PDDLStream paper. Annotation p.7.
 
-#324  [T2] [THESIS]  Background §2.3/§2.4 (p.8-9): readability + qualifiers + cut tail
+#324  [DONE 2026-06-10 (commit a03e6ee; bulk via prior passes)] [T2] [THESIS]  Background §2.3/§2.4 (p.8-9): readability + qualifiers + cut tail
+RESOLVED: a03e6ee drops 'often' and qualifies the voxel-grid opener (common in robotic
+mapping, not in symbolic planning); remaining sub-items verified already applied; the
+'To make planning more efficient' AUTHOR-Q was already settled by the current rewording.
   - "hard to read": Example PDDLStream workflow -- put all args of (pick ?obj ?p ?g ?q ?t)
     on the SAME line.
   - "Not always?": remove "often" in "The overall PDDLStream algorithm often reduces a TAMP".
