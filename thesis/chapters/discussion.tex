@@ -152,24 +152,21 @@ if anything, slightly favours TAMPURA.
 Re-running both systems on a shared scene file would strengthen the
 comparison.
 
-\paragraph{Resolution regime.} The free-space leaf size behaves as a flat
-knob across the 1\,cm--18\,cm range tested. Below \emph{auto\_cell},
-forcing a 5\,cm floor changes nothing (the \texttt{mbs0.05} null finding),
-and even a 1\,cm floor, which roughly triples the free-space partition,
-leaves success unchanged. Above \emph{auto\_cell}, coarsening to 10\,cm and
-beyond leaves the success rate essentially unchanged (identical
-seed-for-seed on stack across all five adaptive settings, within seed noise
-on holding, and a non-monotone dip of up to $\sim$13\,pp on
-find-and-tray-stack, with the 10\,cm arm within 2\,pp of auto) while
-shrinking the free-space partition by $\sim$55\,\% to a level that no longer
-changes from 10 to 18\,cm. The cause is structural rather than numerical: the
-merge step combines free-space cells whenever their merged region is convex,
-so the partition reflects the convex structure of the free space rather than
-the leaf size itself; on stack a 9\,cm floor (1.5$\times$ \emph{auto\_cell})
-reproduces the auto partition exactly. The knob matters only at the extreme
-fine end: at a 1\,mm floor the partition and its grounding grow past what
-the 1800\,s budget can absorb and no episode completes, so the floor's
-failure mode is cost, not solution quality. \emph{auto\_cell}
+\paragraph{Resolution regime.} The resolution sweep (\cref{subsec:resolution})
+shows the free-space leaf size behaving as a flat knob everywhere except its
+extreme fine end. The reading is structural rather than numerical: the merge
+step combines free-space cells whenever their merged region is convex, so the
+final partition reflects the convex structure of the free space rather than
+the leaf size that seeded it. Coarsening past \emph{auto\_cell} cannot remove
+that structure: the partition bottoms out at the workspace's convex
+decomposition, which is why the coarser floors all land on the same partition
+size. Refining below \emph{auto\_cell} gains nothing: the finer floor is
+either re-absorbed outright (the 5\,cm null finding) or survives only as
+redundant subdivisions of the same free space (the 1\,cm arm), inflating the
+grounding without changing what is reachable or searchable, so success stays
+put. The regime ends where this inflation outgrows the budget: at a 1\,mm
+floor the partition and its grounding can no longer be processed in time, so
+the floor's failure mode is cost, not solution quality. \emph{auto\_cell}
 (the largest visible footprint plus a 1\,cm margin) is therefore a convenient
 choice rather than a tuned constant, and semantic's compactness advantage
 over \texttt{uniform} is a structural property of the adaptive partition, not
