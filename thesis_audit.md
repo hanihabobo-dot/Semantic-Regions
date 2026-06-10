@@ -794,7 +794,10 @@ Refs: thesis/ front matter (epigraph page).
     #199 (document-wide task rename).
 Refs: abstract.tex; results.tex p.32; #199.
 
-#315  [T0] [THESIS]  Intro p.1: citation [8,11] after "TAMP studies how to do exactly this." is wrong
+#315  [DONE 2026-06-10 (commit fadb375)] [T0] [THESIS]  Intro p.1: citation [8,11] after "TAMP studies how to do exactly this." is wrong
+RESOLVED: garrett2021integrated (the TAMP survey) added as the lead citation; the existing
+pddlstream + tampura refs KEPT per author decision (supervisor flagged [8]=TAMPURA as
+misplaced, so be ready to defend keeping it).
 "[8] is TAMPURA" -- the cite is misplaced/incorrect for that sentence. Verify what [8] and
 [11] are and replace with the correct TAMP reference(s).
 Refs: introduction.tex p.1; references.bib.
