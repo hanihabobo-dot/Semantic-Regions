@@ -961,11 +961,11 @@ Refs: methods.tex §4 (p.19); #307. Annotation p.19.
   - naming (#310); the model formalization itself = #307.
 Refs: methods.tex §4.4; #307 #310. Annotation p.20.
 
-#328  [DONE 2026-06-10 (commit 047f823)] [T2] [THESIS]  §4.5 sense action (p.22): pessimistic-version note + abandoned conditional-effect design
-ANSWER to the author Q: pessimistic sensing = determinise to the worst case (every sense finds
-nothing); under our encoding a search goal then admits no plan until the target's location can
-be DEDUCED from exhausted alternatives -- the LW1-style axiom machinery we lack. One sentence
-added after the optimistic/reactive-replanning explanation.
+#328  [REJECTED 2026-06-10 (added 047f823, REVERTED 164473d)] [T2] [THESIS]  §4.5 sense action (p.22): pessimistic-version note + abandoned conditional-effect design
+ANSWER to the author Q (recorded here, not in the thesis): pessimistic sensing = determinise to
+the worst case (every sense finds nothing); under our encoding a search goal then admits no plan
+until the target's location can be DEDUCED from exhausted alternatives -- the LW1-style axiom
+machinery we lack. Author decided AGAINST mentioning it in the text; sentence reverted.
 "Would've been interesting to compare a pessimistic version." -- the optimistic sense action
 (and the abandoned conditional-effect design). Optionally note pessimistic sensing as future
 work / a design alternative. [AUTHOR Q] author asks "what is pessimistic sensing?" -- answer
