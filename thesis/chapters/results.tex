@@ -210,11 +210,8 @@ The headline finding is the cost gap between the adaptive partition and a
 uniform free-space grid at the same cell scale. Both partitions use the
 same auto-set cell size (the largest object's footprint, $\approx$6--9\,cm
 in our scenes), so the comparison isolates the structural choice rather
-than the resolution. On holding, the adaptive partition produces 22--38
-Boxels per scene; the uniform grid produces $\sim$300 free-space cells
-alone (\cref{fig:boxel-count-holding}). Larger partitions translate to larger initial-state
-fact counts ($\sim$300 vs 11\,000--14\,000 on stack) and longer per-call
-planning time, which is the mechanism behind \cref{fig:plantime-holding}.
+than the resolution; \cref{subsec:compactness} quantifies the cell- and
+fact-count gap behind it.
 
 What that gap buys is goal-dependent. On holding the uniform baseline
 still solves about half of scenes; it pays several times the planning
@@ -305,11 +302,9 @@ comparison is the natural follow-up (\cref{sec:future_work}).
 \label{sec:disc-tampura}
 
 The quantitative comparison is reported in \cref{subsec:tampura}
-(\cref{fig:tampura}): against a local re-run of TAMPURA's \emph{Find Die},
-the closest analogue to our \texttt{holding} task, we are at rough
-parity end-to-end (144.4\,s vs 166\,s per episode) and comparable in
-reliability (65.6\,\% vs the $\geq$\,63\,\% implied by its published
-returns), on a marginally easier goal.
+(\cref{fig:tampura}): rough parity in end-to-end cost and reliability
+against a local re-run of TAMPURA's \emph{Find Die}, the closest analogue
+to our \texttt{holding} goal.
 Beyond the numbers, the two systems differ in kind.
 
 Both systems sample geometry \emph{online}, inside the planning loop, and
@@ -480,22 +475,14 @@ geometry, is separate from the core contribution and is noted as future
 work.
 
 \paragraph{Simplifications disclosed in the approach.} Two further
-simplifications are stated where they are introduced rather than here. The
-conceptual belief could use two K-literals, $K(p)$ and $K(\neg p)$; the
-implemented domain instead carries a single Know-If fluent (recording whether
-$p$'s value is known) paired with a value-carrying fluent, an equivalent
-encoding for the boolean known/unknown scenarios studied (\cref{sec:kif_belief}). The \texttt{sense} action is modeled
-optimistically (it assumes the target is found), with reactive
-replanning when execution reveals otherwise, because PDDLStream and
-FastDownward support neither contingent branching nor deductive axioms
-(\cref{ch:methods}). The planning layer is thus a deliberately
-\emph{simplified} form of POD planning: a full POD planner such as LW1
-\cite{bonet2014flexible} produces branching contingent plans and carries
-deductive axioms that infer facts the base predicates leave implicit,
-whereas ours determinises optimistically and repairs by replanning. This
-suffices for the single-target retrieval and stacking tasks studied here,
-where progress never hinges on a deduction the planner cannot make locally;
-it would not suffice for problems that genuinely require contingent
-reasoning: the unsound bounded give-up above is one symptom, since ruling
-out an unreachable shadow needs exactly the kind of deduction (clear the
-obstruction first) that an axiom-bearing POD planner expresses directly.
+simplifications are stated where they are introduced rather than here: the
+single Know-If fluent in place of a pair of K-literals
+(\cref{sec:kif_belief}), and the optimistic \texttt{sense} action with
+reactive replanning in place of full contingent POD planning, forced by
+PDDLStream and Fast Downward supporting neither contingent branching nor
+deductive axioms (\cref{ch:methods}). The latter suffices for the tasks
+studied here but not for problems that genuinely require contingent
+reasoning; the unsound bounded give-up above is one symptom, since ruling
+out an unreachable shadow needs exactly the deduction (clear the
+obstruction first) that an axiom-bearing POD planner such as LW1
+\cite{bonet2014flexible} expresses directly.
