@@ -306,6 +306,23 @@ F. ALSO (outside the 5 sections but same headline): abstract.tex almost certainl
 
 PENDING (when coarse mbs arms finish): refresh fig:boxel-resolution + subsec:resolution/disc-validity
 resolution numbers, then re-run this same diff against those.
+  ADDENDUM [2026-06-10 honesty sweep] -- specifics the resolution refresh MUST catch (all measured
+  from sweep_full_2026-05-28 vs current text):
+  (a) §5.5 "on the same 100-seed scenes" is stale: the NEW resolution arms are 48-49 cells each
+      (holding 49+49, f-a-t-s 48+48 at mbs 0.135/0.18) and INCOMPLETE vs 90-cell headline arms.
+  (b) There are NO stack resolution arms in the new sweep at all -- §5.5's "(stack 28->22)" and
+      "identical seed-for-seed on stack" can only come from the OLD sweep; either re-run stack
+      arms or scope the sentence.
+  (c) Plan-time claims will change drastically: text says "fell by 30-45 % on holding and
+      50-65 % on f-a-t-s from 1x to 2x"; NEW data: holding 134.3 -> 18.7 s (-86 %), f-a-t-s
+      124.6 -> 26.3 s (-79 %).  Boxel-count fall also differs: text 30-40 %, new total-boxel
+      fall 31.2 -> 15.0 (holding, -52 %) / 36.2 -> 20.1 (f-a-t-s, -44 %).
+  (d) Success on the coarse arms: holding 65.6 -> 61 %, f-a-t-s 75.6 -> 69 % -- §6.4's "within
+      seed noise on holding" / "mild ~4pp drop on f-a-t-s" become ~5pp / ~7pp at n=48-49;
+      re-state with the wider CIs.
+  (e) thesis/graphics/boxel_count_vs_resolution.png is still the OLD 4-arm figure (5.0/9.4/
+      13.5/18.0 cm); the new sweep's regenerated PNG has only 2 arms (5.0/9.2) because the
+      coarse arms were incomplete at plot time -- regenerate after (a)/(b) complete.
 
 APPLIED (2026-06-04, /workflow; one commit per unit):
   [x] B tab:headline full replace (n_cells 299/300 -> 90) + "order of magnitude in both axes" framing
@@ -959,6 +976,60 @@ RAISE with the supervisors whether the relocation is acceptable. Affects how #30
 the contribution.
 Refs: related-work.tex; background.tex §2.4; #300 #303. Annotation p.9.
 
+#335  [T0] [THESIS]  "blocked from view" failure mode is MISATTRIBUTED -- most all_searched
+cells were NOT blocked; the search finished and the target was simply never seen
+[CLAUDE honesty sweep 2026-06-10; measured from sweep_full_2026-05-28 cells/*/stdout.log]
+results.tex §5.2 (metrics) defines "blocked from view" as failing "only because the target's
+region stayed blocked from the fixed camera, so its absence was never actually observed";
+§5.6 + fig:failure-modes caption repeat it, and conclusion.tex asserts "The scenes studied
+here are arranged so that every place an object can hide is one such anticipated shadow
+region."  The data contradicts all three:
+  - Of the 18 HEADLINE all_searched cells, only 5 contain the audit-#21 "blocked-unresolved"
+    give-up line.  The other 13 printed "All N shadows searched -- target not found": every
+    shadow WAS observed (empty) and the target was still never seen.
+  - Of those 13: 11 were spawn-time "boundary case" scenes (audit-#67 oracle line: target
+    camera-occluded but its centre OUTSIDE every shadow AABB -- shadow under-coverage near
+    cone edges), e.g. randpairs_occ2_seed44_holding_uc0_semantic; 2 (occ4_seed50 semantic +
+    uniform) had the target IN a shadow at spawn yet sensed that shadow empty (target likely
+    displaced during execution, or the sense raycast missed it).
+  - Across the whole sweep dir (incl. resolution arms): 41 all_searched cells = 8 blocked /
+    33 observed-all-empty.
+So the dominant cause is NOT an unresolvable line of sight; it is the partition failing to
+cover the place the target actually hides (or losing it during manipulation) -- the search
+completes "successfully" and misses the object.  That is a more substantive limitation of
+the shadow-AABB representation and is currently presented as something else.
+FIX: (1) §5.2: rename/redefine the mode honestly, e.g. "search exhausted: every candidate
+region was sensed empty or given up, and the target was never observed", and state the two
+sub-causes (shadow-AABB under-coverage at the occlusion-cone boundary; bounded give-up on
+still-blocked regions) with the 13-vs-5 split.  (2) §5.6 text + fig caption: same.
+(3) conclusion.tex: delete or qualify the "every place an object can hide is an anticipated
+shadow region" sentence -- the eval itself refutes it.  (4) §6.4/§6.5: bounded-give-up
+paragraphs stay (true for the 5), add the under-coverage gap as its own accepted limitation
+(links THESIS_NOTES §14 / audit #67/#72 lateral-overhang work).  Machine-readability of this
+distinction is filed as CODEBASE_AUDIT #124.
+Refs: results.tex §5.2 + subsec:failure-modes + fig caption; conclusion.tex (anticipated-
+shadow sentence); discussion.tex §6.4 "Bounded give-up" + §6.5 Planning; CODEBASE_AUDIT
+#124; THESIS_NOTES §14, §18.
+
+#336  [T2] [THESIS]  §5.2: "a failed object release ... did not occur in these runs" is FALSE
+[CLAUDE honesty sweep 2026-06-10]  results.tex §5.2 closes the failure-mode list with "A
+further give-up, a failed object release after repeated retries, is possible but did not
+occur in these runs."  It DID occur, once, in a headline cell: drop_failed on
+find-and-tray-stack, semantic+mbs0.05, seed 36, n_occ=3 (aggregated.csv; #282's own
+FINDINGS block lists "drop_failed 1 (f-a-t-s)").  Fix: "...occurred once in 810 cells" or
+drop the claim.  (fig:failure-modes shows only the semantic/uniform variants, where it
+indeed never occurs -- if that is the intended scope, say so explicitly.)
+Refs: results.tex §5.2; eval_results/sweep_full_2026-05-28/aggregated.csv; #282 FINDINGS.
+
+#337  [T3] [ADMIN]  Verify the intro source-code footnote URL actually resolves
+[CLAUDE honesty sweep 2026-06-10]  introduction.tex footnote links
+git.rwth-aachen.de/hani.alassiri.alhabboub/Semantic_Space_Abstractions, but the local git
+remote is .../pybullet.git (GitLab) and the GitHub remote is hanihabobo-dot/Semantic-Regions
+.git.  If the GitLab project was renamed, the old remote URL redirects and the link is fine;
+if not, the printed link 404s.  Confirm in a browser (logged out, to check visibility too)
+and align with whatever #208 intended (GitHub link present?).
+Refs: introduction.tex footnote; #208; git remote -v.
+
 ================================================================================
 RESOLVED (author notes 2026-06-02 -- no new issue):
   - "explain what a classical planner is + examples" -> DONE in #253 (Background 2.1.2).
@@ -1015,6 +1086,17 @@ OPEN:
       No-action/admin:   #313 (epigraph website variant) #332 (stack numbers -- recorded only)
       Page-local edits:  #314 (abstract) #316 #318 (intro) #319 #324 (background) #325 #326 #327
                          (approach) #330 #331 (results) #333 (discussion)
+  --- Honesty sweep 2026-06-10 (#335-#337; full entries above) -- all OPEN. ---
+      Correctness (T0):  #335 ("blocked from view" misattributed: 13/18 headline all_searched
+                         cells observed every shadow empty -- shadow-AABB under-coverage, not a
+                         blocked line of sight; conclusion's "every hiding place is an
+                         anticipated shadow region" refuted by the sweep's own logs)
+      Correctness (T2):  #336 (drop_failed DID occur once -- §5.2 sentence false)
+      Admin (T3):        #337 (verify intro repo-link URL resolves)
+      Also: #282 ADDENDUM (resolution-refresh specifics: 100-seed claim stale, no stack arms,
+            plan-time fall 79-86 % not 30-65 %, old 4-arm figure); cross-filed code issues
+            CODEBASE_AUDIT #123 (bridge go_home forced success) #124 (persist give-up +
+            spawn-classification fields) #125 (stale TAMPURA plotter docstring).
 
 DONE: #168, #176, #177, #178, #179, #180, #182, #183, #184, #185, #187, #188, #189, #190, #191, #193, #194, #195, #197, #198, #200, #201, #202, #203, #204, #205, #206, #207, #208, #211, #212, #213, #259, #261, #262, #288, #289, #290, #291, #292, #293, #294, #295, #297, #298, #299. MERGED: #192->#187, #196->#176. REJECTED: #186 (expansion declined), #175 (shadow #102/#103 reconciliation declined; by-depth drop already done), #260 (TAMPURA/Saleem differentiation -- redundant, declined).
 
