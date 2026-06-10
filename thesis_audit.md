@@ -73,7 +73,12 @@ Refs: background.tex:85; albore2009translation; geffner2013concise.
 #197  [DONE 2026-05-25] [T1]  fig:replan-cycle caption is wrong vs the image
 #198  [DONE 2026-05-25] [T3]  Figure captions/sizes to fix after visual inspection
 ================================================================================
-#199  [T2] [THESIS]  Rename task terms to reader-facing names (drop code terms)
+#199  [DONE 2026-06-10 (light; commit b31dc06)] [T2] [THESIS]  Rename task terms to reader-facing names (drop code terms)
+RESOLVED LIGHT (author choice): full prose rename rejected -- would desync the text from
+every figure axis/legend and tab:headline (all render the code names); full rename needs a
+plotter label map + regen of ~12 PNGs. Instead: reader-facing gloss at first use in §5.1
+(holding = "find: locate a hidden target and pick it up"; find-and-tray-stack = "find and
+stack"); code names stay canonical everywhere else. Abstract naming handled in #314.
 ================================================================================
 Document-wide. Code task names confusing in prose. Use FIND (= holding; locate a hidden object
 and pick it), STACK, FIND AND STACK (= find-and-tray-stack). Fix: rename in PROSE only (holding
@@ -107,7 +112,7 @@ goal; state finer=no change, coarser=fewer. Coordinate w/ #202/#203.
 Refs: results.tex:194; discussion.tex:60; #202; #203; CODEBASE_AUDIT #108, #98/#100/#101; eval_results/sweep_anytime/aggregated.csv.
 
 ================================================================================
-#210  [T3] [POLISH]  Related Work: drop author names, cite by number ([4]) --- VERY LOW PRIORITY
+#210  [REJECTED 2026-06-10 -- author kill at deadline] [T3] [POLISH]  Related Work: drop author names, cite by number ([4]) --- VERY LOW PRIORITY
 ================================================================================
 related-work.tex throughout. Replace inline "<Author> et al." lead-ins with numeric citation
 labels (e.g. "[4] introduces ..."). Mechanical low-priority polish once T0/T1 content is settled;
@@ -188,11 +193,16 @@ Refs: methods.tex (perception/visibility, sense action); pose-sampling stream co
 #267  [DONE 2026-06-05] [T2] [THESIS]  Methods: fig:boxelization-real caption "object bounding cuboids" correction
 #268  [DONE 2026-06-05] [T2] [THESIS]  Methods: add pseudocode for adaptive semantic discretization
 ================================================================================
-#269  [T2] [THESIS]  Methods: verify Boxel set is supplied to the planner as static facts in initial state
+#269  [DONE 2026-06-10 -- VERIFIED, no edit] [T2] [THESIS]  Methods: verify Boxel set is supplied to the planner as static facts in initial state
 ================================================================================
 [AUTHOR] methods.tex:38 claims "the completed set of Boxels is supplied to the planner as static facts in
 its initial state." Walk the code and confirm (static facts; initial state) before keeping the claim.
 Refs: methods.tex:38; initial-state construction code.
+RESULT 2026-06-10: confirmed. pddlstream_planner._build_init (:392-) iterates registry.boxels and
+emits ('Boxel', id) + is_shadow/is_object/is_free_space into the init fact list for every cell; no
+action effect modifies the Boxel membership facts (only is_free_space flips on place, which the
+sentence does not contradict); the set is rebuilt + re-supplied before each plan() call, matching
+§4.4 "Boxels enter each solve as fixed inputs". Claim stands as written.
 
 ================================================================================
 #270  [DONE 2026-06-06] [T2] [THESIS]  Results: Figure 5.3 overhead-camera caption -- DONE: caption already rewritten (by #288); names cyan/red/grey Boxels, RGB+depth corner insets, oblique viewpoint, oracle detector. Nothing outdated remains.
@@ -308,8 +318,10 @@ PENDING (when coarse mbs arms finish): refresh fig:boxel-resolution + subsec:res
 resolution numbers, then re-run this same diff against those.
   ADDENDUM [2026-06-10 honesty sweep] -- specifics the resolution refresh MUST catch (all measured
   from sweep_full_2026-05-28 vs current text):
-  (a) §5.5 "on the same 100-seed scenes" is stale: the NEW resolution arms are 48-49 cells each
-      (holding 49+49, f-a-t-s 48+48 at mbs 0.135/0.18) and INCOMPLETE vs 90-cell headline arms.
+  (a) [FIXED 2026-06-10, commit 3c46613] §5.5 "on the same 100-seed scenes" is stale: reworded to
+      "the coarser arms were run as a separate sweep with 100 seeds per difficulty level". The NEW
+      resolution arms are 48-49 cells each (holding 49+49, f-a-t-s 48+48 at mbs 0.135/0.18) and
+      INCOMPLETE vs 90-cell headline arms -- items (b)-(e) below stay gated on a re-run.
   (b) There are NO stack resolution arms in the new sweep at all -- §5.5's "(stack 28->22)" and
       "identical seed-for-seed on stack" can only come from the OLD sweep; either re-run stack
       arms or scope the sentence.
@@ -417,11 +429,14 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
 #285  [DONE 2026-06-05] [T2] [THESIS]  Background sec:pod: "POD builds on \cite{...}." is a sentence fragment / placeholder
 #286  [DONE 2026-06-05] [T3] [POLISH]  Background: rephrase or cut "a distinction that matters because we later compare..."
 ================================================================================
-#287  [PARTIAL 2026-06-05] [T2] [POLISH]  Whole document: remove em-dashes (---), an AI tell-tale
+#287  [DONE 2026-06-10 (commits 2158b80 results, 0ed0ce0 discussion, 856e5b0 background)] [T2] [POLISH]  Whole document: remove em-dashes (---), an AI tell-tale
 NOTE 2026-06-05: em-dashes removed (per-instance commas/parens/colons/period; lstlisting/code comments left)
 from abstract, introduction, background, related-work, methods, conclusion (commits d402a40, ba44225, 81a1ad0,
 e95c819, 8f498b9, 510f7a2). REMAINING: results.tex (~16) and discussion.tex (~36), deferred because both are
 under active #282 editing -- sweep once #282 has settled to avoid conflicts.
+COMPLETED 2026-06-10: results.tex (21 sites) + discussion.tex (26 sites) swept; background.tex had 10
+reintroduced by the post-06-05 Fast Downward section (#253/#321), also swept. Verified 0 prose em-dashes
+across all 8 chapters; the 8 remaining matches are PDDL-lstlisting comment separators (exempt by spec).
 ================================================================================
 [AUTHOR 2026-06-05] The author wants ALL em-dashes ("---" in LaTeX, the long dash) removed from the prose --
 they read as a tell-tale sign of machine-written text. ~97 em-dash occurrences across the 8 chapters
@@ -557,7 +572,15 @@ raycast + recursive free-space partition + convex merge), introduced early, buil
 voxels->octrees->Boxels. Cross-ref #254 (define Boxel at first body use).
 Refs: methods.tex §4.1/§4.2; #254. EMAIL bullet 1.
 
-#301  [T1] [THESIS]  Stream implementations are black boxes -- document them (appendix or up front)
+#301  [DONE 2026-06-10 (commit e00b61c)] [T1] [THESIS]  Stream implementations are black boxes -- document them (appendix or up front)
+RESOLVED: new methods §"Stream Implementations" (subsec:stream-impls) between the sensing
+subsection and the manipulation-model paragraph; documents sample-grasp (single top-down,
+0.10 m clearance, seeded contact IK), compute-kin (multi-seed null-space IK, lazy collision
+deferral to plan-motion), compute-stack-kin (support-top release height), plan-motion
+(endpoint checks -> direct linear -> RRT-Connect 2000 it / 0.2 rad / 5% goal bias / 8 edge
+checks + 75-attempt shortcutting). All constants verified against streams.py. New bib entry
+kuffner2000rrt. The existing #304 manipulation-model paragraph closes the subsection
+(answers "how are grasps executed").
 [EMAIL] "Stream implementations are black boxes. At least describe them in the appendix,
 better up front. You could write 30 more pages before hitting the limit. How is plan-
 motion done? compute-kin? How are grasps executed?" Also p.16 "What about motion
@@ -688,7 +711,14 @@ All are stale-text/framing SYNC (not pipeline re-runs); verify each value agains
 sweep_full_2026-05-28 before editing. Cross-ref #282 (new-sweep refresh).
 Refs: results.tex §5.4.5/§5.4.6 + planning-budget para; discussion.tex §6.3/§6.4; #282 #306.
 
-#309  [T1] [THESIS]  Structural reorg of §5 and §6 (setup before goals; collapse §6 redundancy)
+#309  [DONE 2026-06-10 (commit ca86685)] [T1] [THESIS]  Structural reorg of §5 and §6 (setup before goals; collapse §6 redundancy)
+RESOLVED: (p.25) §5.1 reordered sim/robot -> Perception(+camera fig) -> Goals -> scene gen ->
+seeds -> budget (block move, no text changes). (p.40) §6.4+§6.5 merged into one section
+"Limitations and Threats to Validity" (labels sec:disc-validity AND sec:limitations both kept):
+Oracle-perception threat folded into the Perception paragraph, Bounded-give-up threat deleted
+(fully duplicated in the Planning paragraph), Shadow-under-coverage folded into Spatial
+representation; Scene-family / TAMPURA-different-task / Resolution-regime kept. (p.37) §5/§6
+chapter split KEPT per the #244 author decision; the merge removes the flagged redundancy.
 Three structural notes:
   - p.25 (MAJOR): "First explain the setup and environment properly, THEN talk about
     goals." The Goals subsection currently precedes a proper setup/env description -- reorder.
@@ -723,7 +753,11 @@ night; double check." Action: confirm the registered title and reconcile main.te
 change is wanted, request it with the board but assume the registered title for submission.
 Refs: thesis/ title page.
 
-#313  [T3] [ADMIN]  Epigraph -- keep Trump quote in submission, make a chair-website variant WITHOUT it
+#313  [DONE 2026-06-10 (commits 70c3b1b, 3c9f269)] [T3] [ADMIN]  Epigraph -- keep Trump quote in submission, make a chair-website variant WITHOUT it
+RESOLVED (superseded by author decision 2026-06-10): epigraph REMOVED from the build entirely
+("kill trump quote completely") -- include dropped from main.tex, websiteversion toggle
+removed, no website variant needed. chapters/epigraph.tex stays on disk, just not built;
+say the word to delete the file too. One PDF for both submission and chair website.
 Front matter: epigraph "Everything is Computer -- DJT". Supervisor: "the chair doesn't want
 to publish Trump quotes -- I'd ask for a version without this for our chair website, but
 fine for submission if you want. Hector & Morris will see it..." Action: author may keep it
@@ -733,7 +767,7 @@ Refs: thesis/ front matter (epigraph page).
 
 --- PAGE-LOCAL EDITS ---
 
-#314  [T2] [THESIS]  Abstract (p.iii): ground the problem first; reword 3 unclear spots; reader-facing task names
+#314  [DONE 2026-06-10 (commit 20eac0a)] [T2] [THESIS]  Abstract (p.iii): ground the problem first; reword 3 unclear spots; reader-facing task names
   - First two sentences "a bit too quick -- usually one grounds the reader in a problem
     first before presenting it": add a one-sentence problem grounding.
   - "hard to follow": "the partition concentrates resolution on the objects and the regions
@@ -750,7 +784,9 @@ Refs: abstract.tex; results.tex p.32; #199.
 [11] are and replace with the correct TAMP reference(s).
 Refs: introduction.tex p.1; references.bib.
 
-#316  [T2] [THESIS]  Intro p.1: small wording/structure edits cluster
+#316  [DONE 2026-06-10 (commit cc27263)] [T2] [THESIS]  Intro p.1: small wording/structure edits cluster
+NOTE: the "of what" bullet was already satisfied (text reads "full observability of the world
+state") and the em-dash bullet was covered by #287's intro pass; the other five applied.
   - "this is a bit of backward reasoning": the intro argues symbolic-planning-is-insufficient
     by reasoning from the solution backwards -- restructure to argue forward.
   - "of what": "PDDLStream assumes full observability" -- say full observability OF WHAT.
@@ -781,7 +817,7 @@ Refs: introduction.tex p.1; #287.
   - "example fig might already be good here": add an illustrative figure this early.
 Refs: introduction.tex p.2; fig:hero/fig:1.1; #288 #307; EMAIL bullet 3.
 
-#318  [T2] [THESIS]  Intro p.3 (Contributions/Outline): trims + soften claim + naming
+#318  [DONE 2026-06-10 (commit 9e0e64a)] [T2] [THESIS]  Intro p.3 (Contributions/Outline): trims + soften claim + naming
   - "not true": "partially observable deterministic (POD) planner reasons over ..." -- soften
     per the honesty theme (#307).
   - scratched "of this thesis" -> "Contributions" (not "Contributions of this thesis").
@@ -789,7 +825,7 @@ Refs: introduction.tex p.2; fig:hero/fig:1.1; #288 #307; EMAIL bullet 3.
   - naming (cross-ref #310).
 Refs: introduction.tex p.3; #307 #310.
 
-#319  [T3] [THESIS]  Background intro: "This chapter builds up the pieces the thesis depends on" -- rephrase
+#319  [DONE 2026-06-10 (commit b625ab8)] [T3] [THESIS]  Background intro: "This chapter builds up the pieces the thesis depends on" -- rephrase
 Underlined; "maybe doesn't say much". Rephrase or cut.
 Refs: background.tex.
 
@@ -896,14 +932,14 @@ Refs: background.tex §2.3; PDDLStream paper. Annotation p.7.
   - cut the last two sentences of the Background section (scratched).
 Refs: background.tex §2.3/§2.4. Annotation p.8-9.
 
-#325  [T2] [THESIS]  §4.2 (p.18): clarify detection mechanism (raycast) + cross-cameras note
+#325  [DONE 2026-06-10 (commit 5ac9fbc)] [T2] [THESIS]  §4.2 (p.18): clarify detection mechanism (raycast) + cross-cameras note
   - "detected how?": at "When an object is detected, we generate a dedicated Boxel" -- explain
     the detection mechanism (the raycast).
   - "In discussion, explain how this might be extended to more cameras or real settings": the
     Recursive Partitioning paragraph -- add such a note to the discussion.
 Refs: methods.tex §4.2; discussion.tex.
 
-#326  [T2] [THESIS]  §4.x (p.19): viewpoint wording + typography + belief->KIF + keep re-explanation
+#326  [DONE 2026-06-10 (commit a12d285)] [T2] [THESIS]  §4.x (p.19): viewpoint wording + typography + belief->KIF + keep re-explanation
   - "from a VP [viewpoint]": "the objects themselves and the occluded spaces" ("occluded"
     underlined) -- make occlusion viewpoint-dependent in the wording.
   - "renders weirdly": fix the inline italic "obj"/"Boxel" in "For each object obj and Boxel
@@ -914,7 +950,7 @@ Refs: methods.tex §4.2; discussion.tex.
     AUTHOR wants to KEEP it. Likely no-op; recorded so it isn't re-raised.
 Refs: methods.tex §4 (p.19); #307. Annotation p.19.
 
-#327  [T2] [THESIS]  §4.4 (p.20): modesty of "tractable" + "optimistic sensing" qualifier
+#327  [DONE 2026-06-10 (commit cc5fb79)] [T2] [THESIS]  §4.4 (p.20): modesty of "tractable" + "optimistic sensing" qualifier
   - "tractable" (underlined): make modest -> "easier"/"less computationally intensive"/
     "more efficient"; keep the claim minimal.
   - add Daniel's qualifier to the reduction paragraph: "In our domain this reduction lets an
@@ -925,14 +961,22 @@ Refs: methods.tex §4 (p.19); #307. Annotation p.19.
   - naming (#310); the model formalization itself = #307.
 Refs: methods.tex §4.4; #307 #310. Annotation p.20.
 
-#328  [T2] [THESIS]  §4.5 sense action (p.22): pessimistic-version note + abandoned conditional-effect design
+#328  [DONE 2026-06-10 (commit 047f823)] [T2] [THESIS]  §4.5 sense action (p.22): pessimistic-version note + abandoned conditional-effect design
+ANSWER to the author Q: pessimistic sensing = determinise to the worst case (every sense finds
+nothing); under our encoding a search goal then admits no plan until the target's location can
+be DEDUCED from exhausted alternatives -- the LW1-style axiom machinery we lack. One sentence
+added after the optimistic/reactive-replanning explanation.
 "Would've been interesting to compare a pessimistic version." -- the optimistic sense action
 (and the abandoned conditional-effect design). Optionally note pessimistic sensing as future
 work / a design alternative. [AUTHOR Q] author asks "what is pessimistic sensing?" -- answer
 before deciding whether/how to mention it.
 Refs: methods.tex §4.5. Annotation p.22.
 
-#329  [T1] [THESIS]  §4.5 (p.23, Fig 4.4): REMOVE the convergence claim; note relocated objects emit no new shadows
+#329  [DONE 2026-06-10 -- VERIFIED resolved by prior work, no edit] [T1] [THESIS]  §4.5 (p.23, Fig 4.4): REMOVE the convergence claim; note relocated objects emit no new shadows
+RESULT: the convergence/"equivalent to a conditional plan" claim no longer exists in
+methods.tex (removed by the #307 §4.4 drop-in era rewrites); the no-new-shadows fact is
+already stated twice (§4.2 "not given a new shadow at its destination"; §4.5 "moving an
+object cannot spawn new shadows to search").
 "N candidates AND no new occluders -- if there's a new occluder, this doesn't hold." The
 "converges in at most N replanning cycles / equivalent to a conditional plan" claim breaks
 when sensing reveals a new occluder. AUTHOR: remove the convergence claim completely; also
@@ -940,14 +984,14 @@ state here that in our implementation relocated objects do NOT emit new shadows.
 #307 (honest framing).
 Refs: methods.tex §4.5; fig:replan-cycle; #307. Annotation p.23.
 
-#330  [T1] [THESIS]  §5.3 Baselines (p.28): "semantic" is our METHOD, not a baseline; clarify variant differences
+#330  [DONE 2026-06-10 (commit dd23482)] [T1] [THESIS]  §5.3 Baselines (p.28): "semantic" is our METHOD, not a baseline; clarify variant differences
 "'semantic' is arguably your approach, not a baseline" -- reframe baseline #1 in §5.3 as our
 method. "Make the difference [between variants] clearer" (likely the TAMPURA section,
 possibly §5.3 as a whole) -- make the semantic / +mbs0.05 / uniform distinctions
 self-explanatory. Pairs with p.34 "make the environment/variant difference self-explanatory".
 Refs: results.tex §5.3/§5.4.5. Annotation p.28/p.34.
 
-#331  [T2] [THESIS]  §5.4 anytime (p.29): rewrite "Three observations stand out" -- findings first
+#331  [DONE 2026-06-10 (commit a91d46a)] [T2] [THESIS]  §5.4 anytime (p.29): rewrite "Three observations stand out" -- findings first
 "?" on "Three observations stand out. First, the semantic curves rise in a goal-dependent
 way." AUTHOR agrees it reads weird; the whole subsection needs restructuring -- state the
 interesting FINDINGS first, then the facts of the graph in a structured way ("shape of curve
@@ -961,11 +1005,14 @@ with a better manipulation model. AUTHOR: "okay nice but not an issue to resolve
 the framing fix lives in #304. Recorded so it isn't re-raised.
 Refs: results.tex stack-success; #304.
 
-#333  [T2] [THESIS]  §6.4 Threats (p.39): "this implies bad exp setup" -- reword
+#333  [DONE 2026-06-10 -- resolved by #309 merge (commit ca86685)] [T2] [THESIS]  §6.4 Threats (p.39): "this implies bad exp setup" -- reword
 The Threats-to-Validity wording reads as if the experimental setup were flawed. Reword so it
 frames genuine threats without implying a bad setup. (Daniel: the real threats are the
 number/CPU inconsistencies -- see #308.)
 Refs: discussion.tex §6.4; #308. Annotation p.39.
+RESOLVED: the #309 merge replaced the old threats intro with "deliberate simplifications ...
+adopted to isolate the contribution"; #308 fixed the number/CPU inconsistencies Daniel named
+as the real threats. No apologetic framing remains; author approved closing without further edit.
 
 #334  [DISCUSS] [THESIS]  Related-work shortening: confirm the move to Background + resolve the framing question
 AUTHOR meta-note (p.9): the visual-representation material was shortened and MOVED from
@@ -1033,6 +1080,25 @@ remote is .../pybullet.git (GitLab) and the GitHub remote is hanihabobo-dot/Sema
 if not, the printed link 404s.  Confirm in a browser (logged out, to check visibility too)
 and align with whatever #208 intended (GitHub link present?).
 Refs: introduction.tex footnote; #208; git remote -v.
+
+#338  [DONE 2026-06-10 (commit 11c4e9b)] [T0] [THESIS]  FATS goal misdescribed -- it is a TWO-CUBE
+tray tower with ONE hidden cube, not "find them all"
+[AUTHOR finding 2026-06-10, code-verified]  test_full_pipeline.py:736-781 (audit #55): the
+find-and-tray-stack goal is ('on', visible_cube, tray) + ('on', hidden_cube, visible_cube) --
+ONE randomly chosen visible cube on the tray, ONE randomly chosen hidden cube stacked on top;
+--stack-height is never consulted (height always 2); the scene's other K-1 hidden cubes are
+in-shadow distractors only.  build_tray_stack_goal (the #49 multi-cube builder, :387) is dead
+on this path.  The thesis said "must locate hidden cubes ... and stack them" / "must find them
+ALL" -- false.  Sweep data: FATS scenes have K=1/2/3/4 hidden in 93/66/19/7 of 185 recorded
+headline cells, so the scenes DO contain multiple hidden cubes; only the goal involves one.
+FIXED: §5.1 Goals bullet + scene-gen sentence + fig:eval-tasks caption + abstract now state
+the two-cube-tower goal; discussion §6.1 explains FATS(75.6) > holding(65.6) via the two
+holding-only failure channels (search exhausted 8 + false success 7 on holding-semantic;
+without them holding would be ~82%) and the height-2 tower being the most reliable
+manipulation.  Re-run on a richer FATS setup judged infeasible pre-deadline (days of compute)
+and unnecessary once the description is honest; note for future work if supervisors push.
+Refs: results.tex §5.1 + fig:eval-tasks; abstract.tex; discussion.tex §6.1;
+test_full_pipeline.py:387,736-781; aggregated.csv n_hidden.
 
 ================================================================================
 RESOLVED (author notes 2026-06-02 -- no new issue):
