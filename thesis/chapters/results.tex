@@ -1,6 +1,6 @@
 % !TEX root = ../main.tex
 
-\chapter{Results}
+\chapter{Results and Discussion}
 \label{ch:results}
 
 This chapter reports the experimental evaluation of the Boxel-based POD-TAMP framework. \Cref{sec:setup} describes the experimental setup as executed. \Cref{sec:metrics} defines the measured quantities. \Cref{sec:baselines} defines the variants compared, including the TAMPURA external reference. The results themselves follow in the remaining sections.
@@ -203,6 +203,39 @@ The cost gap traces back to the size of the representation. \Cref{fig:boxel-coun
     \label{fig:boxel-count-holding}
 \end{figure}
 
+\subsection{Adaptive vs Uniform Partitioning}
+\label{sec:disc-semantic-vs-uniform}
+
+The headline finding is the cost gap between the adaptive partition and a
+uniform free-space grid at the same cell scale. Both partitions use the
+same auto-set cell size (the largest object's footprint, $\approx$6--9\,cm
+in our scenes), so the comparison isolates the structural choice rather
+than the resolution. On holding, the adaptive partition produces 22--38
+Boxels per scene; the uniform grid produces $\sim$300 free-space cells
+alone (\cref{fig:boxel-count-holding}). Larger partitions translate to larger initial-state
+fact counts ($\sim$300 vs 11\,000--14\,000 on stack) and longer per-call
+planning time, which is the mechanism behind \cref{fig:plantime-holding}.
+
+What that gap buys is goal-dependent. On holding the uniform baseline
+still solves about half of scenes; it pays several times the planning
+time at every $n_\text{occ}$ but the mechanism still works. On stack the
+adaptive variants degrade gracefully from 100\,\% at $h=2$ to 13\,\% at
+$h=4$, while uniform collapses from 90\,\% to 0\,\%. On
+find-and-tray-stack, which composes occluded sensing with stacking,
+uniform is much weaker but still functional (34.4\,\% success, against \texttt{semantic}'s 75.6\,\%). Find-and-tray-stack also outperforms holding despite containing a search, because its terminal requirement differs: holding must end with a physically verified grasp of the target and its search can exhaust without an observation (the two holding-only failure modes of \cref{subsec:failure-modes}), whereas find-and-tray-stack ends at a height-two tower, the most reliable manipulation in the stack family. The reading is that the
+adaptive partition does not change the planner; it changes how many
+irrelevant cells the planner has to ground and search over. When the goal
+needs only a handful of candidate placements (a single hidden target),
+the overhead of a few hundred free-space cells is tolerable; when the
+goal requires composing placements across multiple replans, the overhead
+dominates. On the fully observable stack goal this grounding-cost effect is
+especially clean: with nothing hidden, the partition's occlusion structure is
+inactive and its free-space cells act only as placement candidates, so the
+$\approx$54$\times$ planning-time gap there reflects cell count alone, not
+occlusion reasoning. The same partition is reused across all goals for a single
+code path, rather than substituting a coarser placement grid when nothing is
+hidden.
+
 \subsection{Free-Space Resolution}
 \label{subsec:resolution}
 
@@ -217,12 +250,49 @@ The adaptive partition has one free parameter: the free-space leaf size. The \te
 
 Below auto the partition tolerates the floor until the floor gets extreme. Forcing the leaf floor to 5\,cm leaves the partition unchanged (free-space counts within one cell of auto on every goal, and on stack identical seed-for-seed; \cref{subsec:anytime}), because the convex merge re-absorbs the finer leaves into the same regions. At a 1\,cm floor the merge no longer fully re-absorbs the refinement: the free-space count is roughly three times the auto value (holding 62 vs 22 cells, find-and-tray-stack 77 vs 24, on the $n_\text{occ}\in\{2,3\}$ scenes), yet success is unchanged on the same scenes (66.1\,\% vs 60.0\,\% on holding, 69.0\,\% vs 70.0\,\% on find-and-tray-stack). At a 1\,mm floor the system stops producing results altogether: every episode (58--59 per goal) exhausted the 1800\,s budget before completing. An over-fine floor therefore costs feasibility, not success.
 
-Above auto the partition shrinks to a structural floor: coarsening to 10\,cm collapses the free-space count by $\sim$55\,\% (holding 24.0\,$\to$\,10.3, find-and-tray-stack 25.9\,$\to$\,11.3), and the count then stays flat through 13.5 and 18\,cm: the convex merge has already reduced free space to its convex structure, so past auto the leaf size stops mattering. Success moves little and with no trend in the leaf size: the coarse arms span 60.0--72.2\,\% on holding around auto's 65.6\,\%, and 62.2--73.3\,\% on find-and-tray-stack against auto's 75.6\,\%, while the smaller grounded problem plans faster on holding (mean success-only planning time 134\,s at auto vs 34--47\,s coarse; find-and-tray-stack is mixed, 77--132\,s vs 125\,s). On stack the resolution arms are seed-for-seed identical: all five adaptive settings (auto at 6\,cm and floors at 5, 9, 10, and 12\,cm) succeed on exactly the same 58 of 90 episodes; the 9\,cm floor (1.5$\times$ auto) reproduces the auto partition outright, and the 10 and 12\,cm floors shrink the free-space count by $\sim$32\,\% (17.6\,$\to$\,11.9) with no effect on the outcome. The leaf size is therefore a compactness-and-speed knob, not a success knob, except in the extreme: only the 1\,mm floor breaks the system, and it does so through cost, not solution quality. The auto heuristic sits on a flat plateau rather than at a tuned optimum. \Cref{ch:discussion} takes up why the partition is so insensitive.
+Above auto the partition shrinks to a structural floor: coarsening to 10\,cm collapses the free-space count by $\sim$55\,\% (holding 24.0\,$\to$\,10.3, find-and-tray-stack 25.9\,$\to$\,11.3), and the count then stays flat through 13.5 and 18\,cm: the convex merge has already reduced free space to its convex structure, so past auto the leaf size stops mattering. Success moves little and with no trend in the leaf size: the coarse arms span 60.0--72.2\,\% on holding around auto's 65.6\,\%, and 62.2--73.3\,\% on find-and-tray-stack against auto's 75.6\,\%, while the smaller grounded problem plans faster on holding (mean success-only planning time 134\,s at auto vs 34--47\,s coarse; find-and-tray-stack is mixed, 77--132\,s vs 125\,s). On stack the resolution arms are seed-for-seed identical: all five adaptive settings (auto at 6\,cm and floors at 5, 9, 10, and 12\,cm) succeed on exactly the same 58 of 90 episodes; the 9\,cm floor (1.5$\times$ auto) reproduces the auto partition outright, and the 10 and 12\,cm floors shrink the free-space count by $\sim$32\,\% (17.6\,$\to$\,11.9) with no effect on the outcome. The leaf size is therefore a compactness-and-speed knob, not a success knob, except in the extreme: only the 1\,mm floor breaks the system, and it does so through cost, not solution quality. The auto heuristic sits on a flat plateau rather than at a tuned optimum. \Cref{sec:disc-mbs0} takes up why the partition is so insensitive.
+
+\subsection{Resolution Regime and the 5\,cm Leaf-Floor Variant}
+\label{sec:disc-mbs0}
+
+The \texttt{semantic+mbs0.05} variant was included to test whether
+forcing a 5\,cm floor on the free-space leaf size changes outcomes
+against the default \texttt{semantic} configuration, where the leaf
+floor is the largest object's footprint. It does not: on stack the
+curves overlap seed-for-seed; on holding the floor is $\sim$1\,pp ahead
+of \texttt{semantic}; on find-and-tray-stack it is $\sim$3\,pp behind,
+and non-monotonic in $n_\text{occ}$ (70/77/70\,\%) rather than steadily degrading
+(\cref{fig:success-fats}). On find-and-tray-stack the mean replan count rises relative to \texttt{semantic} (8.7 vs 7.6) without a matching gain in successes, consistent with the finer floor adding sensing/replanning cycles that do not pay off.
+
+The mechanism behind the null finding, and behind the flat coarse arms of
+\cref{subsec:resolution}, is structural rather than numerical. The largest
+object's footprint ($\sim$6--9\,cm in our object set) is already the
+binding constraint on placement, and the merge step combines free-space
+cells whenever their merged region is convex, so the final partition
+reflects the convex structure of the free space rather than the leaf size
+that seeded it. Coarsening past \emph{auto\_cell} cannot remove that
+structure: the partition bottoms out at the workspace's convex
+decomposition, which is why the coarser floors all land on the same
+partition size. Refining below \emph{auto\_cell} gains nothing: the finer
+floor is either re-absorbed outright (the 5\,cm null finding) or survives
+only as redundant subdivisions of the same free space (the 1\,cm arm),
+inflating the grounding without changing what is reachable or searchable,
+so success stays put. The regime ends where this inflation outgrows the
+budget: at a 1\,mm floor the partition and its grounding can no longer be
+processed in time, so the floor's failure mode is cost, not solution
+quality. \emph{auto\_cell} (the largest visible footprint plus a 1\,cm
+margin) is therefore a convenient choice rather than a tuned constant, and
+semantic's compactness advantage over \texttt{uniform} is a structural
+property of the adaptive partition, not an artefact of resolution tuning.
+In scenes whose placements are constrained by sub-5\,cm geometry (narrow
+pockets, dense small-occluder shelves), a finer leaf floor would in
+principle help; constructing such a scene and re-running the same
+comparison is the natural follow-up (\cref{sec:future_work}).
 
 \subsection{Comparison with TAMPURA}
 \label{subsec:tampura}
 
-\Cref{fig:tampura} compares per-episode times on our \texttt{holding} task, the closest analogue to TAMPURA's hidden-object \emph{Find Die} task, against real TAMPURA, re-run on the same hardware. TAMPURA's published number for this task (57.0\,$\pm$\,38\,s, the \textit{Partial Observability} column of Table~II in \cite{curtis2024partially}) is a \emph{per-step} planning time that includes executing the selected controller in simulation, not a per-episode figure; to obtain a like-for-like quantity we re-ran TAMPURA's released \emph{Find Die} environment on this thesis's machine (20 seeds). Per successful episode it takes 166\,$\pm$\,85\,s, against our \texttt{semantic} variant's 144.4\,s wall-clock (success-only, median 21.6\,s); both are measured end-to-end, including simulated execution and replanning, on the same CPU, so the two are at rough parity per episode. Per step (wall-clock divided by the average number of plans), our cost is $\sim$11\,s, against TAMPURA's published 57\,s. On reliability the comparison favours us: our \texttt{semantic} variant succeeds on 65.6\,\% of holding episodes, against the local TAMPURA run's 55\,\% (consistent with the $\geq$\,63\,\% implied by its 0.63\,$\pm$\,0.07 discounted return, Table~I, $\gamma=0.98$, binary terminal reward). We are thus at rough parity on end-to-end cost and somewhat more reliable, on a marginally easier goal (\emph{Find Die} also requires returning home; our \texttt{holding} goal does not). The comparison is architectural, a probabilistic learned-MDP planner (LAO*) versus our deterministic knowledge-literal planning with replanning, and the two run on different environments, so it benchmarks neither system; \cref{ch:discussion} unpacks the framing.
+\Cref{fig:tampura} compares per-episode times on our \texttt{holding} task, the closest analogue to TAMPURA's hidden-object \emph{Find Die} task, against real TAMPURA, re-run on the same hardware. TAMPURA's published number for this task (57.0\,$\pm$\,38\,s, the \textit{Partial Observability} column of Table~II in \cite{curtis2024partially}) is a \emph{per-step} planning time that includes executing the selected controller in simulation, not a per-episode figure; to obtain a like-for-like quantity we re-ran TAMPURA's released \emph{Find Die} environment on this thesis's machine (20 seeds). Per successful episode it takes 166\,$\pm$\,85\,s, against our \texttt{semantic} variant's 144.4\,s wall-clock (success-only, median 21.6\,s); both are measured end-to-end, including simulated execution and replanning, on the same CPU, so the two are at rough parity per episode. Per step (wall-clock divided by the average number of plans), our cost is $\sim$11\,s, against TAMPURA's published 57\,s. On reliability the comparison favours us: our \texttt{semantic} variant succeeds on 65.6\,\% of holding episodes, against the local TAMPURA run's 55\,\% (consistent with the $\geq$\,63\,\% implied by its 0.63\,$\pm$\,0.07 discounted return, Table~I, $\gamma=0.98$, binary terminal reward). We are thus at rough parity on end-to-end cost and somewhat more reliable, on a marginally easier goal (\emph{Find Die} also requires returning home; our \texttt{holding} goal does not). The comparison is architectural, a probabilistic learned-MDP planner (LAO*) versus our deterministic knowledge-literal planning with replanning, and the two run on different environments, so it benchmarks neither system; \cref{sec:disc-tampura} unpacks the framing.
 
 \begin{figure}[H]
     \centering
@@ -230,6 +300,57 @@ Above auto the partition shrinks to a structural floor: coarsening to 10\,cm col
     \caption{Per-episode time on \texttt{holding} (same hardware): our wall-clock (semantic variant; mean\,$\pm$\,std, success-only; right-skewed, median 21.6\,s) and real TAMPURA \emph{Find Die} re-run locally (mean\,$\pm$\,std over successful episodes; 20 seeds, 55\,\% success). Both are per-episode times including simulated execution. TAMPURA's published 57\,s (Table~II) is a per-step figure and is not plotted; see the text for the per-step reconciliation. The two are at rough parity per episode (144.4\,s vs 166\,s), while on reliability holding-\texttt{semantic} leads, succeeding on 65.6\,\% of episodes against TAMPURA's local 55\,\%.}
     \label{fig:tampura}
 \end{figure}
+
+\subsection{Architectural Comparison with TAMPURA}
+\label{sec:disc-tampura}
+
+The quantitative comparison is reported in \cref{subsec:tampura}
+(\cref{fig:tampura}): against a local re-run of TAMPURA's \emph{Find Die},
+the closest analogue to our \texttt{holding} task, we are at rough
+parity end-to-end (144.4\,s vs 166\,s per episode) and somewhat more
+reliable (65.6\,\% vs 55\,\% success), on a marginally easier goal.
+Beyond the numbers, the two systems differ in kind.
+
+Both systems sample geometry \emph{online}, inside the planning loop, and
+both rely on the same determinised, Fast Downward--based classical planner,
+but they use it for different ends. TAMPURA's model-learning runs at
+every control step (Algorithm~2 of \cite{curtis2024partially}). From the
+current belief it optimistically assumes each action succeeds and runs
+Fast Downward to propose candidate action sequences that reach the goal;
+it then samples those actions' real outcomes to estimate how they branch
+under uncertainty, building a \emph{probabilistic} sparse MDP
+$\bar{\mathcal{B}}_\text{sparse}$, and finally solves that MDP
+for an uncertainty- and risk-aware policy. Fast Downward thus chooses
+\emph{which goal-reaching action sequences are worth considering}; the MDP
+solver chooses \emph{what to do once their outcomes are uncertain}, weighing
+each branch's probability of success. Our planner runs the same kind of
+determinised search through PDDLStream, but stops there: it reasons over
+deterministic knowledge literals, executes the chosen plan, and replans
+when an optimistic assumption proves wrong: there are no transition
+probabilities to estimate, no probabilistic MDP, and no policy layer on
+top. The salient difference is that probabilistic layer (learning the
+MDP and solving it for a policy), not the symbolic search
+engine underneath.
+
+This framing changes what the time comparison means. It is
+not a ``semantic-Boxels-beats-TAMPURA'' claim. The two figures come from
+different environments (our tabletop scenes against TAMPURA's), so the
+times are not measuring the same problem and benchmark neither
+system. The planners do also differ in kind: ours runs deterministic
+classical search and replans, whereas TAMPURA learns a probabilistic
+sparse MDP and solves it for a policy. What the comparison does show is
+that a deterministic, replanning-based planner reaches the goal on the
+closest analogous task without ever estimating the learned sparse-MDP
+abstraction TAMPURA relies on. Both planners represent the belief with
+symbolic atoms (including epistemic ones, such as whether an object's
+pose is yet known), so the contrast is not whether knowledge is symbolic
+but how it is used: we reason over it deterministically and recover by
+replanning, with no transition probabilities to estimate, at the price of
+no risk-weighting over uncertain outcomes (\cref{sec:limitations}).
+
+Beyond \emph{how} each system plans, the comparison highlights \emph{what} each system can reason about. Because our planner holds occlusion as explicit symbolic state, line of sight is a planning condition: the \texttt{sense} action requires a clear view of its target region, and the objects that block a view are explicit facts in the planner's state. Those facts also cover candidate placements: a free cell lying on the camera's line of sight to a shadow is flagged as view-blocking, so the planner will not set an object down where it would block a region it still needs to observe. TAMPURA's \emph{Find Die} benchmark (its hidden-object task, the closest analogue to our setting) instead keeps occlusion sub-symbolic: a visibility voxel grid that only weights the success probability of the \texttt{look} action, and a placement sampler that draws object poses with no visibility check, so an object can be placed view-blind. Making space plannable in this way is the point of the representation.
+
+Overall, the comparison's conclusion is that a deterministic knowledge-literal planner with replanning is sufficient to reach the goal on this class of partially observable tabletop tasks (at comparable end-to-end cost, simpler to model than TAMPURA's learned probabilistic policy, and somewhat more reliable), and that it can plan over occlusions which a sub-symbolic visibility representation leaves implicit.
 
 \subsection{Failure Modes}
 \label{subsec:failure-modes}
@@ -243,4 +364,134 @@ Above auto the partition shrinks to a structural floor: coarsening to 10\,cm col
     \label{fig:failure-modes}
 \end{figure}
 
-The qualitative readings of these figures, together with their architectural implications and threats to validity, are interpreted in \cref{ch:discussion}.
+The simplifications behind these numbers, and the scope they place on the claims, are consolidated in \cref{sec:limitations}.
+
+\section{Limitations}
+\label{sec:disc-validity}
+\label{sec:limitations}
+
+The system evaluated in this thesis embodies a set of deliberate
+simplifications, and its findings are conditional on the scenes, the
+budget, and the oracle perception. Each simplification was adopted to
+keep the implementation tractable and to isolate the contribution (Boxel
+discretization and its integration with partially observable
+deterministic TAMP) from concerns that are separate from it. This
+section consolidates these simplifications and states the scope they
+place on the chapter's empirical claims.
+
+\paragraph{Scene family.} All measurements are on tabletop scenes with a
+fixed camera, a Franka Panda, and 6--9\,cm cubes. The
+adaptive-vs-uniform gap is most pronounced in this regime because
+free-space cells dominate the uniform partition; in scenes with denser
+objects or smaller workspaces the ratio could narrow.
+
+\paragraph{TAMPURA on a different task.} We re-ran TAMPURA's released
+\emph{Find Die} environment on this thesis's machine and cross-checked it
+against their published Table~II, but we did not run TAMPURA on our own
+tabletop scenes: \emph{Find Die} is the closest analogue, not the same
+problem, so task, algorithmic, implementation, and parameter differences
+are bundled into a single delta. Both planners are single-threaded. The per-episode figures we compare
+(144.4 vs 166\,s, \cref{subsec:tampura}) were produced on the same machine, so
+they are not confounded by hardware. TAMPURA's \emph{published} per-step time
+(57\,s) was instead measured on the authors' Intel Xeon Gold 6248 (2.5\,GHz
+base), against our AMD Ryzen~7 PRO 7730U (2.0\,GHz base); that base-clock gap,
+if anything, slightly favours TAMPURA.
+Re-running both systems on a shared scene file would strengthen the
+comparison.
+
+\paragraph{Perception.} The scene contains a single fixed camera
+that observes the table from one viewpoint. Its rendered RGB-D images are not processed,
+however: object detection is performed by an oracle that queries
+ground-truth object poses directly from the simulator and uses ray-casts to
+determine which objects are visible from the camera's viewpoint. There is
+therefore no learned detector and no sensor-noise model. This isolates the
+planning contribution from perception error: a real perception module
+consuming the camera images could replace the oracle without altering the
+planning architecture, but would surface noise, misclassification, and
+partial-detection failure modes that the current numbers do not reflect. Because the camera is fixed, the robot never moves
+to a sensing configuration; this is sufficient for the tabletop scenes
+studied here, where every shadow is visible from one viewpoint, but a
+robot-mounted sensor would be required for occlusions not visible from any
+fixed vantage point. Several fixed cameras would fit the same architecture:
+a volume is hidden only if no camera sees it, so adding viewpoints shrinks
+the shadow regions without changing the planner. Deployment on real cameras
+additionally requires replacing the pose oracle with an image-based object
+detector, since a physical camera supplies pixels, not poses.
+
+\paragraph{Manipulation and execution.} Grasping is constraint-based: a
+held object is rigidly welded to the gripper, so objects cannot slip or be
+dropped in transit. Only top-down grasps are sampled, at a single fixed
+height offset. After a place or stack, execution adds a
+small hardcoded vertical lift before returning; this lift is invisible to
+the planner (it produces no PDDL state change and moves only along the
+gravity axis) and exists solely to give the sampling-based motion
+planner a collision-free start configuration for the next move. Collision
+events detected during execution are logged but do not trigger an automatic
+replan.
+
+\paragraph{Spatial representation.} Free-space cells are merged only across
+exactly aligned shared faces; a full semantic merge (matching
+view-blocking, observability, and ordering) was not implemented, so the
+partition contains more Boxels than strictly necessary. When an occluder is
+relocated, its previously computed shadow geometry and the shadow-blocker
+map are not recomputed at its new position. This rests on the assumption
+that the world is static apart from the objects the robot itself moves:
+nothing else shifts, so the only outdated geometry belongs to the relocated
+object, whose new pose the planner tracks explicitly and replans from.
+The axis-aligned shadow Boxels also under-cover the occlusion cone: a
+target can sit camera-occluded just outside every shadow Boxel's bounds,
+in which case the search senses every candidate region, finds them all
+empty, and ends without ever observing the target. This is the dominant
+cause of the \emph{search exhausted} failures (13 of 18 cells;
+\cref{subsec:failure-modes}).
+
+\paragraph{Planning.} The primary goal studied is \texttt{holding};
+\texttt{stack} and \texttt{find-and-tray-stack} are shipped extensions that
+broaden goal diversity. A planner-search
+bias concerns the cost model: the domain gives the \texttt{stack} action a cost
+of 2 while every other action costs 1. This is a hand-tuned bias rather than a
+claim about stacking: because the planner minimises total plan cost and cannot
+weigh one action's outcome likelihood against another's, the higher cost is what
+keeps it from substituting a \texttt{stack} as a cheap rescue when a \texttt{place}
+onto a free Boxel fails its motion check, forcing it to exhaust placement options
+first. It is a deterministic stand-in for the probabilistic action selection the
+POD layer does not perform; \texttt{stack} remains available whenever the goal
+requires it. More fundamentally, when a
+shadow returns \emph{still-blocked} three times in succession the execution
+loop marks it as not containing the target and proceeds. The shadow is
+never directly observed, so for a physically unreachable shadow this
+violates the invariant that belief should reflect observation. It is
+accepted to keep the sense--plan--act loop bounded; the run report
+distinguishes shadows observed empty from shadows given up this way, and
+the evaluation counts the give-up case as a failure. The principled
+remedy (re-grounding the planner's view-blocking atoms from current
+physics) is left to future work (\cref{sec:future_work}).
+
+\paragraph{Parameters.} Several geometric constants (grasp height
+offsets, approach and lift heights, the octree's minimum leaf size, the
+camera pose) are tuned for the specific table, robot, and object set
+used here and would not transfer unchanged to a different setup.
+Generalizing them, for example by deriving grasp parameters from object
+geometry, is separate from the core contribution and is noted as future
+work.
+
+\paragraph{Simplifications disclosed in the approach.} Two further
+simplifications are stated where they are introduced rather than here. The
+conceptual belief could use two K-literals, $K(p)$ and $K(\neg p)$; the
+implemented domain instead carries a single Know-If fluent (recording whether
+$p$'s value is known) paired with a value-carrying fluent, an equivalent
+encoding for the boolean known/unknown scenarios studied (\cref{sec:kif_belief}). The \texttt{sense} action is modeled
+optimistically (it assumes the target is found), with reactive
+replanning when execution reveals otherwise, because PDDLStream and
+FastDownward support neither contingent branching nor deductive axioms
+(\cref{ch:methods}). The planning layer is thus a deliberately
+\emph{simplified} form of POD planning: a full POD planner such as LW1
+\cite{bonet2014flexible} produces branching contingent plans and carries
+deductive axioms that infer facts the base predicates leave implicit,
+whereas ours determinises optimistically and repairs by replanning. This
+suffices for the single-target retrieval and stacking tasks studied here,
+where progress never hinges on a deduction the planner cannot make locally;
+it would not suffice for problems that genuinely require contingent
+reasoning: the unsound bounded give-up above is one symptom, since ruling
+out an unreachable shadow needs exactly the kind of deduction (clear the
+obstruction first) that an axiom-bearing POD planner expresses directly.
