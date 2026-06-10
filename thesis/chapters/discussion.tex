@@ -153,16 +153,23 @@ Re-running both systems on a shared scene file would strengthen the
 comparison.
 
 \paragraph{Resolution regime.} The free-space leaf size behaves as a flat
-knob across the full $\sim$4$\times$ range tested. Below \emph{auto\_cell},
-forcing a 5\,cm floor changes nothing (the \texttt{mbs0.05} null finding);
-above it, coarsening the free-space leaf to 1.5$\times$ and 2$\times$
-\emph{auto\_cell} leaves the success rate essentially unchanged (identical
-seed-for-seed on stack, within seed noise on holding, and only a mild
-$\sim$4\,pp drop on find-and-tray-stack), while shrinking the free-space
-partition by 30--40\,\%. The cause is structural rather than numerical: the
+knob across the 1\,cm--18\,cm range tested. Below \emph{auto\_cell},
+forcing a 5\,cm floor changes nothing (the \texttt{mbs0.05} null finding),
+and even a 1\,cm floor, which roughly triples the free-space partition,
+leaves success unchanged. Above \emph{auto\_cell}, coarsening to 10\,cm and
+beyond leaves the success rate essentially unchanged (identical
+seed-for-seed on stack across all five adaptive settings, within seed noise
+on holding, and a non-monotone dip of up to $\sim$13\,pp on
+find-and-tray-stack, with the 10\,cm arm within 2\,pp of auto) while
+shrinking the free-space partition by $\sim$55\,\% to a level that no longer
+changes from 10 to 18\,cm. The cause is structural rather than numerical: the
 merge step combines free-space cells whenever their merged region is convex,
 so the partition reflects the convex structure of the free space rather than
-the leaf size itself. \emph{auto\_cell}
+the leaf size itself; on stack a 9\,cm floor (1.5$\times$ \emph{auto\_cell})
+reproduces the auto partition exactly. The knob matters only at the extreme
+fine end: at a 1\,mm floor the partition and its grounding grow past what
+the 1800\,s budget can absorb and no episode completes, so the floor's
+failure mode is cost, not solution quality. \emph{auto\_cell}
 (the largest visible footprint plus a 1\,cm margin) is therefore a convenient
 choice rather than a tuned constant, and semantic's compactness advantage
 over \texttt{uniform} is a structural property of the adaptive partition, not
