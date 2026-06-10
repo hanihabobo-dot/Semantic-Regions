@@ -112,7 +112,10 @@ goal; state finer=no change, coarser=fewer. Coordinate w/ #202/#203.
 Refs: results.tex:194; discussion.tex:60; #202; #203; CODEBASE_AUDIT #108, #98/#100/#101; eval_results/sweep_anytime/aggregated.csv.
 
 ================================================================================
-#210  [REJECTED 2026-06-10 -- author kill at deadline] [T3] [POLISH]  Related Work: drop author names, cite by number ([4]) --- VERY LOW PRIORITY
+#210  [DONE 2026-06-10 (commit ef12466; author un-killed it same day)] [T3] [POLISH]  Related Work: drop author names, cite by number ([4]) --- VERY LOW PRIORITY
+RESOLVED: 5 author-name lead-ins in related-work.tex (Saleem, Ma, Zhao, Bai, Kaelbling/
+Hadfield-Menell) -> bare numeric \cite as sentence subject, verbs to singular; system-name
+subjects (TAMPURA, CLG, SS-Replan, IBSP, K-replanner, LW1) kept as names.
 ================================================================================
 related-work.tex throughout. Replace inline "<Author> et al." lead-ins with numeric citation
 labels (e.g. "[4] introduces ..."). Mechanical low-priority polish once T0/T1 content is settled;
