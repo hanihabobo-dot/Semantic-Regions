@@ -23,7 +23,7 @@ This chapter reports the experimental evaluation of the Boxel-based POD-TAMP fra
 \begin{itemize}
     \item \texttt{holding} (\emph{find}: locate a hidden target and pick it up): the robot must end the episode holding a single target object whose initial pose is hidden behind one of a set of occluders. The number of occluders $n_\text{occ}$ is the difficulty axis (2, 3, 4; see \cref{fig:n-occ-scale}).
     \item \texttt{stack}: the robot must build a single tower of cubes to a given height $h$. The goal is a concrete conjunction of \texttt{(on $a$ $b$)} facts (a specific tower) generated at random each episode; because the cubes are identical, which cubes form the tower is immaterial. The stack height $h$ is the difficulty axis (2, 3, 4); cube positions are fully observable.
-    \item \texttt{find-and-tray-stack} (\emph{find and stack}): the robot must locate hidden cubes behind occluders and stack them on a tray. The number of occluders $n_\text{occ}$ is the difficulty axis (2, 3, 4).
+    \item \texttt{find-and-tray-stack} (\emph{find and stack}): the robot must build a two-cube tower on a tray: a cube visible from the start is placed on the tray, and one hidden cube must first be located behind the occluders and then stacked on top; any further hidden cubes act as in-shadow distractors. The number of occluders $n_\text{occ}$ is the difficulty axis (2, 3, 4).
 \end{itemize}
 
 \begin{figure}[H]
@@ -48,7 +48,7 @@ This chapter reports the experimental evaluation of the Boxel-based POD-TAMP fra
         \caption{\texttt{find-and-tray-stack}}
         \label{fig:task-tray}
     \end{subfigure}
-    \caption{The three evaluated goals. \texttt{holding}: retrieve a single target hidden behind occluders. \texttt{stack}: build a tower of cubes to a target height. \texttt{find-and-tray-stack}: locate hidden cubes and stack them on a tray.}
+    \caption{The three evaluated goals. \texttt{holding}: retrieve a single target hidden behind occluders. \texttt{stack}: build a tower of cubes to a target height. \texttt{find-and-tray-stack}: find a hidden cube and stack it on a tray.}
     \label{fig:eval-tasks}
 \end{figure}
 
@@ -78,7 +78,7 @@ This chapter reports the experimental evaluation of the Boxel-based POD-TAMP fra
     \label{fig:n-occ-scale}
 \end{figure}
 
-\paragraph{Scene generation.} Scenes are generated procedurally from a seed, so the same seed always reproduces the same layout. A search-goal scene (\texttt{holding} or \texttt{find-and-tray-stack}) places $n_\text{occ}$ occluder cubes ($6$--$9$\,cm) at random reachable positions on the table, then hides $K$ smaller cubes ($4$--$5.6$\,cm) behind them, with $K$ drawn uniformly from $[1, n_\text{occ}]$. Each small cube is set on an occluder's line of sight to the camera, so it cannot be seen until the robot senses that region; a post-spawn ray-cast verifies the occlusion, and the seed is re-rolled until every hidden cube is genuinely blocked. What each goal does with these cubes then differs: \texttt{holding} singles out one as the target to retrieve, whereas \texttt{find-and-tray-stack} must find them all and stack them on a tray. The \texttt{stack} goal involves no hiding, and spawns its cubes in plain view at random reachable positions.
+\paragraph{Scene generation.} Scenes are generated procedurally from a seed, so the same seed always reproduces the same layout. A search-goal scene (\texttt{holding} or \texttt{find-and-tray-stack}) places $n_\text{occ}$ occluder cubes ($6$--$9$\,cm) at random reachable positions on the table, then hides $K$ smaller cubes ($4$--$5.6$\,cm) behind them, with $K$ drawn uniformly from $[1, n_\text{occ}]$. Each small cube is set on an occluder's line of sight to the camera, so it cannot be seen until the robot senses that region; a post-spawn ray-cast verifies the occlusion, and the seed is re-rolled until every hidden cube is genuinely blocked. What each goal does with these cubes then differs: \texttt{holding} singles out one as the target to retrieve. \texttt{find-and-tray-stack} additionally spawns one small cube in plain view; the goal places that visible cube on the tray and stacks one hidden cube, once found, on top of it, while any remaining hidden cubes act only as in-shadow distractors. The \texttt{stack} goal involves no hiding, and spawns its cubes in plain view at random reachable positions.
 
 \paragraph{Scenes and seeds.} Each $(\text{goal}, \text{variant}, \text{difficulty})$ combination was run on 30 random scenes; seeds are paired across the \texttt{semantic} and \texttt{semantic+mbs0.05} variants (the latter forcing a 5\,cm free-space leaf floor; \cref{sec:baselines}) on the random-pairs scene, so their head-to-head comparison is seed-for-seed. The headline comparison spans 810 cells (3 goals $\times$ 3 variants $\times$ 3 difficulty levels $\times$ 30 seeds). The coarser free-space resolution-floor arms swept in \cref{subsec:resolution} (1.5$\times$ and 2$\times$ the auto leaf size) are reported separately there.
 
