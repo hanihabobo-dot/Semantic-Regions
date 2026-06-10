@@ -976,7 +976,7 @@ RAISE with the supervisors whether the relocation is acceptable. Affects how #30
 the contribution.
 Refs: related-work.tex; background.tex §2.4; #300 #303. Annotation p.9.
 
-#335  [T0] [THESIS]  "blocked from view" failure mode is MISATTRIBUTED -- most all_searched
+#335  [DONE 2026-06-10 (commit 6e3aa7b)] [T0] [THESIS]  "blocked from view" failure mode is MISATTRIBUTED -- most all_searched
 cells were NOT blocked; the search finished and the target was simply never seen
 [CLAUDE honesty sweep 2026-06-10; measured from sweep_full_2026-05-28 cells/*/stdout.log]
 results.tex §5.2 (metrics) defines "blocked from view" as failing "only because the target's
@@ -1011,7 +1011,7 @@ Refs: results.tex §5.2 + subsec:failure-modes + fig caption; conclusion.tex (an
 shadow sentence); discussion.tex §6.4 "Bounded give-up" + §6.5 Planning; CODEBASE_AUDIT
 #124; THESIS_NOTES §14, §18.
 
-#336  [T2] [THESIS]  §5.2: "a failed object release ... did not occur in these runs" is FALSE
+#336  [DONE 2026-06-10 (commit 66255db)] [T2] [THESIS]  §5.2: "a failed object release ... did not occur in these runs" is FALSE
 [CLAUDE honesty sweep 2026-06-10]  results.tex §5.2 closes the failure-mode list with "A
 further give-up, a failed object release after repeated retries, is possible but did not
 occur in these runs."  It DID occur, once, in a headline cell: drop_failed on
@@ -1021,7 +1021,11 @@ drop the claim.  (fig:failure-modes shows only the semantic/uniform variants, wh
 indeed never occurs -- if that is the intended scope, say so explicitly.)
 Refs: results.tex §5.2; eval_results/sweep_full_2026-05-28/aggregated.csv; #282 FINDINGS.
 
-#337  [T3] [ADMIN]  Verify the intro source-code footnote URL actually resolves
+#337  [DONE 2026-06-10 -- VERIFIED, no edit] [T3] [ADMIN]  Verify the intro source-code footnote URL actually resolves
+RESULT: anonymous `git ls-remote https://git.rwth-aachen.de/hani.alassiri.alhabboub/
+Semantic_Space_Abstractions.git` returns HEAD c41440c2, and that commit exists in the local
+history -- the GitLab project was renamed to Semantic_Space_Abstractions (old pybullet.git
+remote URL redirects), is PUBLIC, and is this repo.  Footnote URL is correct as printed.
 [CLAUDE honesty sweep 2026-06-10]  introduction.tex footnote links
 git.rwth-aachen.de/hani.alassiri.alhabboub/Semantic_Space_Abstractions, but the local git
 remote is .../pybullet.git (GitLab) and the GitHub remote is hanihabobo-dot/Semantic-Regions
