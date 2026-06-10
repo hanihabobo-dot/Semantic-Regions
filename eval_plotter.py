@@ -2301,8 +2301,12 @@ def main(argv=None) -> int:
     # Audit #73 TIER B plot 6: failure-mode breakdown (sweep-level
     # stacked bar per (goal, baseline)).  Counts all cells including
     # successes so bar height = total cells per group.
+    # NOTE (audit #113): uses the FILTERED row set so --headline-only /
+    # --drop-coarse-resolution keep this figure to the headline variants
+    # (same behaviour as before the pre-filter all_rows capture); the
+    # thesis sem/uni figure comes from tools/regen_failure_modes_sem_uni.py.
     plot_failure_modes(
-        group_failure_modes(all_rows),
+        group_failure_modes(rows),
         title="Failure-mode breakdown by (goal, variant)",
         out_path=out_dir / "failure_modes.png",
     )
@@ -2311,7 +2315,7 @@ def main(argv=None) -> int:
     # so the failure pile at max_replans is visible.  Reads
     # plan_count from aggregated.csv — no schema change.
     plot_plan_count_distribution(
-        group_plan_count_distribution(all_rows),
+        group_plan_count_distribution(rows),
         title="Replan-count distribution by (goal, variant)",
         out_path=out_dir / "plan_count_distribution.png",
     )
@@ -2319,14 +2323,16 @@ def main(argv=None) -> int:
     # holding (the Find Die analogue).  Sweep-level; no-op if the
     # sweep has no successful holding semantic cells.
     plot_tampura_wallclock_comparison(
-        all_rows,
+        rows,
         title="TAMPURA comparison (holding)",
         out_path=out_dir / "tampura_wallclock_comparison.png",
     )
     # Audit #94 (#77 step 4): IPC-style anytime curve.  No-op if the
     # sweep does not vary min_boxel_size (SCALABILITY_VS_TIME).
+    # THESIS figure -- uses the FILTERED rows so the curves stay at the
+    # headline variants; the gate checks all_rows so it still fires.
     if _has_anytime_axis(all_rows):
-        grouped_anytime = group_solved_vs_time(all_rows)
+        grouped_anytime = group_solved_vs_time(rows)
         plot_solved_vs_time(
             grouped_anytime,
             title=None,
