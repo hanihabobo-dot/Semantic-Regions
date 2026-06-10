@@ -118,22 +118,25 @@ Beyond \emph{how} each system plans, the comparison highlights \emph{what} each 
 
 Overall, the comparison's conclusion is that a deterministic knowledge-literal planner with replanning is sufficient to reach the goal on this class of partially observable tabletop tasks (at comparable end-to-end cost, simpler to model than TAMPURA's learned probabilistic policy, and somewhat more reliable), and that it can plan over occlusions which a sub-symbolic visibility representation leaves implicit.
 
-\section{Threats to Validity}
+\section{Limitations and Threats to Validity}
 \label{sec:disc-validity}
+\label{sec:limitations}
 
-The findings above are conditional on the scenes, the budget, and the
-oracle perception. Six threats merit explicit mention.
+The system evaluated in this thesis embodies a set of deliberate
+simplifications, and its findings are conditional on the scenes, the
+budget, and the oracle perception. Each simplification was adopted to
+keep the implementation tractable and to isolate the contribution (Boxel
+discretization and its integration with partially observable
+deterministic TAMP) from concerns that are separate from it. This
+section consolidates the simplifications and the threats they imply, so
+that the empirical claims of \cref{ch:results} are read with the correct
+scope.
 
 \paragraph{Scene family.} All measurements are on tabletop scenes with a
 fixed camera, a Franka Panda, and 6--9\,cm cubes. The
 adaptive-vs-uniform gap is most pronounced in this regime because
 free-space cells dominate the uniform partition; in scenes with denser
 objects or smaller workspaces the ratio could narrow.
-
-\paragraph{Oracle perception.} Object detection reads ground-truth poses;
-a learned detector consuming the rendered RGB-D would surface noise,
-misclassification, and partial-detection failure modes the current
-numbers do not reflect.
 
 \paragraph{TAMPURA on a different task.} We re-ran TAMPURA's released
 \emph{Find Die} environment on this thesis's machine and cross-checked it
@@ -167,33 +170,6 @@ an artefact of resolution tuning. Neither result generalises to scenes where
 placements are constrained by sub-5\,cm geometry; constructing such a scene
 is the natural follow-up (\cref{sec:future_work}).
 
-\paragraph{Shadow under-coverage.} The axis-aligned shadow Boxels do not
-cover the full occlusion cone: a target can sit camera-occluded just
-outside every shadow Boxel's bounds. The search then senses every
-candidate region, finds them all empty, and ends without ever observing
-the target. This is the dominant cause of the \emph{search exhausted}
-failures (13 of 18 cells; \cref{subsec:failure-modes}).
-
-\paragraph{Bounded give-up.} The three-strike give-up on still-blocked
-shadows is unsound for shadows that are physically unreachable. The run
-report distinguishes shadows observed empty from shadows given up this
-way, and the evaluation counts the give-up case as a failure;
-\cref{sec:limitations} expands on the consequence.
-
-The Limitations and Accepted Simplifications below catalogue the design
-decisions that fix the scope of these results.
-
-\section{Limitations and Accepted Simplifications}
-\label{sec:limitations}
-
-The system evaluated in this thesis embodies a set of deliberate
-simplifications. Each was adopted to keep the implementation tractable and
-to isolate the contribution (Boxel discretization and its
-integration with partially observable deterministic TAMP) from concerns
-that are separate from it. This subsection consolidates these
-simplifications so that the empirical claims of \cref{ch:results} are
-read with the correct scope.
-
 \paragraph{Perception.} The scene contains a single fixed camera
 that observes the table from one viewpoint. Its rendered RGB-D images are not processed,
 however: object detection is performed by an oracle that queries
@@ -202,7 +178,8 @@ determine which objects are visible from the camera's viewpoint. There is
 therefore no learned detector and no sensor-noise model. This isolates the
 planning contribution from perception error: a real perception module
 consuming the camera images could replace the oracle without altering the
-planning architecture. Because the camera is fixed, the robot never moves
+planning architecture, but would surface noise, misclassification, and
+partial-detection failure modes that the current numbers do not reflect. Because the camera is fixed, the robot never moves
 to a sensing configuration; this is sufficient for the tabletop scenes
 studied here, where every shadow is visible from one viewpoint, but a
 robot-mounted sensor would be required for occlusions not visible from any
@@ -228,6 +205,12 @@ map are not recomputed at its new position. This rests on the assumption
 that the world is static apart from the objects the robot itself moves:
 nothing else shifts, so the only outdated geometry belongs to the relocated
 object, whose new pose the planner tracks explicitly and replans from.
+The axis-aligned shadow Boxels also under-cover the occlusion cone: a
+target can sit camera-occluded just outside every shadow Boxel's bounds,
+in which case the search senses every candidate region, finds them all
+empty, and ends without ever observing the target. This is the dominant
+cause of the \emph{search exhausted} failures (13 of 18 cells;
+\cref{subsec:failure-modes}).
 
 \paragraph{Planning.} The primary goal studied is \texttt{holding};
 \texttt{stack} and \texttt{find-and-tray-stack} are shipped extensions that
