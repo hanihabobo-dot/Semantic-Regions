@@ -661,13 +661,61 @@ Related: #98, #100, #108 (RESOLUTION_MBS01), #66 (auto_cell); commit 5bd5f55 (no
            whereas a fake grasp on holding survives to the check -> physics_mismatch. Same manipulation
            fragility, two different exit reasons. Both = likely implementation errors in grasp/stack.
 
+#123. [2026-06-10] [OPEN T2] BRIDGE BoxelPolicy FORCED-SUCCESS PATH -- go_home status DISCARDED.
+     Found in the 2026-06-10 honesty sweep. tampura_bridge/boxel_policy.py get_action, go_home
+     branch (~line 372-381): `self._q_current, _ = execute_go_home(...)` THROWS AWAY the status,
+     then unconditionally calls bb.mark_at_home(belief), sets self._done = True, and reports
+     info["success"]=True.  execute_go_home can honestly return "no_path" (execution_boxel.py
+     :352-373) -- in that case the arm NEVER reaches home, but the belief still says at_home,
+     so TAMPURA's reward check (holding AND at-home) scores the episode 1.0.  This contradicts
+     the module's own claim "Belief/reward is written ONLY on a real grasp" / "honest failure".
+     Same pattern at the first-step park (~line 295): status discarded (benign there -- no
+     reward write -- but tighten for symmetry).
+     ALSO (same sweep, T3): execution_boxel.execute_pick line ~263 ignores the lift
+     _plan_follow return -- a failed lift still returns status "ok", so the held cup may stay
+     at contact height and the transport can bulldoze the die sideways (exactly the failure
+     the lift_height comment says it prevents).  Surface it (e.g. "ok_no_lift" or log).
+     FIX: thread both statuses; on go_home "no_path" do NOT mark_at_home / _done -- record an
+     honest failure (fail_reason "go_home_no_path").  Affects any quoted bridge per-seed
+     results; bridge numbers are NOT in the thesis (comparison there is the TAMPURA re-run),
+     so this gates only #120/PHASE-4 claims.
+     Refs: tampura_bridge/boxel_policy.py:295,372-381; tampura_bridge/execution_boxel.py:263.
+
+#124. [2026-06-10] [OPEN T2] PERSIST blocked_giveup_shadows + SPAWN-TIME HIDDEN CLASSIFICATION
+     IN timing_summary.json.  Found in the 2026-06-10 honesty sweep; this gap let thesis #335
+     (all_searched misattribution) go unnoticed.  Today the ONLY record distinguishing
+     (a) shadows observed empty vs (b) shadows given up after 3x still_blocked is a PROSE line
+     in stdout.log (run_logger.report_run_outcome, audit #21); timing_summary.json carries
+     neither, so aggregated.csv/jsonl cannot verify any failure-mode attribution ("blocked
+     from view" vs "searched everything, target never seen").  Likewise the spawn-time oracle
+     classification (target "Actually hidden in shadow_X" vs "boundary case" -- camera-occluded
+     but OUTSIDE every shadow AABB, audit #67 log line) exists only in prose.
+     FIX: add to timing_summary.json: n_blocked_giveup_shadows, blocked_giveup_shadow_ids,
+     and (for search goals) target_hidden_at_spawn in {"in_shadow","boundary_case","visible"}.
+     eval_runner LIST_VALUED gate keeps the id list out of the flat CSV.  Re-derivable for
+     the EXISTING sweep by parsing cells/*/stdout.log (the 2026-06-10 sweep did exactly that).
+     Refs: run_logger.py report_run_outcome (~349-370); test_full_pipeline.py:665-695 (oracle
+     line), 920-972 (give-up bookkeeping); thesis_audit #335.
+
+#125. [2026-06-10] [OPEN T3] eval_plotter TAMPURA-comparison DOCSTRING/COMMENT STALE (doc
+     drift, found 2026-06-10).  plot_tampura_wallclock_comparison (eval_plotter.py:1104-1136)
+     still says "Reliability runs the other way (ours 42 %, TAMPURA local 55 %)" and "the
+     per-step reconciliation (ours ~5.9 s/solve vs 57 s/step)" -- numbers from the OLD
+     (pre-#107) sweep.  Current sweep_full_2026-05-28: ours 65.6 % (reliability now favours
+     US) and ~11 s/step (144.4/12.59); the THESIS text is already correct (results.tex
+     subsec:tampura) -- only the code comment lies.  Hardcoded TAMPURA_MEAN/STD/N (166/85/11)
+     remain CORRECT (verified 2026-06-10 against \\wsl$ .../runs/sweep_2026-05-26.json:
+     loop_s_success 166.053 +- 84.652, n=11/20, success 0.55).  Fix the docstring numbers and
+     point THESIS_NOTES §21 references at the refreshed values.
+     Refs: eval_plotter.py:1109-1136,1185; runs/sweep_2026-05-26.json (WSL tampura-work).
+
 ================================================================================
 SUMMARY — STATUS (updated 2026-05-24)
 ================================================================================
 Chronological numbers, NOT priority — follow TIER. Closed bodies in git history
 (git log --grep="audit: mark #N") + archive/CODEBASE_AUDIT_DEFERRED.txt.
 
-OPEN — 12 items (bodies above):
+OPEN — 15 items (bodies above):
   #120 T0 — find_dice bridge execution-unfaithful: add real streams + motion planning +
        collision checking + physics/dynamics (the heart of a fair TAMPURA comparison).
   #104 T3 — refresh thesis-PDF plots + numbers to post-#100-merge outputs (thesis #121/#168).
@@ -691,6 +739,13 @@ OPEN — 12 items (bodies above):
   #122 T2 — "false success" (physics_mismatch) is holding-only (36 cells, 0 on stack/fats);
        investigate why _verify_holding catches fake grasps but stack toppling is never flagged.
        Repro seeds logged. HANDOFF (new session, with #121, after the thesis-audit issues).
+  --- batch 4 (2026-06-10 honesty sweep: cheats/stubs/untrue claims) ---
+  #123 T2 — bridge BoxelPolicy discards execute_go_home status: a "no_path" go-home still
+       marks at_home + success (forced-success path); also execute_pick ignores lift status.
+  #124 T2 — persist blocked_giveup_shadows + spawn-time hidden classification (in_shadow /
+       boundary_case) in timing_summary.json; prose-only today (enabled thesis #335 to slip).
+  #125 T3 — eval_plotter TAMPURA-comparison docstring stale (42 % / 5.9 s-per-solve are
+       old-sweep numbers; hardcoded 166/85/n=11 verified correct vs WSL sweep json).
   TIER tally: one open T0 (#120); two open T1 (#107, #113).
 
 CLOSED (one-line; full detail in git / archive):
