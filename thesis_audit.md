@@ -1115,6 +1115,22 @@ and unnecessary once the description is honest; note for future work if supervis
 Refs: results.tex §5.1 + fig:eval-tasks; abstract.tex; discussion.tex §6.1;
 test_full_pipeline.py:387,736-781; aggregated.csv n_hidden.
 
+#339  [DONE 2026-06-10 (commit 85f48d6)] [T1] [THESIS]  Merge Discussion chapter into Results
+(supervisor Daniel 2026-06-10: too much Results<->Discussion flipping; separate discussion
+chapter unusual; conclusion stays its own chapter). Ch.5 is now "Results and Discussion":
+each discussion section interleaved directly after the results it interprets -- 5.4.5
+Adaptive vs Uniform Partitioning (after compactness), 5.4.7 Resolution Regime and the 5cm
+Leaf-Floor Variant (after free-space resolution; old disc-mbs0 + the limitations "Resolution
+regime" para merged, duplicate convex-merge explanation removed), 5.4.9 Architectural
+Comparison with TAMPURA (after the numbers). Old §6.4 became §5.5 with title softened
+"Limitations and Threats to Validity" -> "Limitations" (author: threats-framing sounded like
+a broken setup); intro sentence reworded to scope-framing. ch:discussion label deleted; all
+5 referring sentences fixed (introduction outline, conclusion, results x3); labels
+sec:disc-* and sec:limitations preserved so the 9 \cref{sec:limitations} references and
+sec:disc-tampura ref were untouched. chapters/discussion.tex deleted; main.tex include
+removed; conclusion renumbered ch.7 -> ch.6. Build clean 74pp, 0 undefined.
+Refs: results.tex; main.tex; introduction.tex; conclusion.tex.
+
 ================================================================================
 RESOLVED (author notes 2026-06-02 -- no new issue):
   - "explain what a classical planner is + examples" -> DONE in #253 (Background 2.1.2).
