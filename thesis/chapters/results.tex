@@ -10,6 +10,15 @@ This chapter reports the experimental evaluation of the Boxel-based POD-TAMP fra
 
 \paragraph{Simulator and robot.} All experiments were run inside PyBullet \cite{coumans2021pybullet}, with a 7-DOF Franka Emika Panda as the manipulator on a tabletop.
 
+\paragraph{Perception.} Object detection is performed by an oracle that reads ground-truth object poses from the simulator and uses ray-casts from a fixed camera, positioned in front of and slightly above the table looking down at an oblique angle (\cref{fig:overhead-camera}), to determine which objects, and which Boxels, are visible. The simulator also renders RGB-D images, but they are not processed inside the planning loop. The modelled uncertainty is occlusion uncertainty (which Boxel a hidden object occupies), resolved at run time by the \texttt{sense} action.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{sim/overhead_camera_inset.png}
+    \caption{An evaluation scene observed by the fixed camera, shown here from an oblique simulator viewpoint; the corner panels are the camera's synthetic RGB (top) and depth (bottom) views. The cyan wireframe cells are the Free Space Boxels tiling the workspace; at the cube cluster, the red wireframe cells are the object Boxels bounding the occluders and the grey wireframe cells are the shadow Boxels marking the volumes they occlude from the camera. Object detection is an oracle that reads ground-truth object poses from the simulator rather than processing the rendered RGB-D images. A future learned detector would consume those images in place of the oracle, without changing the planning architecture.}
+    \label{fig:overhead-camera}
+\end{figure}
+
 \paragraph{Goals.} Three goals were evaluated (\cref{fig:eval-tasks}):
 \begin{itemize}
     \item \texttt{holding} (\emph{find}: locate a hidden target and pick it up): the robot must end the episode holding a single target object whose initial pose is hidden behind one of a set of occluders. The number of occluders $n_\text{occ}$ is the difficulty axis (2, 3, 4; see \cref{fig:n-occ-scale}).
@@ -72,15 +81,6 @@ This chapter reports the experimental evaluation of the Boxel-based POD-TAMP fra
 \paragraph{Scene generation.} Scenes are generated procedurally from a seed, so the same seed always reproduces the same layout. A search-goal scene (\texttt{holding} or \texttt{find-and-tray-stack}) places $n_\text{occ}$ occluder cubes ($6$--$9$\,cm) at random reachable positions on the table, then hides $K$ smaller cubes ($4$--$5.6$\,cm) behind them, with $K$ drawn uniformly from $[1, n_\text{occ}]$. Each small cube is set on an occluder's line of sight to the camera, so it cannot be seen until the robot senses that region; a post-spawn ray-cast verifies the occlusion, and the seed is re-rolled until every hidden cube is genuinely blocked. What each goal does with these cubes then differs: \texttt{holding} singles out one as the target to retrieve, whereas \texttt{find-and-tray-stack} must find them all and stack them on a tray. The \texttt{stack} goal involves no hiding, and spawns its cubes in plain view at random reachable positions.
 
 \paragraph{Scenes and seeds.} Each $(\text{goal}, \text{variant}, \text{difficulty})$ combination was run on 30 random scenes; seeds are paired across the \texttt{semantic} and \texttt{semantic+mbs0.05} variants (the latter forcing a 5\,cm free-space leaf floor; \cref{sec:baselines}) on the random-pairs scene, so their head-to-head comparison is seed-for-seed. The headline comparison spans 810 cells (3 goals $\times$ 3 variants $\times$ 3 difficulty levels $\times$ 30 seeds). The coarser free-space resolution-floor arms swept in \cref{subsec:resolution} (1.5$\times$ and 2$\times$ the auto leaf size) are reported separately there.
-
-\paragraph{Perception.} Object detection is performed by an oracle that reads ground-truth object poses from the simulator and uses ray-casts from a fixed camera, positioned in front of and slightly above the table looking down at an oblique angle (\cref{fig:overhead-camera}), to determine which objects, and which Boxels, are visible. The simulator also renders RGB-D images, but they are not processed inside the planning loop. The modelled uncertainty is occlusion uncertainty (which Boxel a hidden object occupies), resolved at run time by the \texttt{sense} action.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.85\textwidth]{sim/overhead_camera_inset.png}
-    \caption{An evaluation scene observed by the fixed camera, shown here from an oblique simulator viewpoint; the corner panels are the camera's synthetic RGB (top) and depth (bottom) views. The cyan wireframe cells are the Free Space Boxels tiling the workspace; at the cube cluster, the red wireframe cells are the object Boxels bounding the occluders and the grey wireframe cells are the shadow Boxels marking the volumes they occlude from the camera. Object detection is an oracle that reads ground-truth object poses from the simulator rather than processing the rendered RGB-D images. A future learned detector would consume those images in place of the oracle, without changing the planning architecture.}
-    \label{fig:overhead-camera}
-\end{figure}
 
 \paragraph{Planning budget.} Each cell was given a wall-clock budget of 1800\,s (30 min); a cell that exhausts it is recorded as \emph{timed out}. This budget is a real operating constraint, not a rare safety net: 24\,\% of cells reach it (31\,\% on find-and-tray-stack, 24\,\% on stack, 16\,\% on holding). Individual planner calls are usually short (over successful cells the median call takes 1.3\,s on stack, 3.4\,s on holding, and 7.0\,s on find-and-tray-stack), but the per-call distribution is heavy-tailed, with occasional calls running to hundreds of seconds. The long holding and find-and-tray-stack episodes therefore reflect this tail of expensive calls together with repeated sense--plan--act replanning, rather than many uniformly cheap calls; stack is the exception, with short episodes made up of many fast calls. The anytime sweep (\cref{fig:solved-vs-time}) records cumulative solve rate as a function of this budget.
 
