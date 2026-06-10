@@ -1119,10 +1119,13 @@ def plot_tampura_wallclock_comparison(
     (success-only; runs/sweep_2026-05-26.json).  holding is the find_dice
     analogue (find a hidden object, pick it up).  Two bars, both mean ± std,
     success-only; the lower whisker is clipped at 0 because our times are
-    right-skewed (mean > median; median in the caption).  Reliability runs
-    the other way (ours 42 %, TAMPURA local 55 %); the per-step
-    reconciliation (ours ~5.9 s/solve vs 57 s/step) is in the prose; see
-    THESIS_NOTES §21.
+    right-skewed (mean > median; median in the caption).  On the
+    sweep_full_2026-05-28 data reliability favours us (ours 65.6 %, TAMPURA
+    local 55 %); the per-step reconciliation (ours ~11 s/step =
+    wall-clock/plan-count vs TAMPURA's published 57 s/step) is in the prose
+    (results.tex subsec:tampura); see THESIS_NOTES §21.  Audit #125: the
+    bar for "ours" is recomputed from the rows passed in, so these prose
+    numbers track whatever sweep the caller loads.
     """
     # TAMPURA find_dice re-run on THIS thesis's hardware (Ryzen 7 PRO
     # 7730U; runs/sweep_2026-05-26.json, n=20).  Per-episode loop time
@@ -1989,6 +1992,14 @@ def main(argv=None) -> int:
                         "only semantic / +mbs0.05 / uniform.  The #98/#100 coarse "
                         "arms (0.09-0.18 m) are merged into sweep_anytime/cells; "
                         "this filters them at plot time without re-running them.")
+    p.add_argument("--headline-only", action="store_true",
+                   help="Keep only the headline variants (semantic auto, "
+                        "semantic+mbs0.05, uniform) for the per-goal figures. "
+                        "Unlike --drop-coarse-resolution this also drops the "
+                        "FINE resolution arms (mbs 0.001/0.01) of the "
+                        "canonical-full sweep (audit #113).  The resolution "
+                        "figure, failure-mode breakdown, and summary tables "
+                        "still see ALL rows.")
     args = p.parse_args(argv)
 
     if not args.csv_path.exists():
@@ -2000,11 +2011,18 @@ def main(argv=None) -> int:
         print(f"[plotter] no rows in {args.csv_path}", file=sys.stderr)
         return 1
 
+    # Capture the FULL row set BEFORE any variant filter: the resolution-axis
+    # figure, the failure-mode breakdown, and the summary tables must see
+    # every arm even when the headline figures are filtered (the canonical-full
+    # sweep, audit #113, puts all arms in ONE aggregated.csv; the previous
+    # post-filter capture made --drop-coarse-resolution silently strip the
+    # coarse arms out of the resolution figure too).
+    all_rows = list(rows)
+
     # Headline figures compare only semantic / +mbs0.05 / uniform.  The #98/#100
     # coarse resolution arms (min_boxel_size 0.09-0.18 m) live in the same
     # sweep_anytime/cells, so without this filter they leak in as extra variant
-    # lines.  The resolution-axis figure is plotted separately (unfiltered) from
-    # the resolution/ subdir.
+    # lines.  The resolution-axis figure is plotted from all_rows (unfiltered).
     if args.drop_coarse_resolution:
         def _is_coarse(r: dict) -> bool:
             mbs = r.get("min_boxel_size")
@@ -2019,10 +2037,17 @@ def main(argv=None) -> int:
         print(f"[plotter] dropped {before - len(rows)} coarse-resolution rows "
               f"(min_boxel_size > 0.05)")
 
-    # Audit #73 TIER B plot 6: capture the full row set before any
-    # auto-split mutates `rows` below — failure-mode breakdown is
-    # sweep-level and needs every cell, success and failure.
-    all_rows = list(rows)
+    # audit #113 canonical-full: the fine arms (mbs 0.001/0.01) are BELOW the
+    # 0.05 threshold, so --drop-coarse-resolution does not remove them and they
+    # would leak into every headline figure as extra variant lines.
+    # --headline-only keeps exactly the three headline variants.
+    if args.headline_only:
+        _HEADLINE_VARIANTS = {"semantic", "semantic+mbs0.05", "uniform"}
+        before = len(rows)
+        rows = [r for r in rows
+                if (r.get("_variant") or _row_variant(r)) in _HEADLINE_VARIANTS]
+        print(f"[plotter] headline-only: kept {len(rows)}/{before} rows "
+              f"(variants {sorted(_HEADLINE_VARIANTS)})")
 
     out_dir = args.csv_path.parent
     # Audit #73 plot 3: per-boxel volumes are LIST_VALUED, so they

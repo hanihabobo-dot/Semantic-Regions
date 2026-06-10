@@ -54,7 +54,10 @@ ep.plot_failure_modes(
 DETAIL = {
     "planner_failed":   "no plan found",
     "timeout":          "timed out",
-    "all_searched":     "blocked from view",
+    # thesis #335: most all_searched cells observed EVERY shadow empty (target
+    # outside every shadow AABB), only a minority were genuinely blocked --
+    # the thesis names this mode "search exhausted", so the figure must match.
+    "all_searched":     "search exhausted",
     "drop_failed":      "manipulation failed",
     "physics_mismatch": "false success",
 }
