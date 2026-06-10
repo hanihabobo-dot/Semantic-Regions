@@ -1029,7 +1029,16 @@ RESOLVED: the #309 merge replaced the old threats intro with "deliberate simplif
 adopted to isolate the contribution"; #308 fixed the number/CPU inconsistencies Daniel named
 as the real threats. No apologetic framing remains; author approved closing without further edit.
 
-#334  [DISCUSS] [THESIS]  Related-work shortening: confirm the move to Background + resolve the framing question
+#334  [DONE 2026-06-10 (commit b018b92)] [T2] [THESIS]  Related-work shortening: confirm the move to Background + resolve the framing question
+RESOLVED: framing = "space abstraction is the contribution, TAMP is the demonstration" (matches
+intro Contributions). Background 2.4 keeps the mechanics (move confirmed, unchanged); NEW
+Related Work 3.1 "Spatial Representations for Planning under Occlusion" leads the chapter with
+the positioning (occupancy grids/octrees with pointer to the uniform ablation as the controlled
+in-thesis comparison; critical regions; occlusion-in-belief: TAMPURA visibility grid, IBSP,
+SS-Replan, Bejjani -- all existing citations, none new). TAMP under PO -> 3.2; POD subsection
+second para deduplicated; 3.2.6 gap summary repointed from 2.4 to 3.1; intro outline updated.
+Defense answer now in writing: the uniform-grid ablation IS the discretization comparison at
+matched cell size, and the resolution sweep rules out tuning.
 AUTHOR meta-note (p.9): the visual-representation material was shortened and MOVED from
 Related Work into Background -- the major change between the last two versions. Open framing
 question: "am I doing TAMP + space abstractions, or space abstractions with a TAMP
