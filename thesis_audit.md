@@ -877,7 +877,14 @@ Refs: introduction.tex p.3; #307 #310.
 Underlined; "maybe doesn't say much". Rephrase or cut.
 Refs: background.tex.
 
-#320  [DONE 2026-06-10 -- VERIFIED resolved by prior work (#276), no edit] [T0] [THESIS]  Background §2.1.1 STRIPS: stop mixing STRIPS syntax with the planning model
+#320  [DONE 2026-06-10 -- final alignment after author clarification] [T0] [THESIS]  Background §2.1.1 STRIPS: stop mixing STRIPS syntax with the planning model
+RESOLUTION (full, after author clarified Daniel's annotation): Daniel's point is the
+syntax/model LAYERING -- the listing shows :precondition/:effect (positive + negated
+literals), no add/delete LISTS; the sets and the successor equation are the MODEL. Fixed
+per Till's structure: syntax paragraph now says 'positive effects add(a), negative effects
+del(a)' (Till's wording, no 'list'), applicability + successor formula live ONLY in the
+state-model sentence, post-listing bridge maps effects to add(a)/del(a). Opener uses
+Daniel's scratched-phrase suggestion. D=<P,A>, I=<O,s0,g> per Till's excerpt.
 p.4: "Bit short -- either drop and integrate with 2.1.1, or extend." Daniel scratched "A
 foundational language for this is" and wrote after STRIPS: "is a common language to
 express ...". CORE correction: "you are mixing STRIPS syntax and the typical planning model
