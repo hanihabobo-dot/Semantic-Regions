@@ -784,10 +784,9 @@ p.40 + EMAIL closing. The supervisors' names are absent from the title page / fr
 Add: Till Hofmann, Daniel Swoboda. MUST-FIX.
 Refs: thesis/ title page / front matter.
 
-#312  [BLOCKED on author 2026-06-10] [T0] [ADMIN]  Title must MATCH the registered title exactly
-STATUS: main.tex title is "Semantic Space Abstractions for Partially Observable
-Deterministic Task and Motion Planning". Only the author can check this against the
-registration form -- confirm and flip to DONE, or fix the title before submission.
+#312  [DONE 2026-06-10 -- author confirmed] [T0] [ADMIN]  Title must MATCH the registered title exactly
+RESOLVED: author confirmed the main.tex title "Semantic Space Abstractions for Partially
+Observable Deterministic Task and Motion Planning" matches the registered title.
 [EMAIL] "Make sure the title matches what we registered -- I'm pretty sure it needs to be
 exactly the same as on the registration form. A title change can be requested with the
 examination board ahead of time, but don't count on getting it done before Wednesday
