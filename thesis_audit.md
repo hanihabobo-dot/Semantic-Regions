@@ -233,7 +233,7 @@ Refs: results.tex:96; #243.
 #280  [DONE 2026-06-04] [T1] [THESIS]  Related Work/Background (Critical Regions): cite the new DYNAMIC-abstraction paper; "static" claim no longer holds
 #281  [DONE 2026-06-04] [T1] [THESIS]  Results/Discussion: stack-goal degradation explanation is WRONG (sim/control limit, not planning difficulty)
 ================================================================================
-#282  [T1] [THESIS]  Results/Discussion: refresh ALL numbers + conclusions from the NEW sweep
+#282  [DONE 2026-06-10 (resolution remainder: commits 862ba10 figures, 3968114 results, 76c9676 discussion)] [T1] [THESIS]  Results/Discussion: refresh ALL numbers + conclusions from the NEW sweep
 ================================================================================
 [SUPERVISOR 2026-06-04] Current results/discussion numbers, figures, and conclusions (success rates, plan
 times, reliability-vs-TAMPURA, failure-mode plot colours) are from the OLD data; the author now has a new
@@ -317,27 +317,39 @@ E. LIMITATIONS (sec:limitations) + FUTURE WORK (sec:future_work): no hard eval n
 F. ALSO (outside the 5 sections but same headline): abstract.tex almost certainly repeats "order of
    magnitude cheaper / fewer cells" — refresh together with disc-tampura/conclusion.
 
-PENDING (when coarse mbs arms finish): refresh fig:boxel-resolution + subsec:resolution/disc-validity
-resolution numbers, then re-run this same diff against those.
+RESOLVED 2026-06-10 (deadline day; sweep still running): numbers frozen from the partial aggregate
+aggregated_partial_2026-06-10_1854rows.csv (1854/2160 cells). ALL arms complete (90- or 180/90-cell)
+EXCEPT the fine floors mbs0.001/0.01 at 117/270 each (randpairs occ2 complete 30+30, occ3 at 29+28;
+occ4 + stack fine cells absent) -- thesis text scopes the fine arms to n_occ in {2,3} with n stated.
+Headline 810 cells verified IDENTICAL to tab:headline (all 9 success rates + 9 plan times to the
+hundredth; --skip-existing preserved them). Old thesis PNGs backed up in backups/thesis_graphics_
+2026-06-10/; 7 of 9 regenerated headline PNGs byte-identical to committed versions.
   ADDENDUM [2026-06-10 honesty sweep] -- specifics the resolution refresh MUST catch (all measured
   from sweep_full_2026-05-28 vs current text):
   (a) [FIXED 2026-06-10, commit 3c46613] §5.5 "on the same 100-seed scenes" is stale: reworded to
       "the coarser arms were run as a separate sweep with 100 seeds per difficulty level". The NEW
       resolution arms are 48-49 cells each (holding 49+49, f-a-t-s 48+48 at mbs 0.135/0.18) and
       INCOMPLETE vs 90-cell headline arms -- items (b)-(e) below stay gated on a re-run.
-  (b) There are NO stack resolution arms in the new sweep at all -- §5.5's "(stack 28->22)" and
-      "identical seed-for-seed on stack" can only come from the OLD sweep; either re-run stack
-      arms or scope the sentence.
-  (c) Plan-time claims will change drastically: text says "fell by 30-45 % on holding and
-      50-65 % on f-a-t-s from 1x to 2x"; NEW data: holding 134.3 -> 18.7 s (-86 %), f-a-t-s
-      124.6 -> 26.3 s (-79 %).  Boxel-count fall also differs: text 30-40 %, new total-boxel
-      fall 31.2 -> 15.0 (holding, -52 %) / 36.2 -> 20.1 (f-a-t-s, -44 %).
-  (d) Success on the coarse arms: holding 65.6 -> 61 %, f-a-t-s 75.6 -> 69 % -- §6.4's "within
-      seed noise on holding" / "mild ~4pp drop on f-a-t-s" become ~5pp / ~7pp at n=48-49;
-      re-state with the wider CIs.
-  (e) thesis/graphics/boxel_count_vs_resolution.png is still the OLD 4-arm figure (5.0/9.4/
-      13.5/18.0 cm); the new sweep's regenerated PNG has only 2 arms (5.0/9.2) because the
-      coarse arms were incomplete at plot time -- regenerate after (a)/(b) complete.
+  (b) [FIXED 2026-06-10, commits 3968114 + 76c9676] Stack resolution arms (mbs 0.09/0.12, 90
+      cells each) COMPLETED in the canonical sweep -- old geometry-derived "(stack 28->22)"
+      replaced with MEASURED: all five adaptive stack settings (auto 6cm; floors 5/9/10/12cm)
+      succeed on the IDENTICAL 58/90 (height,seed) set; 9cm floor reproduces the auto partition
+      outright (free 17.6); 10/12cm shrink free-space -32% (17.6->11.9), outcome unchanged.
+  (c) [FIXED 2026-06-10, commits 3968114 + 76c9676] Re-derived from the COMPLETE 90-cell coarse
+      arms (the 18.7s/26.3s figures were the n=48-49 partial): holding success-only time
+      134.3 -> 33.6/36.7/47.1 s (0.1/0.135/0.18); f-a-t-s MIXED 77.3/131.5/79.1 vs 124.6 s.
+      Free-space fall auto->coarse: holding 24.0 -> 10.1-10.5 (-55-58%), f-a-t-s 25.9 ->
+      11.3-11.7 (-55-56%), FLAT from 10 to 18cm; totals -40-46%. Text states ~55%.
+  (d) [FIXED 2026-06-10, commits 3968114 + 76c9676] Complete-arm success (n=90): holding coarse
+      60.0/64.4/72.2 vs auto 65.6 (within seed noise, non-monotone); f-a-t-s 73.3/62.2/66.7 vs
+      75.6 (10cm arm within 2pp; up to ~13pp non-monotone dip at 0.135). Stated as measured,
+      no "within noise" overclaim on f-a-t-s. ALSO NEW (beyond the addendum): fine arms
+      measured -- 1cm floor = ~3x free-space at unchanged success (66.1 vs 60.0 holding,
+      69.0 vs 70.0 f-a-t-s, matched occ2-3 scenes); 1mm floor = every episode (58-59/goal)
+      hits the 1800s wall (feasibility cost, reported honestly; implementation limit 6b00cd7).
+  (e) [FIXED 2026-06-10, commit 862ba10] boxel_count_vs_resolution.png regenerated from the
+      single canonical sweep: 6 arms (1/5/9.2 auto/10/13.5/18 cm), 1mm arm absent (no
+      partitions -- all timeouts), caption discloses the 1cm bars' occ2-3 scope.
 
 APPLIED (2026-06-04, /workflow; one commit per unit):
   [x] B tab:headline full replace (n_cells 299/300 -> 90) + "order of magnitude in both axes" framing
@@ -416,9 +428,9 @@ APPLIED (2026-06-04, /workflow; one commit per unit):
       abstract + conclusion synced) and shows NO stale values/jargon (13.7, 28.37, 156.10, "order of magnitude
       cheaper", "effectively cannot", replan_limit, no_summary, physics_mismatch, all_searched -> all absent).
   STATUS: all #282 PROSE + the 2 regenerated figures (solved_vs_time_linear, failure_modes_sem_uni) are DONE
-      and verified. ONLY the resolution arms remain PENDING (subsec:resolution + disc-validity "Resolution
-      regime" para + fig:boxel_count_vs_resolution), gated on the still-running coarse mbs sweep. #282 stays
-      OPEN for that remainder.
+      and verified. RESOLUTION REMAINDER DONE 2026-06-10 (see RESOLVED note + ADDENDUM (b)-(e) above;
+      commits 862ba10 / 3968114 / 76c9676; main.pdf rebuilt clean, 74pp, 0 undefined refs; rendered PDF
+      spot-checked for the new resolution numbers). #282 fully CLOSED.
   FOUND BEYOND CATALOG (fix each in its own section):
     - [done] results.tex sec:metrics: dropped "without exceeding the per-episode replan limit" from Success def.
     - [done] results.tex sec:metrics: dropped replan_limit + no_summary from the failure-mode list (cannot occur).
