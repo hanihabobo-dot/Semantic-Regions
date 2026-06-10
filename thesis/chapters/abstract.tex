@@ -1,15 +1,19 @@
 % !TEX root = ../main.tex
 
 \begin{abstract}
-This thesis extends classical Task and Motion Planning (TAMP) to partial
+A robot acting in a cluttered scene often cannot see everything that
+matters: a target object may be hidden behind others, and the robot must
+then decide where to look as part of deciding what to do. This thesis
+extends classical Task and Motion Planning (TAMP) to such partial
 observability by integrating a \emph{Boxel} representation into a
-classical TAMP planner. A \emph{Boxel} is a box-shaped cell of the workspace;
-the partition concentrates resolution on the objects and the regions they
-occlude, covering the free space with a few coarse cells. The robot's belief about which Boxels are occupied is encoded as Know-If
+classical TAMP planner. A \emph{Boxel} is a box-shaped cell of the workspace.
+The partition gives each detected object its own cell, marks the regions
+those objects hide from the camera as dedicated cells, and covers the
+remaining open space with a few coarse cells. The robot's belief about which Boxels are occupied is encoded as Know-If
 Fluents (one per Boxel, marking whether its contents are known), so a
 classical planner can reason about hidden objects and plan sensing actions in
 the same search, without enumerating an exhaustive state space. On three
 tabletop tasks evaluated against a uniform-grid baseline at the same cell
 scale, the adaptive partition produces an order of magnitude fewer cells, cuts
-per-call planning time accordingly, and solves cluttered scenes far more often than the uniform baseline (find-and-tray-stack 75.6\,\% vs 34.4\,\%, holding 65.6\,\% vs 47.8\,\% success). Against the POMDP-based TAMPURA framework on the closest analogous hidden-object task, the system reaches the goal at comparable end-to-end cost ($\approx$144\,s vs 166\,s per episode) and somewhat more reliably (65.6\,\% vs 55\,\%), without learning a probabilistic policy.
+planning time accordingly, and solves cluttered scenes far more often than the uniform baseline (75.6\,\% vs 34.4\,\% success on finding and stacking hidden cubes, 65.6\,\% vs 47.8\,\% on retrieving a hidden object). Against the POMDP-based TAMPURA framework on the closest analogous hidden-object task, the system reaches the goal at comparable end-to-end cost ($\approx$144\,s vs 166\,s per episode) and somewhat more reliably (65.6\,\% vs 55\,\%), without learning a probabilistic policy.
 \end{abstract}
