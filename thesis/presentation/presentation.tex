@@ -97,7 +97,11 @@
 % style -- "(Author et al. [Key])" with the alphabetic key (biblatex
 % alphabetic, maxalphanames=1) set small and in muted blue. The slides carry no
 % bibliography, so citations are written by hand against thesis/resources/references.bib.
-\newcommand{\rc}[2]{{\footnotesize\,(#1\;{\color{i6blue!60}[#2]})}}
+% The [Key] is clickable: it jumps to that entry on the References slide, which
+% carries a matching \hypertarget{ref:<key>}. hidelinks keeps the i6blue colour
+% and suppresses the link border so the citation looks unchanged.
+\newcommand{\rc}[2]{{\footnotesize\,(#1\;\hyperlink{ref:#2}{{\color{i6blue!60}[#2]}})}}
+\hypersetup{hidelinks}
 
 % ---------------------------------------------------------------------------
 % FILL: talk metadata
@@ -476,12 +480,12 @@
           \rc{Pan et al.}{Pan+24}
     \item \textbf{Belief from foundation models}: a VLM\,/\,LLM estimates where
           objects are \rc{Zhao et al.}{Zha+25}
-    \item \textbf{Determinize-and-replan}: FF-Replan does this for probabilistic
-          MDPs \rc{Yoon et al.}{Yoo+07}; the \textbf{K-replanner} does it for
-          partial observability via knowledge literals \rc{Bonet \& Geffner}{Bon+11}.
-          We keep its replanning idea but \emph{join it to TAMP} on named
-          \textbf{Boxel} volumes --- the K-replanner stays purely symbolic, with
-          no geometry
+    \item \textbf{Determinize-and-replan}: SS-Replan replans deterministically in
+          belief space on each observation \rc{Garrett et al.}{Gar+20} --- we
+          \emph{share} this. The POD \textbf{K-replanner} compiles partial
+          observability to classical via knowledge literals
+          \rc{Bonet \& Geffner}{Bon+11}, but is pure task planning; we bring that
+          line \emph{into TAMP}, on named \textbf{Boxel} volumes
   \end{itemize}
 \end{frame}
 
@@ -683,7 +687,8 @@
   \end{itemize}
   \medskip
   \onslide<4->{%
-  {\color{i6blue}\bfseries Setup:} PyBullet + 7-DOF Franka Panda, one fixed camera,
+  {\color{i6blue}\bfseries Setup:} PyBullet \rc{Coumans \& Bai}{Cou+21} + 7-DOF
+  Franka Panda, one fixed camera,
   \textbf{oracle} perception; 3 goals $\times$ 3 difficulty levels $\times$ 30
   seeds, 1800\,s budget each. Oracle perception isolates the representation --- an
   ablation, not a benchmark win.}
@@ -888,43 +893,44 @@
   \scriptsize
   \begin{columns}[T]
     \begin{column}{0.49\textwidth}
-      {\color{i6blue!60}\textbf{[Bon+11]}} Bonet, B. \& Geffner, H. \emph{Planning
+      \hypertarget{ref:Bon+11}{\color{i6blue!60}\textbf{[Bon+11]}} Bonet, B. \& Geffner, H. \emph{Planning
        under Partial Observability by Classical Replanning.} IJCAI, 2011.\par\smallskip
-      {\color{i6blue!60}\textbf{[Cur+24]}} Curtis, A.\ et al. \emph{Partially
+      \hypertarget{ref:Cou+21}{\color{i6blue!60}\textbf{[Cou+21]}} Coumans, E. \& Bai, Y. \emph{PyBullet: a
+       Python Module for Physics Simulation for Games, Robotics and Machine
+       Learning.} 2021.\par\smallskip
+      \hypertarget{ref:Cur+24}{\color{i6blue!60}\textbf{[Cur+24]}} Curtis, A.\ et al. \emph{Partially
        Observable Task and Motion Planning with Uncertainty and Risk Awareness.}
        arXiv:2403.10454, 2024.\par\smallskip
-      {\color{i6blue!60}\textbf{[Gar+18]}} Garrett, C.\,R., Lozano-P\'erez, T. \&
+      \hypertarget{ref:Gar+18}{\color{i6blue!60}\textbf{[Gar+18]}} Garrett, C.\,R., Lozano-P\'erez, T. \&
        Kaelbling, L.\,P. \emph{PDDLStream: Integrating Symbolic Planners and
        Blackbox Samplers.} arXiv:1802.08705; ICAPS, 2020.\par\smallskip
-      {\color{i6blue!60}\textbf{[Gar+20]}} Garrett, C.\,R.\ et al. \emph{Online
+      \hypertarget{ref:Gar+20}{\color{i6blue!60}\textbf{[Gar+20]}} Garrett, C.\,R.\ et al. \emph{Online
        Replanning in Belief Space for Partially Observable Task and Motion
        Problems.} ICRA, 2020.\par\smallskip
-      {\color{i6blue!60}\textbf{[Gef+13]}} Geffner, H. \& Bonet, B. \emph{A Concise
+      \hypertarget{ref:Gef+13}{\color{i6blue!60}\textbf{[Gef+13]}} Geffner, H. \& Bonet, B. \emph{A Concise
        Introduction to Models and Methods for Automated Planning.} Morgan \&
        Claypool, 2013.\par\smallskip
-      {\color{i6blue!60}\textbf{[Hor+13]}} Hornung, A.\ et al. \emph{OctoMap: An
+      \hypertarget{ref:Hor+13}{\color{i6blue!60}\textbf{[Hor+13]}} Hornung, A.\ et al. \emph{OctoMap: An
        Efficient Probabilistic 3D Mapping Framework Based on Octrees.} Autonomous
-       Robots, 2013.\par\smallskip
-      {\color{i6blue!60}\textbf{[Kae+98]}} Kaelbling, L.\,P., Littman, M.\,L. \&
-       Cassandra, A.\,R. \emph{Planning and Acting in Partially Observable
-       Stochastic Domains.} Artificial Intelligence, 1998.
+       Robots, 2013.
     \end{column}
     \begin{column}{0.49\textwidth}
-      {\color{i6blue!60}\textbf{[Kuf+00]}} Kuffner, J.\,J. \& LaValle, S.\,M.
+      \hypertarget{ref:Kae+98}{\color{i6blue!60}\textbf{[Kae+98]}} Kaelbling, L.\,P., Littman, M.\,L. \&
+       Cassandra, A.\,R. \emph{Planning and Acting in Partially Observable
+       Stochastic Domains.} Artificial Intelligence, 1998.\par\smallskip
+      \hypertarget{ref:Kuf+00}{\color{i6blue!60}\textbf{[Kuf+00]}} Kuffner, J.\,J. \& LaValle, S.\,M.
        \emph{RRT-Connect: An Efficient Approach to Single-Query Path Planning.}
        ICRA, 2000.\par\smallskip
-      {\color{i6blue!60}\textbf{[Mol+20]}} Molina, D., Kumar, K. \& Srivastava, S.
+      \hypertarget{ref:Mol+20}{\color{i6blue!60}\textbf{[Mol+20]}} Molina, D., Kumar, K. \& Srivastava, S.
        \emph{Learn and Link: Learning Critical Regions for Efficient Planning.}
        ICRA, 2020.\par\smallskip
-      {\color{i6blue!60}\textbf{[Pan+24]}} Pan, T., Shome, R. \& Kavraki, L.\,E.
+      \hypertarget{ref:Pan+24}{\color{i6blue!60}\textbf{[Pan+24]}} Pan, T., Shome, R. \& Kavraki, L.\,E.
        \emph{Task and Motion Planning for Execution in the Real.} IEEE Trans.\
        Robotics, 2024.\par\smallskip
-      {\color{i6blue!60}\textbf{[Pet+02]}} Petrick, R.\,P.\,A. \& Bacchus, F.
+      \hypertarget{ref:Pet+02}{\color{i6blue!60}\textbf{[Pet+02]}} Petrick, R.\,P.\,A. \& Bacchus, F.
        \emph{A Knowledge-Based Approach to Planning with Incomplete Information and
        Sensing.} AIPS, 2002.\par\smallskip
-      {\color{i6blue!60}\textbf{[Yoo+07]}} Yoon, S.\,W., Fern, A. \& Givan, R.
-       \emph{FF-Replan: A Baseline for Probabilistic Planning.} ICAPS, 2007.\par\smallskip
-      {\color{i6blue!60}\textbf{[Zha+25]}} Zhao, L.\ et al. \emph{Seeing is
+      \hypertarget{ref:Zha+25}{\color{i6blue!60}\textbf{[Zha+25]}} Zhao, L.\ et al. \emph{Seeing is
        Believing: Belief-Space Planning with Foundation Models as Uncertainty
        Estimators.} arXiv:2504.03245, 2025.
     \end{column}
