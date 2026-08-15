@@ -508,37 +508,31 @@ def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
 
 
 def open_gripper(robot_id: int, gui: bool = False):
-    """Open the Panda gripper to URDF max (0.04 m per finger).
+    """Open the Panda gripper to URDF max (0.04 m per finger) through
+    the finger motors — a real release, no teleport.
 
-    Audit #81 2026-05-15: switched from POSITION_CONTROL to
-    resetJointState.  Audit #79's 200 N / 80 steps still lost the
-    fight against cube-pad friction at grasping width — fingers
-    stalled before reaching 0.04 and the pads kept grazing the cube
-    during retraction, dragging it laterally with the arm (seed-999
-    log run_2026-05-15_18-57-21 lines 188-190, 277-279:
-    constraint_gone=True robot_contacts=[2] AFTER open_gripper).
-    resetJointState teleports the fingers to URDF max instantly,
-    bypassing the motor controller's force ceiling AND eliminating
-    the sliding-pad retraction transient.  Sim-only behaviour but
-    acceptable for a thesis-grade release primitive per audit body
-    Step 2 mode (b) ("resetJointState directly to 0.04 ... bypasses
-    motor controller entirely — sim-only acceptable").
+    #P1 friction grasp (2026-08-15): the audit-#81 resetJointState
+    teleport is removed.  It existed because the JOINT_FIXED weld
+    pinned the held object rigidly between the pads while
+    POSITION_CONTROL tried to drag them apart — the motor lost that
+    fight (seed-999 log run_2026-05-15_18-57-21: fingers stalled short
+    of 0.04, pads grazed the cube during retraction).  With the weld
+    gone the object is held by pad friction alone: opening withdraws
+    each pad NORMAL to the face it presses on, so breaking contact is
+    not a friction fight and plain position control reaches 0.04.
+    200 N motor budget over 160 steps (~0.66 s at 240 Hz); the caller
+    adds settle time (base_settle_steps in _release_and_verify_drop)
+    for the object to fall free.
 
-    User direction 2026-05-15: "make sure addconstraint is actually
-    removed and that we dont sample a letting go grasp but really
-    just open up as maximally as we can."
+    User direction 2026-05-15 still honoured: no "letting-go grasp" is
+    sampled — the fingers just open as maximally as they can.
 
-    A short POSITION_CONTROL hold (80 steps @ 240 Hz ~ 0.33 s) keeps
-    the fingers pinned at 0.04 while the cube falls under gravity and
-    settles; without the hold, transient pad-cube reaction forces
-    during the fall could drift the joint back inward.  Caller adds
-    further settle time via base_settle_steps in
-    _release_and_verify_drop.
+    A stall short of 0.038 prints a loud warning; the release verify
+    gate in _release_and_verify_drop reads the same joint states and
+    fails the release if the fingers did not physically open.
     """
     import time
-    p.resetJointState(robot_id, FINGER_JOINTS[0], 0.04)
-    p.resetJointState(robot_id, FINGER_JOINTS[1], 0.04)
-    for _ in range(80):
+    for _ in range(160):
         p.setJointMotorControl2(robot_id, FINGER_JOINTS[0],
                                 p.POSITION_CONTROL,
                                 targetPosition=0.04, force=200)
@@ -548,35 +542,43 @@ def open_gripper(robot_id: int, gui: bool = False):
         p.stepSimulation()
         if gui:
             time.sleep(1 / 120)
+    finger_pos = [p.getJointState(robot_id, fj)[0] for fj in FINGER_JOINTS]
+    if min(finger_pos) < 0.038:
+        print(f"    WARNING: open_gripper fingers stalled at "
+              f"[{finger_pos[0]:.4f}, {finger_pos[1]:.4f}] "
+              f"(target 0.04) — release may be incomplete")
 
 
 def close_gripper(robot_id: int, gui: bool = False,
-                  target_finger_pos: float = 0.01, force: float = 10):
-    """Close the Panda gripper to ``target_finger_pos`` per finger.
+                  target_finger_pos: float = 0.01, force: float = 40):
+    """Close the Panda gripper toward ``target_finger_pos`` per finger.
 
-    Audit #81 refine 2026-05-15: force dropped 50 N -> 10 N and the
-    target is now a kwarg so the caller can pass cube_half_width
-    instead of a fixed deep-inside target.  Previously target=0.01
-    drove the pads to a 0.02 m gap — 2 cm INSIDE a 4 cm cube — and
-    50 N kept driving them inward against the contact stop, producing
-    the visible "smashing" in seed-999 GUI playback and a deeply
-    pressed contact state that persisted across the audit #81
-    resetJointState release (cube grazing pads on next motion).
+    #P1 friction grasp (2026-08-15): close_gripper is now the LOAD
+    PATH.  The JOINT_FIXED weld that used to provide all grip
+    stability is gone; the pads must build and HOLD a normal force so
+    that pad friction (μ = 1.2, boxel_env finger-pad setup) carries
+    the object through every subsequent motion.  execute_pick passes a
+    target slightly INSIDE the object surface (cube_hw − 3 mm): the
+    pads stop at the surface, the residual position error keeps the
+    motors pressing at up to ``force`` N, and PyBullet motor targets
+    persist across stepSimulation — the squeeze stays active during
+    transport with no re-assertion needed.
 
-    User direction 2026-05-15: "when the gripper closes it should
-    only close a tinly little bit, otherwise it's wide open ... we
-    dont want objects floating in the air but we also dont want
-    smashing."
+    40 N default sits inside the real Panda's grasp envelope (70 N
+    continuous / 140 N peak) and yields ~48 N of tangential friction
+    capacity per pad at μ 1.2 — far above the ≤ 5 N scene-object
+    weights, with margin for transport accelerations.
 
-    The JOINT_FIXED constraint added in execute_pick provides all the
-    grip stability during motion; close_gripper is only responsible
-    for the visual grasp and giving the contact-points verify-gate
-    something to measure.  10 N motor budget is far above the ~0.5 N
-    needed to support a 50 g cube; the cube-pad contact settles at
-    whatever the target says, no longer pushing through.
+    Audit #81 history (partially superseded): force was dropped
+    50 → 10 N when the weld carried the load and the close was
+    cosmetic ("we dont want smashing", user 2026-05-15).  The
+    no-smashing contract still holds — the target sits 3 mm inside
+    the surface, not 2 cm as pre-#81, so the pads press without
+    visibly deforming the scene; but 10 N left no margin once the
+    weld stopped carrying the load, hence 40 N.
     """
     import time
-    for _ in range(30):
+    for _ in range(60):
         p.setJointMotorControl2(robot_id, FINGER_JOINTS[0],
                                 p.POSITION_CONTROL,
                                 targetPosition=target_finger_pos,
