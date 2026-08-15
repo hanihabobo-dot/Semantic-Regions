@@ -209,13 +209,22 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
     (test_full_pipeline.py:144, :221, :277, :634-696).  Scoring/logging ground
     truth in simulation is legitimate; the robot must not read it.
 
-  KNOWN BLOCKER FOR A REAL GRASP (deferred #77): object sizes were never matched
-  to the Panda gripper.  Max finger opening 0.08 m; occluders are 0.15 m cubes
-  (ungraspable without the weld), targets 0.08 m (zero margin).  A friction-based
-  grasp REQUIRES resizing the scene objects (proposal on file: targets ~0.05 m,
-  occluders tall narrow blocks 0.06x0.06x0.15 m or cylinders < 0.08 m diameter,
-  lateralFriction toward 1.0).  This changes every scene and therefore every
-  number: plan the canonical re-sweep (CB#113) AFTER this lands.
+  KNOWN BLOCKER FOR A REAL GRASP (deferred #77) — ERRATUM 2026-08-15: the
+  deferred-#77 size inventory (0.15 m occluders / 0.08 m targets) is STALE;
+  fix #17 had already halved the preset scenes before the thesis eval.
+  Code-verified today: default_scene occluders 0.075 m cubes / targets 0.04 m;
+  stack_scene 0.05 m; mixed_shapes all < 0.08 m; ObjectSpec.lateral_friction
+  already defaults to 1.0.  The remaining ungraspable geometry is
+  scalability_scene (and random_pairs_scene on top of it — the eval sweep's
+  scenes): occluder half-extents draw uniform(0.030, 0.045) -> 0.06-0.09 m
+  full width, the upper half of the range over the 0.08 m finger opening;
+  default_scene's 0.075 m occluders leave only 2.5 mm descent clearance per
+  side, too tight for a friction grasp under position-control error.  The #77
+  proposal still applies, narrowed: occluders become tall narrow blocks
+  (~0.05-0.06 m wide, 0.10-0.15 m tall — occlusion improves with height),
+  targets shrink slightly so the hidden-placement jitter window (occ_half -
+  target_half) stays positive.  This changes every seeded scene and therefore
+  every number: plan the canonical re-sweep (CB#113) AFTER this lands.
 
   STARTING POINTS.  Perception: segment_visible (bridge) for visibility; the
   commented-out depth/point-cloud path (f) for geometry; PyBullet's segmentation
