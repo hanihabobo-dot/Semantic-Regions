@@ -1,0 +1,491 @@
+================================================================================
+PAPER AUDIT — ICAPS 2027 SUBMISSION (OPEN WORKSTREAMS)
+================================================================================
+Date: 2026-08-15.  Successor to CODEBASE_AUDIT.txt and thesis_audit.md, both
+archived 2026-08-15 (archive/CODEBASE_AUDIT_FINAL.txt, archive/THESIS_AUDIT_FINAL.md;
+older material in archive/CODEBASE_AUDIT_DEFERRED.txt, archive/THESIS_AUDIT_ARCHIVE.md).
+
+CONTEXT.  The thesis ("Semantic Space Abstractions for Partially Observable
+Deterministic Task and Motion Planning", 76 pp, submitted 2026-06-10) was graded
+1.3.  Supervisors (Till Hofmann, Daniel Swoboda) did not run the code; they judged
+the writing good but noted the work is honest about missing pieces.  Plan: turn it
+into an ICAPS 2027 paper (conference June-July 2027, USA; SUBMISSION DEADLINE
+DECEMBER 2026).  Division of labour: the supervisors write the paper text, the
+author (Hani) does the code.  The missing pieces below come from the supervisor
+debrief (2026-08), roughly in execution order.
+
+NUMBERING.  Workstreams are #P1-#P10.  Old issues are cited as CB#N (archived
+CODEBASE_AUDIT_FINAL.txt) and TH#N (archived THESIS_AUDIT_FINAL.md).  Work through
+this file with the /workflow skill: one issue per turn, before/after preview,
+explicit approval, individual commits.  STATUS: no marker = OPEN; [DONE]/[REJECTED]
+on the header line when resolved.  [REMARK] items are recorded decisions, not tasks.
+
+================================================================================
+POLICY (carried over from CODEBASE_AUDIT.txt, still binding)
+================================================================================
+
+SHELL   Windows PowerShell only.  No bash heredocs for commits; plain
+        `git commit -m "msg"`.  One-line commit subjects, no body.
+
+REMOTES Push meaningful work to BOTH hosts: `git push github <branch>` (github.com
+        hanihabobo-dot/pybullet) and `git push origin <branch>`
+        (git.rwth-aachen.de hani.alassiri.alhabboub/pybullet).
+
+CODE    Commented-out code is intentional documentation/toggles: never delete
+        without explicit approval, move to archive/ instead.  Dead methods/imports
+        are kept on purpose (some are needed for exactly this paper's perception
+        work).  Pure-narration comments stay.
+
+WIKI    Project wiki (pybullet.wiki.git, clone at ../pybullet.wiki/) must be
+        updated after any change to architecture, data structures, algorithms,
+        PDDL domain, execution pipeline, or design decisions.
+
+ARCHIVE archive/ is tracked and pushed; no personal information in it.
+        "emails and pdfs/" is private: never git add it; stage paths explicitly.
+
+ENV     wsl_env/ is the WSL venv (gitignored): do not delete.  PDDLStream is a
+        sibling checkout ../pddlstream_lib.  Launch wrappers (run_boxels,
+        run_eval, plot_eval) live in the user's PowerShell $PROFILE, not the repo.
+        Always give the user the --vis 1 GUI command alongside any headless run.
+
+PLANNER PDDLStream plans against a separate DIRECT PyBullet client
+        (boxel_env.plan_client_id); the planner is stateless, (boxel_fits ?o ?b)
+        init facts are rebuilt from the BoxelRegistry every replan.
+
+PLOTS   New plots add, never replace; old plots must stay regenerable; read new
+        PNGs visually before committing.
+
+GIT     Multi-commit refactors go on a branch off main; single-commit fixes on
+        main.  No worktrees.  Pre-staged files in the index ride along with the
+        next commit; do not unbundle.
+
+================================================================================
+PROJECT PRIMER (distilled from the archived audits; read this first)
+================================================================================
+
+WHAT THE SYSTEM IS.  A tabletop TAMP pipeline (PDDLStream + Fast Downward +
+PyBullet, Franka Panda) for partially observable deterministic (POD) planning.
+The contribution is the representation: an adaptive semantic partition of the
+workspace into "Boxels" (object AABBs, occlusion-shadow volumes cast from a fixed
+camera, octree-partitioned free space with face-merge), which makes occlusion
+explicit symbolic state (Know-If fluents, blocks_view_at) so a classical planner
+can search for hidden objects via optimistic determinization + replanning.
+Baseline comparison: uniform voxel grid (~10x more cells/facts, worse success);
+architectural comparison: TAMPURA (Curtis et al. 2024, arXiv:2403.10454).
+
+KEY FILES (root):  boxel_env.py (env, scenes, camera, oracle, boxelization),
+shadow_calculator.py, free_space.py, cell_merger.py, uniform_grid.py (baseline),
+pddlstream_planner.py (+ pddl/), streams.py (grasp/kin/motion streams),
+execution.py (pick/place/stack/sense execution), robot_utils.py, belief.py,
+reboxelize.py, test_full_pipeline.py (main loop + eval verifiers), eval_runner.py,
+eval_plotter.py, run_logger.py.  tampura_bridge/ runs OUR pipeline inside
+TAMPURA's find_dice env (see #P4).  A src/ package refactor is planned but gated
+(multi-commit branch, do only when the tree is otherwise quiet).
+
+EVAL DATA.  Canonical headline dataset: eval_results/sweep_full_2026-05-28
+(post CB#107 replan-cap removal; 810 cells = 3 goals x 3 variants x 30 seeds x 3
+difficulty; 1800 s budget).  Thesis headline numbers (tab:headline): success
+find-and-tray-stack 75.6/72.2/34.4 %, holding 65.6/66.7/47.8 %, stack
+64.4/64.4/35.6 % (semantic / +mbs0.05 / uniform); stack-by-height semantic
+100/80/13.3 % at h=2/3/4 (uniform 90/16.7/0).  NOTE: EVAL_SUMMARY.md documents
+the OLDER sweep_anytime dataset (4500-row aggregated.csv, pre-cap-removal
+numbers 42.3 % holding etc.) and is stale relative to the thesis; do not quote
+it for the paper without saying which sweep it is.  A fresh full canonical sweep
+(CB#113) is planned and should only run AFTER #P1-#P3 land, since those change
+the system under test.
+
+TAMPURA COMPARISON STATE.  TAMPURA source lives in WSL:
+\\wsl.localhost\Ubuntu\root\tampura-work  (tampura/ core lib + tampura_environments/
+incl. find_dice/ and panda_utils/; their .venv is python 3.11 / pybullet 3.2.7).
+Local 20-seed TAMPURA find_dice re-run (runs/sweep_2026-05-26.json in WSL):
+11/20 = 55 % success, 166 +/- 85 s per successful episode (published-implied
+>= 63 %; published per-step 57 +/- 38 s, ours ~11 s/step).  The thesis frames this
+comparison as INDIRECT and architectural (different task, codebase; local re-run
+possibly disadvantages TAMPURA, TH#306).  Their hiding mechanic is CONTAINMENT
+(die pose-aliased under a cup) vs our LATERAL shadows; their spawns are
+hand-tuned reachable (x in [0.3,0.7], y in [-0.4,0.4], camera-visibility checked,
+scene regenerated until the die is genuinely hidden); their controllers are
+kinematic (motion via bundled BiRRT; grasp library: saved / antipodal / top).
+
+KNOWN FAILURE TAXONOMY (thesis §5): timed out 24 %, no plan found (dominant on
+stack-uniform), search exhausted (holding-only; 13/18 from axis-aligned shadow
+under-coverage, TH#335), false success (physics check catches toppled tower /
+fake grasp; holding-only, which is itself suspicious, CB#122).
+
+BRANCHES THAT MATTER:  audit-14-dense-lattice-attempt (64-ray visibility lattice,
+works, ~3x planning cost), audit-51-shadow-blocker-fix (principled blocker
+re-grounding, reverted), audit-55-pose-aware-stack (destination-aware stack
+kinematics, works, ~7x planning cost), audit-64-tampura-binary-grid.
+
+NOTES FOLDER.  notes/*.md (THESIS_NOTES.md, TAMPURA_PLAN.md, ...) were removed
+from the working tree in 2026-08 cleanup; recover via git history if a reference
+below points there.
+
+================================================================================
+WORKSTREAMS
+================================================================================
+
+================================================================================
+#P1. [OPEN T0]  REMOVE THE CONSTRAINT-WELD GRASP AND ALL ORACLE READS; BUILD A
+     REAL PERCEPTION SYSTEM AND A REAL POSE SAMPLER
+================================================================================
+Supervisor wording: no workarounds and cuts any more.  The ONLY thing that may
+stay is the hardcoded lift after a pick or place action (collision-avoidance aid).
+
+WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
+
+  Grasp / release cheats:
+  (a) execute_pick weld: p.createConstraint(JOINT_FIXED) attaches the object to
+      the EE after gripper close (execution.py:775-780; doc at :655 calls it an
+      accepted simplification).  The archived audits are explicit that this is
+      "a telekinetic attachment that bypasses contact physics" (deferred #59) and
+      that close_gripper is "purely cosmetic", the constraint provides ALL grip
+      stability (deferred #81, commit 8774e6f).
+  (b) release teleport: open_gripper uses p.resetJointState straight to max
+      finger opening because POSITION_CONTROL could not physically free objects
+      (deferred #81, commit 65146ad).  A real release must work through the motor.
+  (c) bridge mirror of the weld: tampura_bridge/execution_boxel.py:94-107 (_weld),
+      plus _held_offset ground-truth read (:82-91).  Whatever replaces (a) must be
+      mirrored there (see #P4).
+  (d) legacy tampura_bridge/execution_bridge.py: full pose-teleport pick/place
+      (resetBasePositionAndOrientation at :34, :152).  Dead code (boxel_policy
+      imports execution_boxel, not this).  Move to archive/ per policy.
+
+  Oracle / ground-truth reads feeding planning or perception:
+  (e) boxel_env.oracle_detect_objects (boxel_env.py:1620-1682): reads exact poses
+      via p.getBasePositionAndOrientation (:1650) and decides visibility by
+      8-AABB-corner rayTestBatch matched against true body ids (:1659-1675).
+      Called unconditionally from get_camera_observation (:1542-1589, both GUI
+      and DIRECT paths); its output feeds the BoxelRegistry that planner and
+      executor consume (test_full_pipeline.py:586-599).  THE central target.
+  (f) RGB-D is already rendered but discarded: getCameraImage at :1560-1572;
+      _depth_to_point_cloud exists (:1597-1618) but is commented out at
+      :1573-1578 ("Re-enable if a real perception pipeline replaces the oracle").
+  (g) sense_shadow_raycasting (execution.py:63-162): the PDDL sense action casts
+      147 rays and classifies hits by comparing hit_obj_id against the KNOWN
+      target/occluder body ids (:142-149).  compute_shadow_blockers (:165) same
+      pattern.  A real sense must classify from rendered observation, not ids.
+  (h) boxelization from privileged geometry: generate_boxels reads p.getAABB
+      (boxel_env.py:1361); shadow_calculator.py raycasts true collision geometry
+      (:127); free_space.py partitions from those AABBs.  Once perception
+      supplies estimated poses/extents, these consume estimates instead.
+  (i) planning-time ground truth: streams.py reads live p.getAABB at :384, :456,
+      :1169, :1178-1193 (compute_stack_kin reads the support's true top surface).
+      Execution-time ground truth: execute_place/execute_stack read live AABBs
+      and poses to compute drop heights (execution.py:850-865, :1023-1037).
+      Precedent from deferred #57: URDF-known SIZE is legitimate design-time
+      knowledge (put it in an object_geometry dict on the registry); sensed
+      POSITION is not.
+  (j) sync_to_plan_client (boxel_env.py:669-702) mirrors exact GUI-world poses
+      into the planning client every replan; the planner literally plans against
+      ground truth.  Post-place/stack snap syncs of the plan-client shadow copy
+      (execution.py:950-956, :1144-1150).  With perception, the plan client must
+      be built from the estimated state.  (The plan-client MECHANISM stays; what
+      changes is the source of poses.)
+  (k) bridge perception adapter: segment_visible (perception_adapter.py:104-119)
+      is already real segmentation-based VISIBILITY, but poses/extents still come
+      from pbu.get_pose/get_aabb ground truth (:121-146, :170-175) and
+      oracle_detect_objects is reused verbatim (:177-188); boxelize.py:43 reads
+      true AABBs.
+
+  Pose sampler:
+  (l) sample_grasp yields exactly one grasp: fixed top-down orientation at a
+      single hardcoded z-offset (_GRASP_Z_OFFSETS=[0.10], streams.py:532-577).
+      No shape awareness, no side/angled grasps, no width reasoning.  "A good
+      pose sampler" replaces this (TAMPURA's get_grasp library, saved/antipodal/
+      top modes, is a working reference implementation; see #P5).
+
+  ALLOWED TO STAY:  _apply_post_action_lift (execution.py:615-635; ~5 cm after
+  pick :792, ~10 cm after place :941 and stack :1136).  Explicitly exempted.
+
+  SCOPE DECISIONS RECORDED (2026-08-15):
+  - The separate pre-release 15 mm lift in execute_place (execution.py:890-911,
+    audit #85 wedge fix) is NOT obviously covered by the exemption ("lift AFTER a
+    pick or place").  Expectation: a real friction grasp removes the tilt wedge
+    that motivated it; try removing it with the weld, keep only if physically
+    justified, and disclose either way.
+  - Eval-harness ground-truth VERIFIERS stay: _verify_cube_on / _verify_holding /
+    _verify_goal_physics and the Phase-4 "ORACLE ONLY" hidden-target setup block
+    (test_full_pipeline.py:144, :221, :277, :634-696).  Scoring/logging ground
+    truth in simulation is legitimate; the robot must not read it.
+
+  KNOWN BLOCKER FOR A REAL GRASP (deferred #77): object sizes were never matched
+  to the Panda gripper.  Max finger opening 0.08 m; occluders are 0.15 m cubes
+  (ungraspable without the weld), targets 0.08 m (zero margin).  A friction-based
+  grasp REQUIRES resizing the scene objects (proposal on file: targets ~0.05 m,
+  occluders tall narrow blocks 0.06x0.06x0.15 m or cylinders < 0.08 m diameter,
+  lateralFriction toward 1.0).  This changes every scene and therefore every
+  number: plan the canonical re-sweep (CB#113) AFTER this lands.
+
+  STARTING POINTS.  Perception: segment_visible (bridge) for visibility; the
+  commented-out depth/point-cloud path (f) for geometry; PyBullet's segmentation
+  buffer gives object masks, from which per-object point clouds give estimated
+  AABBs/poses (sim-grade "real perception": pixels in, poses out, no body-id
+  reads).  Visibility density tradeoff is measured on branch
+  audit-14-dense-lattice-attempt (64-ray lattice, ~3x planning cost).  Grasping:
+  friction-grasp design sketch in deferred #59; belief-update honesty gaps to
+  keep in mind: deferred #51 (stale blocker fallback; principled fix on branch
+  audit-51-shadow-blocker-fix, reverted), #47 (blocks_view_at re-grounding,
+  deferred out of thesis scope: reconsider here).
+
+  ORDER OF WORK (proposal): (1) resize objects + friction-grasp + real release,
+  drop weld and teleports [changes execution.py, robot_utils.py, boxel_env.py
+  scenes; mirror in execution_boxel.py]; (2) perception module: segmentation +
+  depth -> per-object pose/AABB estimates behind the existing detection
+  interface; wire get_camera_observation to it, delete the oracle path;
+  (3) sense action re-implemented over rendered observation; (4) grasp sampler;
+  (5) re-baseline everything (CB#113 sweep).  Each step is its own branch per
+  policy (multi-commit refactor).
+
+================================================================================
+#P2. [OPEN T0]  STACKING-ACCURACY DROP: PROVE IT IS EXECUTION, DETECT PHYSICAL
+     FAILURE (KNOCKED TOWERS, OBJECTS OFF THE TABLE) AND FAIL HONESTLY
+================================================================================
+The paper must address why stack success collapses with height (semantic
+100/80/13.3 % at h=2/3/4).  Supervisor position (matches thesis §5, CB#116,
+TH#281/#304/#332): the planner finds valid plans at every height; the SIMULATED
+ARM rams the tower and knocks everything over: a simulation/manipulation failure,
+not a planning failure.  The thesis discloses this but never fixed or fully
+instrumented it (TH#332: "not an issue to resolve" for the thesis; it IS one for
+the paper).  Also required: when an object is knocked OFF the table, recognise it
+and fail the episode instead of retrying forever.  This detection layer is part
+of the #P1 perception system.
+
+WHAT THE CODE DOES TODAY (2026-08-15 scout):
+  - detect_execution_collisions (robot_utils.py:307-381) runs after every move
+    and pick, but BOTH call sites discard the return value
+    (test_full_pipeline.py:1213-1218, :1298-1303).  Collisions print and change
+    nothing (CB#42 deferred this; the deferral dies here).
+  - No code checks mid-episode whether any object left the table or workspace.
+    _verify_cube_on/_verify_on_table/_verify_holding run only at goal-check time.
+    A cube knocked off the table mid-plan is invisible to the loop; deferred #83
+    even states "cube-fell-off-the-workspace recovery is out of scope".  The
+    empirical marker exists: the spawn window's x lower bound (-0.251) is where
+    cubes used to tip off the table edge (boxel_env.py:823-826).
+  - Stack toppling is likely SILENTLY UNCAUGHT: physics_mismatch (false success)
+    occurs ONLY on holding, never on stack (36 vs 0 cells), which is backwards:
+    a toppled tower should trigger it (CB#122, with author notes; repro seeds
+    0,4,15,19,20,34,36,39,43,44,45,48,59,63,75,87,92 on sweep_full_2026-05-28).
+  - CB#121: stack-uniform fails via fast "no plan found" (~48 no-plan vs ~7
+    timeout) despite the huge grounded domain.  Author hypothesis: mid-execution
+    knock-down, replan from scattered state finds no plan.  Same manipulation
+    fragility, different exit reason.
+
+DELIVERABLES:
+  (a) World-integrity monitor after every executed action: every non-held object
+      still within table bounds and (if previously stacked) still on its support;
+      violations classify the episode (knocked_off_table / tower_toppled) and
+      either trigger an honest replan (object still reachable) or an honest
+      FAILURE (object gone), never a blind retry.  Builds on the existing
+      false-success physics checks; hooks where the discarded collision returns
+      already flow.
+  (b) Root-cause the h=4 collapse with the monitor's data: confirm (or refute)
+      arm-tower collision as the mechanism (deferred #84's three hypotheses:
+      IK drift, grasp tilt, rim interference; #85 tilt compounding).  Fix what is
+      fixable (approach paths that clear the tower; grasp tilt goes away with
+      #P1's real grasp), disclose the rest with numbers.
+  (c) Resolve CB#122 both ways: why holding produces false successes AND why
+      stack produces none (deliberately topple a completed stack and check that
+      it is flagged).
+  (d) Persist the classification (CB#124: blocked_giveup_shadows, spawn-time
+      hidden classification, plus the new knocked_off_table/tower_toppled
+      reasons) in timing_summary.json so aggregated.csv can attribute failure
+      modes without prose-parsing stdout.log (also closes CB#106 part 2's
+      no_summary investigation path).
+  Related backlog if stacking is re-scoped: stack size-compat check, safe-inset
+  XY landing test, trajectory-clipping edge case (branch audit-55-pose-aware-stack),
+  all in the archived FOR LATER list.
+
+================================================================================
+#P3. [OPEN T1]  ALL OBJECTS MUST SPAWN WITHIN REACHABLE RANGE (TAMPURA-STYLE)
+================================================================================
+Supervisor doubt is JUSTIFIED: the reachability constraint exists but the eval's
+own scene does not use it.  boxel_env defines a 0.65 m reach disk around the base
+(-0.4, 0) and a _SAFE_TABLE_ window (x [-0.1,0.70], y [-0.40,0.40]) applied only
+when cfg.constrain_to_reach=True (boxel_env.py:808-929).  stack_scene sets it
+(:267); random_pairs_scene forces it (:394); but scalability_scene NEVER sets it
+(SceneConfig default False, :148), so it samples the wider unconstrained window
+(x [-0.20,0.60], y [-0.50,0.50], :830-831), and the eval sweep runs scalability
+cells (eval_runner.py:416-421).  The thesis sentence "random reachable positions"
+(results.tex:81) is therefore not guaranteed for part of the data.
+
+TAMPURA'S REFERENCE PATTERN (find_dice/env_generator.py): spawn x in [0.3,0.7],
+y in [-0.4,0.4] in front of the fixed base; every spawn camera-visibility
+checked; whole scene regenerated (up to 20x) until the die is genuinely hidden;
+PLACE destinations separately constrained to a shortened 0.75 x 1.22 m reachable
+table band (get_shortened_table_dims).
+
+DELIVERABLES: (a) constrain_to_reach=True for every scene used in evals (or
+default True + explicit opt-out), keep the _assert_xys_in_reach post-spawn net;
+(b) quantify the damage: count sweep cells whose spawns violated the reach disk
+(recomputable from logged spawn poses), report whether any headline number moves;
+(c) verify PLACEMENT sampling (streams place/stack targets) is also
+reach-bounded, mirroring TAMPURA's shortened-table pattern; (d) numbers refresh
+folds into the post-#P1 canonical sweep (CB#113).
+
+================================================================================
+#P4. [OPEN T0]  RUN OUR PIPELINE INSIDE THE TAMPURA ENV FOR A VALID COMPARISON
+================================================================================
+The thesis comparison is honest but indirect (TH#306): local TAMPURA re-run on
+find_dice vs our pipeline on OUR scenes.  The paper needs ours running in THEIR
+env, seed-for-seed (reuse TAMPURA's exact 20 seeds; bridge solve stays
+seed-generic).  The vehicle exists: tampura_bridge/ (runs out-of-process inside
+their WSL venv via PYTHONPATH injection; BoxelPolicy drives TAMPURA's own rollout
+via no-op actions + belief_bridge writes into their SceneBelief; entry point
+run_boxel_on_finddice.py).
+
+STATE OF CB#120 (the fair-comparison blocker list), verified 2026-08-15:
+  FIXED in the current GENUINE bridge: (a) real streams (planner_boxel.py +
+  streams_boxel.py + pddl/domain_find_dice_streamful.pddl); (b) real motion
+  planning (RRT-Connect via _plan_follow); (c) collision checking; (e) visibility
+  via segment_visible (render + segmentation), not the AABB oracle.
+  PARTIAL: (d) physics: grasp is contact-verified and objects made dynamic, but
+  the hold is still the JOINT_FIXED weld, "consistent with the shared pipeline".
+  Once #P1 removes the weld in the main pipeline, the bridge MUST follow, or the
+  comparison is unfaithful again.
+  STILL OPEN: (f) containment regions: find_dice hides the die by CO-LOCATION
+  under a cup; our lateral shadows never contain it, so the semantic partition
+  does not drive the search there: model cup-footprint containment regions.
+  (g) the arm-park before each sense is bridge-internal, not a planned action.
+  (h) full overlay redraw each refresh (perf only).
+
+MUST-FIX BEFORE ANY QUOTED NUMBER (CB#123, verified still present verbatim):
+boxel_policy.py:372-377 discards execute_go_home's status and unconditionally
+marks at_home + success ("no_path" still scores reward 1.0); execute_pick:263
+ignores the lift's status ("ok" without lifting).  Thread both statuses; on
+go_home no_path record fail_reason go_home_no_path.
+
+THEN: PHASE 4, the gated >= 20-seed seed-for-seed bridge eval on their exact
+seeds, honest failures included: this replaces the thesis's indirect comparison
+as the paper's headline TAMPURA result.  Also regenerate the wall-clock plot
+(CB#111) and fix the stale eval_plotter docstring (CB#125) when touching it.
+Architectural decision recorded: the no-op-policy harness is acceptable for the
+paper (it drives their env, belief, and reward untouched); switching to native
+action-schema execution via their effects_fn/execute_fn is optional extra
+faithfulness, decide with supervisors if time allows.
+
+================================================================================
+#P5. [OPEN T2]  CONSIDER ADOPTING TAMPURA'S CONTROLLERS
+================================================================================
+Supervisor suggestion: their controllers may simply work better.  What they are
+(panda_utils/panda_env_utils.py, primitives.py): kinematic joint-interpolation
+drivers (pick_execute/place_execute) over BiRRT motion plans (bundled
+motion_planners package: functionally the same RRT-Connect + shortcut smoothing
+we implement in streams/streams_boxel), plus the qualitatively different part:
+get_grasp samples from a grasp LIBRARY (saved per-mesh JSON grasps, antipodal
+mesh sampling via trimesh, or axis-aligned top grasps) validated by
+close-until-collision at planning time.  Ours: single fixed top-down offset, but
+with genuine runtime finger-contact verification (more honest, far less
+expressive).  DECISION TO MAKE (with #P1's sampler work): adopt their grasp
+library as the pose sampler (fits "use their controllers" AND "good pose
+sampler"), keep our runtime contact verification, keep one motion planner
+(theirs and ours are redundant: pick one).  Their kinematic executors conflict
+with #P1's push toward real physics: adopting their grasp SAMPLING while keeping
+our physical execution is the coherent combination.  Note their Panda differs:
+EE frame panda_grasptarget link 14, fingers [12,13] (ours 11/[9,10]); the bridge
+already resolves this by name (tampura_robot.build_robot_model).
+
+================================================================================
+#P6. [REMARK]  REAL-ROBOT EXPERIMENT: NOT NEEDED FOR ICAPS, NICE TO HAVE
+================================================================================
+For a robotics venue it would be required; for ICAPS it is not.  Record only.
+The thesis conclusion already sketches the path (learned detector + robot-mounted
+active-sensing camera on a physical Panda; planning layer claimed to transfer
+unchanged behind the detection interface).  Revisit after #P1-#P4 if time
+remains before the deadline; otherwise it stays future work in the paper.
+
+================================================================================
+#P7. [OPEN T1]  RELATED WORK: COMPLETE COVERAGE OF THE LAST 2-3 YEARS (2024-2026)
+================================================================================
+No systematic recent-literature sweep was ever done for the thesis.  Evidence:
+TH#230 (supervisor asked to cite the AAAI'25 online/dynamic critical-regions
+follow-up: explicitly SKIPPED, still missing); TH#280 (one-sentence patch
+acknowledging a dynamic-abstraction critical-regions paper); TH#334 (Related
+Work restructure used ONLY pre-existing citations, "none new").  Current
+coverage: TAMPURA, IBSP, SS-Replan, Bejjani, critical regions, PDDLStream,
+LW1/CLG lineage, occupancy grids/octrees.
+DELIVERABLE: a proper 2024-2026 sweep across (a) TAMP under partial
+observability / belief-space TAMP, (b) occlusion-aware manipulation search and
+mechanical search, (c) abstraction/representation learning for planning
+(critical-regions lineage incl. the AAAI'25 paper), (d) POD/contingent planning
+and compilations; an annotated delta list (what each does, how we differ) for
+the supervisors to write from, since they write the paper text (#P10).
+Reevaluate which approaches are close enough to become baselines (feeds #P8).
+
+================================================================================
+#P8. [OPEN T1]  COMPARABLE RESULTS: RUN MODERN APPROACHES ON THE SAME ENV
+================================================================================
+Beyond TAMPURA-vs-ours-in-their-env (#P4), run other recent approaches on the
+same environment where feasible.  Candidates come out of #P7; TAMPURA and LW1
+are already on the list (LW1 also feeds #P9).  Scope rule carried over from the
+archived FOR LATER note (supervisor 2026-05-06): reuse published encodings and
+harnesses where they cover the task; do NOT re-encode other people's systems
+ourselves; if their encoding does not cover the task, drop the comparison
+rather than shoehorn.  Same seeds, same scenes, same metric hooks (eval_runner)
+wherever the harness allows.
+
+================================================================================
+#P9. [OPEN, STRETCH]  FULL POD PLANNING: LW1 + PDDLSTREAM, 3D WUMPUS
+================================================================================
+Far stretch, in principle interesting: replace the relaxation
+(plan-execute-observe-replan over an optimistic determinization) with a genuine
+POD planner: compile PDDLStream's sampled groundings into LW1 (Bonet & Geffner),
+gaining branching contingent plans and deductive axioms.  Then a problem that
+actually NEEDS it, e.g. a continuous/3D Wumpus-style domain.
+WHY IT IS JUSTIFIED (the thesis's own disclosed gap, raised 3x by Till):
+TH#238/#239/#248 (simplified POD, lacks deductive axioms, does not scale without
+them); TH#307 (formal statement: we solve a single optimistic determinization
+and never certify goal-belief containment b_G subset S_G as CLG/LW1 would);
+TH#328 (pessimistic sensing would require exactly the LW1 axiom machinery we
+lack; text reverted from thesis but the reasoning stands).  The unsound
+3-strike bounded give-up (thesis §5 limitation) is the visible symptom.
+EXISTING SPEC: CB#105 (Wumpus-World baseline: cell-belief search, no shadow
+geometry) is the natural first rung and doubles as an ablation of the semantic
+partition.  Treat #P9 as post-deadline research unless #P1-#P4 finish early;
+for the December paper it is future work, at most a positioning paragraph.
+
+================================================================================
+#P10. [REMARK]  DIVISION OF LABOUR AND FRAMING
+================================================================================
+Supervisors write the paper text; author does the code and supplies numbers,
+figures, and the #P7 annotated bibliography.  OPEN FRAMING QUESTION to settle
+with them before writing (carried from TH#334): is the paper "TAMP + space
+abstraction" or "a space abstraction, demonstrated on TAMP"?  The thesis intro
+committed to the latter.  Affects title, contributions list, and which
+experiments are headline vs supporting.  Also settle early: which venue track
+(main track vs. robotics track) and page budget, since #P1-#P4 all change
+headline numbers and every figure will be regenerated from the post-#P1 sweep.
+
+================================================================================
+CARRIED-OVER OPEN ISSUES (from archived CODEBASE_AUDIT.txt)
+================================================================================
+CB#104 thesis-PDF figure refresh          -> superseded; figures regenerate for
+                                             the PAPER from the post-#P1 sweep.
+CB#105 Wumpus baseline                    -> #P9 (first rung).
+CB#106 failure-taxonomy part 2            -> #P2(d).
+CB#107 replan-cap removal re-run          -> folded into CB#113.
+CB#108 part-b resolution matrix arm       -> folded into CB#113.
+CB#110 NL-CLI live demo                   -> PARKED (demo, not paper-critical).
+CB#111 TAMPURA wall-clock plot regen      -> #P4 (after PHASE 4).
+CB#112 Wilson intervals                   -> PARKED (optional; reconsider for
+                                             paper figures).
+CB#113 full canonical sweep re-run        -> OPEN, gates all paper numbers; run
+                                             AFTER #P1/#P2/#P3 land (system under
+                                             test changes; earlier runs obsolete).
+CB#120 bridge execution-faithfulness      -> #P4 (core).
+CB#121 stack-uniform no-plan anomaly      -> #P2(b).
+CB#122 holding-only false-success anomaly -> #P2(c).
+CB#123 bridge forced-success path         -> #P4 (must-fix, first).
+CB#124 persist failure classifications    -> #P2(d).
+CB#125 eval_plotter stale docstring       -> #P4 (trivial, with #P4 plot work).
+
+================================================================================
+SUMMARY — STATUS (2026-08-15)
+================================================================================
+OPEN:  #P1 (T0, first), #P2 (T0), #P3 (T1), #P4 (T0), #P5 (T2, decision),
+       #P7 (T1), #P8 (T1), #P9 (stretch).  CB#113 gates all paper numbers and
+       runs after #P1-#P3.
+REMARKS: #P6 (real robot: not needed), #P10 (supervisors write; framing question
+       open).
+ORDER: P1 -> P2 -> P3 -> (CB#113 sweep) -> P4 -> P5 -> P7/P8 in parallel with
+       supervisor writing; P9 only if time.  Deadline: DECEMBER 2026.
