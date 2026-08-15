@@ -10,8 +10,9 @@ run between actions:
     found_target / clear_but_empty / contains_nontarget / still_blocked.
   - compute_shadow_blockers: rebuild shadow → [blocker] map after objects
     are relocated (audit #78).
-  - execute_pick / execute_place: arm trajectories with constraint-based
-    grasping and geometry-derived contact heights (audit #1, #98).
+  - execute_pick / execute_place: arm trajectories with friction-based
+    grasping (finger-motor squeeze, #P1 — the former constraint weld is
+    gone) and geometry-derived contact heights (audit #1, #98).
   - execute_stack: place the held object on top of another object's live
     AABB top — destination computed from the live PyBullet pose so
     incremental stacks tolerate per-step settling (audit #30).
@@ -310,7 +311,6 @@ def _release_and_verify_drop(
     env,
     robot_id,
     gui,
-    grasp_constraint_id,
     held_body_id,
     dropped_name,
     max_attempts: int = 3,
@@ -318,7 +318,7 @@ def _release_and_verify_drop(
     expected_support_z: Optional[float] = None,
 ) -> bool:
     """
-    Open the gripper, remove the grasp constraint, and verify the held
+    Open the gripper through the finger motors and verify the held
     object actually fell free of the end-effector.  Retries with longer
     settle steps on failure.
 
@@ -333,7 +333,10 @@ def _release_and_verify_drop(
     still attached to the EE — the PDDL fact (obj_at_boxel ?o ?b) then
     diverged from physical reality and every subsequent plan was
     grounded on a fiction.  Now require ALL of:
-      (i)   constraint genuinely gone (getConstraintInfo raises),
+      (i)   fingers physically reached max open (≥ 0.038 per finger —
+            the #P1 friction-grasp analog of the old "constraint gone"
+            probe: with the weld removed, a pad that failed to withdraw
+            is the only thing that can still bind the object to the EE),
       (ii)  cube bottom within 2 cm of ``expected_support_z`` (when
             provided; callers that can't predict it — e.g. the
             emergency-drop path — pass None and the gate is skipped),
@@ -346,20 +349,19 @@ def _release_and_verify_drop(
     log.
 
     Failure modes covered:
-      • removeConstraint raises (already removed, invalid id).
+      • Fingers stall short of max open (motor loses a force fight).
       • Fingers re-close on the object due to position-control overshoot.
       • Object snags on a finger pad and stays at gripper height.
 
     Returns True on a verified drop; False after exhausting max_attempts.
     """
     if dropped_name is None or dropped_name not in env.objects:
-        # Without a name we can't read the object's pose to verify — but
-        # the caller still wants the constraint gone.
-        try:
-            if grasp_constraint_id is not None:
-                p.removeConstraint(grasp_constraint_id)
-        except Exception:
-            pass
+        # Without a name we can't read the object's pose to verify —
+        # best effort: open the fingers and let whatever sits between
+        # them fall, then settle briefly.
+        open_gripper(robot_id, gui)
+        for _ in range(base_settle_steps):
+            env.step_simulation()
         return True
 
     # Audit #84 pre-release diag - bracket entry-to-loop so a cube that
@@ -380,19 +382,7 @@ def _release_and_verify_drop(
           f"{pre_aabb_max[1]:.4f},{pre_aabb_max[2]:.4f}] "
           f"tilt_deg={pre_tilt_deg:.2f}")
 
-    constraint_removed = False
     for attempt in range(1, max_attempts + 1):
-        # Remove the constraint exactly once; subsequent attempts only
-        # retry the gripper-open + settle cycle.
-        if not constraint_removed and grasp_constraint_id is not None:
-            try:
-                p.removeConstraint(grasp_constraint_id)
-                constraint_removed = True
-            except Exception as exc:
-                print(f"    WARNING: removeConstraint failed: {exc}")
-                # Treat as "already gone" so subsequent retries can proceed.
-                constraint_removed = True
-
         open_gripper(robot_id, gui)
         # Longer settle on retries so a snagged object has more time to
         # slip free under gravity.
@@ -402,15 +392,12 @@ def _release_and_verify_drop(
 
         # Audit #80 multi-signal verify gate (see function docstring).
 
-        # (i) constraint state — explicit PyBullet probe.
-        if grasp_constraint_id is not None:
-            try:
-                p.getConstraintInfo(grasp_constraint_id)
-                constraint_gone = False
-            except p.error:
-                constraint_gone = True
-        else:
-            constraint_gone = True
+        # (i) fingers physically reached max open (#P1 friction grasp —
+        # the analog of the old getConstraintInfo probe; open_gripper
+        # already warned if the motors stalled, this gates on it).
+        finger_pos = [p.getJointState(robot_id, fj)[0]
+                       for fj in FINGER_JOINTS]
+        fingers_open = min(finger_pos) >= 0.038
 
         # (iv) robot-link contacts; also collect non-robot contacts (a
         # released cube must touch at least one non-robot body).
@@ -466,11 +453,7 @@ def _release_and_verify_drop(
             if expected_support_z is not None
             else f"bottom_z={cube_bottom_z:.4f} (no_expected)"
         )
-        # Audit #81 instrumentation: confirm fingers actually reached
-        # URDF max (0.04 per finger).  Pre-#81 with POSITION_CONTROL
-        # they could stall short under cube-pad friction.
-        finger_pos = [p.getJointState(robot_id, fj)[0]
-                       for fj in FINGER_JOINTS]
+        # finger_pos already read for gate (i) above — reused in diag.
         if robot_link_contacts:
             link_breakdown = "; ".join(
                 f"link{k}: d={d * 1000:.2f}mm, F={f:.2f}N"
@@ -478,7 +461,7 @@ def _release_and_verify_drop(
             )
         else:
             link_breakdown = "none"
-        diag = (f"constraint_gone={constraint_gone} "
+        diag = (f"fingers_open={fingers_open} "
                 f"robot_link_contacts={{{link_breakdown}}} "
                 f"non_robot_contacts={sorted(non_robot) or 'none'} "
                 f"{height_str} "
@@ -486,7 +469,7 @@ def _release_and_verify_drop(
                 f"cube_tilt_deg={cube_tilt_deg:.2f} "
                 f"finger_pos=[{finger_pos[0]:.4f},{finger_pos[1]:.4f}]")
 
-        ok = (constraint_gone
+        ok = (fingers_open
               and not robot_contacts
               and bool(non_robot)
               and height_ok
@@ -511,7 +494,6 @@ def release_held_object_in_place(
     env,
     robot_id,
     gui,
-    grasp_constraint_id,
     held_body_id,
     held_object_boxel_id,
     registry,
@@ -525,7 +507,7 @@ def release_held_object_in_place(
     max_attempts: int = 3,
 ):
     """
-    Open the gripper, remove the grasp constraint, and verify the object
+    Open the gripper through the finger motors and verify the object
     actually fell/separated from the end-effector.  Retries on failure.
 
     A drop is considered successful when, after settling:
@@ -533,7 +515,7 @@ def release_held_object_in_place(
       • The object's linear speed is near zero (came to rest, not floating).
 
     Failure modes covered:
-      • removeConstraint raises (already removed, invalid id).
+      • Fingers stall short of max open (motor loses a force fight).
       • Fingers re-close on the object due to position-control overshoot.
       • Object snags on a finger pad and stays at gripper height.
 
@@ -541,7 +523,6 @@ def release_held_object_in_place(
         env: BoxelTestEnv.
         robot_id: PyBullet body ID of the robot.
         gui: Whether GUI is active.
-        grasp_constraint_id: Constraint to remove (may be None).
         held_body_id: PyBullet body ID of the held object.
         held_object_boxel_id: Registry boxel ID for the held object (may be None).
         registry, boxel_centers, boxel_to_pybullet, body_id_to_name, viz:
@@ -562,8 +543,7 @@ def release_held_object_in_place(
     dropped_name = body_id_to_name.get(held_body_id)
     print(f"  Replanning while holding {dropped_name or '?'} — releasing.")
     if not _release_and_verify_drop(env, robot_id, gui,
-                                     grasp_constraint_id, held_body_id,
-                                     dropped_name,
+                                     held_body_id, dropped_name,
                                      max_attempts=max_attempts):
         return False, state_updates
     if dropped_name is None or dropped_name not in env.objects:
@@ -646,21 +626,29 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     lower-and-grasp:
 
       IK (seeded from `config`, audit #37/#38) + lower to contact  →
-      close gripper  →  weld via createConstraint with the live
-      EE-to-object transform.
+      close gripper (friction squeeze)  →  verify both pads contact
+      the object.
 
     The contact waypoint is computed from the object's actual AABB so
     the Panda's finger pads physically wrap around the object.
 
-    The constraint-based attachment (p.createConstraint) is an accepted
-    simulation simplification — see audit #7 part B.
+    #P1 friction grasp (2026-08-15): the JOINT_FIXED constraint weld
+    (the audit-#7-part-B "accepted simulation simplification") is
+    removed.  The hold is now pad friction alone: close_gripper drives
+    the fingers toward a target 3 mm inside the object surface, the
+    motors keep pressing at the close force budget, and μ 1.2 pad
+    friction carries the object through transport (deferred #59 fix,
+    unblocked by the deferred-#77 resize).  A grasp that misses (pads
+    not both in contact) aborts into a replan instead of being papered
+    over by a telekinetic attachment.
 
-    A small (~5 cm) hardcoded post-pick lift runs after the grasp
-    constraint is created — cosmetic only.  See audit #36 /
-    THESIS_NOTES.md §19 for the rationale (motion-planning fragility
-    workaround); the lift is invisible to the planner because
-    ``final_config`` (read after the lift) carries the lifted pose
-    forward as the next ``move`` action's plan_motion seed.
+    A small (~5 cm) hardcoded post-pick lift runs after the verified
+    grasp — see audit #36 / THESIS_NOTES.md §19 for the rationale
+    (motion-planning fragility workaround); the lift is invisible to
+    the planner because ``final_config`` (read after the lift) carries
+    the lifted pose forward as the next ``move`` action's plan_motion
+    seed.  (Explicitly exempted in #P1: "the hardcoded lift after a
+    pick or place action may stay".)
 
     Args:
         robot_id: PyBullet body ID of the robot
@@ -672,9 +660,12 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
         gui: Whether GUI is active (for step_simulation timing)
 
     Returns:
-        Tuple[int, RobotConfig]: PyBullet constraint ID for the grasp
-        attachment, and a RobotConfig representing the robot's actual
-        final joint configuration (contact position with object held).
+        Tuple[int, RobotConfig]: PyBullet body ID of the held object
+        (the dispatcher threads it through place/stack/release), and a
+        RobotConfig representing the robot's actual final joint
+        configuration (contact position with object held).  (None,
+        None) on IK failure or failed grip verification — caller
+        replans.
     """
     # --- Contact height from cube TOP, not cube centre (audit #81 refine) ---
     # panda_grasptarget (link 11) sits at the centre of the finger-
@@ -695,7 +686,7 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # big object, the centre it's targeting should be higher.  make
     # it as high percentage wise as it is when the object is small."
     obj_id = env.objects[obj_name].object_id
-    # Audit #82: assert (handempty) BEFORE adding a new constraint.  If
+    # Audit #82: assert (handempty) BEFORE closing on a new object.  If
     # the robot is already in contact with a non-static body, we're about
     # to pick while still physically holding the previous one — surfaces
     # the dispatcher's audit-#79 state-clear divergence (PDDL says
@@ -745,39 +736,40 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # to defend against; the dispatcher already refuses pick-on-pick.
     move_robot_smooth(robot_id, contact_joints, gui)
 
-    # Close target = cube half-width along the finger-closing axis
-    # (use the smaller of XY half-widths as a conservative bound
-    # since the grasp orientation may yaw the gripper).  Fingers
-    # settle at the cube surface under the gentle 10 N motor budget
-    # — no smashing, no objects floating in the gripper above the
-    # cube top.  Floor at 5 mm so a degenerate cube_hw can't drive
-    # the controller to zero or negative.
+    # Close target = 3 mm INSIDE the cube surface along the finger-
+    # closing axis (use the smaller of XY half-widths as a conservative
+    # bound since the grasp orientation may yaw the gripper).  The pads
+    # stop at the surface; the unreachable target keeps the motors
+    # pressing at close_gripper's force budget, and that normal force ×
+    # pad friction is the grip — there is no constraint weld any more
+    # (#P1, deferred #59).  Floor at 2 mm so a degenerate cube_hw can't
+    # drive the target to zero or negative.
     close_gripper(robot_id, gui,
-                  target_finger_pos=max(0.005, cube_hw))
+                  target_finger_pos=max(0.002, cube_hw - 0.003))
 
-    # Attach the object to the gripper with a fixed constraint.
-    # This is a simulation simplification — real grippers use friction,
-    # but constraints prevent physics-engine slip during fast motions.
-    #
-    # Compute the ACTUAL relative transform between EE and object at this
-    # instant rather than using the planned grasp.position offset — position-
-    # control lag means the true EE pose differs slightly, and using the
-    # planned offset causes a corrective snap impulse (audit #98).
-    # obj_id already resolved at the top of execute_pick (for the AABB
-    # read that drives contact_z and the close_gripper target).
-    ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
-    ee_world_pos, ee_world_orn = ee_state[0], ee_state[1]
-    obj_world_pos, obj_world_orn = p.getBasePositionAndOrientation(obj_id)
-    inv_ee_pos, inv_ee_orn = p.invertTransform(ee_world_pos, ee_world_orn)
-    parent_frame_pos, parent_frame_orn = p.multiplyTransforms(
-        inv_ee_pos, inv_ee_orn, obj_world_pos, obj_world_orn
-    )
-    grasp_constraint_id = p.createConstraint(
-        robot_id, END_EFFECTOR_LINK, obj_id, -1,
-        p.JOINT_FIXED, [0, 0, 0],
-        list(parent_frame_pos), [0, 0, 0],
-        parentFrameOrientation=list(parent_frame_orn)
-    )
+    # Grip verification (#P1): a friction grasp only exists if BOTH
+    # finger pads are in contact with the object after the close.  A
+    # miss (object drifted, lateral IK error beyond the descent
+    # clearance) must abort into a replan rather than continue with an
+    # empty or one-sided pinch — the weld used to paper over exactly
+    # this failure class by attaching whatever the planner believed
+    # was there (deferred #59: "it can hold objects that don't fit in
+    # the gripper").  obj_id already resolved at the top of
+    # execute_pick (for the AABB read that drives contact_z and the
+    # close_gripper target).
+    grip_contacts = p.getContactPoints(bodyA=robot_id, bodyB=obj_id)
+    pad_links = {c[3] for c in grip_contacts
+                 if c[3] in FINGER_JOINTS}
+    grip_nf = sum(c[9] for c in grip_contacts if c[3] in FINGER_JOINTS)
+    if pad_links != set(FINGER_JOINTS):
+        print(f"    ERROR: grip verification failed for {obj_name} — "
+              f"pad contacts={sorted(pad_links) or 'none'} (need both "
+              f"{FINGER_JOINTS}), pad_normal_force={grip_nf:.2f}N. "
+              f"Opening gripper and replanning.")
+        open_gripper(robot_id, gui)
+        return None, None
+    print(f"    Grip verified for {obj_name}: both pads in contact, "
+          f"pad_normal_force={grip_nf:.2f}N")
 
     # Audit #82: post-pick assertion — only the newly grasped cube should
     # be in contact with the robot.  Anything else surfaces a ghost from
@@ -788,7 +780,7 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # Hardcoded post-pick lift (audit #36, THESIS_NOTES §19): smaller
     # than place/stack (~5 cm) — cosmetic only for the holding-goal
     # terminate-at-contact view; the next plan_motion already runs in
-    # free space because the cube is now attached to the EE.
+    # free space because the cube now rides in the closed gripper.
     _apply_post_action_lift(robot_id, contact_ee, grasp.orientation,
                             contact_joints, pc, gui)
 
@@ -801,11 +793,11 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     )
     final_config = RobotConfig(joint_positions=actual_joints,
                                name="post_pick_contact")
-    return grasp_constraint_id, final_config
+    return obj_id, final_config
 
 
 def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
-                  grasp_constraint_id, gui) -> Optional[RobotConfig]:
+                  held_body_id, gui) -> Optional[RobotConfig]:
     """
     Execute place action using the plan's grasp pose.
 
@@ -815,11 +807,11 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     final lower-and-release:
 
       IK (seeded from `config`, audit #37/#38) + lower to release
-      height  →  open gripper  →  removeConstraint  →  settle.
+      height  →  open gripper through the finger motors  →  settle.
 
     The release height is computed so the held object's bottom rests on
-    the table surface, using the live EE-to-object offset from the
-    constraint (established at pick time).
+    the table surface, using the live EE-to-object offset (whatever
+    grip height the friction grasp established at pick time).
 
     A small (~10 cm) hardcoded post-place lift runs after the settle
     so the next ``move`` action's plan_motion has safe headroom over
@@ -834,7 +826,8 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
         place_pos: Destination position [x, y, z] (boxel center)
         grasp: Grasp object from the plan (position, orientation)
         config: RobotConfig from the plan's compute_kin_solution (fallback)
-        grasp_constraint_id: PyBullet constraint ID from execute_pick()
+        held_body_id: PyBullet body ID of the held object, from
+            execute_pick() (may be None for the defensive no-held path)
         gui: Whether GUI is active (for step_simulation timing)
 
     Returns:
@@ -843,14 +836,11 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
         the EE).
     """
     # --- Release height from held-object geometry ----------------------------
-    # Query the constraint to find the held body, then compute the EE
-    # height that places the object's bottom on the table surface.
-    # The live EE-to-object Z offset accounts for whatever grasp offset
-    # was established at pick time.
+    # Compute the EE height that places the held object's bottom on the
+    # table surface.  The live EE-to-object Z offset accounts for
+    # whatever grip height the friction grasp established at pick time.
     table_z = env.table_surface_height
-    if grasp_constraint_id is not None:
-        c_info = p.getConstraintInfo(grasp_constraint_id)
-        held_body_id = c_info[2]
+    if held_body_id is not None:
         held_aabb_min, held_aabb_max = p.getAABB(held_body_id)
         obj_half_height = (held_aabb_max[2] - held_aabb_min[2]) / 2.0
 
@@ -899,7 +889,7 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     # drop): this pre-lift is for pad-cube geometry, the post-lift is
     # for plan_motion headroom on the next move.  Vertical, 15 mm, well
     # within the contact_joints IK neighbourhood — no plan_motion needed.
-    if grasp_constraint_id is not None:
+    if held_body_id is not None:
         pre_release_ee = contact_ee + np.array([0.0, 0.0, 0.015])
         pre_release_joints = solve_ik(robot_id, pre_release_ee,
                                        grasp.orientation, pc,
@@ -911,18 +901,17 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
         move_robot_smooth(robot_id, pre_release_joints, gui)
 
     # Verify the cube actually falls free of the gripper — finger-pad
-    # snags / position-control overshoot can leave it attached visually
-    # even after removeConstraint (audit #75).  Helper opens the gripper,
-    # removes the constraint, settles, and retries on failure.  On a
-    # verified drop the caller's post-place lift + plan-client sync run
-    # normally; on failure return None and let the dispatcher replan.
-    if grasp_constraint_id is not None:
+    # snags / position-control overshoot can leave it pinched even
+    # after the motors drive toward open (audit #75).  Helper opens the
+    # gripper, settles, and retries on failure.  On a verified drop the
+    # caller's post-place lift + plan-client sync run normally; on
+    # failure return None and let the dispatcher replan.
+    if held_body_id is not None:
         # audit #80: pass expected support Z so the verify gate can
         # reject cubes pinned mid-air or floating above the table.
         # execute_place IKs the cube to land at table_z + obj_half_height
         # (lines 642-647 above), so the cube's bottom should sit at table_z.
         if not _release_and_verify_drop(env, robot_id, gui,
-                                         grasp_constraint_id,
                                          held_body_id, obj_name,
                                          expected_support_z=table_z):
             print(f"    ERROR: drop verification failed for {obj_name} "
@@ -947,7 +936,7 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     # (test_full_pipeline.py:882), so without this the placed cube remains
     # at its pre-place pose in plan_client and plan_motion certifies
     # trajectories through where it actually sits at runtime.
-    if grasp_constraint_id is not None and held_body_id in env._gui_to_plan:
+    if held_body_id is not None and held_body_id in env._gui_to_plan:
         plan_body = env._gui_to_plan[held_body_id]
         gui_pos, gui_orn = p.getBasePositionAndOrientation(
             held_body_id, physicsClientId=env.client_id)
@@ -964,7 +953,7 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
 
 
 def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
-                  grasp_constraint_id, gui) -> Optional[RobotConfig]:
+                  held_body_id, gui) -> Optional[RobotConfig]:
     """
     Drop the held object on top of ``on_obj_name`` (audit #30, --goal stack).
 
@@ -974,8 +963,8 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
 
       EE z = on_obj_top_z + held_half_height - ee_to_obj_z
 
-    ``ee_to_obj_z`` is the current EE→object Z offset (queried from the
-    grasp constraint's body just like execute_place), so any drift in
+    ``ee_to_obj_z`` is the current EE→object Z offset (read from the
+    held body's live pose just like execute_place), so any drift in
     the grasp pose between pick and stack is accounted for.
 
     Why live AABBs instead of the planner's symbolic destination:
@@ -1004,8 +993,8 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
         config: RobotConfig from the planner's compute_stack_kin (the
             approach pose 10 cm above the support top).  Used as the
             IK seed for the contact-pose lower (audit #37/#38).
-        grasp_constraint_id: Constraint id from the prior pick.  Required —
-            execute_stack queries it to find the held body.
+        held_body_id: PyBullet body ID of the held object, from the
+            prior execute_pick.  Required.
         gui: Whether GUI is active (controls move_robot_smooth pacing).
 
     Returns:
@@ -1015,9 +1004,9 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     if on_obj_name not in env.objects:
         print(f"    ERROR: stack support '{on_obj_name}' not in env.objects")
         return None
-    if grasp_constraint_id is None:
+    if held_body_id is None:
         print(f"    ERROR: stack {obj_name} on {on_obj_name} called without "
-              f"a held object (no grasp constraint).")
+              f"a held object.")
         return None
 
     support_id = env.objects[on_obj_name].object_id
@@ -1026,8 +1015,6 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     sup_cx = (sup_min[0] + sup_max[0]) / 2.0
     sup_cy = (sup_min[1] + sup_max[1]) / 2.0
 
-    c_info = p.getConstraintInfo(grasp_constraint_id)
-    held_body_id = c_info[2]
     held_aabb_min, held_aabb_max = p.getAABB(held_body_id)
     held_half_height = (held_aabb_max[2] - held_aabb_min[2]) / 2.0
 
@@ -1102,11 +1089,11 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
           f"tilt_drift_deg={tilt_drift_deg:+.2f}")
 
     # Verify the cube actually falls free of the gripper — finger-pad
-    # snags / position-control overshoot can leave it attached visually
-    # even after removeConstraint (audit #75).  Helper opens the gripper,
-    # removes the constraint, settles 60 steps (matching the prior in-
-    # line settle so the post-stack AABB read into the registry doesn't
-    # see a micro-bouncing cube), and retries on failure.
+    # snags / position-control overshoot can leave it pinched even
+    # after the motors drive toward open (audit #75).  Helper opens the
+    # gripper, settles 60 steps (matching the prior in-line settle so
+    # the post-stack AABB read into the registry doesn't see a
+    # micro-bouncing cube), and retries on failure.
     # audit #80: expected support Z is the support's live top.  Cube-on-
     # cube stacks land on the support top, so passing sup_top_z is the
     # tight check.  Tray supports are containers — the cube settles
@@ -1114,7 +1101,7 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     # top (sup_max[2]).  Skip the height gate for trays and let the
     # tray-aware geometric check in _verify_cube_on (audit #40,
     # test_full_pipeline.py:127-180) catch geometric stack failures
-    # downstream.  The other 3 gate signals (constraint gone, no robot
+    # downstream.  The other 3 gate signals (fingers open, no robot
     # contact, cube stationary) still catch a gripper pin regardless
     # of support shape.
     support_info = env.objects.get(on_obj_name)
@@ -1122,7 +1109,6 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     verify_support_z = None if support_is_tray else sup_top_z
 
     if not _release_and_verify_drop(env, robot_id, gui,
-                                     grasp_constraint_id,
                                      held_body_id, obj_name,
                                      base_settle_steps=60,
                                      expected_support_z=verify_support_z):

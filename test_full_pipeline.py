@@ -37,7 +37,7 @@ Architecture (post-#26 refactor, 2026-04-19; sense-handler split 2026-05-05):
                     boxel calc, registry, scenario selection, replan loop,
                     results.  Move/pick/place/stack handlers remain inline
                     because they share rebound locals (current_config,
-                    held_body_id, grasp_constraint_id, shadow_occluder_map)
+                    held_body_id, shadow_occluder_map)
                     with the loop; sense was extracted because it owns no
                     rebound locals — only mutates containers.
 """
@@ -83,7 +83,8 @@ from free_space import split_free_boxel  # noqa: F401  (kept for future use)
 from pddlstream_planner import PDDLStreamPlanner
 from streams import RobotConfig
 from robot_utils import (move_robot_smooth,
-                         detect_execution_collisions)
+                         detect_execution_collisions,
+                         FINGER_JOINTS)
 from run_logger import RunLogger, parse_pipeline_args, report_run_outcome
 from visualization import BoxelVisualizer
 
@@ -218,10 +219,10 @@ def _verify_on_table(env, obj_name, eps_z=0.005):
     return True, ""
 
 
-def _verify_holding(env, target_name, grasp_constraint_id):
+def _verify_holding(env, target_name, held_body_id):
     """
-    Physics check that ``target_name`` is currently welded to the
-    end-effector (audit S-18 — the holding-goal twin of
+    Physics check that ``target_name`` is currently held in the
+    gripper (audit S-18 — the holding-goal twin of
     ``_verify_cube_on``).
 
     The pre-fix holding-goal success was driven entirely by
@@ -229,17 +230,21 @@ def _verify_holding(env, target_name, grasp_constraint_id):
     ``sense`` *or* a successful ``pick`` of the target name.  A
     sense-then-failed-pick run therefore reported SUCCESS while the
     gripper was empty (or holding the wrong body).  This helper
-    closes that gap by querying PyBullet directly:
+    closes that gap by querying PyBullet directly.
 
-      1. There is an active grasp constraint.
-      2. The constraint's child body (``bodyB``, info index 2 — same
-         convention used in ``execute_place``) is the target body.
+    #P1 friction grasp (2026-08-15): "holding" is no longer an active
+    JOINT_FIXED constraint — it is a live friction pinch.  The check
+    is now:
 
-    Both checks together are a hard physics guarantee: a
-    ``JOINT_FIXED`` constraint linking the EE link to the target
-    body welds them rigidly until ``removeConstraint`` is called,
-    so any active constraint with ``bodyB == target_body`` means
-    the gripper is genuinely holding the target.
+      1. The dispatcher's held body is the target body (symbolic and
+         physical agreement on WHAT is held).
+      2. BOTH finger pads are in contact with that body, with summed
+         pad normal force above a small threshold — a genuine squeeze,
+         not a graze.
+
+    This is an eval-harness verifier: reading simulator ground truth
+    here is legitimate scoring (PAPER_AUDIT #P1 scope decision); the
+    robot itself never consumes these reads.
 
     NOTE on the dropped lift-above-table check (audit #36): an
     earlier revision also required ``target.AABB_min.z > table_z +
@@ -260,21 +265,32 @@ def _verify_holding(env, target_name, grasp_constraint_id):
         (ok, reason) — reason is "" on success, a short
         diagnostic on failure.
     """
-    if grasp_constraint_id is None:
-        return False, "no active grasp constraint (gripper is empty)"
+    if held_body_id is None:
+        return False, "no held object (gripper is empty)"
     if target_name is None or target_name not in env.objects:
         return False, (f"target '{target_name}' not in env.objects "
                        f"(cannot resolve PyBullet body)")
     target_body = env.objects[target_name].object_id
-    c_info = p.getConstraintInfo(grasp_constraint_id)
-    cstr_body = c_info[2]
-    if cstr_body != target_body:
-        return False, (f"grasp constraint bodyB={cstr_body} ≠ "
+    if held_body_id != target_body:
+        return False, (f"held body={held_body_id} ≠ "
                        f"target body={target_body} ('{target_name}')")
+    robot_id = env.objects["robot"].object_id
+    pad_contacts = [c for c in p.getContactPoints(bodyA=robot_id,
+                                                  bodyB=target_body)
+                    if c[3] in FINGER_JOINTS]
+    pad_links = {c[3] for c in pad_contacts}
+    if pad_links != set(FINGER_JOINTS):
+        return False, (f"finger-pad contact incomplete: links "
+                       f"{sorted(pad_links) or 'none'} (need both "
+                       f"{FINGER_JOINTS})")
+    pad_nf = sum(c[9] for c in pad_contacts)
+    if pad_nf < 0.5:
+        return False, (f"pads touch but squeeze force {pad_nf:.2f} N "
+                       f"< 0.5 N — a graze, not a grasp")
     return True, ""
 
 
-def _verify_goal_physics(goal, env, grasp_constraint_id=None):
+def _verify_goal_physics(goal, env, held_body_id=None):
     """
     Walk a goal AST and physics-check each leaf clause
     (audits #40 + S-18).
@@ -284,9 +300,9 @@ def _verify_goal_physics(goal, env, grasp_constraint_id=None):
       - ``on``        — AABB stack check via ``_verify_cube_on``
       - ``on_table``  — AABB table-rest check via ``_verify_on_table``
                         (audit #41)
-      - ``holding``   — gripper-constraint check via
+      - ``holding``   — finger-pad squeeze check via
                         ``_verify_holding`` (requires
-                        ``grasp_constraint_id``)
+                        ``held_body_id``)
 
     Other heads (e.g. future predicates like ``at_config``)
     trigger a one-line warning so coverage gaps surface in the run
@@ -311,7 +327,7 @@ def _verify_goal_physics(goal, env, grasp_constraint_id=None):
         # of lists.
         for sub in goal[1:]:
             failures.extend(
-                _verify_goal_physics(sub, env, grasp_constraint_id))
+                _verify_goal_physics(sub, env, held_body_id))
     elif head == 'on':
         a, b = str(goal[1]), str(goal[2])
         ok, reason = _verify_cube_on(env, a, b)
@@ -324,7 +340,7 @@ def _verify_goal_physics(goal, env, grasp_constraint_id=None):
             failures.append(f"(on_table {x}) — {reason}")
     elif head == 'holding':
         x = str(goal[1])
-        ok, reason = _verify_holding(env, x, grasp_constraint_id)
+        ok, reason = _verify_holding(env, x, held_body_id)
         if not ok:
             failures.append(f"(holding {x}) — {reason}")
     else:
@@ -922,8 +938,10 @@ def main(gui=True, run_logger=None, scene_config=None,
     # or given up; planner returns no plan -> planner_failed), or the eval runner
     # kills the cell at its per-cell wall-clock --timeout (exit_reason="timeout").
     # Time-bounded, not replan-count-bounded.
-    grasp_constraint_id = None       # set during pick, cleared after place
     held_body_id = None              # PyBullet body ID of the held object
+                                     # (set during pick, cleared after
+                                     # place/stack — #P1: the friction
+                                     # grasp replaced the constraint id)
     held_object_boxel_id = None      # registry boxel ID of the held object
     exit_reason = None               # tracks why the loop ended for Phase 6
     current_config = planner.home_config  # robot's last known joint config
@@ -1061,7 +1079,6 @@ def main(gui=True, run_logger=None, scene_config=None,
                 env=env,
                 robot_id=robot_id,
                 gui=gui,
-                grasp_constraint_id=grasp_constraint_id,
                 held_body_id=held_body_id,
                 held_object_boxel_id=held_object_boxel_id,
                 registry=registry,
@@ -1074,7 +1091,6 @@ def main(gui=True, run_logger=None, scene_config=None,
                 planner=planner,
                 max_attempts=3,
             )
-            grasp_constraint_id = None
             held_body_id = None
             held_object_boxel_id = None
             held_obj_name = None
@@ -1252,9 +1268,9 @@ def main(gui=True, run_logger=None, scene_config=None,
 
             elif action_name == 'pick':
                 # PICK: approach → open gripper → lower to contact →
-                # close gripper → attach via constraint → lift.
-                # Uses the object's CURRENT simulator position (not the
-                # boxel center from planning) to handle any drift.
+                # close gripper (friction squeeze, #P1) → verify grip →
+                # lift.  Uses the object's CURRENT simulator position
+                # (not the boxel center from planning) to handle drift.
                 obj, boxel_id, grasp, config = params
                 obj_str = str(obj)
                 print(f"    Picking {obj_str} from {boxel_id}...")
@@ -1263,8 +1279,8 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # holding something.  The pre-replan release step should
                 # have cleared this, but a fresh planner skeleton can in
                 # principle chain pick→pick without an intervening place;
-                # double-grasping would silently attach two bodies.
-                if held_body_id is not None or grasp_constraint_id is not None:
+                # double-grasping would silently pinch two bodies.
+                if held_body_id is not None:
                     held_name = body_id_to_name.get(held_body_id, str(held_body_id))
                     print(f"    ERROR: Cannot pick {obj_str} — gripper already "
                           f"holds {held_name}. Replanning.")
@@ -1287,10 +1303,10 @@ def main(gui=True, run_logger=None, scene_config=None,
                     robot_id, env, pick_obj_name, pick_pos,
                     grasp, config, gui)
                 if result[0] is None:
-                    print(f"    IK failure during pick — replanning (audit #82)")
+                    print(f"    IK or grip failure during pick — replanning "
+                          f"(audit #82 / #P1 grip verification)")
                     break
-                grasp_constraint_id, current_config = result
-                held_body_id = env.objects[pick_obj_name].object_id
+                held_body_id, current_config = result
                 # Track the registry boxel ID corresponding to the held
                 # body so the emergency-drop path can relocate the right
                 # OBJECT boxel if we have to release mid-plan.
@@ -1336,31 +1352,24 @@ def main(gui=True, run_logger=None, scene_config=None,
 
                 place_result = execute_place(
                     robot_id, env, obj_str, place_pos, grasp, config,
-                    grasp_constraint_id, gui)
+                    held_body_id, gui)
                 if place_result is None:
-                    # audit #79 — distinguish IK failure (constraint
-                    # intact) from drop-verify failure (constraint
-                    # already removed inside _release_and_verify_drop
-                    # on its first attempt, per audit #75).  Leaving
-                    # a stale id in dispatcher state crashes the next
-                    # execute_place at p.getConstraintInfo when the
-                    # planner replans from (holding ?o) via audit #58
-                    # plumbing.  Probe with getConstraintInfo: if it
-                    # raises p.error the constraint is gone, so clear
-                    # held state and let the next planner.plan() build
-                    # init from (handempty).
-                    constraint_alive = False
-                    if grasp_constraint_id is not None:
-                        try:
-                            p.getConstraintInfo(grasp_constraint_id)
-                            constraint_alive = True
-                        except p.error:
-                            constraint_alive = False
-                    if not constraint_alive:
+                    # audit #79 (#P1 rework) — distinguish IK failure
+                    # (fingers still closed on the object, grip intact)
+                    # from drop-verify failure (the release path ran:
+                    # open_gripper drove the fingers to max open).
+                    # Leaving stale held state in the dispatcher would
+                    # make the next planner.plan() build init from
+                    # (holding ?o) for an object the gripper already
+                    # let go of.  The finger joints are the probe now:
+                    # ≥ 0.035 per finger means the release ran.
+                    fingers_open = all(
+                        p.getJointState(robot_id, fj)[0] >= 0.035
+                        for fj in FINGER_JOINTS)
+                    if fingers_open:
                         print(f"    drop-verify failed for {obj_str}; "
                               f"clearing held state and replanning "
                               f"(audit #79).")
-                        grasp_constraint_id = None
                         held_body_id = None
                         held_object_boxel_id = None
                         # Audit #82: before yielding control to the next
@@ -1383,7 +1392,6 @@ def main(gui=True, run_logger=None, scene_config=None,
                         print(f"    IK failure during place — replanning (audit #82)")
                     break
                 current_config = place_result
-                grasp_constraint_id = None
                 held_body_id = None
                 held_object_boxel_id = None
 
@@ -1479,30 +1487,25 @@ def main(gui=True, run_logger=None, scene_config=None,
 
                 stack_result = execute_stack(
                     robot_id, env, obj_str, on_obj_str, grasp, config,
-                    grasp_constraint_id, gui)
+                    held_body_id, gui)
                 if stack_result is None:
-                    # audit #79 — mirror of the place dispatch branch.
-                    # execute_stack delegates release to _release_and_-
-                    # verify_drop (audit #75) which removes the
-                    # constraint on attempt 1; if subsequent retries
-                    # fail, the constraint is freed but the dispatcher
-                    # would otherwise keep a stale id and crash the
-                    # next execute_stack at p.getConstraintInfo
-                    # (execution.py:783).  Probe and clear held state
-                    # on drop-verify failure so the next planner.plan()
-                    # builds init from (handempty).
-                    constraint_alive = False
-                    if grasp_constraint_id is not None:
-                        try:
-                            p.getConstraintInfo(grasp_constraint_id)
-                            constraint_alive = True
-                        except p.error:
-                            constraint_alive = False
-                    if not constraint_alive:
+                    # audit #79 (#P1 rework) — mirror of the place
+                    # dispatch branch.  execute_stack delegates release
+                    # to _release_and_verify_drop (audit #75); if the
+                    # verify retries fail the fingers are open and the
+                    # cube is loose somewhere, so the dispatcher must
+                    # clear held state or the next planner.plan()
+                    # builds init from a fictional (holding ?o).  The
+                    # finger joints are the probe: ≥ 0.035 per finger
+                    # means the release ran; closed fingers mean the
+                    # failure was IK, grip intact.
+                    fingers_open = all(
+                        p.getJointState(robot_id, fj)[0] >= 0.035
+                        for fj in FINGER_JOINTS)
+                    if fingers_open:
                         print(f"    drop-verify failed for {obj_str} on "
                               f"{on_obj_str}; clearing held state and "
                               f"replanning (audit #79).")
-                        grasp_constraint_id = None
                         held_body_id = None
                         held_object_boxel_id = None
                         # Audit #82: mirror of the place branch above —
@@ -1525,7 +1528,6 @@ def main(gui=True, run_logger=None, scene_config=None,
                         print(f"    IK failure during stack — replanning (audit #30)")
                     break
                 current_config = stack_result
-                grasp_constraint_id = None
                 held_body_id = None
                 held_object_boxel_id = None
 
@@ -1605,7 +1607,7 @@ def main(gui=True, run_logger=None, scene_config=None,
         # rigour.
         symbolic_ok = belief.is_target_found()
         if symbolic_ok:
-            ok, reason = _verify_holding(env, target_name, grasp_constraint_id)
+            ok, reason = _verify_holding(env, target_name, held_body_id)
             if not ok:
                 physics_failures.append(f"(holding {target_name}) — {reason}")
                 print(f"  PHYSICAL_FAILURE (goal): "
@@ -1626,7 +1628,7 @@ def main(gui=True, run_logger=None, scene_config=None,
             # gate (e.g. a tower falling later under a subsequent
             # action's vibration).
             physics_failures = _verify_goal_physics(
-                goal, env, grasp_constraint_id=grasp_constraint_id)
+                goal, env, held_body_id=held_body_id)
             for pf in physics_failures:
                 print(f"  PHYSICAL_FAILURE (goal): {pf}")
         success = symbolic_ok and not physics_failures
@@ -1663,9 +1665,8 @@ def main(gui=True, run_logger=None, scene_config=None,
             env.step_simulation()
             time.sleep(1.0 / 240.0)
 
-    if grasp_constraint_id is not None:
-        p.removeConstraint(grasp_constraint_id)
-
+    # #P1: nothing to tear down for a held object any more — the grip
+    # is a live friction pinch, and env.close() ends the simulation.
     env.close()
     return success
 
