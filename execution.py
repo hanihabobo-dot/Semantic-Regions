@@ -734,7 +734,10 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # implicit in the PDDL predicate (holding ?o) — init = open, only
     # pick/place/stack change it.  No drift channel for this safety net
     # to defend against; the dispatcher already refuses pick-on-pick.
-    move_robot_smooth(robot_id, contact_joints, gui)
+    # settle=True: the contact descent is precision-critical (#P1) —
+    # the friction grasp needs lateral centering within the descent
+    # clearance, so hold the endpoint until the arm converges.
+    move_robot_smooth(robot_id, contact_joints, gui, settle=True)
 
     # #P1 pick-arrival diagnostic (mirrors the audit-#84 stack diag).
     # With the weld gone, a lateral arrival error beyond the descent
@@ -892,7 +895,9 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
         print(f"    ERROR: IK failed for place contact of {obj_name} — aborting")
         return None
 
-    move_robot_smooth(robot_id, contact_joints, gui)
+    # settle=True: release-height accuracy feeds the audit-#80 drop
+    # gate's 2 cm height check (#P1 endpoint hold, precision endpoint).
+    move_robot_smooth(robot_id, contact_joints, gui, settle=True)
 
     # Audit #85's 15 mm pre-release lift was removed here (#P1 scope
     # decision, 2026-08-15).  It compensated for a weld-era geometry:
@@ -1062,7 +1067,9 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
               f"{on_obj_name} - aborting")
         return None
 
-    move_robot_smooth(robot_id, contact_joints, gui)
+    # settle=True: stack landings need the tightest XY of all actions —
+    # the #84 arrival diag measures exactly this endpoint (#P1 hold).
+    move_robot_smooth(robot_id, contact_joints, gui, settle=True)
 
     # Audit #84 post-arrival diag - surfaces motion-control overshoot
     # or grasp-tilt drift between contact_z compute and arm arrival.

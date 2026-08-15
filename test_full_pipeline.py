@@ -1211,9 +1211,17 @@ def main(gui=True, run_logger=None, scene_config=None,
                             #       f"loop to trigger outer replan")
                             break
 
-                for wp in traj.waypoints[1:]:
+                # Stream intermediate waypoints; settle ONLY the final
+                # one (#P1 endpoint hold).  The last waypoint is the
+                # approach pose that seeds the subsequent contact IK
+                # (audit #37/#38), so its accuracy matters; settling
+                # every waypoint made the arm visibly stutter (user
+                # report 2026-08-15).
+                last_wp_idx = len(traj.waypoints) - 1
+                for wi, wp in enumerate(traj.waypoints[1:], start=1):
                     move_robot_smooth(robot_id, wp.joint_positions,
-                                      gui, steps=30)
+                                      gui, steps=30,
+                                      settle=(wi == last_wp_idx))
                 # Read the arm's true joint state after motion completes.
                 # Position control can undershoot the IK target; if we
                 # used the planned q2 directly, errors would accumulate
