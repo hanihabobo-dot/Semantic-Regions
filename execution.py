@@ -736,6 +736,23 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # to defend against; the dispatcher already refuses pick-on-pick.
     move_robot_smooth(robot_id, contact_joints, gui)
 
+    # #P1 pick-arrival diagnostic (mirrors the audit-#84 stack diag).
+    # With the weld gone, a lateral arrival error beyond the descent
+    # clearance is the prime suspect when grip verification below
+    # reports a miss — log EE-vs-target and EE-vs-object XY offsets so
+    # failed grips are attributable from headless logs.  Print-only:
+    # nothing here feeds control.
+    live_ee_pos = p.getLinkState(robot_id, END_EFFECTOR_LINK)[0]
+    ee_xy_err = float(np.hypot(live_ee_pos[0] - contact_ee[0],
+                                live_ee_pos[1] - contact_ee[1]))
+    obj_live_pos = p.getBasePositionAndOrientation(obj_id)[0]
+    ee_vs_obj_xy = float(np.hypot(live_ee_pos[0] - obj_live_pos[0],
+                                   live_ee_pos[1] - obj_live_pos[1]))
+    print(f"    [#P1-diag] pick arrival {obj_name}: "
+          f"ee_xy_err={ee_xy_err * 1000:.2f}mm "
+          f"ee_vs_obj_xy={ee_vs_obj_xy * 1000:.2f}mm "
+          f"ee_z={live_ee_pos[2]:.4f} contact_z={contact_z:.4f}")
+
     # Close target = 3 mm INSIDE the cube surface along the finger-
     # closing axis (use the smaller of XY half-widths as a conservative
     # bound since the grasp orientation may yaw the gripper).  The pads
@@ -877,28 +894,14 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
 
     move_robot_smooth(robot_id, contact_joints, gui)
 
-    # Audit #85: pre-release EE lift by 15 mm.  At place geometry the
-    # finger pads share Z-range with the held cube — if the cube tilted
-    # in the gripper at pick time (audit #81 gentle close, up to ~11 deg
-    # observed), a corner pokes into a pad when open_gripper fires and
-    # the strict #80 verify gate (iv) correctly rejects.  The 3-retry
-    # loop makes geometry WORSE by letting physics tilt the cube further
-    # under continuous pad pressure.  Lifting 15 mm moves the pad bottom
-    # clear so the cube falls the last 15 mm and settles flat.  Composes
-    # with the audit-#36 post-place lift (~10 cm, AFTER the verified
-    # drop): this pre-lift is for pad-cube geometry, the post-lift is
-    # for plan_motion headroom on the next move.  Vertical, 15 mm, well
-    # within the contact_joints IK neighbourhood — no plan_motion needed.
-    if held_body_id is not None:
-        pre_release_ee = contact_ee + np.array([0.0, 0.0, 0.015])
-        pre_release_joints = solve_ik(robot_id, pre_release_ee,
-                                       grasp.orientation, pc,
-                                       seed=contact_joints)
-        if pre_release_joints is None:
-            print(f"    ERROR: IK failed for pre-release lift of "
-                  f"{obj_name} — aborting (audit #85)")
-            return None
-        move_robot_smooth(robot_id, pre_release_joints, gui)
+    # Audit #85's 15 mm pre-release lift was removed here (#P1 scope
+    # decision, 2026-08-15).  It compensated for a weld-era geometry:
+    # the gentle cosmetic close let the cube tilt up to ~11° in the
+    # weld's grip, and a tilted corner poked a pad on open.  The
+    # friction grasp squeezes the cube flat between both pads (observed
+    # pick tilt ≤ ~1.6°), so the wedge geometry that motivated the lift
+    # is gone; if drop verification regresses on place, restore the
+    # lift with a physical justification and disclose it.
 
     # Verify the cube actually falls free of the gripper — finger-pad
     # snags / position-control overshoot can leave it pinched even
