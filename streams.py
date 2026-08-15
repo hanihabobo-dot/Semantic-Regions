@@ -304,6 +304,30 @@ class BoxelStreams:
 
                 arm_joints = np.clip(arm_joints, JOINT_LIMITS_LOW, JOINT_LIMITS_HIGH)
 
+                # 6. FK verification (#P1, 2026-08-15) — the planning twin
+                #    of robot_utils.solve_ik's gate.  Clipping (and reach-
+                #    edge convergence failures) can leave a solution whose
+                #    actual EE pose is centimetres off target.  Execution
+                #    now rejects such configs (>10 mm), so certifying them
+                #    here would livelock the replan loop: the planner keeps
+                #    emitting a kin solution execution keeps refusing
+                #    (observed on random-pairs seed 3, place contact).
+                #    Rejecting at the stream makes the sampler draw a
+                #    different boxel/grasp instead.  The model state is
+                #    restored by the finally block regardless.
+                for i, angle in zip(ARM_JOINT_INDICES, arm_joints):
+                    p.resetJointState(self.robot_id, i, angle,
+                                      physicsClientId=pc)
+                fk_pos = p.getLinkState(self.robot_id, END_EFFECTOR_LINK,
+                                        physicsClientId=pc)[0]
+                fk_err = float(np.linalg.norm(
+                    np.asarray(fk_pos) - np.asarray(ee_pos, dtype=float)))
+                if fk_err > 0.010:
+                    logger.debug("_pybullet_ik: rejected solution with FK "
+                                 "error %.1f mm for target %s",
+                                 fk_err * 1000, ee_pos.tolist())
+                    return None
+
                 return RobotConfig(joint_positions=arm_joints)
 
             except Exception as e:
