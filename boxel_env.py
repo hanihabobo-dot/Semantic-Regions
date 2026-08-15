@@ -160,20 +160,24 @@ class SceneConfig:
 
 def default_scene() -> SceneConfig:
     """
-    Original hardcoded scene (3 occluders, 4 targets, all cubes).
+    Original hardcoded scene (3 occluders, 4 targets, all boxes).
 
     Preserved for backward compatibility and regression testing.
-    Occluder cubes are 0.075 m on a side (0.0375 m half-extent) —
-    graspable by the Panda gripper.  All positions within 0.65 m of
-    robot base (fix #17: shifted -0.4 m in X, sizes halved from original).
+    Occluders are 0.06 m wide × 0.075 m tall blocks (#P1 friction
+    grasp: the earlier 0.075 m cubes left only 2.5 mm of descent
+    clearance per finger at the Panda's 0.08 m max opening — too
+    tight without the removed constraint weld; height is kept at
+    0.075 m so the cast shadows match the historical scene).  All
+    positions within 0.65 m of robot base (fix #17: shifted -0.4 m
+    in X, sizes halved from original).
     """
     return SceneConfig(
         occluders=[
-            ObjectSpec(ObjectShape.BOX, [0.0375, 0.0375, 0.0375],
+            ObjectSpec(ObjectShape.BOX, [0.030, 0.030, 0.0375],
                        color=OBJECT_COLORS["red"],    mass=0.5, name="red_object"),
-            ObjectSpec(ObjectShape.BOX, [0.0375, 0.0375, 0.0375],
+            ObjectSpec(ObjectShape.BOX, [0.030, 0.030, 0.0375],
                        color=OBJECT_COLORS["green"],  mass=0.5, name="green_object"),
-            ObjectSpec(ObjectShape.BOX, [0.0375, 0.0375, 0.0375],
+            ObjectSpec(ObjectShape.BOX, [0.030, 0.030, 0.0375],
                        color=OBJECT_COLORS["orange"], mass=0.5, name="orange_object"),
         ],
         targets=[
@@ -293,22 +297,31 @@ def scalability_scene(n_occluders: int = 3, n_targets: int = 4,
         )
     rng = np.random.RandomState(seed)
 
-    # Cubes only — big occluders, small targets.  No cylinders, no
-    # spheres, no rectangular boxes (user pref).  Half-extent ranges
-    # are sized so an occluder reliably hides a target placed in its
-    # shadow cone: big_half ≥ small_half + buffer in every axis, and
-    # the lateral jitter window in ``_hidden_xy_positions`` (≈ occ_half
-    # − target_half) stays positive so multiple hidden targets can sit
-    # behind the same occluder.
-    occluders = [
-        ObjectSpec(ObjectShape.BOX,
-                   [rng.uniform(0.030, 0.045)] * 3,
-                   mass=0.5)
-        for _ in range(n_occluders)
-    ]
+    # Boxes only — tall narrow occluders, small cube targets.  No
+    # cylinders, no spheres (user pref).  Occluders became tall narrow
+    # blocks in the #P1 friction-grasp work (deferred #77): the old
+    # occluder cubes drew half-extents up to 0.045 (0.09 m full width),
+    # over the Panda's 0.08 m max finger opening — grippable only by
+    # the removed constraint weld.  Now XY half-extents stay ≤ 0.030
+    # (0.06 m wide, ≥ 1 cm descent clearance per finger) and the lost
+    # occlusion volume is recovered in height (0.10–0.15 m tall, which
+    # casts LONGER shadows from the fixed overhead camera).  Target
+    # halves stay below occluder halves so the lateral jitter window
+    # in ``_hidden_xy_positions`` (≈ occ_half − target_half) stays
+    # positive and multiple hidden targets can sit behind the same
+    # occluder; the raycast verifier + seed-retry layer backstop the
+    # guarantee either way.
+    occluders = []
+    for _ in range(n_occluders):
+        xy_half = rng.uniform(0.025, 0.030)
+        z_half = rng.uniform(0.050, 0.075)
+        occluders.append(
+            ObjectSpec(ObjectShape.BOX, [xy_half, xy_half, z_half],
+                       mass=0.5)
+        )
     targets = [
         ObjectSpec(ObjectShape.BOX,
-                   [rng.uniform(0.020, 0.028)] * 3,
+                   [rng.uniform(0.015, 0.020)] * 3,
                    mass=0.1)
         for _ in range(n_targets)
     ]
@@ -735,6 +748,17 @@ class BoxelTestEnv:
         robot_id = self._mirror_load_urdf("franka_panda/panda.urdf", robot_pos,
                                           [0, 0, 0, 1], useFixedBase=True)
         self.plan_robot_id = self._gui_to_plan[robot_id]
+        # #P1 friction grasp: the finger pads are the load path now — the
+        # JOINT_FIXED weld that used to carry the held object is gone, so
+        # the pad–object friction cone must hold the grasp on its own.
+        # Bullet combines friction multiplicatively: pad 1.2 × object 1.0
+        # (ObjectSpec default) → μ = 1.2 at the contact, ~48 N tangential
+        # capacity per pad under the 40 N close force, against ≤ 5 N of
+        # object weight.  Physics client only — the DIRECT plan client is
+        # used for collision queries, never contact simulation.
+        for finger_link in (9, 10):  # robot_utils.FINGER_JOINTS
+            p.changeDynamics(robot_id, finger_link, lateralFriction=1.2,
+                             physicsClientId=self.client_id)
         self.objects["robot"] = ObjectInfo(
             object_id=robot_id, name="robot",
             position=np.array(robot_pos), orientation=np.array([0, 0, 0, 1]),
