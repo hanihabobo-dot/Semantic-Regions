@@ -1305,6 +1305,17 @@ def main(gui=True, run_logger=None, scene_config=None,
                 if result[0] is None:
                     print(f"    IK or grip failure during pick — replanning "
                           f"(audit #82 / #P1 grip verification)")
+                    # #P1: a failed grasp attempt can shove or topple
+                    # the object (the descent or close physically
+                    # touched it).  Refresh every OBJECT boxel from
+                    # live PyBullet before replanning — otherwise the
+                    # planner re-targets the stale pose and the same
+                    # miss repeats until timeout (audit #83's
+                    # stale-boxel loop, pick edition; observed on
+                    # random-pairs seed 3: ee_vs_obj_xy ~130 mm on
+                    # every retry against a toppled occluder).
+                    env.update_object_positions()
+                    refresh_object_aabbs(env, registry, viz=viz)
                     break
                 held_body_id, current_config = result
                 # Track the registry boxel ID corresponding to the held
