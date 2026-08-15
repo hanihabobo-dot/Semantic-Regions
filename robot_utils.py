@@ -506,6 +506,29 @@ def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
         if gui:
             time.sleep(1 / 120)
 
+    # Endpoint convergence hold (#P1, 2026-08-15): streamed
+    # interpolation can undershoot the FINAL target by 10-20 mm of EE
+    # travel at awkward postures — tolerable for transit, fatal for a
+    # friction grasp that needs lateral centering within the ~10 mm
+    # descent clearance (grip verification was tripping on exactly
+    # this: [#P1-diag] ee_xy_err 14-21 mm on the missed picks).  Hold
+    # the final target until the arm converges in joint space or a
+    # short cap expires; near-instant when the stream already arrived.
+    # Same endpoint-hold pattern the archived bridge's
+    # follow_trajectory used for its grasp descents
+    # (archive/tampura_bridge_v1/execution_boxel.py).
+    target = [float(v) for v in target_joints]
+    for _ in range(120):
+        cur = [p.getJointState(robot_id, i)[0] for i in range(7)]
+        if max(abs(c - t) for c, t in zip(cur, target)) < 2e-3:
+            break
+        for i in range(7):
+            p.setJointMotorControl2(robot_id, i, p.POSITION_CONTROL,
+                                    targetPosition=target[i], force=240)
+        p.stepSimulation()
+        if gui:
+            time.sleep(1 / 120)
+
 
 def open_gripper(robot_id: int, gui: bool = False):
     """Open the Panda gripper to URDF max (0.04 m per finger) through
