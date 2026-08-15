@@ -315,14 +315,15 @@ def detect_execution_collisions(robot_id: int,
 
     Unlike the planning-time ``is_config_collision_free``, this operates
     on the *actual* physics state — no joint save/restore or body
-    repositioning is needed because ``stepSimulation`` already keeps
-    constrained bodies in the correct position.
+    repositioning is needed because the live simulation already has
+    every body where physics put it (#P1: the held object rides in the
+    friction pinch; pre-#P1 it rode on a constraint weld).
 
     Args:
         robot_id:         PyBullet body ID of the robot.
         physics_client:   PyBullet physics client ID.
-        held_body_id:     Body ID currently attached to the gripper via
-                          constraint, or None if the gripper is empty.
+        held_body_id:     Body ID currently held in the gripper (friction
+                          pinch, #P1), or None if the gripper is empty.
         support_body_ids: Body IDs of surfaces to ignore (table, ground).
         label:            Context string printed with each collision
                           (e.g. "move to free_001").
@@ -485,7 +486,14 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
             for i, angle in zip(ARM_JOINT_INDICES, arm_joints):
                 p.resetJointState(robot_id, i, angle,
                                   physicsClientId=physics_client)
+            # computeForwardKinematics=True is mandatory: without it,
+            # getLinkState can return the link transform cached from the
+            # last simulation step (the arm's pose BEFORE this solve_ik
+            # call), decoupling fk_err from the candidate solution.
+            # Same idiom as the reset-then-read block in
+            # is_config_collision_free above.
             fk_pos = p.getLinkState(robot_id, END_EFFECTOR_LINK,
+                                    computeForwardKinematics=True,
                                     physicsClientId=physics_client)[0]
             fk_err = float(np.linalg.norm(
                 np.asarray(fk_pos) - np.asarray(target_pos, dtype=float)))
