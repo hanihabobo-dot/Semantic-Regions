@@ -150,6 +150,9 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   (d) legacy tampura_bridge/execution_bridge.py: full pose-teleport pick/place
       (resetBasePositionAndOrientation at :34, :152).  Dead code (boxel_policy
       imports execution_boxel, not this).  Move to archive/ per policy.
+      [(c)+(d) OBE 2026-08-15: the whole tampura_bridge/ tree was discarded to
+      archive/tampura_bridge_v1/ — see the #P4 decision note.  No bridge mirror
+      exists to maintain until the bridge restart.]
 
   Oracle / ground-truth reads feeding planning or perception:
   (e) boxel_env.oracle_detect_objects (boxel_env.py:1620-1682): reads exact poses
@@ -226,7 +229,9 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   target_half) stays positive.  This changes every seeded scene and therefore
   every number: plan the canonical re-sweep (CB#113) AFTER this lands.
 
-  STARTING POINTS.  Perception: segment_visible (bridge) for visibility; the
+  STARTING POINTS.  Perception: segment_visible (was the bridge's; now at
+  archive/tampura_bridge_v1/perception_adapter.py, reference only) for
+  visibility; the
   commented-out depth/point-cloud path (f) for geometry; PyBullet's segmentation
   buffer gives object masks, from which per-object point clouds give estimated
   AABBs/poses (sim-grade "real perception": pixels in, poses out, no body-id
@@ -338,8 +343,19 @@ folds into the post-#P1 canonical sweep (CB#113).
 The thesis comparison is honest but indirect (TH#306): local TAMPURA re-run on
 find_dice vs our pipeline on OUR scenes.  The paper needs ours running in THEIR
 env, seed-for-seed (reuse TAMPURA's exact 20 seeds; bridge solve stays
-seed-generic).  The vehicle exists: tampura_bridge/ (runs out-of-process inside
-their WSL venv via PYTHONPATH injection; BoxelPolicy drives TAMPURA's own rollout
+seed-generic).
+
+DECISION 2026-08-15 (user): the existing bridge implementation is DISCARDED —
+"remove all the work done in tampura bridge. that work was trash. we should
+start over."  The whole tampura_bridge/ tree (genuine bridge, smoke probes,
+captures) moved to archive/tampura_bridge_v1/ (also recoverable pre-move from
+git history).  The CB#120/CB#123 state notes below describe that ARCHIVED
+version — they stay as the requirements list for the restart.  The restart
+must build on the post-#P1 weld-free pipeline from day one; #P1's bridge-
+mirroring obligations are void until the new bridge exists.
+
+The DISCARDED vehicle was: tampura_bridge/ (ran out-of-process inside
+their WSL venv via PYTHONPATH injection; BoxelPolicy drove TAMPURA's own rollout
 via no-op actions + belief_bridge writes into their SceneBelief; entry point
 run_boxel_on_finddice.py).
 
