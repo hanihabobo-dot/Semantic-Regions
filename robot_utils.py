@@ -467,7 +467,35 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
                np.any(arm_joints > JOINT_LIMITS_HIGH + 0.1):
                 return None
 
-            return np.clip(arm_joints, JOINT_LIMITS_LOW, JOINT_LIMITS_HIGH)
+            arm_joints = np.clip(arm_joints, JOINT_LIMITS_LOW,
+                                 JOINT_LIMITS_HIGH)
+
+            # FK verification (#P1, 2026-08-15): clipping (and reach-edge
+            # convergence failures) can leave a solution whose ACTUAL EE
+            # pose is centimetres from the target — under the weld this
+            # merely looked sloppy, but a friction grasp descending 60 mm
+            # off-centre bulldozes the scene (random-pairs seed 3: the
+            # arm pressed onto a tall occluder's top edge at the same
+            # wrong pose on every replan).  Set the candidate joints,
+            # read the EE link pose, and reject solutions more than
+            # 10 mm from the Cartesian target so callers get an honest
+            # IK failure -> abort -> replan instead of a silently wrong
+            # config.  The model state is restored by the finally block
+            # regardless.
+            for i, angle in zip(ARM_JOINT_INDICES, arm_joints):
+                p.resetJointState(robot_id, i, angle,
+                                  physicsClientId=physics_client)
+            fk_pos = p.getLinkState(robot_id, END_EFFECTOR_LINK,
+                                    physicsClientId=physics_client)[0]
+            fk_err = float(np.linalg.norm(
+                np.asarray(fk_pos) - np.asarray(target_pos, dtype=float)))
+            if fk_err > 0.010:
+                logger.debug("solve_ik: rejected solution with FK error "
+                             "%.1f mm for target %s", fk_err * 1000,
+                             np.asarray(target_pos).tolist())
+                return None
+
+            return arm_joints
 
         except Exception as e:
             logger.warning("solve_ik failed for pos=%s: %s", target_pos.tolist(), e)
