@@ -1341,7 +1341,7 @@ def main(gui=True, run_logger=None, scene_config=None,
 
             elif action_name == 'place':
                 # PLACE: approach above destination → lower to contact →
-                # open gripper → release constraint → settle → retreat.
+                # open gripper (motor-driven, #P1) → settle → retreat.
                 # After placing, we refresh all object positions from the
                 # simulator so subsequent actions and replans use up-to-date
                 # geometry.

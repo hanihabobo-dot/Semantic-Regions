@@ -318,7 +318,12 @@ class BoxelStreams:
                 for i, angle in zip(ARM_JOINT_INDICES, arm_joints):
                     p.resetJointState(self.robot_id, i, angle,
                                       physicsClientId=pc)
+                # computeForwardKinematics=True is mandatory — without
+                # it getLinkState can return the transform cached from
+                # the last simulation step, decoupling fk_err from the
+                # candidate solution (see robot_utils.solve_ik's gate).
                 fk_pos = p.getLinkState(self.robot_id, END_EFFECTOR_LINK,
+                                        computeForwardKinematics=True,
                                         physicsClientId=pc)[0]
                 fk_err = float(np.linalg.norm(
                     np.asarray(fk_pos) - np.asarray(ee_pos, dtype=float)))
@@ -560,10 +565,14 @@ class BoxelStreams:
         Generate grasp poses for an object with varying clearance.
 
         Yields a single top-down grasp at a fixed 0.10 m above the
-        object center.  Execution uses a constraint-based weld so grip
-        security is independent of the exact EE height; the contact-
-        pose IK is seeded from the planner's q (audit #37/#38) so it
-        stays in the same IK branch.
+        object center.  #P1 (2026-08-15): execution grasps by pad
+        friction now (the constraint weld is gone), so grip security
+        DOES depend on precise lateral centering at the contact pose —
+        the FK-verified IK gates (solve_ik / _pybullet_ik) and
+        execute_pick's grip verification enforce it.  The contact-pose
+        IK is seeded from the planner's q (audit #37/#38) so it stays
+        in the same IK branch.  Replacing this single fixed grasp with
+        a real sampler is #P1 step (4) / #P5.
 
         PDDLStream declaration (see pddl/stream.pddl):
             (:stream sample-grasp
