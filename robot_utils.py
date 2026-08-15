@@ -516,7 +516,7 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
 
 
 def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
-                      steps: int = 60):
+                      steps: int = 60, settle: bool = False):
     """
     Smoothly interpolate joint positions from the current state to
     *target_joints*.
@@ -526,6 +526,14 @@ def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
         target_joints: Sequence of 7 target joint angles.
         gui: If True, sleep between steps for real-time visualisation.
         steps: Number of interpolation steps.
+        settle: When True, hold the final target after the stream until
+            the arm converges in joint space (endpoint convergence hold,
+            #P1).  Opt-in ONLY at precision-critical endpoints — the
+            grasp/release contact descents and the LAST waypoint of a
+            planned move.  Intermediate trajectory waypoints must stream
+            with settle=False, or the motion degrades into the discrete
+            converge-stop-converge stutter the archived bridge's
+            follow_trajectory docstring warns about.
     """
     import time
     current = [p.getJointState(robot_id, i)[0] for i in range(7)]
@@ -552,7 +560,12 @@ def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
     # short cap expires; near-instant when the stream already arrived.
     # Same endpoint-hold pattern the archived bridge's
     # follow_trajectory used for its grasp descents
-    # (archive/tampura_bridge_v1/execution_boxel.py).
+    # (archive/tampura_bridge_v1/execution_boxel.py).  Opt-in via
+    # ``settle`` — running it at every trajectory waypoint made the arm
+    # visibly stutter (user report 2026-08-15), so transit waypoints
+    # stream and only precision endpoints converge.
+    if not settle:
+        return
     target = [float(v) for v in target_joints]
     for _ in range(120):
         cur = [p.getJointState(robot_id, i)[0] for i in range(7)]
