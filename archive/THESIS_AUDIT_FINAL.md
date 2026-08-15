@@ -1,4 +1,9 @@
 ================================================================================
+ARCHIVED 2026-08-15 — thesis submitted and graded (1.3).  Superseded by
+PAPER_AUDIT.txt at the repo root (ICAPS 2027 workstreams).  Every issue in this
+file carries a resolution marker; the trailing "OPEN ISSUES" summary block is
+stale (trust the per-issue headers).  Do not work from this file.
+================================================================================
 THESIS AUDIT — OPEN ISSUES
 ================================================================================
 Date:   2026-05-16
