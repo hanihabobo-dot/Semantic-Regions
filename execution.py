@@ -307,6 +307,43 @@ def audit_robot_held_state(env, robot_id, expected_held_body_id=None,
     return bodies
 
 
+class EmptyHandError(Exception):
+    """#P1 F1(c): place/stack entered with no object between the pads.
+
+    Raised by the held-contact entry assert in execute_place /
+    execute_stack.  Needs its OWN dispatcher path: the audit-#79
+    fingers_open classifier would misfile this case as "IK failure,
+    grip intact" (the fingers are CLOSED — on nothing) and leave stale
+    held state for the next planner.plan().  The dispatcher's handler
+    clears held state, refreshes OBJECT boxels from live PyBullet, and
+    replans.  The gripper is opened before raising so the next pick
+    descent starts from the open baseline.
+    """
+
+
+def _assert_held_contact(robot_id, held_body_id, obj_name, gui, action):
+    """#P1 F1(c) entry gate for place/stack: the held object must still
+    be pinched between BOTH finger pads when the action starts.  The
+    friction grasp can lose the object in transport (or never have had
+    it — a phantom hold that slipped past the pick-side gates); the
+    drop verifier's height gate (ii) is blind for table-height places,
+    so without this assert a lost cube can be "PLACED" without ever
+    moving.  On failure: open the gripper (the fingers are closed on
+    air) and raise EmptyHandError for the dispatcher's dedicated path.
+    """
+    contacts = p.getContactPoints(bodyA=robot_id, bodyB=held_body_id)
+    pad_links = {c[3] for c in contacts if c[3] in FINGER_JOINTS}
+    if pad_links != set(FINGER_JOINTS):
+        nf = sum(c[9] for c in contacts if c[3] in FINGER_JOINTS)
+        print(f"    ERROR: {action} entry assert failed for {obj_name} — "
+              f"held object not in the gripper (pad contacts="
+              f"{sorted(pad_links) or 'none'}, need both {FINGER_JOINTS}, "
+              f"pad_normal_force={nf:.2f}N).  Opening gripper (#P1 F1).")
+        open_gripper(robot_id, gui)
+        raise EmptyHandError(
+            f"{action} {obj_name}: no held-object pad contact at entry")
+
+
 def _release_and_verify_drop(
     env,
     robot_id,
@@ -734,6 +771,10 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # implicit in the PDDL predicate (holding ?o) — init = open, only
     # pick/place/stack change it.  No drift channel for this safety net
     # to defend against; the dispatcher already refuses pick-on-pick.
+    # #P1 F1: "init = open" is now enforced in PHYSICS too — _setup_scene
+    # resets the fingers to 0.04 after robot load (they spawn closed;
+    # the #37/#38 removal rested on a false "loadURDF = open" assumption
+    # that produced the phantom-first-pick field bug).
     # settle=True: the contact descent is precision-critical (#P1) —
     # the friction grasp needs lateral centering within the descent
     # clearance, so hold the endpoint until the arm converges.
@@ -788,8 +829,27 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
               f"Opening gripper and replanning.")
         open_gripper(robot_id, gui)
         return None, None
+    # #P1 F1(d) aperture plausibility: link identity alone cannot
+    # distinguish a pinch from both fingertips STANDING ON the object
+    # top (the phantom first pick read both pads "in contact" with the
+    # fingers at ~0.000 m).  A genuine pinch parks each finger at the
+    # object's half-width (close target is cube_hw − 3 mm; the pads
+    # stop at the surface).  6 mm tolerance covers off-centre grasps
+    # and the min-vs-actual footprint axis mismatch on non-square
+    # objects (≤ 5 mm in the resized scenes).
+    finger_pos = [p.getJointState(robot_id, fj)[0] for fj in FINGER_JOINTS]
+    aperture_err = max(abs(fp - cube_hw) for fp in finger_pos)
+    if aperture_err > 0.006:
+        print(f"    ERROR: grip aperture implausible for {obj_name} — "
+              f"finger_pos=[{finger_pos[0]:.4f},{finger_pos[1]:.4f}] vs "
+              f"cube_hw={cube_hw:.4f} (err={aperture_err * 1000:.1f}mm "
+              f"> 6mm; standing-on-top phantom or partial pinch). "
+              f"Opening gripper and replanning (#P1 F1).")
+        open_gripper(robot_id, gui)
+        return None, None
     print(f"    Grip verified for {obj_name}: both pads in contact, "
-          f"pad_normal_force={grip_nf:.2f}N")
+          f"pad_normal_force={grip_nf:.2f}N, "
+          f"aperture_err={aperture_err * 1000:.1f}mm")
 
     # Audit #82: post-pick assertion — only the newly grasped cube should
     # be in contact with the robot.  Anything else surfaces a ghost from
@@ -803,6 +863,26 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # free space because the cube now rides in the closed gripper.
     _apply_post_action_lift(robot_id, contact_ee, grasp.orientation,
                             contact_joints, pc, gui)
+
+    # #P1 F1(b) post-lift re-verify: with the weld gone, "verified at
+    # close" can never be assumed to mean "still held after the lift".
+    # A phantom hold (tips standing on the object top), a close-then-
+    # eject, or a slip-on-lift all separate here — the object stays
+    # behind while the EE rises.  Re-check both pads against obj_id and
+    # abort into the dispatcher's replan path on loss.
+    lift_contacts = p.getContactPoints(bodyA=robot_id, bodyB=obj_id)
+    lift_pads = {c[3] for c in lift_contacts if c[3] in FINGER_JOINTS}
+    if lift_pads != set(FINGER_JOINTS):
+        lift_nf = sum(c[9] for c in lift_contacts
+                      if c[3] in FINGER_JOINTS)
+        obj_z_now = p.getBasePositionAndOrientation(obj_id)[0][2]
+        print(f"    ERROR: grip lost after post-pick lift for {obj_name} — "
+              f"pad contacts={sorted(lift_pads) or 'none'} (need both "
+              f"{FINGER_JOINTS}), pad_normal_force={lift_nf:.2f}N, "
+              f"obj_z={obj_z_now:.4f}. Opening gripper and replanning "
+              f"(#P1 F1).")
+        open_gripper(robot_id, gui)
+        return None, None
 
     # Read the actual joint state — position control may not reach the
     # exact IK target.  Tracking the true state prevents PDDL state
@@ -861,6 +941,11 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     # whatever grip height the friction grasp established at pick time.
     table_z = env.table_surface_height
     if held_body_id is not None:
+        # #P1 F1(c): held-contact entry assert — raises EmptyHandError
+        # (dedicated dispatcher path) when the object was lost in
+        # transport or the hold was phantom all along.
+        _assert_held_contact(robot_id, held_body_id, obj_name, gui,
+                             action="place")
         held_aabb_min, held_aabb_max = p.getAABB(held_body_id)
         obj_half_height = (held_aabb_max[2] - held_aabb_min[2]) / 2.0
 
@@ -1016,6 +1101,12 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
         print(f"    ERROR: stack {obj_name} on {on_obj_name} called without "
               f"a held object.")
         return None
+
+    # #P1 F1(c): held-contact entry assert — raises EmptyHandError
+    # (dedicated dispatcher path) when the object was lost in transport
+    # or the hold was phantom all along.
+    _assert_held_contact(robot_id, held_body_id, obj_name, gui,
+                         action="stack")
 
     support_id = env.objects[on_obj_name].object_id
     sup_min, sup_max = p.getAABB(support_id)

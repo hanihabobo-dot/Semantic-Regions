@@ -95,7 +95,7 @@ from execution import (audit_robot_held_state,
                        refresh_object_aabbs,
                        release_held_object_in_place,
                        execute_pick, execute_place, execute_stack,
-                       handle_sense_action)
+                       handle_sense_action, EmptyHandError)
 
 
 def goal_satisfied(goal, on_relations=None, target_found=False) -> bool:
@@ -1369,9 +1369,27 @@ def main(gui=True, run_logger=None, scene_config=None,
                     print(f"    ERROR: Cannot resolve position for boxel '{boxel_id_str}'")
                     break
 
-                place_result = execute_place(
-                    robot_id, env, obj_str, place_pos, grasp, config,
-                    held_body_id, gui)
+                try:
+                    place_result = execute_place(
+                        robot_id, env, obj_str, place_pos, grasp, config,
+                        held_body_id, gui)
+                except EmptyHandError:
+                    # #P1 F1(c): the held object was not in the gripper at
+                    # place entry (transport slip / residual phantom hold).
+                    # The audit-#79 fingers_open classifier below would
+                    # misfile this as "IK failure, grip intact" and leave
+                    # held state set — clear it explicitly, refresh OBJECT
+                    # boxels from live PyBullet, and replan.
+                    print(f"    empty hand at place entry for {obj_str}; "
+                          f"clearing held state and replanning (#P1 F1).")
+                    held_body_id = None
+                    held_object_boxel_id = None
+                    audit_robot_held_state(
+                        env, robot_id, expected_held_body_id=None,
+                        tag=f"post-empty-hand-place:{obj_str}")
+                    env.update_object_positions()
+                    refresh_object_aabbs(env, registry, viz=viz)
+                    break
                 if place_result is None:
                     # audit #79 (#P1 rework) — distinguish IK failure
                     # (fingers still closed on the object, grip intact)
@@ -1504,9 +1522,24 @@ def main(gui=True, run_logger=None, scene_config=None,
                 on_obj_str = str(on_obj)
                 print(f"    Stacking {obj_str} on {on_obj_str}...")
 
-                stack_result = execute_stack(
-                    robot_id, env, obj_str, on_obj_str, grasp, config,
-                    held_body_id, gui)
+                try:
+                    stack_result = execute_stack(
+                        robot_id, env, obj_str, on_obj_str, grasp, config,
+                        held_body_id, gui)
+                except EmptyHandError:
+                    # #P1 F1(c): mirror of the place branch — empty hand at
+                    # stack entry gets its own path so the fingers_open
+                    # classifier can't misfile it as an IK failure.
+                    print(f"    empty hand at stack entry for {obj_str}; "
+                          f"clearing held state and replanning (#P1 F1).")
+                    held_body_id = None
+                    held_object_boxel_id = None
+                    audit_robot_held_state(
+                        env, robot_id, expected_held_body_id=None,
+                        tag=f"post-empty-hand-stack:{obj_str}")
+                    env.update_object_positions()
+                    refresh_object_aabbs(env, registry, viz=viz)
+                    break
                 if stack_result is None:
                     # audit #79 (#P1 rework) — mirror of the place
                     # dispatch branch.  execute_stack delegates release
