@@ -471,7 +471,7 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
             arm_joints = np.clip(arm_joints, JOINT_LIMITS_LOW,
                                  JOINT_LIMITS_HIGH)
 
-            # FK verification (#P1, 2026-08-15): clipping (and reach-edge
+            # FK verification (#P1, 2026-08-20): clipping (and reach-edge
             # convergence failures) can leave a solution whose ACTUAL EE
             # pose is centimetres from the target — under the weld this
             # merely looked sloppy, but a friction grasp descending 60 mm
@@ -550,7 +550,7 @@ def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
         if gui:
             time.sleep(1 / 120)
 
-    # Endpoint convergence hold (#P1, 2026-08-15): streamed
+    # Endpoint convergence hold (#P1, 2026-08-20): streamed
     # interpolation can undershoot the FINAL target by 10-20 mm of EE
     # travel at awkward postures — tolerable for transit, fatal for a
     # friction grasp that needs lateral centering within the ~10 mm
@@ -562,7 +562,7 @@ def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
     # follow_trajectory used for its grasp descents
     # (archive/tampura_bridge_v1/execution_boxel.py).  Opt-in via
     # ``settle`` — running it at every trajectory waypoint made the arm
-    # visibly stutter (user report 2026-08-15), so transit waypoints
+    # visibly stutter (user report 2026-08-20), so transit waypoints
     # stream and only precision endpoints converge.
     if not settle:
         return
@@ -583,7 +583,7 @@ def open_gripper(robot_id: int, gui: bool = False):
     """Open the Panda gripper to URDF max (0.04 m per finger) through
     the finger motors — a real release, no teleport.
 
-    #P1 friction grasp (2026-08-15): the audit-#81 resetJointState
+    #P1 friction grasp (2026-08-20): the audit-#81 resetJointState
     teleport is removed.  It existed because the JOINT_FIXED weld
     pinned the held object rigidly between the pads while
     POSITION_CONTROL tried to drag them apart — the motor lost that
@@ -625,7 +625,7 @@ def close_gripper(robot_id: int, gui: bool = False,
                   target_finger_pos: float = 0.01, force: float = 40):
     """Close the Panda gripper toward ``target_finger_pos`` per finger.
 
-    #P1 friction grasp (2026-08-15): close_gripper is now the LOAD
+    #P1 friction grasp (2026-08-20): close_gripper is now the LOAD
     PATH.  The JOINT_FIXED weld that used to provide all grip
     stability is gone; the pads must build and HOLD a normal force so
     that pad friction (μ = 1.2, boxel_env finger-pad setup) carries

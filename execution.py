@@ -632,7 +632,7 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     The contact waypoint is computed from the object's actual AABB so
     the Panda's finger pads physically wrap around the object.
 
-    #P1 friction grasp (2026-08-15): the JOINT_FIXED constraint weld
+    #P1 friction grasp (2026-08-20): the JOINT_FIXED constraint weld
     (the audit-#7-part-B "accepted simulation simplification") is
     removed.  The hold is now pad friction alone: close_gripper drives
     the fingers toward a target 3 mm inside the object surface, the
@@ -900,7 +900,7 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     move_robot_smooth(robot_id, contact_joints, gui, settle=True)
 
     # Audit #85's 15 mm pre-release lift was removed here (#P1 scope
-    # decision, 2026-08-15).  It compensated for a weld-era geometry:
+    # decision, 2026-08-20).  It compensated for a weld-era geometry:
     # the gentle cosmetic close let the cube tilt up to ~11° in the
     # weld's grip, and a tilted corner poked a pad on open.  The
     # friction grasp squeezes the cube flat between both pads (observed
