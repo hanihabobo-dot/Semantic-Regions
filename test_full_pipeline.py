@@ -969,6 +969,14 @@ def main(gui=True, run_logger=None, scene_config=None,
     # successful pick of the object clears its counter.
     pick_fail_counts: Dict[str, int] = {}
     pick_giveup_objects: set = set()
+    # Review fix 2026-08-20 (integration): transit losses (EmptyHandError
+    # at place/stack entry) need their OWN strike counter — the pick
+    # succeeds each cycle (resetting pick_fail_counts), the hold slips
+    # during the move, and without a counter the pick→transit-loss→
+    # replan cycle is unbounded.  NOT reset by a successful pick (that
+    # proves nothing about transport); cleared by a delivered
+    # place/stack of the object.  3 strikes → same giveup path.
+    transit_loss_counts: Dict[str, int] = {}
 
     def _loop_done() -> bool:
         # Holding goals stop when belief.target_found flips; stack goals
@@ -1152,19 +1160,32 @@ def main(gui=True, run_logger=None, scene_config=None,
             env.refresh_debug_camera_views()
 
         if plan is None:
-            if pick_giveup_objects:
-                # #P1 F2: the no-plan is (at least partly) self-inflicted —
-                # objects were withdrawn from the grasp stream after 3
-                # failed picks each.  Classify distinctly so eval tooling
-                # can attribute the failure to grasping, not planning.
+            # #P1 F2: classify "pick_giveup" only when a GOAL-CRITICAL
+            # object (the holding target / a stack-goal cube) was
+            # withdrawn from the grasp stream — then the goal is
+            # provably unreachable because of the giveup.  A withdrawn
+            # OCCLUDER may or may not be why this particular plan()
+            # failed (review fix 2026-08-20: blanket labelling
+            # mis-attributed unrelated no-plans to grasping), so those
+            # runs keep "planner_failed" with a disclosure line.
+            goal_critical_giveups = (
+                pick_giveup_objects & set(planner_target_objects))
+            if goal_critical_giveups:
                 exit_reason = "pick_giveup"
-                print(f"ERROR: No plan found — {len(pick_giveup_objects)} "
-                      f"object(s) marked ungraspable after repeated pick "
-                      f"failures: {sorted(pick_giveup_objects)} "
-                      f"(#P1 F2 giveup).")
+                print(f"ERROR: No plan found — goal-critical object(s) "
+                      f"marked ungraspable after repeated pick failures: "
+                      f"{sorted(goal_critical_giveups)} (#P1 F2 giveup).")
             else:
                 exit_reason = "planner_failed"
-                print("ERROR: No plan found!")
+                if pick_giveup_objects:
+                    print(f"ERROR: No plan found.  Note: "
+                          f"{len(pick_giveup_objects)} non-goal object(s) "
+                          f"were earlier withdrawn from the grasp stream "
+                          f"after repeated pick failures "
+                          f"({sorted(pick_giveup_objects)}) and may "
+                          f"contribute (#P1 F2).")
+                else:
+                    print("ERROR: No plan found!")
             break
 
         print(f"Plan: {len(plan)} actions")
@@ -1439,6 +1460,18 @@ def main(gui=True, run_logger=None, scene_config=None,
                     # boxels from live PyBullet, and replan.
                     print(f"    empty hand at place entry for {obj_str}; "
                           f"clearing held state and replanning (#P1 F1).")
+                    transit_loss_counts[obj_str] = \
+                        transit_loss_counts.get(obj_str, 0) + 1
+                    print(f"    transit loss {transit_loss_counts[obj_str]}"
+                          f"/3 for {obj_str} (review-fix strike counter)")
+                    if (transit_loss_counts[obj_str] >= 3
+                            and obj_str not in pick_giveup_objects):
+                        print(f"    ERROR: {obj_str} lost in transit "
+                              f"{transit_loss_counts[obj_str]} times — "
+                              f"giving up on grasping it (#P1 F2 giveup, "
+                              f"transit edition).")
+                        pick_giveup_objects.add(obj_str)
+                        planner.streams.ungraspable_objects.add(obj_str)
                     held_body_id = None
                     held_object_boxel_id = None
                     audit_robot_held_state(
@@ -1488,6 +1521,9 @@ def main(gui=True, run_logger=None, scene_config=None,
                 current_config = place_result
                 held_body_id = None
                 held_object_boxel_id = None
+                # Review fix: a delivered place proves transport works —
+                # clear the object's transit-loss strikes.
+                transit_loss_counts.pop(obj_str, None)
 
                 # Refresh positions after the physics settle step inside
                 # execute_place — objects may have shifted slightly.
@@ -1599,6 +1635,18 @@ def main(gui=True, run_logger=None, scene_config=None,
                     # classifier can't misfile it as an IK failure.
                     print(f"    empty hand at stack entry for {obj_str}; "
                           f"clearing held state and replanning (#P1 F1).")
+                    transit_loss_counts[obj_str] = \
+                        transit_loss_counts.get(obj_str, 0) + 1
+                    print(f"    transit loss {transit_loss_counts[obj_str]}"
+                          f"/3 for {obj_str} (review-fix strike counter)")
+                    if (transit_loss_counts[obj_str] >= 3
+                            and obj_str not in pick_giveup_objects):
+                        print(f"    ERROR: {obj_str} lost in transit "
+                              f"{transit_loss_counts[obj_str]} times — "
+                              f"giving up on grasping it (#P1 F2 giveup, "
+                              f"transit edition).")
+                        pick_giveup_objects.add(obj_str)
+                        planner.streams.ungraspable_objects.add(obj_str)
                     held_body_id = None
                     held_object_boxel_id = None
                     audit_robot_held_state(
@@ -1649,6 +1697,9 @@ def main(gui=True, run_logger=None, scene_config=None,
                 current_config = stack_result
                 held_body_id = None
                 held_object_boxel_id = None
+                # Review fix: a delivered stack proves transport works —
+                # clear the object's transit-loss strikes.
+                transit_loss_counts.pop(obj_str, None)
 
                 env.update_object_positions()
                 for bid, binfo in boxel_to_pybullet.items():
