@@ -79,9 +79,28 @@ class ShadowCalculator:
         _pc = {} if physics_client is None else {"physicsClientId": physics_client}
 
         # --- Step 1: Determine Shadow Start (Back Face) ---
-        # Direction from camera to object center
+        # Direction from camera to object center, HORIZONTAL PLANE ONLY
+        # (#P1 F3).  The shadow model is 2.5-D: ray hits always resolve
+        # onto the table surface and the shadow's Z range is the height
+        # overestimate, so "back" means "away from the camera across the
+        # table", never "down".  With the full 3-D direction, a tall
+        # narrow occluder close to the camera had its downward component
+        # dominate — all 4 BOTTOM corners classified as back corners,
+        # the ray hits collapsed onto the occluder's own footprint, and
+        # the object-subtraction inverted the shadow to negative extent
+        # (field report missing_shadow.md: shadow_of_red_object extent.z
+        # = -8.7e-6 m; test_boxel_fits then never holds, so a target
+        # hidden there was structurally unfindable).
         cam_to_obj = obj_center - cam_pos
-        cam_to_obj_norm = cam_to_obj / np.linalg.norm(cam_to_obj)
+        cam_to_obj[2] = 0.0
+        _horiz_norm = np.linalg.norm(cam_to_obj)
+        if _horiz_norm < 1e-9:
+            # Degenerate: object directly under the camera.  Fall back
+            # to the full 3-D direction (pre-F3 behaviour); the
+            # degenerate-extent guard below still protects the output.
+            cam_to_obj = obj_center - cam_pos
+            _horiz_norm = np.linalg.norm(cam_to_obj)
+        cam_to_obj_norm = cam_to_obj / _horiz_norm
         
         # Generate all 8 corners
         all_corners = [
@@ -181,8 +200,17 @@ class ShadowCalculator:
         # Enforce Height Overestimate
         full_max[2] = max(full_max[2], o_max[2])
         
-        # Subtract object from shadow
+        # Subtract object from shadow.  Dominant axis in the HORIZONTAL
+        # plane only (#P1 F3): shadows propagate across the table, so
+        # the subtraction must trim a lateral side of the AABB.  With
+        # the Z component included, symmetric back-corner hits let the
+        # downward term win argmax and the subtraction clamped the
+        # shadow's TOP down to the occluder's own base — the inverted-
+        # sliver bug.  Zeroing Z keeps dom_axis in {0, 1}; downstream
+        # _is_downstream reuses this direction and is horizontal for
+        # the same reason.
         shadow_dir = np.mean(hit_points, axis=0) - obj_center
+        shadow_dir[2] = 0.0
         dom_axis = int(np.argmax(np.abs(shadow_dir)))
 
         s_min = full_min.copy()
@@ -247,12 +275,27 @@ class ShadowCalculator:
                 ))
         else:
             # No overhang collision → one big shadow AABB (pre-#72).
-            initial_shadows.append(BoxelData(
-                boxel_type=BoxelType.SHADOW,
-                min_corner=s_min.copy(),
-                max_corner=s_max.copy(),
-                created_by_object=obj_boxel.object_name,
-            ))
+            # #P1 F3 degenerate-extent guard, mirroring the two-slab
+            # carve's check above: an inverted/zero AABB must never be
+            # registered (test_boxel_fits is silently False on negative
+            # extents while blocks_view_at facts still claim the region
+            # occludes — a planner-correctness hole, not a cosmetic
+            # one).  With the horizontal-plane fixes above this should
+            # be unreachable; if it fires, something upstream is wrong
+            # again — warn loudly instead of silently dropping.
+            if np.any(s_max - s_min <= 1e-6):
+                print(f"    WARNING: degenerate shadow AABB for "
+                      f"{obj_boxel.object_name} (extent="
+                      f"{(s_max - s_min).tolist()}) — shadow NOT "
+                      f"registered; occlusion model is missing a region "
+                      f"(#P1 F3 guard, should be unreachable)")
+            else:
+                initial_shadows.append(BoxelData(
+                    boxel_type=BoxelType.SHADOW,
+                    min_corner=s_min.copy(),
+                    max_corner=s_max.copy(),
+                    created_by_object=obj_boxel.object_name,
+                ))
 
         # --- Step 3: Handle Obstacles (Splitting) ---
         active_shadows = initial_shadows
