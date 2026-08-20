@@ -221,6 +221,7 @@ def report_run_outcome(
     sense_count: int = 0,  # audit #73 step 3(c) plot 4
     shadows: list,
     blocked_giveup_shadows: set,
+    pick_giveup_objects: Optional[set] = None,  # #P1 F2 pick 3-strike giveup
     plan_times: list,
     total_plan_time: float,
     physical_failures: list,
@@ -272,6 +273,16 @@ def report_run_outcome(
                       f"(real fix #47 deferred 2026-05-06)")
             else:
                 print(f"FAILED: All {len(shadows)} shadows searched — target not found")
+        elif exit_reason == "pick_giveup":
+            # #P1 F2: mirror of the audit-#21 blocked-shadow giveup —
+            # the run ended because objects were withdrawn from the
+            # grasp stream after 3 failed pick attempts each (single
+            # fixed grasp cannot adapt to a toppled/shifted pose; the
+            # step-(4) sampler is the real remedy).
+            print(f"FAILED: Gave up grasping "
+                  f"{sorted(pick_giveup_objects or [])} after 3 failed "
+                  f"pick attempts each — no plan without them "
+                  f"({len(remaining)} unsearched shadows remaining)")
         elif exit_reason == "planner_failed":
             print(f"FAILED: Planner returned no plan "
                   f"({len(remaining)} unsearched shadows remaining)")
