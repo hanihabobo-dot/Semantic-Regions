@@ -323,25 +323,55 @@ class BoxelStreams:
                 #    Rejecting at the stream makes the sampler draw a
                 #    different boxel/grasp instead.  The model state is
                 #    restored by the finally block regardless.
-                for i, angle in zip(ARM_JOINT_INDICES, arm_joints):
-                    p.resetJointState(self.robot_id, i, angle,
-                                      physicsClientId=pc)
-                # computeForwardKinematics=True is mandatory — without
-                # it getLinkState can return the transform cached from
-                # the last simulation step, decoupling fk_err from the
-                # candidate solution (see robot_utils.solve_ik's gate).
-                fk_pos = p.getLinkState(self.robot_id, END_EFFECTOR_LINK,
-                                        computeForwardKinematics=True,
-                                        physicsClientId=pc)[0]
-                fk_err = float(np.linalg.norm(
-                    np.asarray(fk_pos) - np.asarray(ee_pos, dtype=float)))
-                if fk_err > 0.010:
-                    logger.debug("_pybullet_ik: rejected solution with FK "
-                                 "error %.1f mm for target %s",
-                                 fk_err * 1000, ee_pos.tolist())
-                    return None
-
-                return RobotConfig(joint_positions=arm_joints)
+                #    #P1 F4: before the gate decides, refine up to 2 extra
+                #    rounds with the solver re-seeded from its own output.
+                #    PyBullet's iterative IK routinely stalls 15-25 mm
+                #    short near the workspace boundary (level-4 stack
+                #    approach); restarts recover convergence when the
+                #    pose is actually reachable.
+                fk_err = None
+                for refine_round in range(3):
+                    for i, angle in zip(ARM_JOINT_INDICES, arm_joints):
+                        p.resetJointState(self.robot_id, i, angle,
+                                          physicsClientId=pc)
+                    # computeForwardKinematics=True is mandatory — without
+                    # it getLinkState can return the transform cached from
+                    # the last simulation step, decoupling fk_err from the
+                    # candidate solution (see robot_utils.solve_ik's gate).
+                    fk_pos = p.getLinkState(self.robot_id, END_EFFECTOR_LINK,
+                                            computeForwardKinematics=True,
+                                            physicsClientId=pc)[0]
+                    fk_err = float(np.linalg.norm(
+                        np.asarray(fk_pos) - np.asarray(ee_pos, dtype=float)))
+                    if fk_err <= 0.010:
+                        return RobotConfig(joint_positions=arm_joints)
+                    if refine_round == 2:
+                        break  # last candidate already checked — done
+                    refined = p.calculateInverseKinematics(
+                        bodyUniqueId=self.robot_id,
+                        endEffectorLinkIndex=END_EFFECTOR_LINK,
+                        targetPosition=ee_pos.tolist(),
+                        targetOrientation=ee_orn.tolist(),
+                        lowerLimits=JOINT_LIMITS_LOW.tolist(),
+                        upperLimits=JOINT_LIMITS_HIGH.tolist(),
+                        jointRanges=JOINT_RANGES.tolist(),
+                        restPoses=arm_joints.tolist(),
+                        maxNumIterations=self.ik_max_iterations,
+                        residualThreshold=self.ik_residual_threshold,
+                        physicsClientId=pc
+                    )
+                    if refined is None or len(refined) < 7:
+                        break
+                    cand = np.array(refined[:7])
+                    if np.any(cand < JOINT_LIMITS_LOW - 0.1) or \
+                       np.any(cand > JOINT_LIMITS_HIGH + 0.1):
+                        break
+                    arm_joints = np.clip(cand, JOINT_LIMITS_LOW,
+                                         JOINT_LIMITS_HIGH)
+                logger.debug("_pybullet_ik: rejected solution with FK "
+                             "error %.1f mm after refinement for target %s",
+                             (fk_err or 0.0) * 1000, ee_pos.tolist())
+                return None
 
             except Exception as e:
                 logger.error("IK failed for pos=%s: %s", ee_pos.tolist(), e)
@@ -566,7 +596,15 @@ class BoxelStreams:
     # had the arm itself blocking the view and sense_shadow_raycasting
     # always returned still_blocked.  IK seeding (the actual #37/#38
     # win) is independent of this offset and is retained.
-    _GRASP_Z_OFFSETS = [0.10]
+    #
+    # #P1 F4: 0.06 m added as a lower alternative.  The level-4 stack
+    # approach at +0.10 (z≈0.60 at 0.61 m horizontal) sits at the
+    # Panda's reach margin where IK converges no closer than ~18 mm
+    # and the 10 mm FK gate rejects every seed — deterministic no-plan
+    # (field report stale_shadow_drop.md).  A 6 cm clearance keeps the
+    # wrist out of the camera cone (the reverted experiment was 2 cm)
+    # while giving the sampler a reachable option when 0.10 fails.
+    _GRASP_Z_OFFSETS = [0.10, 0.06]
 
     def sample_grasp(self, obj_id: str) -> Iterator[Tuple[Grasp]]:
         """

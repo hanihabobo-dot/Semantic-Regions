@@ -559,6 +559,7 @@ def release_held_object_in_place(
     occluders,
     planner,
     max_attempts: int = 3,
+    retire_shadows_ok: bool = False,
 ):
     """
     Open the gripper through the finger motors and verify the object
@@ -583,6 +584,11 @@ def release_held_object_in_place(
             Bookkeeping caches that need to be updated with the dropped pose.
         shadows, occluders, planner: Inputs for refreshing shadow_occluder_map.
         max_attempts: How many open-and-settle cycles to try before giving up.
+        retire_shadows_ok: #P1 F4 — when True (caller gates on "no
+            active search": stack goal, or target already found), the
+            dropped object's stale cast shadows are retired like the
+            place/stack handlers do.  Default False keeps unsensed
+            knowledge regions alive during a search.
 
     Returns:
         Tuple[bool, Dict]: (success, state_updates).  state_updates may
@@ -624,6 +630,20 @@ def release_held_object_in_place(
         if viz is not None:
             viz.remove_boxel_viz(held_object_boxel_id)
             viz.draw_boxel_data(obj_bd)
+
+    # #P1 F4 shadow hygiene, emergency-drop edition (caller gates on
+    # "no active search" — see the parameter docstring).  Retire BEFORE
+    # the blocker recompute below so the rebuilt map excludes the
+    # retired ids.
+    if retire_shadows_ok:
+        caster_id = (held_object_boxel_id
+                     if held_object_boxel_id is not None
+                     else dropped_name)
+        retire_cast_shadows(registry, caster_id, shadows,
+                            shadow_occluder_map=planner.shadow_occluder_map
+                            if planner.shadow_occluder_map is not None
+                            else {},
+                            boxel_centers=boxel_centers, viz=viz)
 
     # Free space and shadows must be refreshed: the dropped object now
     # occupies new ground and may block different camera lines of sight.
@@ -1171,6 +1191,17 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc,
                               seed=config.joint_positions)
     if contact_joints is None:
+        # #P1 F4: the planner's config can be STALE by the time a
+        # multi-step stack executes (computed against the support's
+        # pre-stack pose — field report stale_shadow_drop.md: 29.4 mm
+        # FK rejection at the level-4 salvage IK).  Retry once from
+        # REST_POSES before aborting: a fresh solve is free to leave
+        # the dead IK branch the stale seed pinned it to.
+        print(f"    stack contact IK failed from the plan-config seed — "
+              f"retrying from REST_POSES (#P1 F4)")
+        contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation,
+                                  pc)
+    if contact_joints is None:
         print(f"    ERROR: IK failed for stack contact of {obj_name} on "
               f"{on_obj_name} - aborting")
         return None
@@ -1323,6 +1354,52 @@ def refresh_object_aabbs(env, registry, viz=None):
         if viz is not None and viz.tracks_boxel(obj_boxel.id):
             viz.remove_boxel_viz(obj_boxel.id)
             viz.draw_boxel_data(obj_boxel)
+
+
+def retire_cast_shadows(registry, caster_boxel_id, shadows,
+                        shadow_occluder_map, boxel_centers, viz):
+    """#P1 F4: remove the shadow boxels CAST BY a relocated caster.
+
+    Mirror of the sense discovery-cleanup pattern (handle_sense_action's
+    contains_nontarget branch): registry entry, GUI wireframe+label,
+    shadows list, shadow_occluder_map, and boxel_centers all drop the
+    retired ids, and the registry is marked dirty so the next
+    reboxelize frees the region for the free-space partition.
+
+    Shadows are otherwise retired ONLY by sense actions, so stack runs
+    accumulated every spawn-time shadow forever, in registry AND viz
+    (field report stale_shadow_drop.md).  Removal-only — consistent
+    with the documented no-shadow-RECOMPUTE scope cut in
+    refresh_object_aabbs.
+
+    CALLER MUST GATE THIS on the shadow being irrelevant to an active
+    search (goal_kind == 'stack', or the target already found): an
+    unsensed shadow of a merely relocated occluder is the knowledge
+    frontier the planner still needs to sense — retiring it would make
+    a target hidden there structurally unfindable (the F2 verify
+    criterion requires those shadows to survive relocation).
+
+    Returns the number of shadows retired.
+    """
+    bd = registry.get_boxel(caster_boxel_id)
+    if bd is None or not getattr(bd, "shadow_boxel_ids", None):
+        return 0
+    retired = 0
+    for old_sid in list(bd.shadow_boxel_ids):
+        registry.remove_boxel(old_sid)
+        if viz is not None:
+            viz.remove_boxel_viz(old_sid)
+        if old_sid in shadows:
+            shadows.remove(old_sid)
+        shadow_occluder_map.pop(old_sid, None)
+        boxel_centers.pop(old_sid, None)
+        retired += 1
+    bd.shadow_boxel_ids = []
+    if retired:
+        setattr(registry, "_dirty", True)
+        print(f"    -> retired {retired} stale shadow(s) cast by "
+              f"{caster_boxel_id} (#P1 F4 shadow hygiene)")
+    return retired
 
 
 def handle_sense_action(

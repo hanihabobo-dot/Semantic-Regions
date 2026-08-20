@@ -248,7 +248,8 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
 
   STEP-1 FIELD BUGS F1-F4 (2026-08-20, GUI verification after step (1) landed;
   one diagnostic agent per bug; full reports with log-line evidence in
-  archive/p1_field_reports_2026-08-20/; all OPEN, fix before step (2)):
+  archive/p1_field_reports_2026-08-20/; all four FIXED 2026-08-20 on this
+  branch — see the [DONE] markers and the F4 fix note):
   F1. [DONE 2026-08-20] PHANTOM FIRST PICK (grip_loss.md): the Panda's fingers SPAWN CLOSED
       (panda.urdf finger lower=0; loadURDF zeroes joints; nothing initialises
       them — the defensive open_gripper was removed in audit #37/#38 on the
@@ -296,7 +297,7 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       horizontal plane only; add a degenerate-extent guard on the
       single-AABB path (shadow_calculator.py:248-255) mirroring the
       two-slab-carve guard.
-  F4. STACK h=4 IK-INFEASIBLE AT THE FK GATE + SHADOWS NEVER RETIRED
+  F4. [DONE 2026-08-20] STACK h=4 IK-INFEASIBLE AT THE FK GATE + SHADOWS NEVER RETIRED
       (stale_shadow_drop.md): the level-4 approach (z ~0.60 at 0.61 m
       horizontal, single top-down grasp at +0.10) sits at the Panda's reach
       margin where 100-iteration IK converges no closer than ~18 mm, so the
@@ -315,6 +316,28 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       stacked/placed cube's shadow boxels after the OBJECT refresh
       (mirror the discovery-cleanup pattern), same in the place handler and
       release_held_object_in_place.
+      [FIX NOTE 2026-08-20: retirement landed in all three sites but GATED
+      on "no active search" (goal_kind == stack, or target already found).
+      Ungated retirement in the place handler would delete the very shadow
+      the plan senses right after relocating its occluder — the F2
+      mechanism requires unsensed shadows to survive relocation, else a
+      hidden target becomes structurally unfindable.  Deviation from the
+      blanket proposal above, reason stated here.]
+      [POST-FIX h=4 STATUS 2026-08-20 (run_2026-08-20_21-29-11, headless
+      seed 0): the FK-gate dead-end is GONE — plan #1 certifies all three
+      stack kins and the level-4 release lands at bottom_z err 0.1 mm.
+      NEW FINDING for #P2(b): at the level-4 release the opened finger
+      pad stays in light contact with the stacked cube (link 10, ~1.9-2.4
+      N, penetration -0.12 mm) because the wrist is at its reach margin —
+      drop-verify gate (iv) zero-robot-contact fails 3x while gates
+      (i)-(iii)+(v) all pass, the retries nudge the cube (tilt 2.3->8.8
+      deg), it topples when the arm departs, and the re-pick of the
+      toppled cube fails (F2 strike counter fires, honest no-plan exit in
+      4.5 s).  This is deferred-#84's "rim interference" hypothesis with
+      concrete numbers: the h=4 residual is a PHYSICAL manipulation
+      failure at the reach margin, not planning.  Candidate remedy for
+      #P2: run the (allowed) post-stack lift before the verify gate, or
+      an approach path that clears the tower rim.]
 
   ORDER OF WORK (proposal): (1) resize objects + friction-grasp + real release,
   drop weld and teleports [changes execution.py, robot_utils.py, boxel_env.py

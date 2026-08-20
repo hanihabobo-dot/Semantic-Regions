@@ -483,27 +483,57 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
             # IK failure -> abort -> replan instead of a silently wrong
             # config.  The model state is restored by the finally block
             # regardless.
-            for i, angle in zip(ARM_JOINT_INDICES, arm_joints):
-                p.resetJointState(robot_id, i, angle,
-                                  physicsClientId=physics_client)
-            # computeForwardKinematics=True is mandatory: without it,
-            # getLinkState can return the link transform cached from the
-            # last simulation step (the arm's pose BEFORE this solve_ik
-            # call), decoupling fk_err from the candidate solution.
-            # Same idiom as the reset-then-read block in
-            # is_config_collision_free above.
-            fk_pos = p.getLinkState(robot_id, END_EFFECTOR_LINK,
-                                    computeForwardKinematics=True,
-                                    physicsClientId=physics_client)[0]
-            fk_err = float(np.linalg.norm(
-                np.asarray(fk_pos) - np.asarray(target_pos, dtype=float)))
-            if fk_err > 0.010:
-                logger.debug("solve_ik: rejected solution with FK error "
-                             "%.1f mm for target %s", fk_err * 1000,
-                             np.asarray(target_pos).tolist())
-                return None
+            # #P1 F4: before the gate decides, refine up to 2 extra
+            # rounds with the solver re-seeded from its own output —
+            # PyBullet's iterative IK routinely stalls 15-25 mm short
+            # near the workspace boundary (level-4 stack approach) and
+            # restarts recover convergence when the pose is reachable.
+            # Twin of the streams._pybullet_ik refinement.
+            fk_err = None
+            for refine_round in range(3):
+                for i, angle in zip(ARM_JOINT_INDICES, arm_joints):
+                    p.resetJointState(robot_id, i, angle,
+                                      physicsClientId=physics_client)
+                # computeForwardKinematics=True is mandatory: without it,
+                # getLinkState can return the link transform cached from the
+                # last simulation step (the arm's pose BEFORE this solve_ik
+                # call), decoupling fk_err from the candidate solution.
+                # Same idiom as the reset-then-read block in
+                # is_config_collision_free above.
+                fk_pos = p.getLinkState(robot_id, END_EFFECTOR_LINK,
+                                        computeForwardKinematics=True,
+                                        physicsClientId=physics_client)[0]
+                fk_err = float(np.linalg.norm(
+                    np.asarray(fk_pos) - np.asarray(target_pos, dtype=float)))
+                if fk_err <= 0.010:
+                    return arm_joints
+                if refine_round == 2:
+                    break  # last candidate already checked — done
+                refined = p.calculateInverseKinematics(
+                    robot_id, END_EFFECTOR_LINK,
+                    target_pos.tolist(), orn_list,
+                    lowerLimits=JOINT_LIMITS_LOW.tolist(),
+                    upperLimits=JOINT_LIMITS_HIGH.tolist(),
+                    jointRanges=JOINT_RANGES.tolist(),
+                    restPoses=arm_joints.tolist(),
+                    maxNumIterations=100,
+                    residualThreshold=1e-4,
+                    physicsClientId=physics_client,
+                )
+                if refined is None or len(refined) < 7:
+                    break
+                cand = np.array(refined[:7])
+                if np.any(cand < JOINT_LIMITS_LOW - 0.1) or \
+                   np.any(cand > JOINT_LIMITS_HIGH + 0.1):
+                    break
+                arm_joints = np.clip(cand, JOINT_LIMITS_LOW,
+                                     JOINT_LIMITS_HIGH)
 
-            return arm_joints
+            logger.debug("solve_ik: rejected solution with FK error "
+                         "%.1f mm after refinement for target %s",
+                         (fk_err or 0.0) * 1000,
+                         np.asarray(target_pos).tolist())
+            return None
 
         except Exception as e:
             logger.warning("solve_ik failed for pos=%s: %s", target_pos.tolist(), e)
