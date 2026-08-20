@@ -353,6 +353,7 @@ def _release_and_verify_drop(
     max_attempts: int = 3,
     base_settle_steps: int = 30,
     expected_support_z: Optional[float] = None,
+    enforce_tilt: bool = False,
 ) -> bool:
     """
     Open the gripper through the finger motors and verify the held
@@ -382,8 +383,12 @@ def _release_and_verify_drop(
             that move with the arm on the next step),
       (iv)  zero contact between held_body_id and any robot link,
       (v)   cube tilt ≤ 20° (#P1 F2 — a topple-on-release is a failed
-            placement; only when ``expected_support_z`` is provided,
-            so the emergency-drop path tolerates sideways landings).
+            placement; opt-in via ``enforce_tilt``, set by the planned
+            place/stack paths INCLUDING tray stacks, while the
+            emergency-drop path leaves it off and tolerates sideways
+            landings.  Decoupled from ``expected_support_z`` because
+            tray stacks skip the height gate but still need the tilt
+            gate — review fix 2026-08-20).
     Diagnostic info is logged on every attempt (pass or fail) so a
     future false-positive regression is immediately visible in the run
     log.
@@ -490,14 +495,11 @@ def _release_and_verify_drop(
         # was computed but never checked (field report pick_giveup.md
         # §B3: red_object released lying on its side, verify ok).  20°
         # sits far above genuine landings (≤ ~2°) and far below a
-        # topple (~90°).  Only for callers that predict a support
-        # height (place/stack); the emergency-drop path passes
-        # expected_support_z=None and may legitimately land a cube on
-        # its side — failing THAT would abort the whole run.
-        if expected_support_z is not None:
-            tilt_ok = cube_tilt_deg <= 20.0
-        else:
-            tilt_ok = True
+        # topple (~90°).  Opt-in via enforce_tilt: place and stack set
+        # it (INCLUDING tray stacks, which skip the height gate); the
+        # emergency-drop path leaves it off — a sideways landing there
+        # is tolerable and failing it would abort the whole run.
+        tilt_ok = (cube_tilt_deg <= 20.0) if enforce_tilt else True
 
         height_str = (
             f"bottom_z={cube_bottom_z:.4f} "
@@ -870,17 +872,27 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # distinguish a pinch from both fingertips STANDING ON the object
     # top (the phantom first pick read both pads "in contact" with the
     # fingers at ~0.000 m).  A genuine pinch parks each finger at the
-    # object's half-width (close target is cube_hw − 3 mm; the pads
-    # stop at the surface).  6 mm tolerance covers off-centre grasps
-    # and the min-vs-actual footprint axis mismatch on non-square
-    # objects (≤ 5 mm in the resized scenes).
+    # object's half-extent ALONG THE PINCH AXIS — which, with the
+    # yaw-less grasp, may be either horizontal AABB axis of a
+    # non-square footprint (a toppled 4x6 cm box pinched across its
+    # 6 cm side is a real grasp at finger_pos 0.03 while min-half is
+    # 0.02).  Accept an aperture within 6 mm of EITHER horizontal
+    # half-extent; a phantom reads ~0.000-0.005, far below the
+    # >= 0.015 m half-extents of every scene object, so the
+    # standing-on-top signature is still caught.
+    x_half = (aabb_max[0] - aabb_min[0]) / 2.0
+    y_half = (aabb_max[1] - aabb_min[1]) / 2.0
     finger_pos = [p.getJointState(robot_id, fj)[0] for fj in FINGER_JOINTS]
-    aperture_err = max(abs(fp - cube_hw) for fp in finger_pos)
+    aperture_err = min(
+        max(abs(fp - h) for fp in finger_pos)
+        for h in (x_half, y_half)
+    )
     if aperture_err > 0.006:
         print(f"    ERROR: grip aperture implausible for {obj_name} — "
               f"finger_pos=[{finger_pos[0]:.4f},{finger_pos[1]:.4f}] vs "
-              f"cube_hw={cube_hw:.4f} (err={aperture_err * 1000:.1f}mm "
-              f"> 6mm; standing-on-top phantom or partial pinch). "
+              f"half_extents=[{x_half:.4f},{y_half:.4f}] "
+              f"(err={aperture_err * 1000:.1f}mm > 6mm; standing-on-top "
+              f"phantom or partial pinch). "
               f"Opening gripper and replanning (#P1 F1).")
         open_gripper(robot_id, gui)
         return None, None
@@ -1043,7 +1055,8 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
         # (lines 642-647 above), so the cube's bottom should sit at table_z.
         if not _release_and_verify_drop(env, robot_id, gui,
                                          held_body_id, obj_name,
-                                         expected_support_z=table_z):
+                                         expected_support_z=table_z,
+                                         enforce_tilt=True):
             print(f"    ERROR: drop verification failed for {obj_name} "
                   f"after place — aborting (audit #75/#80)")
             return None
@@ -1260,7 +1273,8 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     if not _release_and_verify_drop(env, robot_id, gui,
                                      held_body_id, obj_name,
                                      base_settle_steps=60,
-                                     expected_support_z=verify_support_z):
+                                     expected_support_z=verify_support_z,
+                                     enforce_tilt=True):
         print(f"    ERROR: drop verification failed for {obj_name} on "
               f"{on_obj_name} — aborting (audit #75/#80)")
         return None

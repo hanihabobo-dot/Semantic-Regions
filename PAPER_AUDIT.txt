@@ -338,6 +338,24 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       failure at the reach margin, not planning.  Candidate remedy for
       #P2: run the (allowed) post-stack lift before the verify gate, or
       an approach path that clears the tower rim.]
+      [REVIEW PASS 2026-08-20: 5-lens adversarial review of the four fix
+      commits confirmed and same-day-fixed: (i) aperture gate false-fail
+      on non-square footprints pinched across the larger axis (now
+      accepts either horizontal half-extent; phantoms still read ~0);
+      (ii) pick_giveup exit_reason over-attributed unrelated no-plans
+      (now only when a GOAL-CRITICAL object was withdrawn, else
+      planner_failed + disclosure line); (iii) tray stacks bypassed the
+      new tilt gate via expected_support_z=None (decoupled: enforce_tilt
+      flag set by place/stack incl. trays); (iv) transit losses
+      (EmptyHandError) had no strike counter — pick succeeded each
+      cycle, resetting the pick counter — unbounded loop; now a
+      transit_loss_counts 3-strike feeds the same giveup.  F3 review:
+      clean.  Also: h=3 seed 0 now fails honestly on this trajectory
+      (tower collapse on the level-3 release, knocked orange off green;
+      end-of-run physics gate caught the stale on-relation) — the
+      thesis-known 80 %-at-h=3 physical fragility surfacing because F1's
+      real first pick changes the episode trajectory; #P2 scope, not
+      forced here.]
 
   ORDER OF WORK (proposal): (1) resize objects + friction-grasp + real release,
   drop weld and teleports [changes execution.py, robot_utils.py, boxel_env.py
