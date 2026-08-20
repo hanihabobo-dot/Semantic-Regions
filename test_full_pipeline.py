@@ -953,9 +953,21 @@ def main(gui=True, run_logger=None, scene_config=None,
     # not_here so the planner stops re-attempting them.  Track the IDs
     # so the run report can distinguish observed-empty shadows from
     # blocked-unresolved ones (no false "Searched all" claim).  The
-    # real fix (re-ground blocker atoms) is audit #47, deferred out of
-    # scope 2026-05-06.
+    # real fix (re-ground blocker atoms) landed with #P1 F2's
+    # blocks_view_at re-keying; the 3-strike giveup stays as a bound
+    # for shadows that remain physically unclearable.
     blocked_giveup_shadows: set = set()
+    # #P1 F2: per-object failed-pick strike counter, mirroring
+    # blocked_counts.  The single fixed top-down grasp makes a failed
+    # pick against an unmoved object deterministic — without a bound
+    # the loop regenerates the identical miss until an external kill
+    # (field report pick_giveup.md).  After 3 strikes the object is
+    # marked ungraspable in the planner's stream layer (sample_grasp
+    # yields nothing) so the planner changes course or honestly finds
+    # no plan; exit_reason "pick_giveup" classifies that ending.  A
+    # successful pick of the object clears its counter.
+    pick_fail_counts: Dict[str, int] = {}
+    pick_giveup_objects: set = set()
 
     def _loop_done() -> bool:
         # Holding goals stop when belief.target_found flips; stack goals
@@ -1134,8 +1146,19 @@ def main(gui=True, run_logger=None, scene_config=None,
             env.refresh_debug_camera_views()
 
         if plan is None:
-            exit_reason = "planner_failed"
-            print("ERROR: No plan found!")
+            if pick_giveup_objects:
+                # #P1 F2: the no-plan is (at least partly) self-inflicted —
+                # objects were withdrawn from the grasp stream after 3
+                # failed picks each.  Classify distinctly so eval tooling
+                # can attribute the failure to grasping, not planning.
+                exit_reason = "pick_giveup"
+                print(f"ERROR: No plan found — {len(pick_giveup_objects)} "
+                      f"object(s) marked ungraspable after repeated pick "
+                      f"failures: {sorted(pick_giveup_objects)} "
+                      f"(#P1 F2 giveup).")
+            else:
+                exit_reason = "planner_failed"
+                print("ERROR: No plan found!")
             break
 
         print(f"Plan: {len(plan)} actions")
@@ -1313,6 +1336,30 @@ def main(gui=True, run_logger=None, scene_config=None,
                 if result[0] is None:
                     print(f"    IK or grip failure during pick — replanning "
                           f"(audit #82 / #P1 grip verification)")
+                    # #P1 F2: strike counter mirroring the audit-#21
+                    # sense giveup.  3 failed picks of the same object
+                    # mark it ungraspable at the stream layer, so the
+                    # next planner.plan() cannot ground a pick for it —
+                    # it either routes around the object or honestly
+                    # reports no plan (classified as pick_giveup below)
+                    # instead of regenerating the identical miss
+                    # forever.
+                    pick_fail_counts[obj_str] = \
+                        pick_fail_counts.get(obj_str, 0) + 1
+                    print(f"    pick failure {pick_fail_counts[obj_str]}/3 "
+                          f"for {obj_str} (#P1 F2 strike counter)")
+                    if (pick_fail_counts[obj_str] >= 3
+                            and obj_str not in pick_giveup_objects):
+                        print(f"    ERROR: {obj_str} failed "
+                              f"{pick_fail_counts[obj_str]} pick attempts "
+                              f"— giving up on grasping it (#P1 F2, "
+                              f"mirrors audit #21).  Object is NOT "
+                              f"picked; marking it ungraspable so the "
+                              f"planner stops re-attempting.  Real "
+                              f"remedy: the shape-aware grasp sampler "
+                              f"(#P1 step (4)).")
+                        pick_giveup_objects.add(obj_str)
+                        planner.streams.ungraspable_objects.add(obj_str)
                     # #P1: a failed grasp attempt can shove or topple
                     # the object (the descent or close physically
                     # touched it).  Refresh every OBJECT boxel from
@@ -1326,6 +1373,10 @@ def main(gui=True, run_logger=None, scene_config=None,
                     refresh_object_aabbs(env, registry, viz=viz)
                     break
                 held_body_id, current_config = result
+                # #P1 F2: a successful pick proves the object is
+                # graspable from its current pose — reset its strike
+                # counter so unrelated later failures start fresh.
+                pick_fail_counts.pop(obj_str, None)
                 # Track the registry boxel ID corresponding to the held
                 # body so the emergency-drop path can relocate the right
                 # OBJECT boxel if we have to release mid-plan.
@@ -1689,6 +1740,7 @@ def main(gui=True, run_logger=None, scene_config=None,
         success=success,
         exit_reason=exit_reason,
         goal_kind=goal_kind,
+        pick_giveup_objects=pick_giveup_objects,
         goal=goal,
         target_name=target_name,
         on_relations=on_relations,

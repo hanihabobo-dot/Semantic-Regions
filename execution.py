@@ -380,7 +380,10 @@ def _release_and_verify_drop(
       (iii) cube COM stationary across an extra 20 settle steps
             (<1 mm lateral drift — catches cubes pinned to a finger
             that move with the arm on the next step),
-      (iv)  zero contact between held_body_id and any robot link.
+      (iv)  zero contact between held_body_id and any robot link,
+      (v)   cube tilt ≤ 20° (#P1 F2 — a topple-on-release is a failed
+            placement; only when ``expected_support_z`` is provided,
+            so the emergency-drop path tolerates sideways landings).
     Diagnostic info is logged on every attempt (pass or fail) so a
     future false-positive regression is immediately visible in the run
     log.
@@ -482,6 +485,19 @@ def _release_and_verify_drop(
         held_euler = p.getEulerFromQuaternion(held_orn)
         cube_tilt_deg = max(abs(np.degrees(held_euler[0])),
                              abs(np.degrees(held_euler[1])))
+        # #P1 F2(1c): gate on the tilt for PLANNED releases.  A 90°
+        # topple-on-release used to pass "verify ok" because the tilt
+        # was computed but never checked (field report pick_giveup.md
+        # §B3: red_object released lying on its side, verify ok).  20°
+        # sits far above genuine landings (≤ ~2°) and far below a
+        # topple (~90°).  Only for callers that predict a support
+        # height (place/stack); the emergency-drop path passes
+        # expected_support_z=None and may legitimately land a cube on
+        # its side — failing THAT would abort the whole run.
+        if expected_support_z is not None:
+            tilt_ok = cube_tilt_deg <= 20.0
+        else:
+            tilt_ok = True
 
         height_str = (
             f"bottom_z={cube_bottom_z:.4f} "
@@ -510,7 +526,8 @@ def _release_and_verify_drop(
               and not robot_contacts
               and bool(non_robot)
               and height_ok
-              and stationary)
+              and stationary
+              and tilt_ok)
         if ok:
             print(f"    -> Released {dropped_name} (audit #80 verify ok; "
                   f"{diag})")

@@ -428,10 +428,19 @@ class PDDLStreamPlanner:
                     for obj in target_objects:
                         init.append(('obj_at_boxel_KIF', obj, boxel.id))
 
-        # Static geometric facts: blocks_view_at(occ, occ_boxel, shadow).
-        # Always added regardless of moved status — they describe geometry,
-        # not current state. The derived predicate blocks_view combines these
-        # with obj_at_boxel to determine actual view blockage.
+        # Geometric facts: blocks_view_at(occ, occ_current_boxel, shadow).
+        # shadow_occluder_map comes from compute_shadow_blockers' LIVE
+        # raycast, so a listed blocker blocks the shadow from wherever it
+        # CURRENTLY stands.  The fact must therefore be keyed to the
+        # occluder's current boxel: for a relocated occluder that is
+        # moved_occluders[occ] (its destination), because the OBJECT loop
+        # above stops emitting obj_at_boxel(occ, occ) the moment the
+        # occluder is recorded as moved — keying the fact to the original
+        # boxel id made blocks_view underivable forever after one
+        # relocation, and the planner walked straight into doomed sense
+        # actions until the audit-#21 3-strike giveup burned the shadow
+        # (#P1 F2, the concrete audit-#47/#51 mechanism; field report
+        # archive/p1_field_reports_2026-08-20/pick_giveup.md).
         #
         # shadow_occluder_map is Dict[shadow_id, List[blocker_ids]] — includes
         # ALL objects that block the camera's LOS to each shadow, not just the
@@ -441,13 +450,18 @@ class PDDLStreamPlanner:
                 if isinstance(blocker_ids, str):
                     blocker_ids = [blocker_ids]
                 for occluder_id in blocker_ids:
-                    init.append(('blocks_view_at', occluder_id, occluder_id, shadow_id))
+                    current_boxel = moved_occluders.get(occluder_id,
+                                                        occluder_id)
+                    init.append(('blocks_view_at', occluder_id,
+                                 current_boxel, shadow_id))
         else:
             for shadow_id in shadows:
                 shadow_boxel = self.registry.get_boxel(shadow_id)
                 if shadow_boxel and shadow_boxel.created_by_boxel_id:
                     occ_id = shadow_boxel.created_by_boxel_id
-                    init.append(('blocks_view_at', occ_id, occ_id, shadow_id))
+                    current_boxel = moved_occluders.get(occ_id, occ_id)
+                    init.append(('blocks_view_at', occ_id, current_boxel,
+                                 shadow_id))
 
         # Placement-blocking facts (audit #5): for each free-space boxel,
         # check whether it lies in the camera→shadow line of sight.  Emitted

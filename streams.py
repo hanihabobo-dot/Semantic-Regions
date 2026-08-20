@@ -199,6 +199,14 @@ class BoxelStreams:
         self._config_counter = 0
         self._traj_counter = 0
         self._grasp_counter = 0
+
+        # #P1 F2: objects the dispatcher gave up on after 3 failed pick
+        # attempts (mirror of the audit-#21 sense giveup).  sample_grasp
+        # yields nothing for them, so the planner can no longer ground a
+        # pick and is forced onto a different branch — or honestly
+        # reports no plan.  Persistent across replans (one BoxelStreams
+        # instance per PDDLStreamPlanner, which lives for the episode).
+        self.ungraspable_objects: set = set()
         
         # IK solver parameters (PyBullet's iterative Jacobian-based IK).
         # 100 iterations is the PyBullet recommended default; convergence
@@ -587,6 +595,20 @@ class BoxelStreams:
         Yields:
             Tuples of (grasp,) for the object — one per Z offset.
         """
+        # #P1 F2: pick 3-strike giveup — with the single fixed top-down
+        # grasp, a toppled object regenerates a byte-identical doomed
+        # attempt on every replan; after the dispatcher's strike counter
+        # trips, stop offering grasps so the planner changes course or
+        # honestly reports no plan instead of looping until an external
+        # kill (field report pick_giveup.md: 8 identical misses, run
+        # killed by the user).  The real remedy is the step-(4)
+        # yaw-aware sampler.
+        if str(obj_id) in self.ungraspable_objects:
+            logger.info("sample_grasp: %s marked ungraspable after "
+                        "repeated pick failures — no grasp offered "
+                        "(#P1 F2 giveup)", obj_id)
+            return
+
         # Top-down orientation: pitch=180deg = gripper pointing straight down
         orn = np.array(p.getQuaternionFromEuler([0, np.pi, 0]))
         # Yield one grasp per Z-offset (currently 0.10 m above object).
