@@ -759,6 +759,22 @@ class BoxelTestEnv:
         for finger_link in (9, 10):  # robot_utils.FINGER_JOINTS
             p.changeDynamics(robot_id, finger_link, lateralFriction=1.2,
                              physicsClientId=self.client_id)
+        # #P1 F1 (field bug, archive/p1_field_reports_2026-08-20/
+        # grip_loss.md): panda.urdf's prismatic finger joints have
+        # lower=0.0 and loadURDF zeroes every joint, so the fingers
+        # SPAWN FULLY CLOSED while the PDDL convention assumes init =
+        # open (execution.py execute_pick).  Without this reset the
+        # episode's FIRST descent grinds the closed fingertips into the
+        # object top (500-800 N servo grind) and grip verification
+        # passes on a phantom hold.  Scene construction, not a
+        # grasp-path teleport.  sync_to_plan_client copies finger
+        # joints before every plan; the plan client is mirrored here
+        # anyway so the two worlds never start divergent.
+        for fj in (9, 10):  # robot_utils.FINGER_JOINTS
+            p.resetJointState(robot_id, fj, 0.04,
+                              physicsClientId=self.client_id)
+            p.resetJointState(self.plan_robot_id, fj, 0.04,
+                              physicsClientId=self.plan_client_id)
         self.objects["robot"] = ObjectInfo(
             object_id=robot_id, name="robot",
             position=np.array(robot_pos), orientation=np.array([0, 0, 0, 1]),
