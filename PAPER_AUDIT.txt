@@ -246,6 +246,76 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   audit-51-shadow-blocker-fix, reverted), #47 (blocks_view_at re-grounding,
   deferred out of thesis scope: reconsider here).
 
+  STEP-1 FIELD BUGS F1-F4 (2026-08-20, GUI verification after step (1) landed;
+  one diagnostic agent per bug; full reports with log-line evidence in
+  archive/p1_field_reports_2026-08-20/; all OPEN, fix before step (2)):
+  F1. PHANTOM FIRST PICK (grip_loss.md): the Panda's fingers SPAWN CLOSED
+      (panda.urdf finger lower=0; loadURDF zeroes joints; nothing initialises
+      them — the defensive open_gripper was removed in audit #37/#38 on the
+      false "init = open" assumption).  The first descent grinds the closed
+      fingertips into the object top (+6.8 mm arrival stall), grip
+      verification passes on link identity alone (both tips pressing DOWN
+      count as "both pads in contact"; the 500-800 N readings are servo
+      grind, NOT close transients — genuine grasps read 2x40 N), the object
+      never moves, and the phantom hold survives to a place/stack that
+      releases nothing (table-height places even pass drop-verify with
+      err=0).  First pick only: any open_gripper leaves fingers at 0.04 for
+      the rest of the episode.  FIX: (a) resetJointState fingers to 0.04 in
+      _setup_scene after robot load (root cause, one line); (b) re-verify pad
+      contact after the post-pick lift, abort to replan on loss; (c) held-
+      contact entry assert in execute_place/execute_stack with its OWN
+      failure path (the dispatcher's fingers_open classifier would misfile
+      it); (d) aperture plausibility in grip verification
+      (|finger_pos - cube_hw| <= ~6 mm; phantom reads ~0.00).
+  F2. MOVED OCCLUDER NEVER RE-BLOCKS + PICK HAS NO GIVE-UP (pick_giveup.md):
+      _build_init emits blocks_view_at hardcoded to the occluder's ORIGINAL
+      boxel id (pddlstream_planner.py:439-444) and stops emitting
+      obj_at_boxel for moved occluders, so the blocks_view derived predicate
+      can never re-fire after a relocation — the planner believes the shadow
+      clear, sense hits the real occluder identically each time, and the
+      audit-#21 3-strike giveup burns the shadow.  This is the concrete
+      #47/#51 mechanism.  Separately, pick failures have NO strike counter: a
+      toppled block (unpickable by the single no-yaw grasp) loops
+      byte-identical retries until the process is killed.  FIX: key
+      blocks_view_at to the CURRENT boxel (moved_occluders.get(id, id), ~one
+      line); add a pick strike counter mirroring blocked_counts; optionally
+      gate on cube_tilt_deg in _release_and_verify_drop (already computed,
+      never checked).  Tier 2 = step-(4) sampler: yaw 0/90 candidates from
+      the live AABB, finger-width-validated before yield.
+  F3. DEGENERATE/INVERTED SHADOWS for tall occluders near the camera
+      (missing_shadow.md): back-corner and dominant-axis selection use the
+      full 3D camera->object direction (shadow_calculator.py:81-110,
+      :184-194); for a tall close occluder the downward component dominates,
+      the shadow AABB collapses to the occluder footprint and the
+      object-subtraction INVERTS it (observed shadow_of_red_object extent.z
+      = -8.7e-6 m; wireframe drawn 17 um tall, label unaffected — hence
+      "label without box" in the GUI).  test_boxel_fits is False on negative
+      extents, so a target hidden behind such an occluder is STRUCTURALLY
+      UNFINDABLE — a planner gap introduced by the tall-block resize, not
+      cosmetics.  FIX: compute shadow direction/back corners in the
+      horizontal plane only; add a degenerate-extent guard on the
+      single-AABB path (shadow_calculator.py:248-255) mirroring the
+      two-slab-carve guard.
+  F4. STACK h=4 IK-INFEASIBLE AT THE FK GATE + SHADOWS NEVER RETIRED
+      (stale_shadow_drop.md): the level-4 approach (z ~0.60 at 0.61 m
+      horizontal, single top-down grasp at +0.10) sits at the Panda's reach
+      margin where 100-iteration IK converges no closer than ~18 mm, so the
+      #P1 10 mm FK gate rejects all 8 seeds on every replan -> "no plan
+      found".  The observed "drop onto the old shadow" was the audit-#58
+      release-in-place fallback hovering over the STALE plan-time stack
+      config (coincidence; init-fact deltas prove the shadow poisoned
+      nothing).  Underlying hygiene gap is real though: shadows are retired
+      ONLY by sense actions — no path removes a shadow when its caster is
+      picked/stacked (refresh_object_aabbs skips shadows by design;
+      reboxelize treats them as permanent), so stack runs accumulate stale
+      shadows in registry AND viz.  FIX: add a lower approach offset to
+      _GRASP_Z_OFFSETS (e.g. [0.10, 0.06]); IK refinement (re-seed from own
+      output / more iterations) before BOTH FK gates; execute_stack retry
+      seeded from REST_POSES when the plan-config seed fails; retire the
+      stacked/placed cube's shadow boxels after the OBJECT refresh
+      (mirror the discovery-cleanup pattern), same in the place handler and
+      release_held_object_in_place.
+
   ORDER OF WORK (proposal): (1) resize objects + friction-grasp + real release,
   drop weld and teleports [changes execution.py, robot_utils.py, boxel_env.py
   scenes; mirror in execution_boxel.py]; (2) perception module: segmentation +
