@@ -304,7 +304,7 @@ class BoxelStreams:
 
                 arm_joints = np.clip(arm_joints, JOINT_LIMITS_LOW, JOINT_LIMITS_HIGH)
 
-                # 6. FK verification (#P1, 2026-08-15) — the planning twin
+                # 6. FK verification (#P1, 2026-08-20) — the planning twin
                 #    of robot_utils.solve_ik's gate.  Clipping (and reach-
                 #    edge convergence failures) can leave a solution whose
                 #    actual EE pose is centimetres off target.  Execution
@@ -565,7 +565,7 @@ class BoxelStreams:
         Generate grasp poses for an object with varying clearance.
 
         Yields a single top-down grasp at a fixed 0.10 m above the
-        object center.  #P1 (2026-08-15): execution grasps by pad
+        object center.  #P1 (2026-08-20): execution grasps by pad
         friction now (the constraint weld is gone), so grip security
         DOES depend on precise lateral centering at the contact pose —
         the FK-verified IK gates (solve_ik / _pybullet_ik) and

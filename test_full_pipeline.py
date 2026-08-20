@@ -232,7 +232,7 @@ def _verify_holding(env, target_name, held_body_id):
     gripper was empty (or holding the wrong body).  This helper
     closes that gap by querying PyBullet directly.
 
-    #P1 friction grasp (2026-08-15): "holding" is no longer an active
+    #P1 friction grasp (2026-08-20): "holding" is no longer an active
     JOINT_FIXED constraint — it is a live friction pinch.  The check
     is now:
 
@@ -1216,7 +1216,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # approach pose that seeds the subsequent contact IK
                 # (audit #37/#38), so its accuracy matters; settling
                 # every waypoint made the arm visibly stutter (user
-                # report 2026-08-15).
+                # report 2026-08-20).
                 last_wp_idx = len(traj.waypoints) - 1
                 for wi, wp in enumerate(traj.waypoints[1:], start=1):
                     move_robot_smooth(robot_id, wp.joint_positions,
