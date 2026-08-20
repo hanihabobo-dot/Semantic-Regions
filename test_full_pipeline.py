@@ -94,6 +94,7 @@ from execution import (audit_robot_held_state,
                        compute_shadow_blockers,
                        refresh_object_aabbs,
                        release_held_object_in_place,
+                       retire_cast_shadows,
                        execute_pick, execute_place, execute_stack,
                        handle_sense_action, EmptyHandError)
 
@@ -1102,6 +1103,11 @@ def main(gui=True, run_logger=None, scene_config=None,
                 occluders=occluders,
                 planner=planner,
                 max_attempts=3,
+                # #P1 F4: retire the dropped object's stale cast
+                # shadows only when no search is active (same gate as
+                # the place/stack handlers).
+                retire_shadows_ok=(goal_kind == 'stack'
+                                   or belief.is_target_found()),
             )
             held_body_id = None
             held_object_boxel_id = None
@@ -1527,6 +1533,16 @@ def main(gui=True, run_logger=None, scene_config=None,
                                 viz.remove_boxel_viz(obj_str)
                                 viz.draw_boxel_data(moved_bd)
 
+                # #P1 F4 shadow hygiene, place edition (same gate as the
+                # stack handler): only when NO search is active — during
+                # a search the placed occluder's unsensed shadows are
+                # exactly the regions the plan senses next, and MUST
+                # survive the relocation (F2's verify criterion).
+                if goal_kind == 'stack' or belief.is_target_found():
+                    retire_cast_shadows(registry, obj_str, shadows,
+                                        shadow_occluder_map,
+                                        boxel_centers, viz)
+
                 # Rebuild shadow_occluder_map from current physics state so
                 # blocks_view_at facts reflect the relocated occluder's new
                 # position on the next replan (audit #73, #24 fixed).
@@ -1659,6 +1675,21 @@ def main(gui=True, run_logger=None, scene_config=None,
                         if viz is not None:
                             viz.remove_boxel_viz(obj_str)
                             viz.draw_boxel_data(bd)
+
+                # #P1 F4 shadow hygiene: the stacked cube left its
+                # spawn spot — its cast shadows describe occlusion that
+                # no longer exists there, and nothing else ever removes
+                # them (stack goals emit no sense actions), so registry,
+                # GUI and free-space carve accumulate stale shadows for
+                # the whole episode.  Gated on no ACTIVE search: in a
+                # holding-type run before the target is found, an
+                # unsensed shadow is the knowledge frontier — retiring
+                # it would make a target hidden there unfindable (see
+                # retire_cast_shadows docstring).
+                if goal_kind == 'stack' or belief.is_target_found():
+                    retire_cast_shadows(registry, obj_str, shadows,
+                                        shadow_occluder_map,
+                                        boxel_centers, viz)
 
                 # Audit #40: gate the on_relations write on a physics
                 # check.  execute_stack's 60-step settle can leave a
