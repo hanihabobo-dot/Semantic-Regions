@@ -21,7 +21,7 @@ import cycles.
 """
 
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import Dict, FrozenSet, List, Tuple
 
 import numpy as np
 
@@ -196,3 +196,138 @@ def grid_would_hit(camera_pos, frag_min, frag_max,
         bmax = np.maximum(bmax, centre + 1e-6)
     return _segments_intersect_aabb(
         np.asarray(camera_pos, dtype=float), endpoints, bmin, bmax)
+
+
+# ---------------------------------------------------------------------------
+# #P1 step (2): render-based object detection.
+#
+# Sim-grade "real perception": the fixed scene camera renders RGB + depth +
+# instance segmentation (pybullet getCameraImage), each segmented object's
+# depth pixels are unprojected to a world-frame point cloud, and the cloud
+# yields a per-object AABB/pose ESTIMATE.  Planning consumes these
+# estimates; the body-id oracle (BoxelTestEnv.oracle_detect_objects)
+# survives only for the eval harness's ground-truth checks (Phase-1 settle
+# sanity, Phase-4 hidden/visible split, F5 pre-flight target AABB).
+#
+# The functions below stay pure numpy (no pybullet import — the module
+# contract): the caller renders and passes arrays + the OpenGL matrices.
+# ---------------------------------------------------------------------------
+
+# An object is detected when its segmentation id covers at least this many
+# pixels.  Below that a cloud is too thin to localize (single-edge slivers);
+# the object simply stays unknown to the planner — honest partial
+# observability.  The 8-corner ray oracle stays the harness's ground truth
+# for the hidden/visible SPLIT, so a disagreement here is a perception
+# limitation, not a scene-classification change.
+DETECTION_MIN_PIXELS = 6
+
+# When the cloud's lowest point comes within this height of a known support
+# surface, the estimated AABB is extended down to rest ON the surface: the
+# bottom edge of a resting object is almost always cut by the surface
+# itself, never observed.  Objects floating higher (stacked cubes, tray
+# contents) keep their observed bottom — no guess.
+DETECTION_SUPPORT_SNAP = 0.02
+
+
+@dataclass
+class ObjectDetection:
+    """One detected object: segmentation pixels -> world-frame estimate."""
+    name: str
+    body_id: int
+    pixel_count: int
+    est_min: np.ndarray       # estimated AABB min corner (world frame)
+    est_max: np.ndarray       # estimated AABB max corner (world frame)
+
+    @property
+    def est_center(self) -> np.ndarray:
+        return (self.est_min + self.est_max) / 2.0
+
+
+def unproject_depth_pixels(rows, cols, depth_values,
+                           view_matrix, projection_matrix,
+                           width: int, height: int) -> np.ndarray:
+    """Unproject pixel coordinates + RAW depth-buffer values to world points.
+
+    Canonical OpenGL inverse: NDC = (2(u+.5)/W - 1, 1 - 2(v+.5)/H, 2d - 1),
+    world = (P·V)^-1 · clip.  ``view_matrix`` / ``projection_matrix`` are
+    the column-major 16-tuples pybullet's computeViewMatrix /
+    computeProjectionMatrixFOV return; ``depth_values`` are the raw [0,1]
+    buffer values (NOT meters).  Row 0 is the TOP image row (pybullet
+    convention).
+    """
+    proj = np.asarray(projection_matrix, dtype=float).reshape(4, 4, order="F")
+    view = np.asarray(view_matrix, dtype=float).reshape(4, 4, order="F")
+    pix_to_world = np.linalg.inv(proj @ view)
+    x = (2.0 * (np.asarray(cols, dtype=float) + 0.5) - width) / width
+    y = -((2.0 * (np.asarray(rows, dtype=float) + 0.5) - height) / height)
+    z = 2.0 * np.asarray(depth_values, dtype=float) - 1.0
+    clip = np.column_stack([x, y, z, np.ones_like(x)])
+    world = clip @ pix_to_world.T
+    return world[:, :3] / world[:, 3:4]
+
+
+def detect_objects_from_render(seg_mask: np.ndarray,
+                               depth_buffer: np.ndarray,
+                               view_matrix, projection_matrix,
+                               body_id_to_name: Dict[int, str],
+                               camera_xy,
+                               support_z: float,
+                               min_pixels: int = DETECTION_MIN_PIXELS,
+                               no_footprint_completion: FrozenSet[str] = frozenset()
+                               ) -> Dict[str, "ObjectDetection"]:
+    """Per-object AABB/pose estimates from one rendered observation.
+
+    For each candidate body id present in ``seg_mask`` with at least
+    ``min_pixels`` pixels: unproject its depth pixels to a world cloud and
+    take the cloud's AABB, then apply two completion priors for the
+    surfaces a single fixed camera can never observe:
+
+    1. support snap — a bottom within DETECTION_SUPPORT_SNAP of
+       ``support_z`` extends down to it (resting objects' bottoms are cut
+       by the surface, not seen);
+    2. square-footprint — scene objects are box-like with near-square
+       footprints, but the face AWAY from the camera is invisible, so the
+       observed footprint is shrunk along the viewing direction.  The
+       shorter horizontal axis is extended to match the longer one, on the
+       side pointing away from the camera.  Names in
+       ``no_footprint_completion`` (the tray — deliberately non-square)
+       skip this prior.
+
+    Both priors only ever GROW the box — estimates stay conservative for
+    "could something hide behind/inside this" reasoning, and the
+    execution layer sizes grippers from its own live sensing, not from
+    these estimates.
+    """
+    seg = np.asarray(seg_mask)
+    height, width = seg.shape
+    cam_xy = np.asarray(camera_xy, dtype=float)[:2]
+    detections: Dict[str, ObjectDetection] = {}
+    for body_id, name in body_id_to_name.items():
+        rows, cols = np.nonzero(seg == body_id)
+        if rows.size < min_pixels:
+            continue
+        pts = unproject_depth_pixels(
+            rows, cols, np.asarray(depth_buffer)[rows, cols],
+            view_matrix, projection_matrix, width, height)
+        est_min = pts.min(axis=0)
+        est_max = pts.max(axis=0)
+        if est_min[2] <= support_z + DETECTION_SUPPORT_SNAP:
+            est_min[2] = support_z
+        if name not in no_footprint_completion:
+            away = (est_min[:2] + est_max[:2]) / 2.0 - cam_xy
+            ext_x = est_max[0] - est_min[0]
+            ext_y = est_max[1] - est_min[1]
+            if ext_x + 1e-9 < ext_y:
+                if away[0] >= 0.0:
+                    est_max[0] += ext_y - ext_x
+                else:
+                    est_min[0] -= ext_y - ext_x
+            elif ext_y + 1e-9 < ext_x:
+                if away[1] >= 0.0:
+                    est_max[1] += ext_x - ext_y
+                else:
+                    est_min[1] -= ext_x - ext_y
+        detections[name] = ObjectDetection(
+            name=name, body_id=int(body_id), pixel_count=int(rows.size),
+            est_min=est_min, est_max=est_max)
+    return detections
