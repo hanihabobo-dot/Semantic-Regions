@@ -186,6 +186,11 @@ class BoxelStreams:
                 "BoxelStreams requires robot_id for kinematically valid IK. "
                 "Heuristic IK fallback has been removed (audit #80)."
             )
+        # #P3(c) pre-IK reach gate: the Panda's base is fixed, cache its
+        # XY once (proprioception, not scene perception).
+        base_pos, _ = p.getBasePositionAndOrientation(
+            self.robot_id, physicsClientId=self.physics_client)
+        self._robot_base_xy = np.asarray(base_pos[:2], dtype=float)
         
         # Home configuration — the Panda's neutral rest pose, used as the
         # default start/end for transit motions.
@@ -658,7 +663,28 @@ class BoxelStreams:
         # world-frame EE target position.
         offsets = list(self._GRASP_Z_OFFSETS)
         random.shuffle(offsets)
+        # #P1 step (2) altitude gate: a z-offset at or below the object's
+        # top parks the grasp frame INSIDE the block — the approach swing
+        # then plows the open fingers through its top (seed 0 field
+        # observation: the F4 0.06 m offset bound for a 12.6 cm occluder,
+        # grasp point 8 mm below the top, and the move clipped the block;
+        # the kin stream cannot catch it because the pick target is
+        # ignored_body there).  Gate on the object's REGISTRY boxel
+        # half-height (belief geometry): the F4 offset keeps serving the
+        # reach-margin stack levels, whose 3-4 cm cubes still pass.  A
+        # pre-sense object without a boxel keeps every offset.
+        obj_boxel = self.registry.get_boxel(str(obj_id))
+        min_z_offset = None
+        if obj_boxel is not None:
+            min_z_offset = (float(obj_boxel.max_corner[2])
+                            - float(obj_boxel.min_corner[2])) / 2.0 + 0.01
         for z in offsets:
+            if min_z_offset is not None and z < min_z_offset:
+                logger.debug("sample_grasp: %s skipping z=%.2f — below "
+                             "half-height %.3f + 1 cm clearance (#P1 "
+                             "altitude gate)", obj_id, z,
+                             min_z_offset - 0.01)
+                continue
             self._grasp_counter += 1
             grasp = Grasp(
                 position=np.array([0, 0, z]),
@@ -1139,6 +1165,27 @@ class BoxelStreams:
         # position the end-effector must reach.
         target_pos = boxel.center + grasp.position
         ee_orn = grasp.orientation
+
+        # #P3(c) pre-IK reach gate (2026-08-21): free-space PLACEMENT
+        # candidates span the whole table, but the Panda cannot reach
+        # beyond ~0.8 m horizontally from its base — pybullet IK on such
+        # targets fails all 8 seeds only after a full refinement loop
+        # each, and the adaptive sampler burns an entire escalation round
+        # per doomed (object, boxel) pair (observed on seed 0: free_004
+        # at 1.02 m ate three rounds, plan #1 took 17 min; user field
+        # runs 16-23-24 / 16-24-28 were killed in the same swamp).
+        # Reject the geometrically impossible target BEFORE the IK loop.
+        # 0.80 m sits above every IK solution ever certified in this
+        # setup (the F4 reach-margin stack case is at 0.61 m) and below
+        # every observed burn (0.886-1.02 m), so this changes wall-clock
+        # only, never the reachable plan space.
+        reach = float(np.linalg.norm(
+            np.asarray(target_pos[:2], dtype=float) - self._robot_base_xy))
+        if reach > 0.80:
+            logger.debug("compute_kin: %s at %s rejected pre-IK — target "
+                         "%.3f m from the base (> 0.80 m reach limit, "
+                         "#P3(c))", obj_id, boxel_id, reach)
+            return
 
         # --- Resolve the grasped object's PyBullet body ID --------------------
         # This body must be EXCLUDED from collision checks in plan_motion(),
