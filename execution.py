@@ -562,6 +562,7 @@ def release_held_object_in_place(
     planner,
     max_attempts: int = 3,
     retire_shadows_ok: bool = False,
+    belief=None,
 ):
     """
     Open the gripper through the finger motors and verify the object
@@ -645,7 +646,8 @@ def release_held_object_in_place(
                             shadow_occluder_map=planner.shadow_occluder_map
                             if planner.shadow_occluder_map is not None
                             else {},
-                            boxel_centers=boxel_centers, viz=viz)
+                            boxel_centers=boxel_centers, viz=viz,
+                            belief=belief)
 
     # Free space and shadows must be refreshed: the dropped object now
     # occupies new ground and may block different camera lines of sight.
@@ -1214,6 +1216,26 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
               f"retrying from REST_POSES (#P1 F4)")
         contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation,
                                   pc)
+        # Review fix 2026-08-20: the REST_POSES solve is free to land
+        # in a DIFFERENT IK branch than the arm's current (planned,
+        # collision-checked) pose — and move_robot_smooth below is
+        # plain linear joint interpolation with no collision checking,
+        # so a branch jump would sweep the arm, cube in hand, over the
+        # very stack it is building.  Accept the retry only if it
+        # stays near the current arm state (the true contact pose is a
+        # ~10 cm lower from the approach, well under 0.9 rad on every
+        # joint); otherwise abort to a replan, which re-derives the
+        # kinematics through the refined stream IK anyway.
+        if contact_joints is not None:
+            _cur = [p.getJointState(robot_id, i)[0] for i in range(7)]
+            _max_dj = max(abs(c - t)
+                          for c, t in zip(_cur, contact_joints))
+            if _max_dj > 0.9:
+                print(f"    REST_POSES retry landed in a different IK "
+                      f"branch (max joint delta {_max_dj:.2f} rad > "
+                      f"0.9) — rejecting the unplanned sweep, aborting "
+                      f"to replan (#P1 F4 review fix)")
+                contact_joints = None
     if contact_joints is None:
         print(f"    ERROR: IK failed for stack contact of {obj_name} on "
               f"{on_obj_name} - aborting")
@@ -1371,7 +1393,8 @@ def refresh_object_aabbs(env, registry, viz=None):
 
 
 def retire_cast_shadows(registry, caster_boxel_id, shadows,
-                        shadow_occluder_map, boxel_centers, viz):
+                        shadow_occluder_map, boxel_centers, viz,
+                        belief=None):
     """#P1 F4: remove the shadow boxels CAST BY a relocated caster.
 
     Mirror of the sense discovery-cleanup pattern (handle_sense_action's
@@ -1407,6 +1430,14 @@ def retire_cast_shadows(registry, caster_boxel_id, shadows,
             shadows.remove(old_sid)
         shadow_occluder_map.pop(old_sid, None)
         boxel_centers.pop(old_sid, None)
+        # Review fix 2026-08-20: keep the belief ledger consistent —
+        # a retired shadow is neither 'unknown' (it no longer exists
+        # as a sense target) nor 'not_here' (nothing was observed).
+        # The distinct 'retired' status keeps get_unknown_shadows()
+        # and the run report's "unsearched shadows remaining" counts
+        # honest without claiming an observation.
+        if belief is not None and old_sid in belief.shadow_status:
+            belief.shadow_status[old_sid] = 'retired'
         retired += 1
     bd.shadow_boxel_ids = []
     if retired:

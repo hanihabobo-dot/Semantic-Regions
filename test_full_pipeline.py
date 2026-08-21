@@ -1116,6 +1116,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # the place/stack handlers).
                 retire_shadows_ok=(goal_kind == 'stack'
                                    or belief.is_target_found()),
+                belief=belief,
             )
             held_body_id = None
             held_object_boxel_id = None
@@ -1577,7 +1578,8 @@ def main(gui=True, run_logger=None, scene_config=None,
                 if goal_kind == 'stack' or belief.is_target_found():
                     retire_cast_shadows(registry, obj_str, shadows,
                                         shadow_occluder_map,
-                                        boxel_centers, viz)
+                                        boxel_centers, viz,
+                                        belief=belief)
 
                 # Rebuild shadow_occluder_map from current physics state so
                 # blocks_view_at facts reflect the relocated occluder's new
@@ -1740,7 +1742,8 @@ def main(gui=True, run_logger=None, scene_config=None,
                 if goal_kind == 'stack' or belief.is_target_found():
                     retire_cast_shadows(registry, obj_str, shadows,
                                         shadow_occluder_map,
-                                        boxel_centers, viz)
+                                        boxel_centers, viz,
+                                        belief=belief)
 
                 # Audit #40: gate the on_relations write on a physics
                 # check.  execute_stack's 60-step settle can leave a
