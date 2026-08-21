@@ -652,7 +652,7 @@ def open_gripper(robot_id: int, gui: bool = False):
 
 
 def close_gripper(robot_id: int, gui: bool = False,
-                  target_finger_pos: float = 0.01, force: float = 40):
+                  target_finger_pos: float = 0.01, force: float = 60):
     """Close the Panda gripper toward ``target_finger_pos`` per finger.
 
     #P1 friction grasp (2026-08-20): close_gripper is now the LOAD
@@ -666,10 +666,13 @@ def close_gripper(robot_id: int, gui: bool = False,
     persist across stepSimulation — the squeeze stays active during
     transport with no re-assertion needed.
 
-    40 N default sits inside the real Panda's grasp envelope (70 N
-    continuous / 140 N peak) and yields ~48 N of tangential friction
+    60 N default sits inside the real Panda's grasp envelope (70 N
+    continuous / 140 N peak) and yields ~72 N of tangential friction
     capacity per pad at μ 1.2 — far above the ≤ 5 N scene-object
-    weights, with margin for transport accelerations.
+    weights.  Raised 40 → 60 N (2026-08-21, user report): transit
+    slips still occurred at 40 N (field run 11-49-53: red slipped out
+    mid-move, caught by the F1 empty-hand assert), so the margin
+    against transport accelerations and rotational peel was too thin.
 
     Audit #81 history (partially superseded): force was dropped
     50 → 10 N when the weld carried the load and the close was
