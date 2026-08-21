@@ -833,8 +833,40 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # given the seed, and it keeps the wrist out of the camera's view
     # so move→sense sequences aren't blocked by the arm itself.
     pc = env.client_id
+
+    # #P1 top-down descent (2026-08-21, user report: "it first
+    # collided... its not top down enough").  The planned move parks
+    # the arm above the PLAN-TIME target; since the live-pose re-aim,
+    # the contact point is the LIVE pose — a single interpolated lower
+    # therefore swipes sideways-and-down and the fingers clip the
+    # block's edge on the way, knocking it and loosening the grip.
+    # Split the lower: (1) horizontal re-aim at the approach altitude
+    # to directly above the live object (fingertips stay well clear of
+    # the block top), then (2) a strictly vertical descent.  The
+    # vertical stage is seeded from the align solution so the IK stays
+    # in the same branch.
+    # Pre-grasp aperture first (see the comment further down) so the
+    # horizontal align above the block also sweeps with narrowed
+    # fingers, not the full-open 0.04 m.
+    pregrasp_aperture = min(0.04, max(x_half, y_half) + 0.008)
+    close_gripper(robot_id, gui, target_finger_pos=pregrasp_aperture)
+
+    live_ee_now = p.getLinkState(robot_id, END_EFFECTOR_LINK)[0]
+    above_ee = np.array([contact_ee[0], contact_ee[1],
+                         max(float(live_ee_now[2]), contact_z + 0.05)])
+    above_joints = solve_ik(robot_id, above_ee, grasp.orientation, pc,
+                            seed=config.joint_positions)
+    contact_seed = config.joint_positions
+    if above_joints is not None:
+        move_robot_smooth(robot_id, above_joints, gui, settle=True)
+        contact_seed = above_joints
+    else:
+        print(f"    WARNING: horizontal re-aim IK failed for {obj_name} — "
+              f"falling back to the single-stage lower (#P1 top-down "
+              f"descent)")
+
     contact_joints = solve_ik(robot_id, contact_ee, grasp.orientation, pc,
-                              seed=config.joint_positions)
+                              seed=contact_seed)
 
     # Contact IK is mandatory (can't pick without reaching the object).
     # Aborting on failure triggers a replan rather than driving the arm
@@ -852,15 +884,12 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # the #37/#38 removal rested on a false "loadURDF = open" assumption
     # that produced the phantom-first-pick field bug).
     # #P1 pre-grasp aperture (2026-08-21, investigation synthesis):
-    # descend with the fingers sized to the object instead of the
-    # full-open 0.04 m — the narrower sweep keeps the pads from
+    # the fingers are sized to the object BEFORE the horizontal align
+    # above (see there) — the narrower sweep keeps the pads from
     # clipping neighbours (or the object itself on a marginal arrival)
-    # during the precision descent.  The pinch axis can be either
-    # horizontal AABB axis (yaw-less grasp), so size on the LARGER
-    # half-extent, +8 mm clearance per finger.  Free finger motion —
-    # nothing is between the pads yet.
-    pregrasp_aperture = min(0.04, max(x_half, y_half) + 0.008)
-    close_gripper(robot_id, gui, target_finger_pos=pregrasp_aperture)
+    # during both the align and the descent.  The pinch axis can be
+    # either horizontal AABB axis (yaw-less grasp), so the aperture is
+    # sized on the LARGER half-extent, +8 mm clearance per finger.
 
     # settle=True: the contact descent is precision-critical (#P1) —
     # the friction grasp needs lateral centering within the descent
