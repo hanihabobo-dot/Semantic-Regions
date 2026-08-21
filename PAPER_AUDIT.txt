@@ -598,6 +598,80 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   (5) re-baseline everything (CB#113 sweep).  Each step is its own branch per
   policy (multi-commit refactor).
 
+  [STEP (2) DETECTION INTERFACE LANDED 2026-08-21 — commits baf11ba
+  (perception.py core: canonical depth unprojection at pixel centres,
+  per-seg-id clouds, growth-only AABB completion — support snap +
+  square-footprint along the view axis, tray exempt; DETECTION_MIN_PIXELS
+  6) and a387c67 (get_camera_observation renders ALWAYS: ER_TINY_RENDERER
+  in GUI and DIRECT so twins perceive identical pixels; audit #56
+  render-skip fast path retired by design; visible_objects, object_poses
+  and boxels all estimate-derived, seg_mask carried in CameraObservation;
+  generate_boxels consumes estimated AABBs, spawn-order iteration kept —
+  boxel order feeds grounding order and equal-cost tie-breaks;
+  oracle_detect_objects survives ONLY for the Phase-1/Phase-4 ground-
+  truth checks and tools).  Estimate quality
+  (tools/_probe_perception.py, seeds 0/3/999): every axis within 1.3 mm
+  of p.getAABB truth, detection agrees with the 8-corner oracle on every
+  tested object, render ~180 ms + detect ~7 ms per observation.  The F5
+  pre-flight now checks hidden targets against the ESTIMATE-derived
+  fragments — a belief-level guarantee, the stronger correct reading;
+  the target box stays oracle (harness side).  FALLOUT FIXED SAME DAY:
+  (i) mm-level estimate shifts flip PDDLStream's equal-cost tie-breaks,
+  and the first re-run landed on a latent geometric bug — sample_grasp's
+  SHUFFLED z-offsets could bind the F4 0.06 m offset for a ~13 cm
+  occluder, parking the grasp frame 8 mm INSIDE the block; the approach
+  swing then clips it (the kin stream cannot catch this: the pick target
+  is ignored_body).  Fixed by the altitude gate (2129bf3): offsets below
+  boxel half-height + 1 cm are never offered; the F4 reach-margin stack
+  case (3-4 cm cubes) still passes.  (ii) With those invalid-but-fast
+  bindings gone the #P3(c) unreachable-placement swamp dominated (plan
+  #1 spent 17 min certifying; free-space candidates up to 1.02 m from
+  the base burn 8 IK seeds per escalation round) — the pre-IK 0.80 m
+  reach gate (2129bf3) fast-fails them; wall-clock only, 0.80 m is above
+  every IK ever certified here and below every observed burn
+  (0.886-1.02 m).  (iii) The deferred "placement-blocking slice
+  alignment" became mandatory: the old 5x5 mid-height grid let the
+  planner place a 13 cm occluder at free_005 UNDER shadow_of_red's
+  mid-height rays, where the dense census then listed it as a blocker —
+  forcing the F7 re-pick no-plan.  9ea58a5 rebuilds
+  _compute_placement_view_blocks on perception.sense_ray_slices + the
+  shared 5 % per-slice tolerance: the fourth consumer of the single
+  criterion.  VERIFIED headless at 9ea58a5: holding seed 0 SUCCESS
+  (2 plans, 32.8 s total planning, zero collisions, placements avoid
+  every sense corridor), stack h=2 seed 0 SUCCESS (1 plan, 1.0 s),
+  find-and-tray-stack seed 999 --seed-retry SUCCESS (4 plans, 20 s,
+  both stacks 0.0 mm err), F5 diag seeds 0/3/999 PASS, perception probe
+  PASS; holding seed 999 --seed-retry re-rolls deterministically to
+  343879192 and fails HONESTLY on the F10 held-cargo sweep (below) —
+  the same physical-failure class this seed showed pre-rewire (F8).
+  STILL ORACLE-FED after this step (tracked): refresh_object_aabbs
+  (p.getAABB per registry OBJECT boxel, 8 call sites) -> step-(2c)
+  re-estimation from a fresh render; sense-discovery BoxelData builds in
+  handle_sense_action (found_target ~:1716 / contains_nontarget ~:1857)
+  -> step (3); streams.py hidden-object size fallbacks
+  (:451/:523/:574/:1270/:1281) -> step (2d) nominal-size prior;
+  boxel_to_pybullet position cache, plan-client collision mirroring and
+  execute_pick's live re-aim/aperture reads stay ground-truth by scope
+  decision (execution-servo: a real robot senses at the wrist; the
+  collision world is a documented sim concession).]
+
+  F10. [OPEN] HELD-CARGO SWEPT VOLUME IS NEVER COLLISION-CHECKED
+      (2026-08-21, run 20-17-18, seed 343879192): plan_motion excludes
+      the grasped body from ALL collision checks (necessary at the pick
+      endpoint, where gripper-object contact is intended), so the ~13 cm
+      block hanging under the hand is invisible to RRT validation — a
+      plan-valid transit swept held red THROUGH green 4x, toppled green
+      (live pose 125 mm off, 38 deg tilt), the release then dropped red
+      43 mm high onto the knocked green, and toppled green burned its F2
+      3-strike giveup into an honest no-plan (7 unsearched shadows).
+      This is the MECHANISM behind the recurring transit-slip family
+      (11-49-53 first field catch, 15-49-02 post-lift slip = F8): the
+      cargo hits what the arm avoids.  FIX DIRECTION (#P2, with the
+      world-integrity monitor): sweep the held object's AABB along the
+      EE waypoints against the obstacle set in plan_motion — strict on
+      the transit interior, endpoints keep their intended contacts,
+      mirroring the f35d88a gripper-interior rule.
+
 ================================================================================
 #P2. [OPEN T0]  STACKING-ACCURACY DROP: PROVE IT IS EXECUTION, DETECT PHYSICAL
      FAILURE (KNOCKED TOWERS, OBJECTS OFF THE TABLE) AND FAIL HONESTLY
@@ -689,7 +763,11 @@ folds into the post-#P1 canonical sweep (CB#113).
   and free_001 [0.5, 0.0, 0.675] — and all 8 IK seeds were rejected at the
   FK gate (147-251 mm residuals) on every resample, burning the full
   sampling budget; both runs were killed mid-sampling.  Placement
-  reach-bounding applies to random-pairs too, not only scalability spawns.]
+  reach-bounding applies to random-pairs too, not only scalability spawns.
+  MITIGATED 2026-08-21 (2129bf3): compute_kin fast-fails targets more
+  than 0.80 m horizontal from the base BEFORE the IK loop — kills the
+  wall-clock burn; candidate GENERATION is still unbounded, so the full
+  reach-bounding of placement sampling remains this deliverable.]
 
 ================================================================================
 #P4. [OPEN T0]  RUN OUR PIPELINE INSIDE THE TAMPURA ENV FOR A VALID COMPARISON
