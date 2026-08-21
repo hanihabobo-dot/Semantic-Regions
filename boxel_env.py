@@ -14,6 +14,7 @@ from enum import Enum
 
 from boxel_types import ObjectInfo, CameraObservation
 from boxel_data import BoxelData, BoxelType
+from perception import detect_objects_from_render
 from shadow_calculator import ShadowCalculator
 from free_space import FreeSpaceGenerator
 from uniform_grid import UniformGridGenerator
@@ -1383,9 +1384,10 @@ class BoxelTestEnv:
                 size=spec.full_extents, is_visible=False, is_occluder=False
             )
     
-    def generate_boxels(self, visible_objects: List[str]) -> List[BoxelData]:
+    def generate_boxels(self, est_aabbs: Dict[str, Tuple[np.ndarray, np.ndarray]]
+                        ) -> List[BoxelData]:
         """
-        Generate Semantic BoxelData for visible objects and their shadows.
+        Generate Semantic BoxelData for detected objects and their shadows.
 
         Object boxels get ``id=<object_name>`` (e.g. "red_object") so the
         planner can reference them with their human-readable label.
@@ -1393,8 +1395,14 @@ class BoxelTestEnv:
         ``created_by_boxel_id`` / ``created_by_object`` set to the parent
         object name (which is also the parent's boxel ID).
 
+        #P1 step (2): geometry comes from the caller's perception
+        ESTIMATES, not p.getAABB — an object without an estimate (hidden,
+        undetected) gets no boxel, which is the structural mechanism that
+        keeps hidden objects out of the planner's world.
+
         Args:
-            visible_objects: List of visible object names.
+            est_aabbs: detected object name -> (aabb_min, aabb_max)
+                estimated world-frame AABB corners.
 
         Returns:
             List of OBJECT + SHADOW BoxelData with semantic IDs and parent
@@ -1404,14 +1412,16 @@ class BoxelTestEnv:
         on_surface_tol = 0.01  # PyBullet contact margin + AABB rounding
 
         object_boxels: List[BoxelData] = []
-        for obj_name in visible_objects:
-            if obj_name not in self.objects:
+        # Iterate in self.objects (spawn) order, not dict/sorted order of
+        # the estimates: boxel list order feeds free-space generation and
+        # PDDL grounding order, and equal-cost plans tie-break on it — the
+        # pre-step-2 oracle iterated spawn order, so keep that behaviour.
+        for obj_name in self.objects:
+            if obj_name not in est_aabbs:
                 continue
 
-            obj_info = self.objects[obj_name]
-            aabb_min, aabb_max = p.getAABB(obj_info.object_id)
-            aabb_min = np.array(aabb_min)
-            aabb_max = np.array(aabb_max)
+            aabb_min = np.asarray(est_aabbs[obj_name][0], dtype=float)
+            aabb_max = np.asarray(est_aabbs[obj_name][1], dtype=float)
 
             object_boxels.append(BoxelData(
                 id=obj_name,
@@ -1594,42 +1604,72 @@ class BoxelTestEnv:
         """
         Capture an observation from the camera.
 
-        In GUI mode, order matches pre--#56 history (e.g. parent of ff6384f):
-        ``getCameraImage`` first so ExampleBrowser RGB/depth panes update, then
-        oracle boxels.  In DIRECT mode, skip rendering (audit #56 fast path).
+        #P1 step (2): detection is REAL perception now — the fixed camera
+        renders RGB + depth + instance segmentation and
+        perception.detect_objects_from_render turns the segmented depth
+        pixels into per-object AABB/pose ESTIMATES; boxels (and everything
+        the planner sees) are built from those estimates.  The detection
+        render uses ER_TINY_RENDERER in BOTH GUI and DIRECT mode so GUI
+        twins and headless runs perceive bit-identical pixels (audit #56's
+        DIRECT render-skip fast path is retired by design: detection
+        requires the render).  oracle_detect_objects survives only for the
+        eval harness's ground-truth checks (Phase-1 settle sanity, Phase-4
+        hidden/visible split) — it no longer feeds this observation.
         """
-        if not self._gui:
-            visible_objects, object_poses = self.oracle_detect_objects()
-            boxels = self.generate_boxels(visible_objects)
-            return CameraObservation(
-                visible_objects=visible_objects,
-                object_poses=object_poses,
-                boxels=boxels,
-            )
-
         view_matrix, projection_matrix = self._view_and_projection_matrices()
-        _, _, rgb_array, depth_array, _ = p.getCameraImage(
+        if self._gui:
+            # Display-only side effect: keep the ExampleBrowser RGB/depth
+            # panes fresh via the hardware renderer (pre-#56 pane
+            # behaviour).  Detection ignores this image.
+            p.getCameraImage(
+                width=self.image_width,
+                height=self.image_height,
+                viewMatrix=view_matrix,
+                projectionMatrix=projection_matrix,
+                renderer=p.ER_BULLET_HARDWARE_OPENGL,
+            )
+        _, _, rgb_array, depth_array, seg_array = p.getCameraImage(
             width=self.image_width,
             height=self.image_height,
             viewMatrix=view_matrix,
             projectionMatrix=projection_matrix,
-            renderer=p.ER_BULLET_HARDWARE_OPENGL,
+            renderer=p.ER_TINY_RENDERER,
+            physicsClientId=self.client_id,
         )
         rgb_image = np.array(rgb_array, dtype=np.uint8).reshape(
             (self.image_height, self.image_width, 4)
         )[:, :, :3]
-        depth_image = self._depth_buffer_to_meters(
-            np.array(depth_array).reshape((self.image_height, self.image_width))
-        )
-        # Point cloud is not used by any downstream consumer; commented
-        # out to avoid the expensive depth→world-coordinate transform.
-        # Re-enable if a real perception pipeline replaces the oracle.
-        # point_cloud = self._depth_to_point_cloud(
-        #     depth_image, view_matrix, projection_matrix
-        # )
+        depth_buffer = np.asarray(depth_array, dtype=float).reshape(
+            (self.image_height, self.image_width))
+        seg_mask = np.asarray(seg_array).reshape(
+            (self.image_height, self.image_width))
+        depth_image = self._depth_buffer_to_meters(depth_buffer)
+        # Full-frame point cloud stays disabled (no consumer);
+        # perception.unproject_depth_pixels does the per-object clouds.
 
-        visible_objects, object_poses = self.oracle_detect_objects()
-        boxels = self.generate_boxels(visible_objects)
+        body_id_to_name = {
+            info.object_id: name for name, info in self.objects.items()
+            if name not in ("plane", "table", "robot")
+        }
+        trays = frozenset(
+            name for name, info in self.objects.items()
+            if getattr(info, "is_tray", False))
+        detections = detect_objects_from_render(
+            seg_mask, depth_buffer, view_matrix, projection_matrix,
+            body_id_to_name, self.camera_position[:2],
+            self.table_surface_height,
+            no_footprint_completion=trays)
+
+        # Spawn order, matching the oracle's historical iteration order
+        # (order feeds nothing planner-critical here, but keep it stable).
+        visible_objects = [n for n in self.objects if n in detections]
+        object_poses = {
+            n: (detections[n].est_center, np.array([0.0, 0.0, 0.0, 1.0]))
+            for n in visible_objects
+        }
+        boxels = self.generate_boxels(
+            {name: (det.est_min, det.est_max)
+             for name, det in detections.items()})
 
         return CameraObservation(
             rgb_image=rgb_image,
@@ -1637,6 +1677,7 @@ class BoxelTestEnv:
             visible_objects=visible_objects,
             object_poses=object_poses,
             boxels=boxels,
+            seg_mask=seg_mask,
         )
     
     def _depth_buffer_to_meters(self, depth_buffer: np.ndarray) -> np.ndarray:

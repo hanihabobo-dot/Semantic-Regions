@@ -54,10 +54,21 @@ class OctreeNode:
 
 @dataclass
 class CameraObservation:
-    """Data structure for camera observations."""
-    visible_objects: List[str]  # List of object names that are visible
-    object_poses: Dict[str, Tuple[np.ndarray, np.ndarray]]  # Dict mapping object names to (position, orientation)
+    """Data structure for camera observations.
+
+    #P1 step (2) contract: every field is derived from the rendered
+    observation (perception.detect_objects_from_render).  visible_objects
+    lists DETECTED objects only, and object_poses carries their AABB-centre
+    ESTIMATES with identity orientation — undetected (hidden) objects
+    appear nowhere in this structure, so their ground-truth poses can never
+    leak into planning through it.  (The pre-step-2 oracle populated
+    object_poses with ground truth for every object, hidden included; no
+    live consumer ever read it — grep-verified 2026-08-21.)
+    """
+    visible_objects: List[str]  # Names of objects DETECTED in the render
+    object_poses: Dict[str, Tuple[np.ndarray, np.ndarray]]  # detected name -> (est. position, identity quat)
     boxels: Optional[List['BoxelData']] = None  # OBJECT + SHADOW BoxelData generated from the observation
     rgb_image: Optional[np.ndarray] = None  # RGB image (H, W, 3) — None when not computed
     depth_image: Optional[np.ndarray] = None  # Depth image (H, W) in meters — None when not computed
     point_cloud: Optional[np.ndarray] = None  # Point cloud (N, 3) in world coords — None when not computed
+    seg_mask: Optional[np.ndarray] = None  # Instance segmentation (H, W), pybullet body ids
