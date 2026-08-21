@@ -414,10 +414,20 @@ def cell_to_argv(cell: Dict, extra_args: List[str]) -> List[str]:
     # them unconditionally turned every (default, holding) cell into a
     # scalability run.
     if cell["scene"] == "scalability":
+        # --seed-retry (F5, 2026-08-21): the sensable-guarantee
+        # pre-flight re-rolls seeds whose hidden target lands outside
+        # every sense-hittable shadow fragment (structurally
+        # unwinnable).  Without the flag those cells would hard-fail
+        # into exit_reason=no_summary and silently shrink the
+        # scalability arm's N; the deterministic re-roll (seeded from
+        # the cell seed) keeps re-runs reproducible.  Also covers the
+        # pre-existing "Could not place" placement exhaustion the same
+        # way random-pairs cells always did.
         argv.extend([
             "--n-occluders", str(cell["n_occluders"]),
             "--n-targets",   str(cell["n_targets"]),
             "--n-hidden",    str(cell["n_hidden"]),
+            "--seed-retry",
         ])
     elif cell["scene"] == "random-pairs":
         # random-pairs derives n_hidden/n_targets internally from seed
