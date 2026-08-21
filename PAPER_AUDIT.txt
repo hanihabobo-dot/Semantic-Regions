@@ -477,7 +477,7 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       is never claimed observed); one-shot grasp resample inside
       execute_pick after a close-time verification failure (retreat,
       re-read live pose, re-descend once).  User confirms picks work.]
-      F5. [OPEN] HIDDEN-SPAWN CLASSIFICATION INCONSISTENT WITH SENSE
+      F5. [DONE 2026-08-21] HIDDEN-SPAWN CLASSIFICATION INCONSISTENT WITH SENSE
       GEOMETRY (2026-08-21, user field report on random-pairs seed 0,
       run_2026-08-21_13-44-12): Phase 4 claims "Target: blue_object —
       ORACLE: Actually hidden in shadow_of_red_object__00" (log :52-53,
@@ -501,6 +501,93 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       fragments and re-roll the scene when the target is not genuinely
       inside a sensed-able fragment.  Blocks meaningful holding-goal
       numbers on the affected seeds — fix before CB#113.]
+      [FIX NOTE 2026-08-21 — root cause was THREE stacked defects (4-skeptic
+      adversarial review): (i) sense z blind spot: every sense ray endpoint
+      sat at fragment_base+0.04 m, ABOVE the top of every post-resize
+      3-4 cm target, so sense could never hit a hidden target — NO holding
+      episode was winnable since the P1 resize.  The spawn oracle itself
+      was CORRECT (segmentation render agrees pixel-for-pixel on every
+      tested seed).  (ii) seed-999 class: the camera-hidden target lay
+      inside NO final F3 shadow fragment (shadow-overlap carve artifact) —
+      structurally unwinnable no matter how sense aims.  (iii) census
+      interaction, exposed by the first fix attempt: the any-hit blocker
+      census pinned relocated occluders over single grazing rays (1/674),
+      forcing relocate-again plans into the silent re-pick stream-binding
+      deadlock (now F7).  FIXED in three commits: c4b9b05 — new
+      perception.py owns ONE shared sense-ray criterion (sense_ray_slices,
+      grid_would_hit, SENSE_MARGINAL_BLOCKED_FRACTION): dense low slice at
+      base+0.02 m with 12 mm spacing so 3-4 cm targets are hittable,
+      per-slice 5 % blocked tolerance shared by sense AND
+      compute_shadow_blockers, slice-aware shrink pads, adjacency-gated
+      parent fallback, tray ignored by low rays.  bdb4ec6 — pre-flight
+      sensable guarantee: every oracle-hidden target must sit inside a
+      final F3 fragment that perception.grid_would_hit confirms the
+      IDENTICAL sense endpoints would hit; retryable "F5 pre-flight"
+      RuntimeError, deterministic re-roll under --seed-retry / auto-seed,
+      loud fail on pinned seeds; the Phase-4 ORACLE line names the
+      sense-hittable fragment; eval_runner scalability cells emit
+      --seed-retry.  f6c00eb — spawn separation 0.10 -> 0.15 m centre-to-
+      centre (edge inset stays 0.10) to cut shadow-overlap carve slivers;
+      30-seed probe: re-roll rate 4/30 (was 5/30), unwinnable-carve misses
+      0 (was 2), seed 0 now casts 3 clean unfragmented shadows.  VERIFIED:
+      tools/_diag_f5_seed0.py asserts found_target + grid_would_hit + zero
+      table grazes; post-spacing headless smoke on f6c00eb: holding seed 0
+      SUCCESS in ONE plan (run_2026-08-21_16-30-21: sense on the
+      unfragmented shadow_of_red_object, pick 116 N / aperture_err 1.7 mm;
+      was 3 plans pre-spacing), stack h=2 seed 0 SUCCESS
+      (run_2026-08-21_16-31-29: 2.0 s plan, release err 0.0 mm); pinned
+      holding seed 999 = loud "F5 pre-flight" abort BY DESIGN; with
+      --seed-retry = deterministic re-roll to 343879192, target FOUND
+      (that episode then honestly failed on a post-lift grip slip —
+      physical, not F5; now F8); find-and-tray-stack seed 999 --seed-retry
+      = SUCCESS (previously a bounded failure).  CONSEQUENCE: the 0.15
+      spacing changes EVERY seed's scene — eval_corpus.json pre-vetted
+      seeds and all old per-seed expectations are stale until the CB#113
+      re-sweep.]
+  F6. [OPEN] SENSE UN-GATED BY HIDEABILITY SINCE a0e536b — PLANNER SENSES
+      IMPOSSIBLE FRAGMENTS (2026-08-21): a0e536b (2026-05-27,
+      "experimental sense relaxation") dropped the boxel_fits precondition
+      from :action sense, so sense grounds on ANY view_clear shadow,
+      including fragments the target provably cannot occupy.  Field
+      evidence: the user's GUI run 16-04-59 spent plan #1 on a move+sense
+      of shadow_of_red_object__02, a 4 mm carve sliver no 3-4 cm target
+      fits — wasted mission actions before the real search.  The comment
+      at pddlstream_planner.py:518-523 still claims boxel_fits gates BOTH
+      place and sense — stale since a0e536b.  Natural fix: static
+      (sensable ?o ?b) init atoms rebuilt per replan from
+      perception.grid_would_hit + the streams.py fits test, added as a
+      sense precondition (keeps the audit-#102 no-test-stream rule).
+      NEEDS AN EXPLICIT USER GO: domain surgery, and it changes CB#113
+      step counts (user warm 2026-08-21, not yet approved).
+  F7. [OPEN] SILENT RE-PICK STREAM-BINDING NO-PLAN (2026-08-21): when the
+      only way forward is to RE-PICK an occluder the robot itself already
+      placed (relocate it a second time), PDDLStream finds valid action
+      skeletons but binding dies silently (sample_time ~0 s, no
+      diagnostic) and the episode ends "no plan found (unsearched shadows
+      remaining)".  Logs: run 11-49-53 PLAN #7, run 15-25-23 PLAN #4.  No
+      handempty-state fallback exists and nothing discloses that
+      skeletons were found.  The c4b9b05 shared census removes the main
+      TRIGGER (grazing rays no longer pin relocated occluders as
+      blockers) but the binding failure itself is untouched — any future
+      relocate-again demand hits it again.  Suspect: re-pick kin/grasp
+      streams for an object sitting at a free_* boxel.  #P2 scope
+      (failure classification + a binding diagnostic), root cause open.
+  F8. [OPEN] POST-LIFT GRIP SLIP (2026-08-21, run 15-49-02, seed
+      343879192): blue_object lifted cleanly, then pad_normal_force
+      dropped to 0 N in transit; the one-shot in-pick grasp resample
+      (grip+transit round) re-descended and slipped again; episode ended
+      honestly.  #P2 pick-reliability data point (physical, not
+      planning): the F5 re-roll seed reaches the target but cannot hold
+      it.  Fold into #P2(b)'s root-cause round alongside the level-4
+      pad-contact finding.
+  F9. [OPEN] CONTAINS_NONTARGET REDISCOVERY HAS NO STRIKE COUNTER
+      (2026-08-21): blocked-view, pick, and transit-loss failures all
+      carry 3-strike giveups, but senses that end contains_nontarget
+      (rediscovering an occluder inside a fragment) can repeat across
+      replans without bound — no counter, no giveup.  Mitigated in
+      practice by the c4b9b05 shared census (the relocate-loop trigger is
+      gone) but the asymmetry remains; add the counter when #P2's
+      failure-classification layer lands.
 
   ORDER OF WORK (proposal): (1) resize objects + friction-grasp + real release,
   drop weld and teleports [changes execution.py, robot_utils.py, boxel_env.py
@@ -596,6 +683,13 @@ default True + explicit opt-out), keep the _assert_xys_in_reach post-spawn net;
 (c) verify PLACEMENT sampling (streams place/stack targets) is also
 reach-bounded, mirroring TAMPURA's shortened-table pattern; (d) numbers refresh
 folds into the post-#P1 canonical sweep (CB#113).
+  [EVIDENCE 2026-08-21 for (c): user GUI runs 16-23-24 / 16-24-28
+  (random-pairs, post-spacing tree): PDDLStream repeatedly bound placements
+  at unreachable free-space boxels — free_009 ee target [0.45, 0.25, 0.52]
+  and free_001 [0.5, 0.0, 0.675] — and all 8 IK seeds were rejected at the
+  FK gate (147-251 mm residuals) on every resample, burning the full
+  sampling budget; both runs were killed mid-sampling.  Placement
+  reach-bounding applies to random-pairs too, not only scalability spawns.]
 
 ================================================================================
 #P4. [OPEN T0]  RUN OUR PIPELINE INSIDE THE TAMPURA ENV FOR A VALID COMPARISON
