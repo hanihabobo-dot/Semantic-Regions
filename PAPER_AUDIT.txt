@@ -706,6 +706,16 @@ WHAT THE CODE DOES TODAY (2026-08-15 scout):
     knock-down, replan from scattered state finds no plan.  Same manipulation
     fragility, different exit reason.
 
+  [KNOCKED-OFF-TABLE EVIDENCE 2026-08-21 (run 22-11-42, tray-stack seed
+  343879192): a cyan transit slip (F10 mechanism) LAUNCHED the goal cube
+  off the table — it landed on the floor at y=1.27 m, 1.276 m from the
+  base.  The planner correctly could not reach it (pre-IK gate lines
+  name the distance) and spent 107 s exhausting sense-based alternative
+  skeletons before a GENERIC "no plan (9 unsearched shadows remaining)".
+  Deliverable (a)'s monitor would classify this as knocked_off_table
+  immediately after the failed transit — same episode outcome, honest
+  label, two minutes sooner.]
+
 DELIVERABLES:
   (a) World-integrity monitor after every executed action: every non-held object
       still within table bounds and (if previously stacked) still on its support;
@@ -767,7 +777,18 @@ folds into the post-#P1 canonical sweep (CB#113).
   MITIGATED 2026-08-21 (2129bf3): compute_kin fast-fails targets more
   than 0.80 m horizontal from the base BEFORE the IK loop — kills the
   wall-clock burn; candidate GENERATION is still unbounded, so the full
-  reach-bounding of placement sampling remains this deliverable.]
+  reach-bounding of placement sampling remains this deliverable.
+  EXTENDED SAME DAY (29ad499) after a user GUI field report (run
+  22-01-06): the pre-IK gate alone rejects a placement only AFTER
+  FastDownward commits a plan to it — the GUI run burned a 99 s search
+  round on free_008 at 0.802 m, then started the next 110 s round and
+  the user killed it.  _build_init now filters free boxels beyond the
+  shared streams.REACH_LIMIT_M (0.80 m) out of the boxel_fits PLACE
+  candidates entirely (shadow fits stay un-gated — hideability is not a
+  reach property).  Side effect: the search space shrinks — holding
+  seed 0 plan #1 dropped 31 s -> 2.1 s, stack h=2 -> 0.96 s.
+  Remaining for (c): stack/tray destinations and the TAMPURA-style
+  shortened-table PLACE band; spawns (a)/(b) unchanged.]
 
 ================================================================================
 #P4. [OPEN T0]  RUN OUR PIPELINE INSIDE THE TAMPURA ENV FOR A VALID COMPARISON
