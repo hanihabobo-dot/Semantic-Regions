@@ -37,7 +37,7 @@ from pddlstream.utils import read
 from boxel_data import BoxelRegistry, BoxelType
 from perception import (sense_ray_slices, segment_aabb_hit_mask,
                         SENSE_MARGINAL_BLOCKED_FRACTION)
-from streams import BoxelStreams, RobotConfig, Trajectory, Grasp
+from streams import BoxelStreams, RobotConfig, Trajectory, Grasp, REACH_LIMIT_M
 from robot_utils import REST_POSES
 
 
@@ -537,9 +537,25 @@ class PDDLStreamPlanner:
         # extent test — only emit if a target placement exists where
         # all 8 of its AABB corners are actually occluded from the
         # camera AND the target rests stably on the table.
+        # #P3(c) placement-candidate reach gate (2026-08-21): a free
+        # boxel whose centre lies beyond REACH_LIMIT_M horizontal from
+        # the robot base is NEVER offered as a place destination — the
+        # place EE target is boxel.center + a vertical grasp offset, so
+        # compute_kin's pre-IK gate would reject it anyway, but only
+        # AFTER FastDownward committed a plan to it and burned a full
+        # search round (~40-60 s post-F3) on the doomed skeleton
+        # (observed: GUI run 22-01-06, free_008 at 0.802 m, one wasted
+        # 99 s round).  Gating the FACT keeps unreachable placements out
+        # of the search space entirely.  SHADOW fits stay un-gated:
+        # (boxel_fits target shadow) encodes hideability for sense —
+        # a target can hide beyond arm reach; reach is a pick concern,
+        # enforced by the kin stream when a pick is actually planned.
         free_ids = [
             b.id for b in self.registry.boxels.values()
             if b.boxel_type == BoxelType.FREE_SPACE
+            and float(np.linalg.norm(
+                np.asarray(b.center[:2], dtype=float)
+                - self.streams._robot_base_xy)) <= REACH_LIMIT_M
         ]
         shadow_ids = [
             b.id for b in self.registry.boxels.values()

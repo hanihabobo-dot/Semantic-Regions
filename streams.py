@@ -24,6 +24,19 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
+# #P3(c) shared reach limit (2026-08-21): maximum horizontal distance
+# from the Panda base at which a top-down pick/place EE target is
+# considered reachable.  Used by compute_kin_solution's pre-IK gate AND
+# by _build_init's placement-candidate filter in pddlstream_planner —
+# one constant, or the symbolic layer proposes placements the kin
+# stream then rejects, wasting a full FastDownward round (~40-60 s
+# post-F3) per doomed candidate (observed: GUI run 22-01-06 committed
+# to free_008 at 0.802 m after a 99 s search, then lost the round to
+# the pre-IK gate).  0.80 m sits above every IK solution ever certified
+# in this setup (the F4 reach-margin stack case is at 0.61 m) and below
+# every observed 8-seed IK failure (0.886-1.02 m).
+REACH_LIMIT_M = 0.80
+
 from boxel_data import BoxelRegistry, BoxelData, BoxelType
 from robot_utils import (ARM_JOINT_INDICES, END_EFFECTOR_LINK, FINGER_JOINTS,
                          JOINT_LIMITS_LOW, JOINT_LIMITS_HIGH, JOINT_RANGES,
@@ -186,8 +199,11 @@ class BoxelStreams:
                 "BoxelStreams requires robot_id for kinematically valid IK. "
                 "Heuristic IK fallback has been removed (audit #80)."
             )
-        # #P3(c) pre-IK reach gate: the Panda's base is fixed, cache its
-        # XY once (proprioception, not scene perception).
+        # #P3(c) reach gates: the Panda's base is fixed, cache its XY
+        # once (proprioception, not scene perception).  Shared by the
+        # pre-IK gate below AND _build_init's placement-candidate gate
+        # (same REACH_LIMIT_M so the planner never proposes what the
+        # kin stream would reject).
         base_pos, _ = p.getBasePositionAndOrientation(
             self.robot_id, physicsClientId=self.physics_client)
         self._robot_base_xy = np.asarray(base_pos[:2], dtype=float)
@@ -1181,10 +1197,10 @@ class BoxelStreams:
         # only, never the reachable plan space.
         reach = float(np.linalg.norm(
             np.asarray(target_pos[:2], dtype=float) - self._robot_base_xy))
-        if reach > 0.80:
+        if reach > REACH_LIMIT_M:
             logger.debug("compute_kin: %s at %s rejected pre-IK — target "
-                         "%.3f m from the base (> 0.80 m reach limit, "
-                         "#P3(c))", obj_id, boxel_id, reach)
+                         "%.3f m from the base (> %.2f m reach limit, "
+                         "#P3(c))", obj_id, boxel_id, reach, REACH_LIMIT_M)
             return
 
         # --- Resolve the grasped object's PyBullet body ID --------------------
