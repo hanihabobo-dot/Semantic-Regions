@@ -1608,6 +1608,52 @@ def handle_sense_action(
                   f"after remove_boxel_viz — wireframe/phantom likely "
                   f"painted at the stale location")
 
+        # Sibling batch-sense (2026-08-21, user-directed): F3's corrected
+        # geometry splits one caster's occlusion into several fragments,
+        # so a single sense cleared only ITS fragment and the GUI kept
+        # showing the caster's other shadows ("shadow still there after
+        # sensing" field report).  Re-run the same 147-ray cast on the
+        # caster's remaining fragments now and remove every one that is
+        # ALSO observably empty — each removal is backed by a real
+        # observation, so the belief stays honest.  Fragments that come
+        # back blocked / non-empty stay for a planned sense of their
+        # own; a surprise found_target here is deliberately left for the
+        # next planned sense rather than plumbed through this replan
+        # branch.
+        caster_id = (shadow_boxel.created_by_boxel_id
+                     or shadow_boxel.created_by_object)
+        caster_bd = registry.get_boxel(caster_id) if caster_id else None
+        if caster_bd is not None and sid_str in getattr(
+                caster_bd, "shadow_boxel_ids", []):
+            caster_bd.shadow_boxel_ids.remove(sid_str)
+        if caster_bd is not None:
+            for sib_sid in list(getattr(caster_bd, "shadow_boxel_ids", [])):
+                sib_bd = registry.get_boxel(sib_sid)
+                if sib_bd is None:
+                    continue
+                sib_occluder_ids = set()
+                for blocker_bid in shadow_occluder_map.get(sib_sid, []):
+                    if blocker_bid in boxel_to_pybullet:
+                        sib_occluder_ids.add(
+                            boxel_to_pybullet[blocker_bid]['pybullet_id'])
+                sib_outcome, _, _ = sense_shadow_raycasting(
+                    env.camera_position, sib_bd, target_pybullet_id,
+                    sib_occluder_ids, robot_id=robot_id,
+                    support_body_ids=support_body_ids)
+                if sib_outcome != "clear_but_empty":
+                    continue
+                belief.mark_sensed(sib_sid, found=False)
+                registry.remove_boxel(sib_sid)
+                if viz is not None:
+                    viz.remove_boxel_viz(sib_sid)
+                if sib_sid in shadows:
+                    shadows.remove(sib_sid)
+                shadow_occluder_map.pop(sib_sid, None)
+                boxel_centers.pop(sib_sid, None)
+                caster_bd.shadow_boxel_ids.remove(sib_sid)
+                print(f"    -> sibling fragment {sib_sid} also observed "
+                      f"empty — removed (batch-sense)")
+
         if sense_outcome == "contains_nontarget":
             # Non-target objects discovered inside the shadow.
             # Create OBJECT + SHADOW boxels for each one so the
