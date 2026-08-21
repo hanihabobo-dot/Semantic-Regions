@@ -63,7 +63,7 @@ def _capture_freeze(label: str) -> None:
 
 def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
                             occluder_pybullet_ids=None, robot_id=None,
-                            support_body_ids=None) -> Tuple[str, float, Set[int]]:
+                            support_body_ids=None):
     """
     Sense a shadow region using PyBullet ray-casting from the fixed camera.
 
@@ -86,11 +86,17 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
             to ignore when collecting detected bodies.
 
     Returns:
-        Tuple[str, float, Set[int]]:
+        Tuple[str, float, Set[int], Optional[Tuple[np.ndarray, np.ndarray]]]:
           - outcome string
           - blocked_fraction (0 when not blocked)
           - set of non-target, non-occluder dynamic body IDs detected inside
             the shadow (empty for found_target and still_blocked)
+          - for still_blocked: (min, max) AABB of the BLOCKED ray target
+            points, padded by half the ray-grid spacing and clamped to the
+            fragment — the sub-region that remains UNOBSERVED.  The clear
+            rays observed the rest of the fragment empty, so the caller
+            may SHRINK the shadow to this box (partial-reveal shrink,
+            2026-08-21, user-directed).  None for the other outcomes.
     """
     ray_origin = np.array(camera_pos)
     ignore_ids = {-1}
@@ -138,14 +144,19 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
     robot_hits = 0
     detected_bodies: Set[int] = set()
     total_rays = len(results)
+    # Target points of the rays that were BLOCKED — the sub-region that
+    # stays unobserved.  Feeds the partial-reveal shrink (see Returns).
+    blocked_targets = []
 
-    for hit_obj_id, _link, _frac, _pos, _normal in results:
+    for i, (hit_obj_id, _link, _frac, _pos, _normal) in enumerate(results):
         if hit_obj_id == target_pybullet_id:
-            return "found_target", 0.0, set()
+            return "found_target", 0.0, set(), None
         if occluder_pybullet_ids and (hit_obj_id in occluder_pybullet_ids):
             occluder_hits += 1
+            blocked_targets.append(ray_tos[i])
         elif (robot_id is not None) and (hit_obj_id == robot_id):
             robot_hits += 1
+            blocked_targets.append(ray_tos[i])
         elif hit_obj_id not in ignore_ids:
             detected_bodies.add(hit_obj_id)
 
@@ -168,15 +179,31 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
             if robot_hits > 0 and occluder_hits == 0:
                 print(f"    NOTE: {robot_hits}/{total_rays} rays blocked "
                       f"by robot arm (not occluder)")
-            return "still_blocked", blocked_fraction, set()
+            # Partial-reveal bounds: the blocked targets' AABB, padded
+            # by half a grid cell (7 samples across each extent), Z kept
+            # at the fragment's full range (height stays an
+            # overestimate), clamped to the fragment.
+            bt = np.asarray(blocked_targets, dtype=float)
+            pad = (np.asarray(max_c[:2]) - np.asarray(min_c[:2])) / 12.0
+            b_min = np.array([
+                max(float(bt[:, 0].min()) - pad[0], float(min_c[0])),
+                max(float(bt[:, 1].min()) - pad[1], float(min_c[1])),
+                float(min_c[2]),
+            ])
+            b_max = np.array([
+                min(float(bt[:, 0].max()) + pad[0], float(max_c[0])),
+                min(float(bt[:, 1].max()) + pad[1], float(max_c[1])),
+                float(max_c[2]),
+            ])
+            return "still_blocked", blocked_fraction, set(), (b_min, b_max)
         print(f"    NOTE: tolerating {blocked_total}/{total_rays} "
               f"marginally blocked rays ({blocked_fraction:.0%} <= 5%) — "
               f"classifying by the remaining rays")
 
     if detected_bodies:
-        return "contains_nontarget", 0.0, detected_bodies
+        return "contains_nontarget", 0.0, detected_bodies, None
 
-    return "clear_but_empty", 0.0, set()
+    return "clear_but_empty", 0.0, set(), None
 
 
 def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
@@ -767,8 +794,9 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
                             tag=f"pre-pick:{obj_name}")
     aabb_min, aabb_max = p.getAABB(obj_id)
     cube_top_z = float(aabb_max[2])
-    cube_hw = min(aabb_max[0] - aabb_min[0],
-                   aabb_max[1] - aabb_min[1]) / 2.0
+    x_half = (aabb_max[0] - aabb_min[0]) / 2.0
+    y_half = (aabb_max[1] - aabb_min[1]) / 2.0
+    cube_hw = min(x_half, y_half)
 
     _GRASP_MARGIN_FROM_TOP = 0.005  # 5 mm below cube top
     _FINGER_TIP_DEPTH = 0.035
@@ -776,9 +804,22 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     min_contact_z = table_z + _FINGER_TIP_DEPTH
     contact_z = max(cube_top_z - _GRASP_MARGIN_FROM_TOP, min_contact_z)
 
+    # #P1 pick re-aim (2026-08-21, investigation synthesis): the
+    # dispatcher's obj_pos can be STALE by the time the descent starts —
+    # transit finger sweeps shove objects 10-28 mm between the position
+    # read and the pick (GUI field runs 10-53-50 / 10-55-47: 7 of 9
+    # picks failed with single-pad grips at exactly that misalignment).
+    # Aim the final descent at the object's LIVE pose; the AABB-derived
+    # contact_z above is already live.
+    obj_pos_live = p.getBasePositionAndOrientation(obj_id)[0]
+    reaim_xy = float(np.hypot(obj_pos_live[0] - obj_pos[0],
+                              obj_pos_live[1] - obj_pos[1]))
+    if reaim_xy > 0.002:
+        print(f"    [#P1-diag] pick re-aim {obj_name}: live pose "
+              f"{reaim_xy * 1000:.1f}mm from the dispatcher's position")
     contact_ee = np.array([
-        obj_pos[0] + grasp.position[0],
-        obj_pos[1] + grasp.position[1],
+        obj_pos_live[0] + grasp.position[0],
+        obj_pos_live[1] + grasp.position[1],
         contact_z,
     ])
 
@@ -810,6 +851,17 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # resets the fingers to 0.04 after robot load (they spawn closed;
     # the #37/#38 removal rested on a false "loadURDF = open" assumption
     # that produced the phantom-first-pick field bug).
+    # #P1 pre-grasp aperture (2026-08-21, investigation synthesis):
+    # descend with the fingers sized to the object instead of the
+    # full-open 0.04 m — the narrower sweep keeps the pads from
+    # clipping neighbours (or the object itself on a marginal arrival)
+    # during the precision descent.  The pinch axis can be either
+    # horizontal AABB axis (yaw-less grasp), so size on the LARGER
+    # half-extent, +8 mm clearance per finger.  Free finger motion —
+    # nothing is between the pads yet.
+    pregrasp_aperture = min(0.04, max(x_half, y_half) + 0.008)
+    close_gripper(robot_id, gui, target_finger_pos=pregrasp_aperture)
+
     # settle=True: the contact descent is precision-critical (#P1) —
     # the friction grasp needs lateral centering within the descent
     # clearance, so hold the endpoint until the arm converges.
@@ -876,8 +928,8 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
     # half-extent; a phantom reads ~0.000-0.005, far below the
     # >= 0.015 m half-extents of every scene object, so the
     # standing-on-top signature is still caught.
-    x_half = (aabb_max[0] - aabb_min[0]) / 2.0
-    y_half = (aabb_max[1] - aabb_min[1]) / 2.0
+    # x_half / y_half hoisted to the AABB read at the top of the
+    # function (also sizes the pre-grasp aperture).
     finger_pos = [p.getJointState(robot_id, fj)[0] for fj in FINGER_JOINTS]
     aperture_err = min(
         max(abs(fp - h) for fp in finger_pos)
@@ -1386,6 +1438,48 @@ def refresh_object_aabbs(env, registry, viz=None):
             viz.draw_boxel_data(obj_boxel)
 
 
+def _shrink_shadow_fragment(registry, shadow_bd, blocked_min, blocked_max,
+                            viz, boxel_centers):
+    """#P1 partial-reveal shrink (2026-08-21, user-directed).
+
+    A still_blocked sense is not a null observation: every CLEAR ray
+    observed its column of the fragment empty.  Shrink the fragment to
+    the blocked rays' padded bounding box (the sub-region that remains
+    unobserved) so the belief, the planner's boxel_fits grounding, and
+    the GUI wireframe all track what is actually still hidden.  The
+    fragment keeps its id, its belief status ('unknown' — the remaining
+    region was NOT observed), and its blocked_counts strikes.
+
+    Returns True when the fragment actually shrank.
+    """
+    new_min = np.maximum(np.asarray(shadow_bd.min_corner, dtype=float),
+                         np.asarray(blocked_min, dtype=float))
+    new_max = np.minimum(np.asarray(shadow_bd.max_corner, dtype=float),
+                         np.asarray(blocked_max, dtype=float))
+    # Degenerate guard — never register an inverted/sliver box (mirrors
+    # the F3 shadow-construction guards).
+    if np.any(new_max - new_min <= 1e-3):
+        return False
+    old_ext = shadow_bd.max_corner - shadow_bd.min_corner
+    new_ext = new_max - new_min
+    # Only rewrite geometry for a meaningful reveal (> 2 mm on some
+    # horizontal axis) — avoids viz churn on repeat identical senses.
+    if not np.any(old_ext[:2] - new_ext[:2] > 0.002):
+        return False
+    shadow_bd.min_corner = new_min
+    shadow_bd.max_corner = new_max
+    boxel_centers[shadow_bd.id] = shadow_bd.center
+    if viz is not None:
+        viz.remove_boxel_viz(shadow_bd.id)
+        viz.draw_boxel_data(shadow_bd)
+    setattr(registry, "_dirty", True)
+    print(f"    -> {shadow_bd.id} shrunk to the still-blocked region "
+          f"({old_ext[0] * 100:.1f}x{old_ext[1] * 100:.1f} -> "
+          f"{new_ext[0] * 100:.1f}x{new_ext[1] * 100:.1f} cm; the "
+          f"revealed part was observed empty)")
+    return True
+
+
 def handle_sense_action(
     *,
     action_params,
@@ -1453,7 +1547,8 @@ def handle_sense_action(
         if blocker_bid in boxel_to_pybullet:
             occluder_pybullet_ids.add(boxel_to_pybullet[blocker_bid]['pybullet_id'])
 
-    sense_outcome, blocked_fraction, detected_bodies = sense_shadow_raycasting(
+    (sense_outcome, blocked_fraction, detected_bodies,
+     blocked_bbox) = sense_shadow_raycasting(
         env.camera_position,
         shadow_boxel,
         target_pybullet_id,
@@ -1575,11 +1670,18 @@ def handle_sense_action(
                     if blocker_bid in boxel_to_pybullet:
                         sib_occluder_ids.add(
                             boxel_to_pybullet[blocker_bid]['pybullet_id'])
-                sib_outcome, _, _ = sense_shadow_raycasting(
+                sib_outcome, _, _, sib_bbox = sense_shadow_raycasting(
                     env.camera_position, sib_bd, target_pybullet_id,
                     sib_occluder_ids, robot_id=robot_id,
                     support_body_ids=support_body_ids)
                 if sib_outcome != "clear_but_empty":
+                    # Partial-reveal shrink for a still-blocked sibling:
+                    # its clear rays observed part of it empty even
+                    # though the fragment as a whole stays.
+                    if sib_outcome == "still_blocked" and sib_bbox:
+                        _shrink_shadow_fragment(registry, sib_bd,
+                                                sib_bbox[0], sib_bbox[1],
+                                                viz, boxel_centers)
                     continue
                 belief.mark_sensed(sib_sid, found=False)
                 registry.remove_boxel(sib_sid)
@@ -1743,6 +1845,15 @@ def handle_sense_action(
     print(f"    View to {shadow_id} still blocked "
           f"({blocked_fraction:.0%} rays hit occluder). "
           f"[attempt {blocked_counts[sid_str]}]")
+    # #P1 partial-reveal shrink (2026-08-21, user-directed): the clear
+    # rays of this failed sense still observed part of the fragment
+    # empty — shrink it to the blocked sub-region so belief, planner
+    # grounding, and the GUI wireframe track what actually remains
+    # hidden.
+    if blocked_bbox:
+        _shrink_shadow_fragment(registry, shadow_boxel,
+                                blocked_bbox[0], blocked_bbox[1],
+                                viz, boxel_centers)
     if blocked_counts[sid_str] >= 3:
         print(f"    ERROR: {shadow_id} blocked "
               f"{blocked_counts[sid_str]} times — giving "
