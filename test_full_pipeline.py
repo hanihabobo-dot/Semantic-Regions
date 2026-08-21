@@ -807,14 +807,18 @@ def main(gui=True, run_logger=None, scene_config=None,
     shadow_occluder_map = compute_shadow_blockers(
         env.camera_position, registry, shadows, occluders, env
     )
-    # compute_shadow_blockers now applies the parent-relationship fallback
-    # internally for any shadow whose ray-grid produced no blockers, so
-    # there's nothing to do here per shadow EXCEPT warn when even the
-    # parent linkage is missing — those shadows are unreachable by the
-    # planner and would silently be treated as view_clear.
+    # compute_shadow_blockers applies the tolerance-aligned census plus
+    # the (adjacency-gated) parent-relationship fallback internally, so
+    # an EMPTY blocker list is now a legitimate state: nothing blocks
+    # more of the shadow's rays than the sense itself would tolerate,
+    # the planner derives view_clear, and a direct (move, sense) plan
+    # is schedulable — exactly what happens for marginal grazers and
+    # far-displaced carve fragments post-F5.  Log it as information,
+    # not as the broken-linkage warning it used to be.
     for shadow_id in shadows:
         if not shadow_occluder_map.get(shadow_id):
-            print(f"  WARNING: Shadow {shadow_id} has no linked occluder — skipping")
+            print(f"  Shadow {shadow_id}: no blocker above sense "
+                  f"tolerance — view-clear, directly sensable")
 
     # Bridge between the symbolic (PDDL) and physical (PyBullet) worlds.
     # The planner reasons about boxel IDs like "obj_000"; execution needs
