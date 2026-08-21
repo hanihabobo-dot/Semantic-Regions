@@ -14,7 +14,7 @@ from enum import Enum
 
 from boxel_types import ObjectInfo, CameraObservation
 from boxel_data import BoxelData, BoxelType
-from perception import detect_objects_from_render
+from perception import ObjectDetection, detect_objects_from_render
 from shadow_calculator import ShadowCalculator
 from free_space import FreeSpaceGenerator
 from uniform_grid import UniformGridGenerator
@@ -1628,37 +1628,10 @@ class BoxelTestEnv:
                 projectionMatrix=projection_matrix,
                 renderer=p.ER_BULLET_HARDWARE_OPENGL,
             )
-        _, _, rgb_array, depth_array, seg_array = p.getCameraImage(
-            width=self.image_width,
-            height=self.image_height,
-            viewMatrix=view_matrix,
-            projectionMatrix=projection_matrix,
-            renderer=p.ER_TINY_RENDERER,
-            physicsClientId=self.client_id,
-        )
-        rgb_image = np.array(rgb_array, dtype=np.uint8).reshape(
-            (self.image_height, self.image_width, 4)
-        )[:, :, :3]
-        depth_buffer = np.asarray(depth_array, dtype=float).reshape(
-            (self.image_height, self.image_width))
-        seg_mask = np.asarray(seg_array).reshape(
-            (self.image_height, self.image_width))
+        detections, rgb_image, depth_buffer, seg_mask = self.detect_objects()
         depth_image = self._depth_buffer_to_meters(depth_buffer)
         # Full-frame point cloud stays disabled (no consumer);
         # perception.unproject_depth_pixels does the per-object clouds.
-
-        body_id_to_name = {
-            info.object_id: name for name, info in self.objects.items()
-            if name not in ("plane", "table", "robot")
-        }
-        trays = frozenset(
-            name for name, info in self.objects.items()
-            if getattr(info, "is_tray", False))
-        detections = detect_objects_from_render(
-            seg_mask, depth_buffer, view_matrix, projection_matrix,
-            body_id_to_name, self.camera_position[:2],
-            self.table_surface_height,
-            no_footprint_completion=trays)
 
         # Spawn order, matching the oracle's historical iteration order
         # (order feeds nothing planner-critical here, but keep it stable).
@@ -1680,6 +1653,51 @@ class BoxelTestEnv:
             seg_mask=seg_mask,
         )
     
+    def detect_objects(self) -> Tuple[Dict[str, 'ObjectDetection'],
+                                      np.ndarray, np.ndarray, np.ndarray]:
+        """Render the fixed camera and estimate per-object AABBs (#P1 step 2).
+
+        The light detection path shared by get_camera_observation and
+        execution.refresh_object_aabbs: one ER_TINY_RENDERER pass
+        (identical on GUI and DIRECT clients) +
+        perception.detect_objects_from_render.  No boxel or shadow
+        generation, no ExampleBrowser pane refresh.
+
+        Returns (detections, rgb_image, depth_buffer, seg_mask) where
+        detections maps detected object name -> perception.ObjectDetection
+        and depth_buffer holds RAW [0,1] buffer values (metres conversion
+        is the caller's concern).
+        """
+        view_matrix, projection_matrix = self._view_and_projection_matrices()
+        _, _, rgb_array, depth_array, seg_array = p.getCameraImage(
+            width=self.image_width,
+            height=self.image_height,
+            viewMatrix=view_matrix,
+            projectionMatrix=projection_matrix,
+            renderer=p.ER_TINY_RENDERER,
+            physicsClientId=self.client_id,
+        )
+        rgb_image = np.array(rgb_array, dtype=np.uint8).reshape(
+            (self.image_height, self.image_width, 4)
+        )[:, :, :3]
+        depth_buffer = np.asarray(depth_array, dtype=float).reshape(
+            (self.image_height, self.image_width))
+        seg_mask = np.asarray(seg_array).reshape(
+            (self.image_height, self.image_width))
+        body_id_to_name = {
+            info.object_id: name for name, info in self.objects.items()
+            if name not in ("plane", "table", "robot")
+        }
+        trays = frozenset(
+            name for name, info in self.objects.items()
+            if getattr(info, "is_tray", False))
+        detections = detect_objects_from_render(
+            seg_mask, depth_buffer, view_matrix, projection_matrix,
+            body_id_to_name, self.camera_position[:2],
+            self.table_surface_height,
+            no_footprint_completion=trays)
+        return detections, rgb_image, depth_buffer, seg_mask
+
     def _depth_buffer_to_meters(self, depth_buffer: np.ndarray) -> np.ndarray:
         """Convert depth buffer values to meters."""
         return self.far_plane * self.near_plane / (
