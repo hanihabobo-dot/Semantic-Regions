@@ -380,6 +380,24 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       non-empty / target-holding fragments stay for their own planned
       sense.  retire_cast_shadows kept unchanged per user decision
       (it is what cleans stack-goal runs, where sense never fires).]
+      [2026-08-21 ROOT CAUSE + FINAL USER DECISION (supersedes the
+      retirement notes above): the persistent "sense doesn't remove the
+      shadow" reports were NOT a removal bug — the sense classifier
+      (byte-identical to main) flags still_blocked on ANY occluder or
+      robot ray hit, and P1's tall occluders + F3's full-size fragments
+      make 1-3 % marginal ray clips routine (runs 09-09-27 / 10-19-02:
+      senses stuck at 1 % / 3 % blocked, so the clear_but_empty removal
+      path never fired at all).  FIX: up to 5 % blocked rays are now
+      tolerated and the sense classifies by the remaining rays (genuine
+      blockages measure 12-100 %); disclosed cost: a target hiding
+      exactly behind the tolerated rays is missed by that sense.
+      retire_cast_shadows REMOVED WHOLESALE per explicit user
+      instruction (both hygiene rounds reverted, incl. the belief
+      'retired' status; stack-goal runs accumulate their spawn-time
+      shadows again — accepted; the code survives in git history,
+      commits 27a7fda..f66b3a9).  The sibling batch-sense stays (user
+      choice) and now actually fires, since senses reach
+      clear_but_empty again.]
 
   ORDER OF WORK (proposal): (1) resize objects + friction-grasp + real release,
   drop weld and teleports [changes execution.py, robot_utils.py, boxel_env.py
