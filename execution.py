@@ -1532,29 +1532,52 @@ class ActionResult:
 
 
 def refresh_object_aabbs(env, registry, viz=None):
-    """Refresh every OBJECT boxel's AABB from live PyBullet (audit #71).
+    """Refresh every OBJECT boxel's AABB from a fresh OBSERVATION (audit
+    #71; rewired to perception estimates by #P1 step (2c), 2026-08-21 —
+    this used to be the last per-episode p.getAABB chokepoint feeding
+    the planner).
 
-    Called at the end of each handle_sense_action outcome branch so the
-    next replan reads the registry over current geometry instead of the
-    spawn-time AABB.  Closes the OBJECT-side staleness gap left by
-    pick/place/stack/settle.  SHADOW boxels are NOT recomputed here —
-    accepted thesis gap per user-explicit scope cut; the SHADOW keyed
-    to a refreshed OBJECT may now be slightly mis-aligned with the live
-    silhouette.  Cost is ~0.1 ms for a 10-object scene.
+    Called at the end of each handle_sense_action outcome branch and
+    after pick/place failures so the next replan reads the registry
+    over current geometry instead of the spawn-time AABB.  SHADOW
+    boxels are NOT recomputed here — accepted thesis gap per
+    user-explicit scope cut.  Cost is one TinyRenderer pass (~190 ms).
 
-    Per-object early-out: if the new AABB matches the registry value
-    within _aabb_tol (0.1 mm — same FP-noise budget reboxelize uses),
-    skip the write AND the viz remove/redraw.  Without this, every
-    sense redraws every OBJECT wireframe even when nothing moved.
+    RIGID-SIZE TRACKING: an object's size cannot change, but a refresh
+    render often has the ARM partially occluding the just-manipulated
+    object, and a naive re-estimate would shrink the boxel to the
+    visible sliver (misleading every fits/kin consumer).  So the boxel's
+    extents are canonical — per axis the MAX of the current extents and
+    the fresh estimate's — and the refresh re-POSES that known-size box:
+    XY centred on the fresh estimate, z anchored to the estimate's top
+    (the top face is the best-observed surface from this camera).  An
+    object with no detection at all (fully behind the arm) keeps its
+    last estimate — honest staleness, logged.
+
+    Per-object early-out: if the resulting AABB matches the registry
+    value within _aabb_tol (0.1 mm — same FP-noise budget reboxelize
+    uses), skip the write AND the viz remove/redraw.
     """
     _aabb_tol = 1e-4
+    detections, _, _, _ = env.detect_objects()
+    stale = []
     for obj_boxel in registry.get_boxels_by_type(BoxelType.OBJECT):
         obj_info = env.objects.get(obj_boxel.id)
         if obj_info is None:
             continue
-        aabb_min, aabb_max = p.getAABB(obj_info.object_id)
-        new_min = np.array(aabb_min)
-        new_max = np.array(aabb_max)
+        det = detections.get(obj_boxel.id)
+        if det is None:
+            stale.append(obj_boxel.id)
+            continue
+        cur_ext = np.asarray(obj_boxel.max_corner, dtype=float) \
+            - np.asarray(obj_boxel.min_corner, dtype=float)
+        est_ext = det.est_max - det.est_min
+        canon_ext = np.maximum(cur_ext, est_ext)
+        centre_xy = (det.est_min[:2] + det.est_max[:2]) / 2.0
+        new_max = np.array([centre_xy[0] + canon_ext[0] / 2.0,
+                            centre_xy[1] + canon_ext[1] / 2.0,
+                            det.est_max[2]])
+        new_min = new_max - canon_ext
         if (np.allclose(new_min, obj_boxel.min_corner, atol=_aabb_tol) and
                 np.allclose(new_max, obj_boxel.max_corner, atol=_aabb_tol)):
             continue
@@ -1563,6 +1586,10 @@ def refresh_object_aabbs(env, registry, viz=None):
         if viz is not None and viz.tracks_boxel(obj_boxel.id):
             viz.remove_boxel_viz(obj_boxel.id)
             viz.draw_boxel_data(obj_boxel)
+    if stale:
+        print(f"    [perception] {len(stale)} object(s) not visible in "
+              f"the refresh render — keeping last estimate: "
+              f"{sorted(stale)}")
 
 
 def _shrink_shadow_fragment(registry, shadow_bd, blocked_min, blocked_max,
