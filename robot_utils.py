@@ -257,7 +257,8 @@ def is_path_collision_free(robot_id: int, q_start, q_end,
                             ignored_bodies=None,
                             allow_gripper_collisions: bool = False,
                             held_body_ids=None,
-                            held_body_ee_offset=None) -> bool:
+                            held_body_ee_offset=None,
+                            strict_gripper_interior: bool = False) -> bool:
     """
     Check a straight-line joint-space path for collisions.
 
@@ -281,6 +282,16 @@ def is_path_collision_free(robot_id: int, q_start, q_end,
             the gripper, passed through to is_config_collision_free.
         held_body_ee_offset: Optional [x, y, z] grasp offset, passed
             through to is_config_collision_free.
+        strict_gripper_interior: When True (2026-08-21, transit
+            side-push fix), the gripper-collision exemption applies
+            only to samples in the first/last 20 % of the path — the
+            interior is checked STRICTLY even when
+            allow_gripper_collisions is True.  Rationale: pick/place
+            endpoints genuinely need finger-vs-clutter proximity, but
+            certifying the whole transit with relaxed fingers let the
+            open gripper sweep THROUGH tall occluders mid-path (field
+            runs: objects shoved 10-28 mm, orange knocked over by a
+            side push on a certified "direct path clear" trajectory).
 
     Returns:
         True if every sampled configuration is collision-free.
@@ -290,9 +301,12 @@ def is_path_collision_free(robot_id: int, q_start, q_end,
     with RenderingLock(physics_client):
         for t in np.linspace(0.0, 1.0, n_checks):
             q = (1.0 - t) * q_s + t * q_e
+            relax_here = allow_gripper_collisions
+            if strict_gripper_interior and 0.2 < t < 0.8:
+                relax_here = False
             if not is_config_collision_free(robot_id, q, physics_client,
                                             ignored_bodies,
-                                            allow_gripper_collisions=allow_gripper_collisions,
+                                            allow_gripper_collisions=relax_here,
                                             log_collisions=False,
                                             held_body_ids=held_body_ids,
                                             held_body_ee_offset=held_body_ee_offset):

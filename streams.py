@@ -812,13 +812,21 @@ class BoxelStreams:
         # Most tabletop moves are simple reaches that don't collide with
         # anything.  Check 8 evenly-spaced configs along the straight line;
         # if all clear, yield a 10-waypoint linear trajectory immediately.
+        # strict_gripper_interior (2026-08-21): the gripper-collision
+        # relaxation is legitimate AT the cluttered endpoints, but
+        # certifying the whole transit with relaxed fingers let the open
+        # gripper sweep through tall occluders mid-path (field: orange
+        # knocked over by a side push on a "direct path clear"
+        # trajectory).  Interior samples now check the fingers strictly;
+        # blocked paths fall through to RRT, which routes around/over.
         if is_path_collision_free(self.robot_id, q1.joint_positions,
                                   q2.joint_positions, pc,
                                   n_checks=self.RRT_EDGE_CHECKS,
                                   ignored_bodies=path_ignored,
                                   allow_gripper_collisions=is_pick_place,
                                   held_body_ids=held_body_ids,
-                                  held_body_ee_offset=held_body_ee_offset):
+                                  held_body_ee_offset=held_body_ee_offset,
+                                  strict_gripper_interior=is_pick_place):
             logger.info("plan_motion: direct path clear — linear trajectory")
             yield (self._linear_trajectory(q1, q2),)
             return
