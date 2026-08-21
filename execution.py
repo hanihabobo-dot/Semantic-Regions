@@ -180,20 +180,27 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
                 print(f"    NOTE: {robot_hits}/{total_rays} rays blocked "
                       f"by robot arm (not occluder)")
             # Partial-reveal bounds: the blocked targets' AABB, padded
-            # by half a grid cell (7 samples across each extent), Z kept
-            # at the fragment's full range (height stays an
-            # overestimate), clamped to the fragment.
+            # by half a grid cell in X/Y (7 samples across each extent)
+            # and by a FULL slice spacing in Z (only 3 slices, and the
+            # regions above the top slice / below the bottom slice are
+            # never sampled — the full-spacing pad clamps to the
+            # fragment boundary there, so unsampled volume is never
+            # claimed observed).  2026-08-21 user report: a tall
+            # occluder blocked only the TOP of a fragment while the
+            # rest was visibly clear — the old full-height bbox threw
+            # that vertical information away.
             bt = np.asarray(blocked_targets, dtype=float)
-            pad = (np.asarray(max_c[:2]) - np.asarray(min_c[:2])) / 12.0
+            pad_xy = (np.asarray(max_c[:2]) - np.asarray(min_c[:2])) / 12.0
+            pad_z = (float(max_c[2]) - float(min_c[2])) / 3.0
             b_min = np.array([
-                max(float(bt[:, 0].min()) - pad[0], float(min_c[0])),
-                max(float(bt[:, 1].min()) - pad[1], float(min_c[1])),
-                float(min_c[2]),
+                max(float(bt[:, 0].min()) - pad_xy[0], float(min_c[0])),
+                max(float(bt[:, 1].min()) - pad_xy[1], float(min_c[1])),
+                max(float(bt[:, 2].min()) - pad_z, float(min_c[2])),
             ])
             b_max = np.array([
-                min(float(bt[:, 0].max()) + pad[0], float(max_c[0])),
-                min(float(bt[:, 1].max()) + pad[1], float(max_c[1])),
-                float(max_c[2]),
+                min(float(bt[:, 0].max()) + pad_xy[0], float(max_c[0])),
+                min(float(bt[:, 1].max()) + pad_xy[1], float(max_c[1])),
+                min(float(bt[:, 2].max()) + pad_z, float(max_c[2])),
             ])
             return "still_blocked", blocked_fraction, set(), (b_min, b_max)
         print(f"    NOTE: tolerating {blocked_total}/{total_rays} "
@@ -714,7 +721,8 @@ def _apply_post_action_lift(robot_id, contact_ee, orientation, contact_joints,
     move_robot_smooth(robot_id, lift_joints, gui)
 
 
-def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
+def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
+                 _retry: bool = False
                  ) -> Tuple[Optional[int], Optional[RobotConfig]]:
     """
     Execute pick action using the plan's grasp pose.
@@ -942,8 +950,22 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
         print(f"    ERROR: grip verification failed for {obj_name} — "
               f"pad contacts={sorted(pad_links) or 'none'} (need both "
               f"{FINGER_JOINTS}), pad_normal_force={grip_nf:.2f}N. "
-              f"Opening gripper and replanning.")
+              f"Opening gripper.")
         open_gripper(robot_id, gui)
+        if not _retry:
+            # #P1 grasp resample (2026-08-21, user step 2): the failed
+            # descent/close may itself have shoved the block, so a full
+            # replan would regenerate the same grasp against stale
+            # geometry.  Retreat to the approach altitude and re-run
+            # the whole pick ONCE against the fresh live pose (new
+            # AABB, re-aim, aperture, vertical descent).
+            print(f"    -> resampling the grasp against the live pose "
+                  f"(one retry, #P1 step 2)")
+            retreat = (above_joints if above_joints is not None
+                       else config.joint_positions)
+            move_robot_smooth(robot_id, retreat, gui, settle=True)
+            return execute_pick(robot_id, env, obj_name, obj_pos, grasp,
+                                config, gui, _retry=True)
         return None, None
     # #P1 F1(d) aperture plausibility: link identity alone cannot
     # distinguish a pinch from both fingertips STANDING ON the object
@@ -969,9 +991,19 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui
               f"finger_pos=[{finger_pos[0]:.4f},{finger_pos[1]:.4f}] vs "
               f"half_extents=[{x_half:.4f},{y_half:.4f}] "
               f"(err={aperture_err * 1000:.1f}mm > 6mm; standing-on-top "
-              f"phantom or partial pinch). "
-              f"Opening gripper and replanning (#P1 F1).")
+              f"phantom or partial pinch). Opening gripper (#P1 F1).")
         open_gripper(robot_id, gui)
+        if not _retry:
+            # #P1 grasp resample — same one-shot retry as the pad-contact
+            # failure above (the block may have been nudged by this very
+            # attempt).
+            print(f"    -> resampling the grasp against the live pose "
+                  f"(one retry, #P1 step 2)")
+            retreat = (above_joints if above_joints is not None
+                       else config.joint_positions)
+            move_robot_smooth(robot_id, retreat, gui, settle=True)
+            return execute_pick(robot_id, env, obj_name, obj_pos, grasp,
+                                config, gui, _retry=True)
         return None, None
     print(f"    Grip verified for {obj_name}: both pads in contact, "
           f"pad_normal_force={grip_nf:.2f}N, "
@@ -1492,8 +1524,9 @@ def _shrink_shadow_fragment(registry, shadow_bd, blocked_min, blocked_max,
     old_ext = shadow_bd.max_corner - shadow_bd.min_corner
     new_ext = new_max - new_min
     # Only rewrite geometry for a meaningful reveal (> 2 mm on some
-    # horizontal axis) — avoids viz churn on repeat identical senses.
-    if not np.any(old_ext[:2] - new_ext[:2] > 0.002):
+    # axis, Z included — 2026-08-21) — avoids viz churn on repeat
+    # identical senses.
+    if not np.any(old_ext - new_ext > 0.002):
         return False
     shadow_bd.min_corner = new_min
     shadow_bd.max_corner = new_max
@@ -1503,9 +1536,11 @@ def _shrink_shadow_fragment(registry, shadow_bd, blocked_min, blocked_max,
         viz.draw_boxel_data(shadow_bd)
     setattr(registry, "_dirty", True)
     print(f"    -> {shadow_bd.id} shrunk to the still-blocked region "
-          f"({old_ext[0] * 100:.1f}x{old_ext[1] * 100:.1f} -> "
-          f"{new_ext[0] * 100:.1f}x{new_ext[1] * 100:.1f} cm; the "
-          f"revealed part was observed empty)")
+          f"({old_ext[0] * 100:.1f}x{old_ext[1] * 100:.1f}x"
+          f"{old_ext[2] * 100:.1f} -> "
+          f"{new_ext[0] * 100:.1f}x{new_ext[1] * 100:.1f}x"
+          f"{new_ext[2] * 100:.1f} cm; the revealed part was observed "
+          f"empty)")
     return True
 
 
