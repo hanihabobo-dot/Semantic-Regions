@@ -871,7 +871,8 @@ class BoxelTestEnv:
     _TABLE_PLACE_Y_RANGE = (-0.50, 0.50)
 
     def _random_xy_positions(self, n: int, rng: np.random.RandomState,
-                             margin: float = 0.10,
+                             margin: float = 0.15,
+                             edge_margin: float = 0.10,
                              constrain_to_reach: bool = False,
                              reach_radius: Optional[float] = None,
                              reserved_xys: Optional[List[List[float]]] = None,
@@ -882,8 +883,18 @@ class BoxelTestEnv:
         ``_SAFE_TABLE_*_RANGE`` plus a reach-disk filter when
         ``constrain_to_reach`` is True).
 
-        Uses rejection sampling with a minimum separation of ``margin``
-        metres to avoid objects spawning on top of each other.
+        Uses rejection sampling with a minimum centre-to-centre
+        separation of ``margin`` metres between spawned objects.
+        Raised 0.10 -> 0.15 (2026-08-21, user request): at 0.10 the
+        <= 6 cm occluders regularly spawned inside each other's shadow
+        corridors, producing heavy F3 overlap carves (body-in-shadow
+        fragment slivers like the 4 mm shadow_of_red_object__02 cap on
+        seed 0) and blockers standing in front of half the fragments;
+        0.15 leaves >= 9 cm clear gap and makes scenes noticeably more
+        spacious without exhausting the placement window.
+        ``edge_margin`` (unchanged at 0.10) insets the window bounds so
+        objects keep clear of the table edge — kept separate so the
+        wider object spacing does not also shrink the usable window.
 
         When ``constrain_to_reach`` is True, samples must ALSO lie inside
         a disk of radius ``reach_radius`` around the robot base.  Used by
@@ -901,10 +912,10 @@ class BoxelTestEnv:
         else:
             x_lo, x_hi = self._TABLE_PLACE_X_RANGE
             y_lo, y_hi = self._TABLE_PLACE_Y_RANGE
-        x_lo += margin
-        x_hi -= margin
-        y_lo += margin
-        y_hi -= margin
+        x_lo += edge_margin
+        x_hi -= edge_margin
+        y_lo += edge_margin
+        y_hi -= edge_margin
         bx, by = self._ROBOT_BASE_XY
         r_max = (reach_radius if reach_radius is not None
                  else self._PANDA_REACH_RADIUS)
