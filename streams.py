@@ -37,6 +37,16 @@ logger = logging.getLogger(__name__)
 # every observed 8-seed IK failure (0.886-1.02 m).
 REACH_LIMIT_M = 0.80
 
+# #P1 step (2d): nominal size prior for objects the robot has not yet
+# observed (pre-sense hidden targets — no registry boxel, no perception
+# estimate).  TASK knowledge, not perception: the robot knows what CLASS
+# of object it is searching for (3-4 cm target cubes across all scenes),
+# not the instance's true dimensions — the previous p.getAABB fallback
+# leaked exactly those.  0.04 m is the class upper bound, so fits
+# reasoning is conservative: anything that fits the largest possible
+# target fits the real one.
+NOMINAL_HIDDEN_EXTENTS = np.array([0.04, 0.04, 0.04])
+
 from boxel_data import BoxelRegistry, BoxelData, BoxelType
 from robot_utils import (ARM_JOINT_INDICES, END_EFFECTOR_LINK, FINGER_JOINTS,
                          JOINT_LIMITS_LOW, JOINT_LIMITS_HIGH, JOINT_RANGES,
@@ -447,9 +457,10 @@ class BoxelStreams:
         boxels.  Returns True iff the dest extent >= the obj extent on
         all three axes.
 
-        Pre-sense targets lack OBJECT registry boxels; falls back to a
-        PyBullet AABB read on the plan-client mirror (same pattern as
-        compute_stack_kin_solution's held-cube fallback, audit #55).
+        Pre-sense targets lack OBJECT registry boxels; they use the
+        NOMINAL_HIDDEN_EXTENTS class prior (#P1 step (2d), 2026-08-21 —
+        the previous p.getAABB fallback leaked the hidden instance's
+        true size into planner facts).
 
         Args:
             obj_id: Boxel ID of the object being placed / sensed for
@@ -465,14 +476,7 @@ class BoxelStreams:
         if obj_boxel is not None:
             obj_extents = obj_boxel.max_corner - obj_boxel.min_corner
         else:
-            body_id = self._resolve_body_id(obj_id)
-            if body_id is None:
-                return False
-            try:
-                mn, mx = p.getAABB(body_id, physicsClientId=self.physics_client)
-            except Exception:
-                return False
-            obj_extents = np.array(mx) - np.array(mn)
+            obj_extents = NOMINAL_HIDDEN_EXTENTS
         dest_extents = dest_boxel.max_corner - dest_boxel.min_corner
         return bool(np.all(dest_extents >= obj_extents))
 
@@ -537,14 +541,9 @@ class BoxelStreams:
         if obj_boxel is not None:
             obj_extent = (obj_boxel.max_corner - obj_boxel.min_corner) / 2.0
         else:
-            body_id = self._resolve_body_id(obj_id)
-            if body_id is None:
-                return False
-            try:
-                mn, mx = p.getAABB(body_id, physicsClientId=self.physics_client)
-            except Exception:
-                return False
-            obj_extent = (np.array(mx) - np.array(mn)) / 2.0
+            # #P1 step (2d): class prior, not the hidden instance's true
+            # size (see NOMINAL_HIDDEN_EXTENTS).
+            obj_extent = NOMINAL_HIDDEN_EXTENTS / 2.0
         hx, hy, hz = float(obj_extent[0]), float(obj_extent[1]), float(obj_extent[2])
 
         # Stable resting pose: target must rest on the table (the only
@@ -1289,17 +1288,19 @@ class BoxelStreams:
         """
         IK to release the held ``obj_id`` on top of ``on_obj_id``.
 
-        Pose derivation: read ``on_obj_id``'s current AABB from PyBullet
-        (falling back to its registry boxel) and compute the EE z so the
-        held object's bottom face rests on the support's top face:
+        Pose derivation (#P1 step (2d), 2026-08-21): read ``on_obj_id``'s
+        REGISTRY boxel — the perception-estimated current pose, kept
+        fresh by refresh_object_aabbs — and compute the EE z so the held
+        object's bottom face rests on the support's top face:
 
             ee_target.xy = on_obj_top.xy + grasp.position[:2]
             ee_target.z  = on_obj_top.z + held_half_height + grasp.position[2]
 
-        ``held_half_height`` prefers the held object's registry boxel
-        (compute_kin_solution sized it from the AABB at scan time);
-        falls back to the live PyBullet AABB when no registry boxel
-        exists, e.g. for hidden targets pre-sense (audit #55).
+        ``held_half_height`` prefers the held object's registry boxel;
+        a pre-sense hidden target without one uses the
+        NOMINAL_HIDDEN_EXTENTS class prior.  A support with NO registry
+        boxel yields nothing (pose never observed — the audit-#55 live
+        p.getAABB read leaked its true position here).
 
         ``ignored_body_ids`` on the yielded config includes BOTH the held
         cube AND the support cube (audit #55).  See the section comment
@@ -1313,48 +1314,36 @@ class BoxelStreams:
         (config_for_boxel ?q ?on_obj) — the last so the preceding move
         action can deliver the arm to the support's OBJECT boxel.
         """
-        # Body-id lookups hoisted (audit #55): held_body_id is reused by
-        # the AABB-fallback branch below AND the ignored-set construction;
-        # support_body_id is reused by the on_obj AABB read AND the
-        # ignored-set construction.
+        # Body-id lookups (audit #55): since step (2d) both are needed
+        # ONLY for the ignored-set construction — the pose/size reads
+        # come from the registry / the nominal prior.
         held_body_id = self._resolve_body_id(obj_id)
         support_body_id = self._resolve_body_id(on_obj_id)
 
-        # Held cube half-height: prefer registry boxel; fall back to live
-        # AABB for hidden targets that don't have OBJECT-type registry
-        # boxels (audit #55).  Their bodies ARE mirrored in plan_client
-        # via _mirror_load_urdf even before sense reveals their pose,
-        # and the cube's z-extent doesn't depend on knowing where it is.
+        # Held cube half-height: prefer the registry boxel (perception
+        # estimate); a hidden target without a boxel uses the
+        # NOMINAL_HIDDEN_EXTENTS class prior (#P1 step (2d) — the audit
+        # #55 live-AABB fallback leaked the hidden instance's true
+        # z-extent into stream sampling).
         held_boxel = self.registry.get_boxel(obj_id)
         if held_boxel is not None:
             held_half_height = float(held_boxel.extent[2])
-        elif held_body_id is not None:
-            try:
-                h_min, h_max = p.getAABB(
-                    held_body_id, physicsClientId=self.physics_client)
-            except Exception:
-                return
-            held_half_height = float(h_max[2] - h_min[2]) / 2.0
         else:
+            held_half_height = float(NOMINAL_HIDDEN_EXTENTS[2]) / 2.0
+
+        # Support pose: the registry boxel IS the current belief — since
+        # step (2c) refresh_object_aabbs keeps it posed from fresh
+        # renders, so the pre-(2d) preference for the LIVE p.getAABB is
+        # both redundant and a ground-truth leak (for a pre-discovery
+        # support it leaked the true POSITION into the kin target).  No
+        # boxel -> no kin: the robot cannot aim a stack at an object
+        # whose pose it has never observed; the optimistic skeleton
+        # simply fails to bind, matching reality.
+        on_boxel = self.registry.get_boxel(on_obj_id)
+        if on_boxel is None:
             return
-
-        top_z: Optional[float] = None
-        if support_body_id is not None:
-            try:
-                aabb_min, aabb_max = p.getAABB(support_body_id,
-                                               physicsClientId=self.physics_client)
-                top_z = float(aabb_max[2])
-                cx = (aabb_min[0] + aabb_max[0]) / 2.0
-                cy = (aabb_min[1] + aabb_max[1]) / 2.0
-            except Exception:
-                top_z = None
-
-        if top_z is None:
-            on_boxel = self.registry.get_boxel(on_obj_id)
-            if on_boxel is None:
-                return
-            top_z = float(on_boxel.max_corner[2])
-            cx, cy, _ = on_boxel.center.tolist()
+        top_z = float(on_boxel.max_corner[2])
+        cx, cy, _ = on_boxel.center.tolist()
 
         target_obj_pos = np.array([cx, cy, top_z + held_half_height])
         target_pos = target_obj_pos + grasp.position
