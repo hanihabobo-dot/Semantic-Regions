@@ -232,6 +232,13 @@ class BoxelVisualizer:
         when new objects/shadows are discovered or fragments are
         added by reboxelization (see test_full_pipeline.py).
         """
+        # Hardening (2026-08-21 review): drawing an id that is already
+        # tracked would overwrite the tracking lists and orphan the old
+        # wireframe/label on screen until clear_all.  Every current
+        # caller removes first, but self-removing here makes the
+        # invariant local instead of contractual.
+        if bd.id and self.tracks_boxel(bd.id):
+            self.remove_boxel_viz(bd.id)
         item_ids, body_ids = self._draw_one_boxel(
             bd, duration=duration, fill_opacity=fill_opacity,
             show_labels=True, label_size=label_size,

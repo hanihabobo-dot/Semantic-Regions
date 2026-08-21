@@ -968,6 +968,17 @@ def main(gui=True, run_logger=None, scene_config=None,
     # successful pick of the object clears its counter.
     pick_fail_counts: Dict[str, int] = {}
     pick_giveup_objects: set = set()
+    # Non-absorbing giveup (2026-08-21, investigation synthesis): a
+    # permanent "ungraspable" mark froze every shadow the object blocks
+    # for the rest of the episode (run 10-55-47: orange 3/3 made the
+    # target's own hiding shadow uncleareable).  After 4 replans the
+    # object re-enters the grasp stream for another 3 attempts — the
+    # world may have changed (it was shoved, settled differently) and
+    # the re-aimed descent may now succeed.  At most 2 paroles per
+    # object, so a truly ungraspable object still ends in a bounded
+    # giveup instead of a slow infinite loop.
+    pick_giveup_marked_at: Dict[str, int] = {}
+    pick_parole_counts: Dict[str, int] = {}
     # Review fix 2026-08-20 (integration): transit losses (EmptyHandError
     # at place/stack entry) need their OWN strike counter — the pick
     # succeeds each cycle (resetting pick_fail_counts), the hold slips
@@ -988,6 +999,25 @@ def main(gui=True, run_logger=None, scene_config=None,
         plan_count += 1
         unknown_shadows = belief.get_unknown_shadows()
         known_empty = belief.get_known_empty_shadows()
+
+        # Giveup parole (2026-08-21): see the pick_giveup_marked_at
+        # comment above.  Runs before planner.plan() so the paroled
+        # object's grasps are offered again this replan.
+        for _obj, _at in list(pick_giveup_marked_at.items()):
+            if (plan_count - _at >= 4
+                    and _obj in pick_giveup_objects
+                    and pick_parole_counts.get(_obj, 0) < 2):
+                pick_parole_counts[_obj] = \
+                    pick_parole_counts.get(_obj, 0) + 1
+                pick_giveup_objects.discard(_obj)
+                planner.streams.ungraspable_objects.discard(_obj)
+                pick_fail_counts.pop(_obj, None)
+                transit_loss_counts.pop(_obj, None)
+                pick_giveup_marked_at.pop(_obj, None)
+                print(f"  giveup parole "
+                      f"{pick_parole_counts[_obj]}/2: {_obj} re-enters "
+                      f"the grasp stream after 4 replans (#P1 "
+                      f"non-absorbing giveup)")
 
         print(f"\n=== PLAN #{plan_count} ===")
         if goal_kind == 'find-and-tray-stack':
@@ -1381,6 +1411,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                               f"(#P1 step (4)).")
                         pick_giveup_objects.add(obj_str)
                         planner.streams.ungraspable_objects.add(obj_str)
+                        pick_giveup_marked_at[obj_str] = plan_count
                     # #P1: a failed grasp attempt can shove or topple
                     # the object (the descent or close physically
                     # touched it).  Refresh every OBJECT boxel from
@@ -1466,6 +1497,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                               f"transit edition).")
                         pick_giveup_objects.add(obj_str)
                         planner.streams.ungraspable_objects.add(obj_str)
+                        pick_giveup_marked_at[obj_str] = plan_count
                     held_body_id = None
                     held_object_boxel_id = None
                     audit_robot_held_state(
@@ -1631,6 +1663,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                               f"transit edition).")
                         pick_giveup_objects.add(obj_str)
                         planner.streams.ungraspable_objects.add(obj_str)
+                        pick_giveup_marked_at[obj_str] = plan_count
                     held_body_id = None
                     held_object_boxel_id = None
                     audit_robot_held_state(
