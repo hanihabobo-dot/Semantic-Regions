@@ -38,6 +38,7 @@ import numpy as np
 import pybullet as p
 
 from boxel_data import BoxelData, BoxelType
+from perception import SENSE_MARGINAL_BLOCKED_FRACTION, sense_ray_slices
 from reboxelize import reboxelize_free_space
 from streams import RobotConfig
 from robot_utils import (END_EFFECTOR_LINK, FINGER_JOINTS, solve_ik,
@@ -92,7 +93,8 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
           - set of non-target, non-occluder dynamic body IDs detected inside
             the shadow (empty for found_target and still_blocked)
           - for still_blocked: (min, max) AABB of the BLOCKED ray target
-            points, padded by half the ray-grid spacing and clamped to the
+            points, padded per ray by half ITS slice's X/Y spacing and by
+            the gap to the neighbouring slice in Z, clamped to the
             fragment — the sub-region that remains UNOBSERVED.  The clear
             rays observed the rest of the fragment empty, so the caller
             may SHRINK the shadow to this box (partial-reveal shrink,
@@ -111,101 +113,117 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
     min_c = shadow_boxel.min_corner
     max_c = shadow_boxel.max_corner
 
-    # Three z-slices through the shadow volume so a target at any height
-    # has a chance of being hit.  +0.04 m on the lowest slice keeps it
-    # clear of the shadow base (which sits at the table surface — rays
-    # exactly at table_z would terminate on the table before reaching
-    # anything inside the shadow); 1/3 and 2/3 fractions space the
-    # upper two slices through the remaining volume.
-    z_levels = [
-        min_c[2] + 0.04,
-        min_c[2] + (max_c[2] - min_c[2]) * 0.33,
-        min_c[2] + (max_c[2] - min_c[2]) * 0.67,
-    ]
-
-    # 7x7 grid per z-slice — finer than compute_shadow_blockers' 5x5
-    # because here we need to detect whether the TARGET is visible
-    # (precision matters), not just identify which objects block the
-    # corridor.
-    n = 7
+    # Shared sense-grid geometry (F5, 2026-08-21): one dense low slice
+    # near the fragment base (12 mm spacing — an endpoint 2 cm above the
+    # base lies INSIDE any >= 3 cm target body whose footprint contains
+    # it, so the terminating ray must register the hit) plus the two
+    # historical coarse 7x7 slices at 0.33/0.67 of the fragment height.
+    # The pre-F5 grid's lowest endpoints sat at base + 0.04 m — ABOVE
+    # the tops of the post-resize 3-4 cm targets; a descending ray's
+    # minimum height is its endpoint, so every holding-goal target was
+    # structurally undetectable and its fragment got removed as
+    # "observed empty".  perception.sense_ray_slices is the single
+    # source of this geometry; the spawn-time findability guarantee
+    # (perception.grid_would_hit) consumes the identical endpoint list,
+    # so the spawn promise and the physical sense cannot disagree.
+    slices, capped = sense_ray_slices(min_c, max_c)
+    if capped:
+        print(f"    NOTE: dense sense slice capped — endpoint spacing "
+              f"exceeds the guaranteed-hit bound on this oversized "
+              f"fragment ({float(max_c[0]-min_c[0]):.2f} x "
+              f"{float(max_c[1]-min_c[1]):.2f} m)")
     ray_froms = []
     ray_tos = []
-    for z_target in z_levels:
-        for xi in np.linspace(min_c[0], max_c[0], n):
-            for yi in np.linspace(min_c[1], max_c[1], n):
-                ray_froms.append(ray_origin.tolist())
-                ray_tos.append([float(xi), float(yi), float(z_target)])
+    ray_slice = []            # slice index per ray (per-slice stats/pads)
+    for si, sl in enumerate(slices):
+        for pt in sl.points:
+            ray_froms.append(ray_origin.tolist())
+            ray_tos.append([float(pt[0]), float(pt[1]), float(pt[2])])
+            ray_slice.append(si)
 
     # rayTestBatch numThreads=0: let Bullet pick max threads (audit #69).
-    # Largest single batch on the planner hot path (147 rays per sense).
+    # Largest single batch on the planner hot path (~150-1000 rays per
+    # sense depending on fragment size; pybullet's batch cap is 16384).
     # Safe — sense action is sequential w.r.t. stepSimulation.
     results = p.rayTestBatch(ray_froms, ray_tos, numThreads=0)
     occluder_hits = 0
     robot_hits = 0
     detected_bodies: Set[int] = set()
-    total_rays = len(results)
-    # Target points of the rays that were BLOCKED — the sub-region that
+    # Blocked rays as (endpoint, slice index) — the sub-region that
     # stays unobserved.  Feeds the partial-reveal shrink (see Returns).
     blocked_targets = []
+    blocked_per_slice = [0] * len(slices)
 
     for i, (hit_obj_id, _link, _frac, _pos, _normal) in enumerate(results):
         if hit_obj_id == target_pybullet_id:
             return "found_target", 0.0, set(), None
         if occluder_pybullet_ids and (hit_obj_id in occluder_pybullet_ids):
             occluder_hits += 1
-            blocked_targets.append(ray_tos[i])
+            blocked_targets.append((ray_tos[i], ray_slice[i]))
+            blocked_per_slice[ray_slice[i]] += 1
         elif (robot_id is not None) and (hit_obj_id == robot_id):
             robot_hits += 1
-            blocked_targets.append(ray_tos[i])
+            blocked_targets.append((ray_tos[i], ray_slice[i]))
+            blocked_per_slice[ray_slice[i]] += 1
         elif hit_obj_id not in ignore_ids:
             detected_bodies.add(hit_obj_id)
 
     blocked_total = occluder_hits + robot_hits
     if blocked_total > 0:
-        blocked_fraction = blocked_total / total_rays if total_rays > 0 else 0.0
-        # Marginal-clip tolerance (2026-08-21, user-directed: "sense
-        # used to remove the shadow before P1").  This classifier is
-        # unchanged from main, but P1's tall occluders and F3's
-        # full-size shadow fragments make 1-3 % of the 147 rays
-        # routinely graze an occluder corner or the arm — and ANY hit
-        # used to veto the whole observation, so the clear_but_empty
-        # removal path never fired and shadows looked permanent in the
-        # GUI (runs 09-09-27 / 10-19-02: senses stuck at 1 % and 3 %
-        # blocked).  Tolerate up to 5 % blocked rays and classify by
-        # the remaining ones; genuine blockages measure 12-100 %.
-        # Disclosed cost: a target hiding exactly behind the tolerated
-        # rays is missed by THIS sense.
-        if blocked_fraction > 0.05:
+        # Per-slice blocked fractions (F5): the dense low slice carries
+        # an order of magnitude more rays than a coarse 7x7 slice, so a
+        # single blocked_count/total_rays fraction would DILUTE a
+        # genuinely blocked upper region below the tolerance and let
+        # the fragment be removed with its upper volume never observed.
+        # Classify by the WORST slice instead — each slice is judged
+        # against its own ray count, which keeps the 5 % marginal-clip
+        # tolerance (2026-08-21, user-directed: "sense used to remove
+        # the shadow before P1") at its original calibration: P1's tall
+        # occluders and F3's full-size fragments make 1-3 % of a
+        # slice's rays routinely graze an occluder corner or the arm —
+        # and ANY hit used to veto the whole observation, so the
+        # clear_but_empty removal path never fired and shadows looked
+        # permanent in the GUI (runs 09-09-27 / 10-19-02: senses stuck
+        # at 1 % and 3 % blocked).  Genuine blockages measure 12-100 %
+        # on their slice.  Disclosed cost: a target hiding exactly
+        # behind the tolerated rays is missed by THIS sense.
+        slice_fractions = [
+            blocked_per_slice[si] / len(sl.points)
+            for si, sl in enumerate(slices)
+        ]
+        blocked_fraction = max(slice_fractions)
+        if blocked_fraction > SENSE_MARGINAL_BLOCKED_FRACTION:
             if robot_hits > 0 and occluder_hits == 0:
-                print(f"    NOTE: {robot_hits}/{total_rays} rays blocked "
+                print(f"    NOTE: {robot_hits}/{len(results)} rays blocked "
                       f"by robot arm (not occluder)")
-            # Partial-reveal bounds: the blocked targets' AABB, padded
-            # by half a grid cell in X/Y (7 samples across each extent)
-            # and by a FULL slice spacing in Z (only 3 slices, and the
-            # regions above the top slice / below the bottom slice are
-            # never sampled — the full-spacing pad clamps to the
-            # fragment boundary there, so unsampled volume is never
-            # claimed observed).  2026-08-21 user report: a tall
-            # occluder blocked only the TOP of a fragment while the
-            # rest was visibly clear — the old full-height bbox threw
-            # that vertical information away.
-            bt = np.asarray(blocked_targets, dtype=float)
-            pad_xy = (np.asarray(max_c[:2]) - np.asarray(min_c[:2])) / 12.0
-            pad_z = (float(max_c[2]) - float(min_c[2])) / 3.0
-            b_min = np.array([
-                max(float(bt[:, 0].min()) - pad_xy[0], float(min_c[0])),
-                max(float(bt[:, 1].min()) - pad_xy[1], float(min_c[1])),
-                max(float(bt[:, 2].min()) - pad_z, float(min_c[2])),
-            ])
-            b_max = np.array([
-                min(float(bt[:, 0].max()) + pad_xy[0], float(max_c[0])),
-                min(float(bt[:, 1].max()) + pad_xy[1], float(max_c[1])),
-                min(float(bt[:, 2].max()) + pad_z, float(max_c[2])),
-            ])
+            # Partial-reveal bounds: union of per-ray pad boxes, clamped
+            # to the fragment.  Each blocked endpoint is padded by half
+            # ITS slice's spacing in X/Y (the dense slice earned a small
+            # pad, the coarse slices need a large one — one global pad
+            # cannot represent the mixed-density grid) and by the actual
+            # gap to the neighbouring slice or fragment boundary in Z,
+            # so unsampled volume between slices is never claimed
+            # observed.  2026-08-21 user report: a tall occluder blocked
+            # only the TOP of a fragment while the rest was visibly
+            # clear — the old full-height bbox threw that vertical
+            # information away.
+            lo_list = []
+            hi_list = []
+            for pt, si in blocked_targets:
+                sl = slices[si]
+                pt_arr = np.asarray(pt, dtype=float)
+                lo_list.append(pt_arr - np.array([
+                    sl.spacing_x / 2.0, sl.spacing_y / 2.0, sl.pad_z_down]))
+                hi_list.append(pt_arr + np.array([
+                    sl.spacing_x / 2.0, sl.spacing_y / 2.0, sl.pad_z_up]))
+            b_min = np.maximum(np.min(np.asarray(lo_list), axis=0),
+                               np.asarray(min_c, dtype=float))
+            b_max = np.minimum(np.max(np.asarray(hi_list), axis=0),
+                               np.asarray(max_c, dtype=float))
             return "still_blocked", blocked_fraction, set(), (b_min, b_max)
-        print(f"    NOTE: tolerating {blocked_total}/{total_rays} "
-              f"marginally blocked rays ({blocked_fraction:.0%} <= 5%) — "
-              f"classifying by the remaining rays")
+        print(f"    NOTE: tolerating {blocked_total}/{len(results)} "
+              f"marginally blocked rays (worst slice {blocked_fraction:.0%} "
+              f"<= 5%) — classifying by the remaining rays")
 
     if detected_bodies:
         return "contains_nontarget", 0.0, detected_bodies, None
@@ -217,17 +235,19 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
     """
     For each shadow, find ALL object boxels that block the camera's view.
 
-    Casts a coarse ray grid from the camera through each shadow volume.
-    Any object whose PyBullet body intercepts at least one ray is recorded
-    as a blocker for that shadow.  This replaces the old one-to-one
-    shadow_occluder_map that only tracked the creating occluder (audit #78).
+    Casts the SAME ray grid as sense_shadow_raycasting (shared
+    perception.sense_ray_slices geometry, F5) from the camera through
+    each shadow volume.  Any object whose PyBullet body intercepts at
+    least one ray is recorded as a blocker for that shadow.  This
+    replaces the old one-to-one shadow_occluder_map that only tracked
+    the creating occluder (audit #78).
 
     Why not just use the parent relationship?  Because after objects are
     relocated, a DIFFERENT object may now block the camera's view of a
     shadow that was originally created by something else.
 
-    Why we ALSO consult the parent relationship as a fallback: the 5x5
-    z-slice ray grid is geometrically incomplete — for shadows that
+    Why we ALSO consult the parent relationship as a fallback: any
+    finite ray grid is geometrically incomplete — for shadows that
     share a face with their occluder and extend past the occluder under
     perspective skew (e.g. yellow ↔ shadow_of_yellow_object), the rays
     can graze the occluder's AABB along the shared face and miss it
@@ -269,36 +289,82 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
 
         blocker_set = set()
         min_c, max_c = sb.min_corner, sb.max_corner
-        # Single Z slice at the shadow midpoint — coarser than
-        # sense_shadow_raycasting because we only need to identify
-        # WHICH objects block, not whether the target is visible.
-        z_mid = (min_c[2] + max_c[2]) / 2.0
-        n = 5
-
+        # SAME ray grid as sense_shadow_raycasting (F5, 2026-08-21):
+        # the census used to cast a single 5x5 slice at the shadow
+        # midpoint, which never saw a SHORT (3-4 cm) body standing in
+        # front of a fragment's low region — the denser sense would
+        # then hit that body without it ever appearing in the blocker
+        # facts, misclassifying it as contains_nontarget and churning
+        # discovery/replans.  Sharing perception.sense_ray_slices keeps
+        # the planner's blocks_view_at facts and the physical sense
+        # agreeing ray-for-ray on WHO blocks WHAT.
+        slices, _capped = sense_ray_slices(min_c, max_c)
         ray_froms = []
         ray_tos = []
-        for xi in np.linspace(min_c[0], max_c[0], n):
-            for yi in np.linspace(min_c[1], max_c[1], n):
+        ray_slice = []
+        for si, sl in enumerate(slices):
+            for pt in sl.points:
                 ray_froms.append(ray_origin)
-                ray_tos.append([float(xi), float(yi), float(z_mid)])
+                ray_tos.append([float(pt[0]), float(pt[1]), float(pt[2])])
+                ray_slice.append(si)
 
         # rayTestBatch numThreads=0: let Bullet pick max threads (audit #69).
         # Safe — registry rebuild is sequential w.r.t. stepSimulation.
         results = p.rayTestBatch(ray_froms, ray_tos, numThreads=0)
-        for hit_id, _link, _frac, _pos, _normal in results:
+        # Tolerance-aligned blocker selection (F5): mirror the sense's
+        # per-slice classifier.  An object is listed as a blocker only
+        # if removing it is NEEDED to bring every slice's blocked
+        # fraction under the shared SENSE_MARGINAL_BLOCKED_FRACTION —
+        # exactly the condition under which the sense would classify
+        # still_blocked because of it.  Any-hit listing would pin a
+        # shadow blocked (blocks_view_at is keyed to the blocker's
+        # CURRENT boxel) over single grazing rays the sense itself
+        # tolerates — observed on seed 0: green relocated to free_010
+        # grazed 1/674 rays of its old shadow, stayed a blocker, and
+        # the forced relocate-again plan died in the re-pick
+        # stream-binding failure.
+        per_slice_obj_hits = [dict() for _ in slices]
+        for i, (hit_id, _link, _frac, _pos, _normal) in enumerate(results):
             if hit_id in pybullet_to_boxel:
+                counts = per_slice_obj_hits[ray_slice[i]]
+                counts[hit_id] = counts.get(hit_id, 0) + 1
+        for si, sl in enumerate(slices):
+            counts = per_slice_obj_hits[si]
+            remaining = sum(counts.values())
+            n_slice = len(sl.points)
+            if remaining / n_slice <= SENSE_MARGINAL_BLOCKED_FRACTION:
+                continue
+            for hit_id, cnt in sorted(counts.items(),
+                                      key=lambda kv: -kv[1]):
                 blocker_set.add(pybullet_to_boxel[hit_id])
+                remaining -= cnt
+                if remaining / n_slice <= SENSE_MARGINAL_BLOCKED_FRACTION:
+                    break
 
         # Parent-relationship fallback: if raycasting found nothing for
         # this shadow but we know the creating occluder, add it.  The
         # creator is by construction the geometry that cast the shadow,
-        # so it remains a valid blocker until either (a) it is moved or
-        # (b) the shadow itself is removed.  We re-confirm it is still
+        # so it remains a valid blocker while it still stands where it
+        # cast it.  Gated on face-adjacency (F5): the fallback exists
+        # for the shared-face graze case — rays skimming along the
+        # occluder/shadow contact face can miss the body entirely — and
+        # that case only exists while the creator's AABB still touches
+        # the fragment.  A relocated creator (or one whose residual
+        # grazes the tolerance pass above deemed marginal) must NOT be
+        # re-pinned: blocks_view_at keys to its CURRENT boxel and would
+        # freeze the shadow blocked forever.  We re-confirm it is still
         # an OBJECT in the registry to avoid resurrecting stale links.
         if not blocker_set and sb.created_by_boxel_id:
             creator = registry.get_boxel(sb.created_by_boxel_id)
             if creator is not None:
-                blocker_set.add(sb.created_by_boxel_id)
+                adj = 0.01
+                touches = bool(
+                    np.all(np.asarray(creator.min_corner)
+                           <= np.asarray(max_c) + adj)
+                    and np.all(np.asarray(creator.max_corner)
+                               >= np.asarray(min_c) - adj))
+                if touches:
+                    blocker_set.add(sb.created_by_boxel_id)
 
         blockers[shadow_id] = list(blocker_set)
 
@@ -1611,6 +1677,16 @@ def handle_sense_action(
         if blocker_bid in boxel_to_pybullet:
             occluder_pybullet_ids.add(boxel_to_pybullet[blocker_bid]['pybullet_id'])
 
+    # F5 low-slice companion: the dense slice's endpoints sit only 2 cm
+    # above the fragment base, low enough that rays near the tray can
+    # terminate on its 3 cm walls.  The tray is static support furniture
+    # (audit #82 treats it as static too) — fold it into the ignored
+    # supports so a wall hit neither blocks the observation nor
+    # "discovers" the tray as a non-target object.
+    sense_support_ids = frozenset(support_body_ids or ()) | {
+        info.object_id for info in env.objects.values()
+        if getattr(info, "is_tray", False)}
+
     (sense_outcome, blocked_fraction, detected_bodies,
      blocked_bbox) = sense_shadow_raycasting(
         env.camera_position,
@@ -1618,7 +1694,7 @@ def handle_sense_action(
         target_pybullet_id,
         occluder_pybullet_ids,
         robot_id=robot_id,
-        support_body_ids=support_body_ids,
+        support_body_ids=sense_support_ids,
     )
 
     if sense_outcome == "found_target":
@@ -1710,7 +1786,7 @@ def handle_sense_action(
         # geometry splits one caster's occlusion into several fragments,
         # so a single sense cleared only ITS fragment and the GUI kept
         # showing the caster's other shadows ("shadow still there after
-        # sensing" field report).  Re-run the same 147-ray cast on the
+        # sensing" field report).  Re-run the same ray-grid cast on the
         # caster's remaining fragments now and remove every one that is
         # ALSO observably empty — each removal is backed by a real
         # observation, so the belief stays honest.  Fragments that come
@@ -1737,7 +1813,7 @@ def handle_sense_action(
                 sib_outcome, _, _, sib_bbox = sense_shadow_raycasting(
                     env.camera_position, sib_bd, target_pybullet_id,
                     sib_occluder_ids, robot_id=robot_id,
-                    support_body_ids=support_body_ids)
+                    support_body_ids=sense_support_ids)
                 if sib_outcome != "clear_but_empty":
                     # Partial-reveal shrink for a still-blocked sibling:
                     # its clear rays observed part of it empty even
@@ -1907,8 +1983,8 @@ def handle_sense_action(
     sid_str = str(shadow_id)
     blocked_counts[sid_str] = blocked_counts.get(sid_str, 0) + 1
     print(f"    View to {shadow_id} still blocked "
-          f"({blocked_fraction:.0%} rays hit occluder). "
-          f"[attempt {blocked_counts[sid_str]}]")
+          f"({blocked_fraction:.0%} of the worst slice's rays hit "
+          f"occluder). [attempt {blocked_counts[sid_str]}]")
     # #P1 partial-reveal shrink (2026-08-21, user-directed): the clear
     # rays of this failed sense still observed part of the fragment
     # empty — shrink it to the blocked sub-region so belief, planner
