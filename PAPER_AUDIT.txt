@@ -465,6 +465,42 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       before sensing, parole 1/2 fired then honest re-giveup, shrink
       2.7x27.7 -> 2.0x11.5 cm on a 10 % blockage, zero drops, bounded
       classified end; stack h=2 SUCCESS.]
+      [GRIP + TRANSIT ROUND 2026-08-21 afternoon (user field tests):
+      close force 40 -> 60 N (transit slips at 40 N); two-stage
+      top-down pick descent (horizontal re-aim at approach altitude,
+      then strictly vertical lower — the diagonal swipe was edge-
+      clipping the block); strict gripper checks on the transit-path
+      INTERIOR (the blanket gripper_relax certified finger sweeps
+      through tall occluders — the orange side-push; endpoints stay
+      relaxed); Z-aware partial shrink (top-blocked fragments now
+      shrink in height, full-slice-spacing padding so unsampled volume
+      is never claimed observed); one-shot grasp resample inside
+      execute_pick after a close-time verification failure (retreat,
+      re-read live pose, re-descend once).  User confirms picks work.]
+      F5. [OPEN] HIDDEN-SPAWN CLASSIFICATION INCONSISTENT WITH SENSE
+      GEOMETRY (2026-08-21, user field report on random-pairs seed 0,
+      run_2026-08-21_13-44-12): Phase 4 claims "Target: blue_object —
+      ORACLE: Actually hidden in shadow_of_red_object__00" (log :52-53,
+      guarantee line :35 "1/1 hidden"), yet run 11-49-53 SENSED red__00
+      and batch-observed it EMPTY (rays through that volume never hit
+      blue), blue was plainly visible in the GUI throughout, and the
+      user observed the one genuinely occluded object was NOT the
+      target.  The robot cleared every occluder correctly and the
+      target was never findable — the episode is structurally
+      unwinnable at spawn.  Suspects: the spawn-time hidden test
+      (8-corner camera-ray occlusion + "shadow AABB contains centre",
+      test_full_pipeline Phase-4 ORACLE block + random_pairs_scene
+      hidden placement/guarantee in boxel_env) disagrees with the
+      sense-time 7x7x3 volume grid, and F3's corrected fragment
+      geometry changed the shadow AABBs under the spawn logic's
+      assumptions (the placement jitter window and "contains centre"
+      test predate F3).  Fix direction: one shared visibility/
+      containment criterion for spawn classification and sense (the
+      #P1 step-(2) perception module is the principled home), or at
+      minimum re-run the hidden guarantee against the FINAL F3 shadow
+      fragments and re-roll the scene when the target is not genuinely
+      inside a sensed-able fragment.  Blocks meaningful holding-goal
+      numbers on the affected seeds — fix before CB#113.]
 
   ORDER OF WORK (proposal): (1) resize objects + friction-grasp + real release,
   drop weld and teleports [changes execution.py, robot_utils.py, boxel_env.py
