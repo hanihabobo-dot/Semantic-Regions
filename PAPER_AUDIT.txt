@@ -655,6 +655,35 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   decision (execution-servo: a real robot senses at the wrist; the
   collision world is a documented sim concession).]
 
+  [STEP (2c)+(2d) LANDED 2026-08-21 late.  afa7ff3 (2c):
+  refresh_object_aabbs re-poses OBJECT boxels from a fresh TinyRenderer
+  detection instead of p.getAABB — RIGID-SIZE tracking: extents are
+  canonical (per-axis max across observations) and a refresh re-POSES
+  the known-size box, XY centred on the estimate, z top-anchored, so
+  the arm partially occluding the just-manipulated object can no longer
+  shrink its boxel; objects with no detection at all keep the last
+  estimate, logged ("[perception] N object(s) not visible in the
+  refresh render").  a80511b (2d): the streams.py hidden-object
+  fallbacks use NOMINAL_HIDDEN_EXTENTS (4 cm class prior — task
+  knowledge, conservative upper bound) instead of the instance's true
+  AABB, and compute_stack_kin takes the SUPPORT pose from the registry
+  estimate — the audit-#55 live-AABB preference leaked a pre-discovery
+  support's true POSITION into the kin target; no boxel now means no
+  kin (cannot aim at an unobserved pose).  The stream layer has ZERO
+  ground-truth geometry reads (grep-verified: remaining p.getAABB
+  mentions in streams.py are comments; body ids survive only in
+  collision ignore-sets and the seg-mask identity map).  VERIFIED
+  headless: holding seed 0 SUCCESS (2 plans, 5.9 s total planning),
+  stack h=2 SUCCESS (1.1 s), find-and-tray-stack seed 999 --seed-retry
+  SUCCESS THROUGH an F10 held-cargo collision and a toppled-red drop
+  failure (5 plans, honest recovery, both stacks 0.0 mm err).
+  FOLLOW-ON for step (3)/#P2: a LOST object (transit slip, knocked off
+  the table) keeps its stale last-seen boxel — the robot should mark an
+  object lost when its believed region renders visibly empty,
+  mirroring sense's observed-empty logic.  Remaining oracle reads
+  feeding planning: ONLY the sense-discovery BoxelData builds in
+  handle_sense_action — exactly step (3)'s scope.]
+
   F10. [OPEN] HELD-CARGO SWEPT VOLUME IS NEVER COLLISION-CHECKED
       (2026-08-21, run 20-17-18, seed 343879192): plan_motion excludes
       the grasped body from ALL collision checks (necessary at the pick
