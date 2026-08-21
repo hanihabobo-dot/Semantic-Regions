@@ -146,14 +146,19 @@ def sense_ray_slices(min_corner, max_corner) -> Tuple[List[SenseSlice], bool]:
     return slices, capped
 
 
-def _segments_intersect_aabb(origin: np.ndarray, endpoints: np.ndarray,
-                             bmin: np.ndarray, bmax: np.ndarray) -> bool:
-    """True if any segment origin->endpoint intersects the AABB.
+def segment_aabb_hit_mask(origin, endpoints, bmin, bmax) -> np.ndarray:
+    """Per-segment boolean mask: does origin->endpoint intersect the AABB?
 
     Slab test restricted to t in [0, 1] — rays TERMINATE at their
     endpoint (matching pybullet rayTestBatch), so a body beyond the
-    endpoint does not count.
+    endpoint does not count.  Vectorized over endpoints so callers can
+    COUNT blocked rays per slice (the shared marginal tolerance needs
+    fractions, not just any-hit).
     """
+    origin = np.asarray(origin, dtype=float)
+    endpoints = np.asarray(endpoints, dtype=float)
+    bmin = np.asarray(bmin, dtype=float)
+    bmax = np.asarray(bmax, dtype=float)
     d = endpoints - origin[None, :]
     t_lo = np.zeros(len(endpoints))
     t_hi = np.ones(len(endpoints))
@@ -170,7 +175,13 @@ def _segments_intersect_aabb(origin: np.ndarray, endpoints: np.ndarray,
         hi = np.where(parallel, np.inf if inside else -np.inf, hi)
         t_lo = np.maximum(t_lo, lo)
         t_hi = np.minimum(t_hi, hi)
-    return bool(np.any(t_lo <= t_hi))
+    return t_lo <= t_hi
+
+
+def _segments_intersect_aabb(origin: np.ndarray, endpoints: np.ndarray,
+                             bmin: np.ndarray, bmax: np.ndarray) -> bool:
+    """True if any segment origin->endpoint intersects the AABB."""
+    return bool(np.any(segment_aabb_hit_mask(origin, endpoints, bmin, bmax)))
 
 
 def grid_would_hit(camera_pos, frag_min, frag_max,

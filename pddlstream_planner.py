@@ -35,6 +35,8 @@ from pddlstream.language.generator import from_gen_fn, from_fn
 from pddlstream.utils import read
 
 from boxel_data import BoxelRegistry, BoxelType
+from perception import (sense_ray_slices, segment_aabb_hit_mask,
+                        SENSE_MARGINAL_BLOCKED_FRACTION)
 from streams import BoxelStreams, RobotConfig, Trajectory, Grasp
 from robot_utils import REST_POSES
 
@@ -307,34 +309,39 @@ class PDDLStreamPlanner:
         For each (free_boxel, shadow) pair, test whether the free boxel
         lies in the camera→shadow line of sight.
 
-        Casts a 5x5 ray grid from the camera through each shadow volume
-        (same density as compute_shadow_blockers in execution.py)
-        and tests each ray against every free boxel's AABB.
+        F5 alignment (2026-08-21, the previously deferred "placement-
+        blocking slice alignment"): endpoints and tolerance are the SAME
+        shared sense grid the live sense and compute_shadow_blockers use
+        (perception.sense_ray_slices + SENSE_MARGINAL_BLOCKED_FRACTION).
+        The old 5x5 mid-height grid missed low blockers entirely: a
+        ~13 cm block placed at a free boxel passes UNDER the shadow's
+        mid-height rays but clips the dense low slice, so the planner
+        placed occluders into corridors the census then flagged blocked
+        (seed 0: orange placed at free_005 immediately listed as a
+        blocker of shadow_of_red, forcing a re-pick the binding layer
+        cannot deliver — F7).  A free boxel now blocks a shadow iff, on
+        ANY slice, it would intercept MORE than the marginal fraction of
+        that slice's rays — exactly the census's listing criterion.
 
         Returns:
             Set of (free_boxel_id, shadow_id) pairs where placement would
             block the camera's view to the shadow.
         """
-        cam = self.camera_pos
+        cam = np.asarray(self.camera_pos, dtype=float)
         blocking = set()
-        n = 5
 
         for shadow_id in shadow_ids:
             sb = self.registry.get_boxel(shadow_id)
             if sb is None:
                 continue
-            min_c, max_c = sb.min_corner, sb.max_corner
-            z_mid = (min_c[2] + max_c[2]) / 2.0
-
-            ray_endpoints = []
-            for xi in np.linspace(min_c[0], max_c[0], n):
-                for yi in np.linspace(min_c[1], max_c[1], n):
-                    ray_endpoints.append(np.array([xi, yi, z_mid]))
+            slices, _ = sense_ray_slices(sb.min_corner, sb.max_corner)
 
             for fb in free_boxels:
-                for ep in ray_endpoints:
-                    if self._ray_aabb_intersects(cam, ep,
-                                                 fb.min_corner, fb.max_corner):
+                for sl in slices:
+                    hits = segment_aabb_hit_mask(
+                        cam, sl.points, fb.min_corner, fb.max_corner)
+                    if (float(np.count_nonzero(hits)) / len(sl.points)
+                            > SENSE_MARGINAL_BLOCKED_FRACTION):
                         blocking.add((fb.id, shadow_id))
                         break
 
