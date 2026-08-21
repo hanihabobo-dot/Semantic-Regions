@@ -153,11 +153,23 @@
   ;; current uniform-prior scenario this does not affect completeness.
   ;;
   ;; See CODEBASE_AUDIT #61, PA-5, PF-1.
+  ;; (handempty) precondition (2026-08-21, user direction): sensing with
+  ;; an object in the gripper is physically self-defeating — the held
+  ;; object and the arm sit in the fixed camera's ray cone (field run
+  ;; 2026-08-21_11-49-53: 100 % self-blocked sensing the held occluder's
+  ;; own shadow, 25 % arm-blocked on a sibling re-cast).  Symbolically,
+  ;; picking an occluder already clears blocks_view, so without this
+  ;; gate the planner ordered sense BEFORE place and walked into doomed
+  ;; senses.  Action costs cannot fix the ordering — (pick sense place)
+  ;; and (pick place sense) have identical action multisets, so equal
+  ;; total cost under ANY cost assignment; only a precondition can force
+  ;; place-first.
   (:action sense
     :parameters (?o ?region)
     :precondition (and
       (Obj ?o)
       (Boxel ?region)
+      (handempty)
       (view_clear ?region)
       (not (obj_at_boxel_KIF ?o ?region))  ; Only sense if unknown
     )

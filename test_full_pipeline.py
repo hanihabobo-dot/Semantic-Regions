@@ -1118,46 +1118,28 @@ def main(gui=True, run_logger=None, scene_config=None,
         )
         plan_dt = time.perf_counter() - plan_t0
 
-        # audit #58 SAFETY NET — if the held cube blocked all plans (e.g.
-        # collides with everything from its current pose), drop it and
-        # try once more from (handempty).  Mirrors the pre-#58 behaviour
-        # for this single edge case.
+        # No-plan-while-holding (2026-08-21, user directive: NEVER
+        # blind-drop the held object — the audit-#58 release-in-place is
+        # RETIRED; its unreasoned drop spot landed inside shadow
+        # corridors and re-blocked them, GUI demo run 11-49-53).
+        # Instead, plan a minimal DISPOSAL: goal (handempty) makes the
+        # planner find a proper (move, place ...) for the held object —
+        # a strictly easier problem than the mission, and the placement
+        # respects the placement-blocking facts and kinematic streams
+        # like any other place.  The normal dispatch executes it; the
+        # next loop iteration replans the mission from handempty.  If
+        # even the disposal has no plan, end the episode honestly, still
+        # holding — no drop, ever.  (release_held_object_in_place is
+        # kept in execution.py per the dead-code policy but is no
+        # longer called from the loop.)
         if plan is None and held_obj_name is not None:
-            print(f"  audit #58: planner found no plan with {held_obj_name} "
-                  f"held — falling back to release-and-replan.")
-            drop_ok, drop_state = release_held_object_in_place(
-                env=env,
-                robot_id=robot_id,
-                gui=gui,
-                held_body_id=held_body_id,
-                held_object_boxel_id=held_object_boxel_id,
-                registry=registry,
-                boxel_centers=boxel_centers,
-                boxel_to_pybullet=boxel_to_pybullet,
-                body_id_to_name=body_id_to_name,
-                viz=viz,
-                shadows=shadows,
-                occluders=occluders,
-                planner=planner,
-                max_attempts=3,
-            )
-            held_body_id = None
-            held_object_boxel_id = None
-            held_obj_name = None
-            if drop_state.get("shadow_occluder_map") is not None:
-                shadow_occluder_map = drop_state["shadow_occluder_map"]
-            if drop_state.get("current_config") is not None:
-                current_config = drop_state["current_config"]
-            if not drop_ok:
-                exit_reason = "drop_failed"
-                print("ERROR: Could not release held object after retries — "
-                      "aborting to avoid double-grasp.")
-                break
-            env.sync_to_plan_client(held_body_id=None)
+            print(f"  no mission plan with {held_obj_name} held — planning "
+                  f"a disposal place instead (audit #58 drop retired "
+                  f"2026-08-21).")
             plan_t1 = time.perf_counter()
             plan = planner.plan(
                 target_objects=planner_target_objects,
-                goal=goal,
+                goal=('handempty',),
                 current_config=current_config,
                 known_empty_shadows=known_empty,
                 moved_occluders=dict(belief.occluders_moved),
@@ -1172,9 +1154,15 @@ def main(gui=True, run_logger=None, scene_config=None,
                                                     'find-and-tray-stack')
                                    else None),
                 unit_costs=unit_costs,
-                held_obj=None,
+                held_obj=held_obj_name,
             )
             plan_dt += time.perf_counter() - plan_t1
+            if plan is None:
+                exit_reason = "no_plan_while_holding"
+                print(f"ERROR: no disposal plan for {held_obj_name} either — "
+                      f"ending the episode honestly while holding (no blind "
+                      f"drop; user directive 2026-08-21).")
+                break
         total_plan_time += plan_dt
         plan_times.append(plan_dt)
         print(f"  [timing] planner.plan() #{plan_count}: {plan_dt:.3f}s "

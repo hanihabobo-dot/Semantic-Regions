@@ -283,6 +283,15 @@ def report_run_outcome(
                   f"{sorted(pick_giveup_objects or [])} after 3 failed "
                   f"pick attempts each — no plan without them "
                   f"({len(remaining)} unsearched shadows remaining)")
+        elif exit_reason == "no_plan_while_holding":
+            # 2026-08-21: the audit-#58 blind drop is retired (user
+            # directive) — when neither the mission nor a minimal
+            # disposal place is plannable with the held object, the
+            # episode ends honestly, object still in hand.
+            print(f"FAILED: No mission plan and no disposal place for the "
+                  f"held object — episode ended while holding (audit-#58 "
+                  f"drop retired; {len(remaining)} unsearched shadows "
+                  f"remaining)")
         elif exit_reason == "planner_failed":
             print(f"FAILED: Planner returned no plan "
                   f"({len(remaining)} unsearched shadows remaining)")
