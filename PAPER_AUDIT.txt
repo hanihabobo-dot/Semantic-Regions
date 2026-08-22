@@ -912,6 +912,37 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       the transit interior, endpoints keep their intended contacts,
       mirroring the f35d88a gripper-interior rule.
 
+  F12. [OPEN] VIEW_BLOCKED GATES SENSE ABSOLUTELY WHILE THE EXECUTED
+      SENSE MAKES PROGRESS ON PARTIALLY BLOCKED FRAGMENTS (2026-08-22,
+      runs 15-25-35 / 15-58-09): the domain derives view_clear by
+      stratified negation over blocks_view, so ANY census-listed
+      blocker (> 5 % of some slice) makes a shadow un-sensable in
+      planning — the only plannable route is relocating the blocker,
+      which is F7 territory when that means a re-pick.  But the
+      EXECUTED sense handles partial blockage productively:
+      still_blocked shrinks the fragment to the blocked remainder
+      (partial-reveal, 2026-08-21) and the clear rays observe the rest
+      empty.  In the repro, shadow_of_red was 12 % blocked by the
+      marginally placed orange (see the F11 residual): a sense would
+      have revealed 88 % of it or found the target outright, but the
+      planner could not ground one and the episode died in the F7
+      binding death instead.  Direction (F6-ADJACENT, SO PARKED WITH
+      IT — it changes what sense means in the domain): either derive
+      view_clear from a "usefully observable" criterion (every
+      slice's blocked fraction under a threshold well above the
+      census margin), or let sense ground on marginally blocked
+      shadows at a cost penalty.  Evaluate together with the parked
+      F6 criterion work on its A/B harness.
+
+  F13. [MINOR] DUPLICATE obj_at_boxel INIT ATOMS FOR VISIBLE TARGETS
+      (2026-08-22, run 15-26-10 [#76-diag]: cyan_object listed at
+      ['cyan_object', 'cyan_object']): a visible target that also has
+      its own OBJECT boxel gets obj_at_boxel/obj_at_boxel_KIF once
+      from the OBJECT-boxel loop and again from
+      visible_target_locations.  Harmless — PDDLStream's evaluations
+      dict dedupes — but the #76-diag counts are inflated; dedupe in
+      _build_init when convenient.
+
 ================================================================================
 #P2. [OPEN T0]  STACKING-ACCURACY DROP: PROVE IT IS EXECUTION, DETECT PHYSICAL
      FAILURE (KNOCKED TOWERS, OBJECTS OFF THE TABLE) AND FAIL HONESTLY
