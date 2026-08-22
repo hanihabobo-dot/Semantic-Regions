@@ -42,7 +42,8 @@ import pybullet as p
 
 import telemetry          # #P1 F17 world telemetry (no-op unless armed)
 from boxel_data import BoxelData, BoxelType
-from perception import (SENSE_MARGINAL_BLOCKED_FRACTION,
+from perception import (DETECTION_MIN_PIXELS,
+                        SENSE_MARGINAL_BLOCKED_FRACTION,
                         first_surface_interceptors, sense_ray_slices)
 from reboxelize import reboxelize_free_space
 from streams import RobotConfig
@@ -112,7 +113,8 @@ def sense_shadow_from_render(shadow_boxel, target_pybullet_id,
             table, tray walls) never counted as interceptors.
 
     Returns:
-        Tuple[str, float, Set[int], Optional[Tuple[np.ndarray, np.ndarray]]]:
+        Tuple[str, float, Set[int], Optional[Tuple[np.ndarray, np.ndarray]]],
+        Dict[int, int]:
           - outcome string
           - blocked_fraction (0 when not blocked)
           - set of non-target, non-occluder dynamic body IDs detected inside
@@ -125,6 +127,12 @@ def sense_shadow_from_render(shadow_boxel, target_pybullet_id,
             fragment empty, so the caller may SHRINK the shadow to this
             box (partial-reveal shrink, 2026-08-21, user-directed).
             None for the other outcomes.
+          - interceptor_counts: {seg id -> how many grid endpoints that
+            body stood in front of}, covering EVERY intercepting body
+            (target, occluders, robot, supports and discoveries alike).
+            Purely diagnostic — no branch reads it — but without it the
+            "contains something the render cannot localize" refusal
+            cannot name what it saw (#P1 F15).
     """
     ignore_ids = {-1}
     if robot_id is not None:
@@ -171,6 +179,9 @@ def sense_shadow_from_render(shadow_boxel, target_pybullet_id,
     occluder_hits = 0
     robot_hits = 0
     detected_bodies: Set[int] = set()
+    # Diagnostic only (#P1 F15): every intercepting seg id and how many
+    # endpoints it covered, so the caller can name what it saw.
+    interceptor_counts: dict = {}
     # Blocked endpoints as (endpoint, slice index) — the sub-region that
     # stays unobserved.  Feeds the partial-reveal shrink (see Returns).
     blocked_targets = []
@@ -188,8 +199,10 @@ def sense_shadow_from_render(shadow_boxel, target_pybullet_id,
         if not intercepted[i]:
             continue
         hit_obj_id = int(hit_ids[i])
+        interceptor_counts[hit_obj_id] = \
+            interceptor_counts.get(hit_obj_id, 0) + 1
         if hit_obj_id == target_pybullet_id:
-            return "found_target", 0.0, set(), None
+            return "found_target", 0.0, set(), None, interceptor_counts
         if hit_obj_id in occ_set:
             occluder_hits += 1
             blocked_targets.append((ray_tos[i], ray_slice[i]))
@@ -253,16 +266,18 @@ def sense_shadow_from_render(shadow_boxel, target_pybullet_id,
                                np.asarray(min_c, dtype=float))
             b_max = np.minimum(np.max(np.asarray(hi_list), axis=0),
                                np.asarray(max_c, dtype=float))
-            return "still_blocked", blocked_fraction, set(), (b_min, b_max)
+            return ("still_blocked", blocked_fraction, set(),
+                    (b_min, b_max), interceptor_counts)
         print(f"    NOTE: tolerating {blocked_total}/{len(ray_tos)} "
               f"marginally hidden endpoints (worst slice "
               f"{blocked_fraction:.0%} <= 5%) — classifying by the "
               f"remaining endpoints")
 
     if detected_bodies:
-        return "contains_nontarget", 0.0, detected_bodies, None
+        return ("contains_nontarget", 0.0, detected_bodies, None,
+                interceptor_counts)
 
-    return "clear_but_empty", 0.0, set(), None
+    return "clear_but_empty", 0.0, set(), None, interceptor_counts
 
 
 def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
@@ -1869,7 +1884,7 @@ def handle_sense_action(
     sense_view, sense_proj = env._view_and_projection_matrices()
 
     (sense_outcome, blocked_fraction, detected_bodies,
-     blocked_bbox) = sense_shadow_from_render(
+     blocked_bbox, interceptor_counts) = sense_shadow_from_render(
         shadow_boxel,
         target_pybullet_id,
         sense_depth_m, sense_seg, sense_view, sense_proj,
@@ -1971,6 +1986,24 @@ def handle_sense_action(
                   f"cannot localize (below the detection minimum) — "
                   f"keeping the fragment. [attempt "
                   f"{blocked_counts[sid_str]}]")
+            # #P1 F15: NAME what was seen.  Before this the refusal was
+            # anonymous — three strikes could retire the fragment the
+            # target was actually sitting in and the log never said which
+            # body caused it.  For each discovery: how many grid endpoints
+            # it stood in front of, how many pixels its seg id covers in
+            # the whole frame, and why it missed the detection gate.
+            _diag = []
+            for _b in sorted(detected_bodies):
+                _nm = body_id_to_name.get(_b, f"<seg id {_b}>")
+                _px = int(np.count_nonzero(sense_seg == _b))
+                _diag.append(
+                    f"{_nm}(id={_b}) endpoints={interceptor_counts.get(_b, 0)} "
+                    f"seg_px={_px} "
+                    f"{'localized' if _nm in sense_detections else 'BELOW_MIN'}")
+            print(f"      [F15-diag] discoveries: {'; '.join(_diag)}"
+                  f" | detection minimum {DETECTION_MIN_PIXELS} px"
+                  f" | localized this render: "
+                  f"{sorted(sense_detections)}")
             if blocked_counts[sid_str] >= 3:
                 print(f"    ERROR: {shadow_id} unlocalizable-content "
                       f"{blocked_counts[sid_str]} times — giving up "
@@ -2049,7 +2082,7 @@ def handle_sense_action(
                     if blocker_bid in boxel_to_pybullet:
                         sib_occluder_ids.add(
                             boxel_to_pybullet[blocker_bid]['pybullet_id'])
-                sib_outcome, _, _, sib_bbox = sense_shadow_from_render(
+                sib_outcome, _, _, sib_bbox, _ = sense_shadow_from_render(
                     sib_bd, target_pybullet_id,
                     sense_depth_m, sense_seg, sense_view, sense_proj,
                     sib_occluder_ids, robot_id=robot_id,
