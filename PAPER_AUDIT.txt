@@ -593,6 +593,31 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       re-roll seeds whose oracle fragment is not fits-approved, so any
       residual false negative becomes a loud spawn re-roll instead of
       a doomed episode.]
+      [A/B ROUNDS 2-4 (2026-08-22, same 20 seeds; user directed the
+      two-fits split): gate2 = split (can_hide lower bound,
+      74619db) + the F11 volume fix -> 11/20 @ 7.5 s mean; nogate2 =
+      F11 only -> 17/20 @ 15.8 s; gate3 = split without F11
+      (d51d42f) -> 13/20 @ 3.8 s, and the trap seeds CHANGED (7/10
+      failed again, 4'/5 newly) — proving the residual false-negative
+      source is test_target_can_hide_in_shadow's stage-2 occlusion
+      SAMPLING (3x3 candidates x 8 corners misses the actual hiding
+      spot), not the size bound; gate4 = necessary-only can_hide
+      (min-bound extent + table-reaching, no occlusion stage,
+      90df94a) -> 16/20 @ 11.7 s — trap gone but the gate approves so
+      much it prunes nothing and loses the speed win.  SETTLED
+      CONCLUSIONS: (1) success rate is statistically IDENTICAL across
+      all sane configs (15-17/20; the recurring failures 13/17/18 and
+      often 7 are physical-giveup / F7 classes shared by both arms);
+      (2) only the STRICT gate buys the big planning speedup (2.9 s
+      vs 8.3 s mean), and its speed comes precisely from the
+      aggressive pruning that occasionally over-prunes; (3) the
+      decision is therefore STRICT gate + F5-style pre-flight net
+      (re-roll seeds whose oracle fragment the strict criterion
+      rejects — belief-consistent, TAMPURA regenerates scenes the
+      same way) versus NO gate; nothing in between pays.
+      RECOMMENDATION: strict + net.  Overfitting caveat: rounds 1-4
+      all used seeds 0-19; the landed config must be confirmed on
+      fresh seeds before CB#113.]
   F7. [OPEN] SILENT RE-PICK STREAM-BINDING NO-PLAN (2026-08-21): when the
       only way forward is to RE-PICK an occluder the robot itself already
       placed (relocate it a second time), PDDLStream finds valid action
@@ -740,6 +765,18 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       support — mirrors what the census will later see.  Note the
       9ea58a5 alignment fixed the RAY GEOMETRY half of this; the
       blocking-VOLUME half is this finding.
+      [FIRST IMPLEMENTATION REVERTED 2026-08-22 (335ddc1 in, reverted
+      1cc38d2 base / d51d42f gate): the honest per-object volumes
+      under the shallow camera declare most of the table corridor-
+      blocking — no-gate planning time DOUBLED (8.3 -> 15.8 s mean
+      for +1 success) and the gated arm collapsed (11/20) because
+      whole shadows became "unclearable" in the fact set.  The bug is
+      real (it cost the user's 12-09-28 run) but the fix needs a
+      cheaper criterion — candidates: emit per-object volume facts
+      only for corridors of shadows the target can_hide in, or a
+      looser prospective tolerance (2x the census margin) so only
+      egregious placements are forbidden and rare re-blocks stay
+      handled by replanning, as before.]
 
   F10. [OPEN] HELD-CARGO SWEPT VOLUME IS NEVER COLLISION-CHECKED
       (2026-08-21, run 20-17-18, seed 343879192): plan_motion excludes
