@@ -40,6 +40,7 @@ from typing import Optional, Set, Tuple
 import numpy as np
 import pybullet as p
 
+import telemetry          # #P1 F17 world telemetry (no-op unless armed)
 from boxel_data import BoxelData, BoxelType
 from perception import (SENSE_MARGINAL_BLOCKED_FRACTION,
                         first_surface_interceptors, sense_ray_slices)
@@ -1288,6 +1289,7 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
         open_gripper(robot_id, gui)
         for _ in range(30):
             p.stepSimulation()
+            telemetry.tick()
 
     # Hardcoded post-place lift (audit #36, THESIS_NOTES §19): give the
     # next plan_motion ~10 cm of safe headroom over the just-placed cube.

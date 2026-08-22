@@ -406,6 +406,13 @@ def cell_to_argv(cell: Dict, extra_args: List[str]) -> List[str]:
         "--goal", str(cell["goal"]),
         "--baseline", str(cell.get("baseline", "semantic")),
         "--log-level", "quiet",
+        # #P1 F17: the world telemetry recorder defaults ON for headless
+        # runs, but it samples the simulator every step and the sweep
+        # MEASURES wall-clock — an observer that costs time would shift
+        # the very numbers this harness reports (and write ~1-2 MB per
+        # cell).  Sweeps therefore opt out; interactive headless
+        # diagnostics keep it.
+        "--no-telemetry",
     ]
     # audit #67 follow-up — only emit count knobs when the scene
     # actually consumes them.  run_logger auto-promotes

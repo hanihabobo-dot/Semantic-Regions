@@ -12,6 +12,7 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
+import telemetry          # #P1 F17 world telemetry (no-op unless armed)
 from boxel_types import ObjectInfo, CameraObservation
 from boxel_data import BoxelData, BoxelType
 from perception import ObjectDetection, detect_objects_from_render
@@ -800,6 +801,7 @@ class BoxelTestEnv:
         # table to reach static equilibrium.
         for _ in range(10):
             p.stepSimulation(physicsClientId=self.client_id)
+            telemetry.tick()
 
         self.update_object_positions()
     
@@ -1810,6 +1812,7 @@ class BoxelTestEnv:
         """Step the simulation forward (GUI client only — physics lives there)."""
         for _ in range(num_steps):
             p.stepSimulation(physicsClientId=self.client_id)
+            telemetry.tick()
 
     def reset(self, scene_config: Optional[SceneConfig] = None):
         """
