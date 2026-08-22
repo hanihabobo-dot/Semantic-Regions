@@ -760,7 +760,7 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   feeding planning: ONLY the sense-discovery BoxelData builds in
   handle_sense_action — exactly step (3)'s scope.]
 
-  F11. [OPEN] PLACEMENT-BLOCKING FACTS USE THE FREE BOXEL'S OWN AABB AS
+  F11. [DONE] PLACEMENT-BLOCKING FACTS USE THE FREE BOXEL'S OWN AABB AS
       THE BLOCKING VOLUME, NOT THE PLACED OBJECT'S (2026-08-22, user
       GUI run 12-09-28 seed 0 + no-gate eval arm seed 0, same
       signature): _compute_placement_view_blocks tests the camera->
@@ -794,6 +794,50 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       looser prospective tolerance (2x the census margin) so only
       egregious placements are forbidden and rare re-blocks stay
       handled by replanning, as before.]
+      [FIXED 2026-08-22: _compute_placement_view_blocks now returns
+      (pairs, egregious) — the pair criterion is byte-identical to
+      before, and for every (cell, shadow) the pair test does NOT
+      flag, each object-extent class (mm-quantized; tray excluded —
+      unpickable by design (audit #49), its wide flat volume produced
+      7 dead triples in the first tray-goal smoke) is tested as the
+      335ddc1 virtual box (estimated extents centred on the cell,
+      bottom on the cell floor) at the LOOSER
+      PLACEMENT_EGREGIOUS_BLOCKED_FRACTION = 0.15 instead of the
+      census margin 0.05.  Threshold from measurement
+      (tools/_probe_f11_volume.py over all 20 A/B eval seeds incl.
+      the deterministic pre-flight re-rolls): the cell-safe-but-
+      volume-blocked gap population clusters at 5/49-7/49 of a 7x7
+      coarse slice (0.102/0.122/0.143 — edge rows of the grid) and
+      thins sharply above 1/7, so 0.15 means "would blind more than
+      one full grid row of some slice"; median seed gains 3 triples
+      (max 21) vs median 7 (max 49) at the census margin — the
+      335ddc1 over-constraint stays out.  Also measured: the
+      initial-state fact geometry never collapses (>= 7 placeable
+      reachable cells per shadow x class even at 0.05 on every seed),
+      so the 335ddc1 regression was mid-episode dynamics / search
+      cost, not spawn-state infeasibility.  Cost: pair-blocked cells
+      need no volume test (pair facts already expand over every
+      object) and a virtual box contained in the cell AABB cannot
+      out-block the cell — the full initial sweep is ~0.1 s.  New
+      triples append after the pair expansion so the pre-existing
+      fact order (FastDownward tie-break input) is untouched;
+      non-empty sets are disclosed as [F11-diag] (smart_filter now
+      drops F\d+-diag from the terminal like #\d+-diag).
+      RESIDUAL (accepted, by design): the marginal band (0.05, 0.15]
+      stays allowed prospectively while the census lists it, so the
+      F11+F7 corner survives — live repro run 15-25-35 (holding
+      seed 0 second smoke): orange placed at the reboxelized free_005
+      blocks 12.2 % of shadow_of_red's worst slice (verified offline,
+      tools/_f11_census_check.py), census lists it, the forced
+      relocate-again dies in the F7 binding death, honest no-plan.
+      Closing the band = re-running the measured 0.05 regression; the
+      actual lever is F7 (and see F12 below).  Smoke at the fix:
+      holding seed 0 SUCCESS 3.0 s / 1 plan (plus the known
+      marginal-corner no-plan on a rerun — wall-clock trajectory
+      noise, pre-existing class), stack h=2 SUCCESS 1.1 s,
+      find-and-tray-stack 999 SUCCESS 3 plans 11.7 s (and one honest
+      F8 transit-slip ending on an earlier attempt), F5 diag PASS,
+      perception probe PASS.]
 
   F10. [OPEN] HELD-CARGO SWEPT VOLUME IS NEVER COLLISION-CHECKED
       (2026-08-21, run 20-17-18, seed 343879192): plan_motion excludes
