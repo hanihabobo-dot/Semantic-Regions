@@ -559,6 +559,40 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       sense precondition (keeps the audit-#102 no-test-stream rule).
       NEEDS AN EXPLICIT USER GO: domain surgery, and it changes CB#113
       step counts (user warm 2026-08-21, not yet approved).
+      [A/B EVAL 2026-08-22 (user-requested, "settle this once and for
+      all"): gate = branch p1-sensable-gate @ 4b3aaca (one-line revert
+      of a0e536b: boxel_fits restored on sense), base = 45eeed1;
+      20 seeds (0-19), holding, random-pairs, --seed-retry, headless,
+      seed-for-seed (identical pre-flight re-rolls both arms: 4->
+      1013818839, 6->346043753, 12->1155324522); harness
+      tools/_ab_eval_sensable.py, results
+      eval_results/ab_sensable_2026-08-22/{gate,nogate}.json.
+      RESULTS: success 15/20 (gate) vs 16/20 (no gate) — within noise;
+      planning time mean 2.9 s vs 8.3 s, median 2.0 s vs 4.5 s (gate
+      ~2.5-3x faster, fewer plans/episode).  Seed-level: gate WON
+      seeds 0 and 4' (no-gate wandered into a no-plan dead end on 0
+      despite the same HEAD succeeding it repeatedly earlier —
+      trajectory instability of un-gated sensing; on 4' no-gate ended
+      in the S-18 belief-vs-physics false-found failure, a
+      false-positive-sense class the gate avoided).  Gate LOST seeds
+      10/17/18; 17/18 are ordinary F2-giveup physical failures (fits
+      fact present), but seeds 7/10/13 CONFIRM the a0e536b
+      false-negative trap: (boxel_fits target oracle-fragment) was
+      MISSING at spawn (verified in problem_initial.pddl), making the
+      episode structurally unwinnable under the gate — fired on 3/20
+      scenes, net cost 1 win (7 and 13 failed in the no-gate arm too,
+      for unrelated reasons).  Root cause of the modern trap: the
+      step-(2d) NOMINAL prior (4 cm class UPPER bound) is bigger than
+      the actual 3-3.4 cm targets, so hideability under-approves.
+      VERDICT + FIX DIRECTION (pending user go): keep the gate for the
+      2.5-3x planning speedup and trajectory stability, and close the
+      trap by (i) using the class LOWER bound (3 cm) for the SHADOW/
+      hideability branch — "could any sought-class instance hide
+      here" — while keeping the upper bound for PLACE fits ("will my
+      object always fit"), and (ii) extending the F5 pre-flight to
+      re-roll seeds whose oracle fragment is not fits-approved, so any
+      residual false negative becomes a loud spawn re-roll instead of
+      a doomed episode.]
   F7. [OPEN] SILENT RE-PICK STREAM-BINDING NO-PLAN (2026-08-21): when the
       only way forward is to RE-PICK an occluder the robot itself already
       placed (relocate it a second time), PDDLStream finds valid action
@@ -683,6 +717,29 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   mirroring sense's observed-empty logic.  Remaining oracle reads
   feeding planning: ONLY the sense-discovery BoxelData builds in
   handle_sense_action — exactly step (3)'s scope.]
+
+  F11. [OPEN] PLACEMENT-BLOCKING FACTS USE THE FREE BOXEL'S OWN AABB AS
+      THE BLOCKING VOLUME, NOT THE PLACED OBJECT'S (2026-08-22, user
+      GUI run 12-09-28 seed 0 + no-gate eval arm seed 0, same
+      signature): _compute_placement_view_blocks tests the camera->
+      shadow slice rays against the FREE BOXEL's AABB, but the object
+      placed there stands at the boxel CENTRE with its own (taller)
+      extents — a 13 cm occluder placed in a short/narrow free cell
+      blocks low slice rays the cell itself does not.  Observed: the
+      planner judged free_005 corridor-safe for orange, the post-place
+      census immediately listed orange as a blocker of shadow_of_red
+      (where seed 0's target hides), and the episode then needed a
+      relocate-AGAIN of placed orange + red — the F7 silent re-pick
+      binding death (one alternative placement also sat at the IK
+      margin: FK 13-17 mm just over the 10 mm gate at [0.2,-0.3]),
+      three escalating FastDownward rounds (7 -> 24 -> 51 -> 104 s
+      cumulative search), honest "no plan (2 unsearched shadows
+      remaining)".  FIX: test the slice rays against a virtual box =
+      the candidate OBJECT's extents (or the nominal class upper
+      bound) centred on the free boxel's centre, bottom on the
+      support — mirrors what the census will later see.  Note the
+      9ea58a5 alignment fixed the RAY GEOMETRY half of this; the
+      blocking-VOLUME half is this finding.
 
   F10. [OPEN] HELD-CARGO SWEPT VOLUME IS NEVER COLLISION-CHECKED
       (2026-08-21, run 20-17-18, seed 343879192): plan_motion excludes
