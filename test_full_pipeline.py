@@ -27,7 +27,7 @@ PDDLStream path is added to sys.path via the hardcoded PDDLSTREAM_PATH constant 
 Architecture (post-#26 refactor, 2026-04-19; sense-handler split 2026-05-05):
     belief.py       BeliefState — partial-observability bookkeeping.
     execution.py    execute_pick / execute_place / execute_stack /
-                    sense_shadow_raycasting / compute_shadow_blockers /
+                    sense_shadow_from_render / compute_shadow_blockers /
                     release_held_object_in_place / handle_sense_action.
                     handle_sense_action is the dispatch-loop wrapper that
                     owns post-sense bookkeeping; see its docstring for the
@@ -1627,11 +1627,49 @@ def main(gui=True, run_logger=None, scene_config=None,
                                    if obj_str in boxel_to_pybullet
                                    else obj_str)
                     if placed_name in env.objects:
-                        body_id = env.objects[placed_name].object_id
-                        aabb_min, aabb_max = p.getAABB(body_id)
-                        aabb_min = np.array(aabb_min)
-                        aabb_max = np.array(aabb_max)
+                        # #P1 step (3): the post-place carve reads the
+                        # placed object's RENDER estimate (rigid-size:
+                        # per-axis max of known and estimated extents,
+                        # XY centred on the estimate, z top-anchored —
+                        # the refresh_object_aabbs formula), not
+                        # p.getAABB.  When the arm occludes the
+                        # just-placed object, its known-size box is
+                        # re-posed at the consumed cell (the plan's
+                        # intended placement); the next observation
+                        # corrects it.
+                        _det = env.detect_objects()[0].get(placed_name)
+                        _prev_bd = registry.get_boxel(obj_str)
+                        _prev_ext = (
+                            np.asarray(_prev_bd.max_corner, dtype=float)
+                            - np.asarray(_prev_bd.min_corner, dtype=float)
+                            if _prev_bd is not None else None)
+                        if _det is not None:
+                            _est_ext = _det.est_max - _det.est_min
+                            _canon = (np.maximum(_prev_ext, _est_ext)
+                                      if _prev_ext is not None else _est_ext)
+                            _cxy = (_det.est_min[:2] + _det.est_max[:2]) / 2.0
+                            aabb_max = np.array([_cxy[0] + _canon[0] / 2.0,
+                                                 _cxy[1] + _canon[1] / 2.0,
+                                                 _det.est_max[2]])
+                            aabb_min = aabb_max - _canon
+                        elif _prev_ext is not None:
+                            _cc = np.asarray(consumed_free.center,
+                                             dtype=float)
+                            aabb_min = np.array([
+                                _cc[0] - _prev_ext[0] / 2.0,
+                                _cc[1] - _prev_ext[1] / 2.0,
+                                env.table_surface_height])
+                            aabb_max = aabb_min + _prev_ext
+                            print(f"    [perception] {placed_name} occluded "
+                                  f"in the post-place render — carving its "
+                                  f"known-size box at the destination cell")
+                        else:
+                            aabb_min = aabb_max = None
+                            print(f"    WARNING: {placed_name} has neither "
+                                  f"a detection nor a prior boxel — "
+                                  f"post-place carve skipped")
 
+                    if placed_name in env.objects and aabb_min is not None:
                         registry.update_after_place(
                             free_boxel_id=boxel_id_str,
                             object_boxel_id=obj_str,
@@ -1663,9 +1701,10 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # boxels are now split after placement (above), but shadow
                 # AABBs still describe the pre-relocation geometry.  This
                 # is functionally safe because:
-                # (a) sense_shadow_raycasting detects the target by PyBullet
-                #     body ID — any ray that hits the target works regardless
-                #     of whether the AABB is perfectly aligned.
+                # (a) sense_shadow_from_render detects the target by its
+                #     seg-mask id — any grid endpoint whose pixel shows the
+                #     target works regardless of whether the AABB is
+                #     perfectly aligned.
                 # (b) The occluder has been physically removed from the shadow
                 #     region (picked up and placed elsewhere), so rays through
                 #     the old AABB pass through empty space.
@@ -1777,17 +1816,46 @@ def main(gui=True, run_logger=None, scene_config=None,
                         binfo['position'] = np.array(env.objects[bname].position)
 
                 # Refresh the stacked object's OBJECT boxel from its new
-                # AABB so _build_init's next pass sees it above the
+                # pose so _build_init's next pass sees it above the
                 # support and (clear ?obj_str) is emitted for the new
                 # stack top (the support is no longer clear, which the
                 # planner picks up via on_relations below).
+                # #P1 step (3): the pose comes from the post-stack
+                # RENDER estimate (rigid-size formula); when the arm
+                # occludes the cube, its known-size box is re-posed on
+                # TOP of the support's boxel (the verified stack pose)
+                # — keeping the last estimate would leave it at the
+                # pre-pick table spot and mislead the next replan.
                 if obj_str in env.objects:
-                    body_id = env.objects[obj_str].object_id
-                    a_min, a_max = p.getAABB(body_id)
-                    a_min = np.array(a_min)
-                    a_max = np.array(a_max)
+                    _det = env.detect_objects()[0].get(obj_str)
                     bd = registry.get_boxel(obj_str)
                     if bd is not None:
+                        _cur_ext = (np.asarray(bd.max_corner, dtype=float)
+                                    - np.asarray(bd.min_corner, dtype=float))
+                        if _det is not None:
+                            _canon = np.maximum(_cur_ext,
+                                                _det.est_max - _det.est_min)
+                            _cxy = (_det.est_min[:2]
+                                    + _det.est_max[:2]) / 2.0
+                            a_max = np.array([_cxy[0] + _canon[0] / 2.0,
+                                              _cxy[1] + _canon[1] / 2.0,
+                                              _det.est_max[2]])
+                            a_min = a_max - _canon
+                        else:
+                            _sup_bd = registry.get_boxel(on_obj_str)
+                            _sc = (np.asarray(_sup_bd.center, dtype=float)
+                                   if _sup_bd is not None
+                                   else np.asarray(bd.center, dtype=float))
+                            _sz = (float(_sup_bd.max_corner[2])
+                                   if _sup_bd is not None
+                                   else env.table_surface_height)
+                            a_min = np.array([_sc[0] - _cur_ext[0] / 2.0,
+                                              _sc[1] - _cur_ext[1] / 2.0,
+                                              _sz])
+                            a_max = a_min + _cur_ext
+                            print(f"    [perception] {obj_str} occluded in "
+                                  f"the post-stack render — re-posing its "
+                                  f"known-size box on {on_obj_str}'s top")
                         bd.min_corner = a_min
                         bd.max_corner = a_max
                         bd.on_surface = None

@@ -6,8 +6,10 @@ This module hosts the routines that translate planned PDDL actions
 into PyBullet motions, plus the perception/bookkeeping helpers that
 run between actions:
 
-  - sense_shadow_raycasting: ray-cast a shadow volume to classify it as
-    found_target / clear_but_empty / contains_nontarget / still_blocked.
+  - sense_shadow_from_render: classify a shadow volume against the fixed
+    camera's rendered depth + segmentation (#P1 step 3; the pre-step-3
+    rayTestBatch version lives in git history) as found_target /
+    clear_but_empty / contains_nontarget / still_blocked.
   - compute_shadow_blockers: rebuild shadow → [blocker] map after objects
     are relocated (audit #78).
   - execute_pick / execute_place: arm trajectories with friction-based
@@ -18,10 +20,11 @@ run between actions:
     incremental stacks tolerate per-step settling (audit #30).
   - release_held_object_in_place: emergency drop with verification when
     the planner needs to be invoked while still holding an object.
-  - handle_sense_action: dispatch-loop wrapper around sense_shadow_raycasting
-    that owns the post-sense bookkeeping (belief, registry, viz, occluder
-    map, blocked counts).  Returns an ActionResult; see its docstring for
-    the break/release contract (audit S-01).
+  - handle_sense_action: dispatch-loop wrapper around
+    sense_shadow_from_render that owns the post-sense bookkeeping
+    (belief, registry, viz, occluder map, blocked counts).  Returns an
+    ActionResult; see its docstring for the break/release contract
+    (audit S-01).
 
 The orchestration loop in test_full_pipeline.py composes these — it owns
 the BeliefState, the registry, and the high-level decision logic, while
@@ -38,7 +41,8 @@ import numpy as np
 import pybullet as p
 
 from boxel_data import BoxelData, BoxelType
-from perception import SENSE_MARGINAL_BLOCKED_FRACTION, sense_ray_slices
+from perception import (SENSE_MARGINAL_BLOCKED_FRACTION,
+                        first_surface_interceptors, sense_ray_slices)
 from reboxelize import reboxelize_free_space
 from streams import RobotConfig
 from robot_utils import (END_EFFECTOR_LINK, FINGER_JOINTS, solve_ik,
@@ -62,29 +66,49 @@ def _capture_freeze(label: str) -> None:
     time.sleep(secs)
 
 
-def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
-                            occluder_pybullet_ids=None, robot_id=None,
-                            support_body_ids=None):
+def sense_shadow_from_render(shadow_boxel, target_pybullet_id,
+                             depth_image_m, seg_mask,
+                             view_matrix, projection_matrix,
+                             occluder_pybullet_ids=None, robot_id=None,
+                             support_body_ids=None):
     """
-    Sense a shadow region using PyBullet ray-casting from the fixed camera.
+    Sense a shadow region against ONE rendered observation (#P1 step 3).
+
+    The classification grid is the shared sense-grid geometry
+    (perception.sense_ray_slices), but instead of privileged
+    pybullet.rayTestBatch body-id casts, each grid endpoint is tested
+    against the fixed camera's rendered depth + instance segmentation
+    (perception.first_surface_interceptors): a rendered surface strictly
+    in front of an endpoint means the camera cannot see that endpoint,
+    and the seg mask names the interceptor — the accepted sim-grade
+    identity map standing in for a recognition model.  Ray-vs-render
+    agreement measured 98 % per endpoint over the 20 A/B eval seeds
+    with ZERO found-chain differences (tools/_probe_render_sense.py);
+    the residual disagreements are boundary grazes in both directions.
 
     Returns one of four outcomes:
-      - found_target: at least one ray hits the target
-      - still_blocked: no ray hits target and at least one ray hits occluder
-        or robot arm
-      - contains_nontarget: view is clear but rays hit non-target dynamic
-        objects inside the shadow (e.g. another occluder that drifted in)
-      - clear_but_empty: no ray hits any dynamic object
+      - found_target: the target's surface intercepts some endpoint
+      - still_blocked: no endpoint shows the target and some slice has
+        more than the marginal fraction of its endpoints hidden behind
+        an occluder or the robot arm
+      - contains_nontarget: view is clear but non-target dynamic
+        objects intercept endpoints inside the shadow
+      - clear_but_empty: every endpoint is visible (or only support
+        surfaces stand beyond it)
 
     Args:
-        camera_pos: Fixed camera position [x, y, z]
         shadow_boxel: BoxelData for the shadow region to sense
-        target_pybullet_id: PyBullet body ID of the target object
-        occluder_pybullet_ids: Optional set/list of PyBullet body IDs for ALL
+        target_pybullet_id: seg-mask id of the target object
+        depth_image_m: rendered depth in METERS (H, W), view-axis
+        seg_mask: rendered instance segmentation (H, W)
+        view_matrix / projection_matrix: the render's camera matrices
+            (pybullet column-major 16-tuples) — the observation defines
+            the viewpoint; no separate camera position is taken.
+        occluder_pybullet_ids: Optional set/list of seg ids for ALL
             objects that may block camera view to this shadow.
-        robot_id: Optional PyBullet body ID of the robot.
-        support_body_ids: Optional frozenset of static body IDs (plane, table)
-            to ignore when collecting detected bodies.
+        robot_id: Optional seg id of the robot.
+        support_body_ids: Optional frozenset of static ids (plane,
+            table, tray walls) never counted as interceptors.
 
     Returns:
         Tuple[str, float, Set[int], Optional[Tuple[np.ndarray, np.ndarray]]]:
@@ -92,15 +116,15 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
           - blocked_fraction (0 when not blocked)
           - set of non-target, non-occluder dynamic body IDs detected inside
             the shadow (empty for found_target and still_blocked)
-          - for still_blocked: (min, max) AABB of the BLOCKED ray target
-            points, padded per ray by half ITS slice's X/Y spacing and by
-            the gap to the neighbouring slice in Z, clamped to the
-            fragment — the sub-region that remains UNOBSERVED.  The clear
-            rays observed the rest of the fragment empty, so the caller
-            may SHRINK the shadow to this box (partial-reveal shrink,
-            2026-08-21, user-directed).  None for the other outcomes.
+          - for still_blocked: (min, max) AABB of the BLOCKED grid
+            endpoints, padded per endpoint by half ITS slice's X/Y
+            spacing and by the gap to the neighbouring slice in Z,
+            clamped to the fragment — the sub-region that remains
+            UNOBSERVED.  The visible endpoints observed the rest of the
+            fragment empty, so the caller may SHRINK the shadow to this
+            box (partial-reveal shrink, 2026-08-21, user-directed).
+            None for the other outcomes.
     """
-    ray_origin = np.array(camera_pos)
     ignore_ids = {-1}
     if robot_id is not None:
         ignore_ids.add(robot_id)
@@ -116,48 +140,56 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
     # Shared sense-grid geometry (F5, 2026-08-21): one dense low slice
     # near the fragment base (12 mm spacing — an endpoint 2 cm above the
     # base lies INSIDE any >= 3 cm target body whose footprint contains
-    # it, so the terminating ray must register the hit) plus the two
-    # historical coarse 7x7 slices at 0.33/0.67 of the fragment height.
-    # The pre-F5 grid's lowest endpoints sat at base + 0.04 m — ABOVE
-    # the tops of the post-resize 3-4 cm targets; a descending ray's
-    # minimum height is its endpoint, so every holding-goal target was
-    # structurally undetectable and its fragment got removed as
-    # "observed empty".  perception.sense_ray_slices is the single
-    # source of this geometry; the spawn-time findability guarantee
-    # (perception.grid_would_hit) consumes the identical endpoint list,
-    # so the spawn promise and the physical sense cannot disagree.
+    # it, so its pixel must show the body's surface in front) plus the
+    # two historical coarse 7x7 slices at 0.33/0.67 of the fragment
+    # height.  The pre-F5 grid's lowest endpoints sat at base + 0.04 m —
+    # ABOVE the tops of the post-resize 3-4 cm targets, so every
+    # holding-goal target was structurally undetectable and its fragment
+    # got removed as "observed empty".  perception.sense_ray_slices is
+    # the single source of this geometry; the spawn-time findability
+    # guarantee (perception.grid_would_hit) consumes the identical
+    # endpoint list, so the spawn promise and the physical sense cannot
+    # disagree (probe-verified under the render criterion: zero
+    # found-chain differences across the eval seeds).
     slices, capped = sense_ray_slices(min_c, max_c)
     if capped:
         print(f"    NOTE: dense sense slice capped — endpoint spacing "
               f"exceeds the guaranteed-hit bound on this oversized "
               f"fragment ({float(max_c[0]-min_c[0]):.2f} x "
               f"{float(max_c[1]-min_c[1]):.2f} m)")
-    ray_froms = []
     ray_tos = []
-    ray_slice = []            # slice index per ray (per-slice stats/pads)
+    ray_slice = []            # slice index per endpoint (stats/pads)
     for si, sl in enumerate(slices):
         for pt in sl.points:
-            ray_froms.append(ray_origin.tolist())
             ray_tos.append([float(pt[0]), float(pt[1]), float(pt[2])])
             ray_slice.append(si)
 
-    # rayTestBatch numThreads=0: let Bullet pick max threads (audit #69).
-    # Largest single batch on the planner hot path (~150-1000 rays per
-    # sense depending on fragment size; pybullet's batch cap is 16384).
-    # Safe — sense action is sequential w.r.t. stepSimulation.
-    results = p.rayTestBatch(ray_froms, ray_tos, numThreads=0)
+    intercepted, hit_ids, in_view = first_surface_interceptors(
+        ray_tos, depth_image_m, seg_mask, view_matrix, projection_matrix)
+
     occluder_hits = 0
     robot_hits = 0
     detected_bodies: Set[int] = set()
-    # Blocked rays as (endpoint, slice index) — the sub-region that
+    # Blocked endpoints as (endpoint, slice index) — the sub-region that
     # stays unobserved.  Feeds the partial-reveal shrink (see Returns).
     blocked_targets = []
     blocked_per_slice = [0] * len(slices)
 
-    for i, (hit_obj_id, _link, _frac, _pos, _normal) in enumerate(results):
+    occ_set = set(occluder_pybullet_ids) if occluder_pybullet_ids else set()
+    for i in range(len(ray_tos)):
+        if not in_view[i]:
+            # An endpoint outside the image frame was never observed —
+            # count it blocked (conservative; zero occurrences on the
+            # table scenes, probe-verified).
+            blocked_targets.append((ray_tos[i], ray_slice[i]))
+            blocked_per_slice[ray_slice[i]] += 1
+            continue
+        if not intercepted[i]:
+            continue
+        hit_obj_id = int(hit_ids[i])
         if hit_obj_id == target_pybullet_id:
             return "found_target", 0.0, set(), None
-        if occluder_pybullet_ids and (hit_obj_id in occluder_pybullet_ids):
+        if hit_obj_id in occ_set:
             occluder_hits += 1
             blocked_targets.append((ray_tos[i], ray_slice[i]))
             blocked_per_slice[ray_slice[i]] += 1
@@ -194,8 +226,8 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
         blocked_fraction = max(slice_fractions)
         if blocked_fraction > SENSE_MARGINAL_BLOCKED_FRACTION:
             if robot_hits > 0 and occluder_hits == 0:
-                print(f"    NOTE: {robot_hits}/{len(results)} rays blocked "
-                      f"by robot arm (not occluder)")
+                print(f"    NOTE: {robot_hits}/{len(ray_tos)} endpoints "
+                      f"hidden by robot arm (not occluder)")
             # Partial-reveal bounds: union of per-ray pad boxes, clamped
             # to the fragment.  Each blocked endpoint is padded by half
             # ITS slice's spacing in X/Y (the dense slice earned a small
@@ -221,9 +253,10 @@ def sense_shadow_raycasting(camera_pos, shadow_boxel, target_pybullet_id,
             b_max = np.minimum(np.max(np.asarray(hi_list), axis=0),
                                np.asarray(max_c, dtype=float))
             return "still_blocked", blocked_fraction, set(), (b_min, b_max)
-        print(f"    NOTE: tolerating {blocked_total}/{len(results)} "
-              f"marginally blocked rays (worst slice {blocked_fraction:.0%} "
-              f"<= 5%) — classifying by the remaining rays")
+        print(f"    NOTE: tolerating {blocked_total}/{len(ray_tos)} "
+              f"marginally hidden endpoints (worst slice "
+              f"{blocked_fraction:.0%} <= 5%) — classifying by the "
+              f"remaining endpoints")
 
     if detected_bodies:
         return "contains_nontarget", 0.0, detected_bodies, None
@@ -235,12 +268,15 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
     """
     For each shadow, find ALL object boxels that block the camera's view.
 
-    Casts the SAME ray grid as sense_shadow_raycasting (shared
-    perception.sense_ray_slices geometry, F5) from the camera through
-    each shadow volume.  Any object whose PyBullet body intercepts at
-    least one ray is recorded as a blocker for that shadow.  This
-    replaces the old one-to-one shadow_occluder_map that only tracked
-    the creating occluder (audit #78).
+    Classifies the SAME shared sense grid as sense_shadow_from_render
+    (perception.sense_ray_slices geometry, F5) against ONE rendered
+    observation of the fixed camera (#P1 step 3 — the pre-step-3
+    rayTestBatch version lives in git history; ``camera_pos`` is kept
+    for signature stability but the render defines the viewpoint).
+    Any object whose rendered surface hides grid endpoints beyond the
+    shared marginal tolerance is recorded as a blocker for that shadow.
+    This replaces the old one-to-one shadow_occluder_map that only
+    tracked the creating occluder (audit #78).
 
     Why not just use the parent relationship?  Because after objects are
     relocated, a DIFFERENT object may now block the camera's view of a
@@ -279,7 +315,16 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
             body_id = env.objects[obj_boxel.object_name].object_id
             pybullet_to_boxel[body_id] = obj_bid
 
-    ray_origin = camera_pos.tolist()
+    # #P1 step (3): the census reads ONE rendered observation of the
+    # fixed camera, like the sense — grid endpoints are classified by
+    # perception.first_surface_interceptors against the render's depth
+    # + segmentation instead of rayTestBatch body-id casts, so the
+    # planner's blocks_view_at facts and the physical sense agree on
+    # the SAME observation channel as well as the same grid geometry.
+    _, _, _census_depth_buf, census_seg = env.detect_objects()
+    census_depth_m = env._depth_buffer_to_meters(_census_depth_buf)
+    census_view, census_proj = env._view_and_projection_matrices()
+
     blockers = {}
 
     for shadow_id in shadow_ids:
@@ -289,28 +334,26 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
 
         blocker_set = set()
         min_c, max_c = sb.min_corner, sb.max_corner
-        # SAME ray grid as sense_shadow_raycasting (F5, 2026-08-21):
-        # the census used to cast a single 5x5 slice at the shadow
+        # SAME grid as sense_shadow_from_render (F5, 2026-08-21): the
+        # census used to cast a single 5x5 slice at the shadow
         # midpoint, which never saw a SHORT (3-4 cm) body standing in
         # front of a fragment's low region — the denser sense would
         # then hit that body without it ever appearing in the blocker
         # facts, misclassifying it as contains_nontarget and churning
         # discovery/replans.  Sharing perception.sense_ray_slices keeps
         # the planner's blocks_view_at facts and the physical sense
-        # agreeing ray-for-ray on WHO blocks WHAT.
+        # agreeing endpoint-for-endpoint on WHO blocks WHAT.
         slices, _capped = sense_ray_slices(min_c, max_c)
-        ray_froms = []
         ray_tos = []
         ray_slice = []
         for si, sl in enumerate(slices):
             for pt in sl.points:
-                ray_froms.append(ray_origin)
                 ray_tos.append([float(pt[0]), float(pt[1]), float(pt[2])])
                 ray_slice.append(si)
 
-        # rayTestBatch numThreads=0: let Bullet pick max threads (audit #69).
-        # Safe — registry rebuild is sequential w.r.t. stepSimulation.
-        results = p.rayTestBatch(ray_froms, ray_tos, numThreads=0)
+        intercepted, hit_ids, _in_view = first_surface_interceptors(
+            ray_tos, census_depth_m, census_seg,
+            census_view, census_proj)
         # Tolerance-aligned blocker selection (F5): mirror the sense's
         # per-slice classifier.  An object is listed as a blocker only
         # if removing it is NEEDED to bring every slice's blocked
@@ -319,12 +362,15 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
         # still_blocked because of it.  Any-hit listing would pin a
         # shadow blocked (blocks_view_at is keyed to the blocker's
         # CURRENT boxel) over single grazing rays the sense itself
-        # tolerates — observed on seed 0: green relocated to free_010
-        # grazed 1/674 rays of its old shadow, stayed a blocker, and
-        # the forced relocate-again plan died in the re-pick
+        # tolerates — observed on seed 0: green at free_010 grazed
+        # 1/674 rays of its old shadow, stayed a blocker, and the
+        # forced relocate-again plan died in the re-pick
         # stream-binding failure.
         per_slice_obj_hits = [dict() for _ in slices]
-        for i, (hit_id, _link, _frac, _pos, _normal) in enumerate(results):
+        for i in range(len(ray_tos)):
+            if not intercepted[i]:
+                continue
+            hit_id = int(hit_ids[i])
             if hit_id in pybullet_to_boxel:
                 counts = per_slice_obj_hits[ray_slice[i]]
                 counts[hit_id] = counts.get(hit_id, 0) + 1
@@ -1531,7 +1577,7 @@ class ActionResult:
     reason: str = ""
 
 
-def refresh_object_aabbs(env, registry, viz=None):
+def refresh_object_aabbs(env, registry, viz=None, detections=None):
     """Refresh every OBJECT boxel's AABB from a fresh OBSERVATION (audit
     #71; rewired to perception estimates by #P1 step (2c), 2026-08-21 —
     this used to be the last per-episode p.getAABB chokepoint feeding
@@ -1557,9 +1603,15 @@ def refresh_object_aabbs(env, registry, viz=None):
     Per-object early-out: if the resulting AABB matches the registry
     value within _aabb_tol (0.1 mm — same FP-noise budget reboxelize
     uses), skip the write AND the viz remove/redraw.
+
+    ``detections`` (#P1 step 3): pass the detection dict of an
+    observation the caller already rendered (handle_sense_action's
+    single-render contract) to skip the extra TinyRenderer pass; None
+    renders fresh, as before.
     """
     _aabb_tol = 1e-4
-    detections, _, _, _ = env.detect_objects()
+    if detections is None:
+        detections, _, _, _ = env.detect_objects()
     stale = []
     for obj_boxel in registry.get_boxels_by_type(BoxelType.OBJECT):
         obj_info = env.objects.get(obj_boxel.id)
@@ -1715,11 +1767,20 @@ def handle_sense_action(
         info.object_id for info in env.objects.values()
         if getattr(info, "is_tray", False)}
 
+    # #P1 step (3): ONE rendered observation serves this entire sense
+    # action — the main classification, the sibling batch-sense, the
+    # discovery estimates and the closing AABB refresh all read the
+    # same instant (GUI and headless twins render identical pixels,
+    # ER_TINY_RENDERER both modes).
+    sense_detections, _, _sense_depth_buf, sense_seg = env.detect_objects()
+    sense_depth_m = env._depth_buffer_to_meters(_sense_depth_buf)
+    sense_view, sense_proj = env._view_and_projection_matrices()
+
     (sense_outcome, blocked_fraction, detected_bodies,
-     blocked_bbox) = sense_shadow_raycasting(
-        env.camera_position,
+     blocked_bbox) = sense_shadow_from_render(
         shadow_boxel,
         target_pybullet_id,
+        sense_depth_m, sense_seg, sense_view, sense_proj,
         occluder_pybullet_ids,
         robot_id=robot_id,
         support_body_ids=sense_support_ids,
@@ -1746,38 +1807,83 @@ def handle_sense_action(
         if (target_info is not None
                 and registry.get_boxel(target_obj_str) is None):
             t_bid = target_info.object_id
-            t_min, t_max = p.getAABB(t_bid)
-            t_min = np.array(t_min)
-            t_max = np.array(t_max)
-            target_bd = BoxelData(
-                id=target_obj_str,
-                boxel_type=BoxelType.OBJECT,
-                min_corner=t_min,
-                max_corner=t_max,
-                object_name=target_obj_str,
-                is_occluder=False,
-                on_surface=(
-                    "table"
-                    if t_min[2] <= env.table_surface_height + 0.01
-                    else None
-                ),
-                surface_z=env.table_surface_height,
-            )
-            registry.add_boxel(target_bd)
-            boxel_centers[target_obj_str] = target_bd.center
-            object_body_ids[target_obj_str] = env.plan_body_id(t_bid)
-            boxel_to_pybullet[target_obj_str] = {
-                'name': target_obj_str,
-                'pybullet_id': t_bid,
-                'position': np.array(target_info.position),
-            }
-            if viz is not None:
-                viz.draw_boxel_data(target_bd)
-            print(f"      -> registered OBJECT boxel for {target_obj_str} "
-                  f"at live AABB (audit #76).")
+            # #P1 step (3): the registered boxel comes from the SAME
+            # rendered observation that just found the target — no
+            # p.getAABB.  A target found through a sliver can render
+            # below DETECTION_MIN_PIXELS; it then stays unregistered
+            # this round (loud log) and the next observation localizes
+            # it — the pick that usually follows in the SAME plan uses
+            # the execution servo's own live re-aim, not this boxel.
+            t_det = sense_detections.get(target_obj_str)
+            if t_det is None:
+                print(f"      [step3-diag] {target_obj_str} found but "
+                      f"renders below the detection minimum — OBJECT "
+                      f"boxel NOT registered this round (audit #76 "
+                      f"hook deferred to the next observation).")
+            else:
+                target_bd = BoxelData(
+                    id=target_obj_str,
+                    boxel_type=BoxelType.OBJECT,
+                    min_corner=np.array(t_det.est_min),
+                    max_corner=np.array(t_det.est_max),
+                    object_name=target_obj_str,
+                    is_occluder=False,
+                    on_surface=(
+                        "table"
+                        if t_det.est_min[2]
+                        <= env.table_surface_height + 0.01
+                        else None
+                    ),
+                    surface_z=env.table_surface_height,
+                )
+                registry.add_boxel(target_bd)
+                boxel_centers[target_obj_str] = target_bd.center
+                object_body_ids[target_obj_str] = env.plan_body_id(t_bid)
+                boxel_to_pybullet[target_obj_str] = {
+                    'name': target_obj_str,
+                    'pybullet_id': t_bid,
+                    'position': np.array(t_det.est_center),
+                }
+                if viz is not None:
+                    viz.draw_boxel_data(target_bd)
+                print(f"      -> registered OBJECT boxel for "
+                      f"{target_obj_str} at the render estimate "
+                      f"(audit #76, step 3).")
 
-        refresh_object_aabbs(env, registry, viz)
+        refresh_object_aabbs(env, registry, viz,
+                             detections=sense_detections)
         return ActionResult(continue_=True, reason="sense_found_target")
+
+    # #P1 step (3): a contains_nontarget where NO discovered body is
+    # localizable in the render (all below DETECTION_MIN_PIXELS) cannot
+    # register anything — removing the fragment would erase a volume we
+    # just observed to contain SOMETHING, and proceeding would loop.
+    # Treat it like a blocked observation: keep the fragment, burn an
+    # audit-#21 strike, give up on the fragment after 3 (marked
+    # not_here, disclosed).  Practically this needs a pathological
+    # sliver view of the discovered body; the bound keeps it finite.
+    if sense_outcome == "contains_nontarget":
+        _loc_names = [body_id_to_name[b] for b in detected_bodies
+                      if b in body_id_to_name
+                      and body_id_to_name[b] in sense_detections]
+        if not _loc_names:
+            sid_str = str(shadow_id)
+            blocked_counts[sid_str] = blocked_counts.get(sid_str, 0) + 1
+            print(f"    Shadow {shadow_id} contains something the render "
+                  f"cannot localize (below the detection minimum) — "
+                  f"keeping the fragment. [attempt "
+                  f"{blocked_counts[sid_str]}]")
+            if blocked_counts[sid_str] >= 3:
+                print(f"    ERROR: {shadow_id} unlocalizable-content "
+                      f"{blocked_counts[sid_str]} times — giving up "
+                      f"(mirrors audit #21).  Marked not_here; the "
+                      f"content stays unmodelled.")
+                blocked_giveup_shadows.add(sid_str)
+                belief.mark_sensed(sid_str, found=False)
+            refresh_object_aabbs(env, registry, viz,
+                                 detections=sense_detections)
+            return ActionResult(continue_=False,
+                                reason="sense_contains_unlocalizable")
 
     if sense_outcome in ("clear_but_empty", "contains_nontarget"):
         sid_str = str(shadow_id)
@@ -1838,8 +1944,9 @@ def handle_sense_action(
                     if blocker_bid in boxel_to_pybullet:
                         sib_occluder_ids.add(
                             boxel_to_pybullet[blocker_bid]['pybullet_id'])
-                sib_outcome, _, _, sib_bbox = sense_shadow_raycasting(
-                    env.camera_position, sib_bd, target_pybullet_id,
+                sib_outcome, _, _, sib_bbox = sense_shadow_from_render(
+                    sib_bd, target_pybullet_id,
+                    sense_depth_m, sense_seg, sense_view, sense_proj,
                     sib_occluder_ids, robot_id=robot_id,
                     support_body_ids=sense_support_ids)
                 if sib_outcome != "clear_but_empty":
@@ -1882,9 +1989,20 @@ def handle_sense_action(
                 if obj_info is None:
                     continue
                 bid = obj_info.object_id
-                aabb_min, aabb_max = p.getAABB(bid)
-                aabb_min = np.array(aabb_min)
-                aabb_max = np.array(aabb_max)
+                # #P1 step (3): the discovered object's boxel comes from
+                # the SAME rendered observation that discovered it — no
+                # p.getAABB.  A body below the detection minimum stays
+                # unregistered this round (the guard above already
+                # ensured at least one discovery IS localizable).
+                det = sense_detections.get(obj_name)
+                if det is None:
+                    print(f"      [step3-diag] discovered {obj_name} "
+                          f"renders below the detection minimum — not "
+                          f"registered this round; a later observation "
+                          f"localizes it.")
+                    continue
+                aabb_min = np.array(det.est_min)
+                aabb_max = np.array(det.est_max)
 
                 # Discovery may re-trigger for an object_name we
                 # already know about (e.g. previous re-sense pass
@@ -1946,7 +2064,7 @@ def handle_sense_action(
                 boxel_to_pybullet[obj_name] = {
                     'name': obj_name,
                     'pybullet_id': bid,
-                    'position': np.array(obj_info.position),
+                    'position': np.array(det.est_center),
                 }
                 # Keep the `occluders` snapshot in sync with the
                 # registry: compute_shadow_blockers iterates this
@@ -2030,11 +2148,12 @@ def handle_sense_action(
         # (and possibly new object/shadow boxels were added).
         if viz is not None:
             viz.remove_boxel_viz(sid_str)
-        # audit #71 — refresh OBJECT AABBs from live PyBullet BEFORE
+        # audit #71 — refresh OBJECT AABBs from the observation BEFORE
         # reboxelize so the free-space carve uses current geometry,
         # not the spawn-time snapshot.  SHADOW boxels intentionally
         # left stale (scope cut).
-        refresh_object_aabbs(env, registry, viz)
+        refresh_object_aabbs(env, registry, viz,
+                             detections=sense_detections)
         reboxelize_free_space(
             registry, env, boxel_centers, viz, show_free)
 
@@ -2072,5 +2191,6 @@ def handle_sense_action(
         belief.mark_sensed(sid_str, found=False)
     else:
         print(f"    -> REPLANNING without marking shadow empty...")
-    refresh_object_aabbs(env, registry, viz)
+    refresh_object_aabbs(env, registry, viz,
+                         detections=sense_detections)
     return ActionResult(continue_=False, reason="sense_still_blocked")
