@@ -26,6 +26,7 @@ if PDDLSTREAM_PATH not in sys.path:
     sys.path.insert(0, PDDLSTREAM_PATH)
 
 import random
+import re
 import numpy as np
 from typing import List, Tuple, Optional, Dict, Any, Union
 
@@ -66,6 +67,36 @@ def read_pddl_file(filename: str) -> str:
     filepath = os.path.join(pddl_dir, filename)
     with open(filepath, 'r') as f:
         return f.read()
+
+
+class _StdoutTee:
+    """Duplicate writes to the wrapped stream into a buffer.
+
+    F7 (2026-08-22): PDDLStream's adaptive solver PRINTS its per-round
+    skeleton lines and the final ``Summary: {... skeletons: N ...}`` but
+    returns only (plan, cost, certificate) — there is no API for "were
+    action skeletons found before binding failed", and patching the
+    sibling ../pddlstream_lib checkout would leave this repo depending
+    on an untracked library divergence.  plan() therefore tees stdout
+    around solve() and reads the solver's own lines back.  Delegation
+    via __getattr__ keeps RunLogger's own stdout wrapper working
+    underneath (FastDownward subprocess output bypasses sys.stdout and
+    is not captured — the skeleton/summary lines are Python prints).
+    """
+
+    def __init__(self, stream):
+        self._stream = stream
+        self.chunks = []
+
+    def write(self, s):
+        self._stream.write(s)
+        self.chunks.append(s)
+
+    def flush(self):
+        self._stream.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
 
 
 class PDDLStreamPlanner:
@@ -585,9 +616,9 @@ class PDDLStreamPlanner:
             for (free_id, shadow_id) in placement_blocks:
                 for obj_id in obj_boxel_ids:
                     init.append(('blocks_view_at', obj_id, free_id, shadow_id))
-            # New F11 triples appended AFTER the pair expansion so the
-            # relative order of the pre-existing facts (FastDownward
-            # tie-break input) is untouched; sorted for determinism.
+            # F11 triples: sorted for deterministic membership (the
+            # whole init list is seed-shuffled before returning, so
+            # position carries no meaning — only the fact SET does).
             for (obj_id, free_id, shadow_id) in sorted(egregious_triples):
                 init.append(('blocks_view_at', obj_id, free_id, shadow_id))
             # Stashed for plan()'s [#76-diag] block (_build_init runs for
@@ -876,14 +907,25 @@ class PDDLStreamPlanner:
                   f"criterion: {egregious}")
         _plan_start_t = time.perf_counter()
 
-        # Call PDDLStream solver
-        solution = solve(
-            problem,
-            algorithm='adaptive',  # Best for TAMP problems
-            max_time=max_time,
-            unit_costs=unit_costs,
-            verbose=verbose
-        )
+        # F7 (2026-08-22): reset the binding-death record so a stale
+        # value from the previous replan can never leak into this
+        # call's no-plan classification.
+        self.last_no_plan_binding_death = None
+
+        # Call PDDLStream solver — through a stdout tee (see _StdoutTee:
+        # the solver prints skeleton/summary lines it does not return).
+        _tee = _StdoutTee(sys.stdout)
+        sys.stdout = _tee
+        try:
+            solution = solve(
+                problem,
+                algorithm='adaptive',  # Best for TAMP problems
+                max_time=max_time,
+                unit_costs=unit_costs,
+                verbose=verbose
+            )
+        finally:
+            sys.stdout = _tee._stream
 
         plan, cost, certificate = solution
         _plan_elapsed = time.perf_counter() - _plan_start_t
@@ -894,8 +936,43 @@ class PDDLStreamPlanner:
 
         if verbose:
             print_solution(solution)
-        
+
         if plan is None:
+            # F7 binding-death disclosure: a no-plan where FastDownward
+            # DID find action skeletons but stream binding never
+            # delivered values (sample_time ~0) is a distinct failure
+            # class — the silent re-pick binding death (runs 11-49-53
+            # PLAN #7, 15-25-23 PLAN #4, 12-09-28 plan #3, 15-25-35
+            # plan #3).  "Skeletons existed" must never be silent.
+            captured = ''.join(_tee.chunks)
+            skeleton_lines = [
+                ln for ln in captured.splitlines()
+                if ln.startswith('Stream plan (')
+                and not ln.rstrip().endswith((': None', ': False'))
+            ]
+            summary_m = None
+            for summary_m in re.finditer(r'Summary: \{([^}]*)\}',
+                                         captured):
+                pass
+            summary_txt = summary_m.group(1) if summary_m else ''
+            sk_m = re.search(r'skeletons: (\d+)', summary_txt)
+            st_m = re.search(r'sample_time: ([\d.]+)', summary_txt)
+            n_skeletons = (int(sk_m.group(1)) if sk_m
+                           else len(skeleton_lines))
+            if n_skeletons > 0:
+                sample_t = float(st_m.group(1)) if st_m else -1.0
+                last_skeleton = (skeleton_lines[-1].strip()
+                                 if skeleton_lines else '<not captured>')
+                self.last_no_plan_binding_death = {
+                    'skeletons': n_skeletons,
+                    'sample_time': sample_t,
+                    'last_skeleton': last_skeleton,
+                }
+                print(f"  [F7-diag] no plan BUT {n_skeletons} action "
+                      f"skeleton(s) were found — stream binding failed "
+                      f"to deliver values (sample_time="
+                      f"{sample_t:.3f}s).  Last skeleton: "
+                      f"{last_skeleton}")
             return None
         
         # Convert plan to our action format

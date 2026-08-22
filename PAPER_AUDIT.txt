@@ -635,7 +635,7 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       the necessary-only variant — reset to strict when this work
       resumes.  A/B harness: tools/_ab_eval_sensable.py; all six
       arms' raw results: eval_results/ab_sensable_2026-08-22/.]
-  F7. [OPEN] SILENT RE-PICK STREAM-BINDING NO-PLAN (2026-08-21): when the
+  F7. [DONE] SILENT RE-PICK STREAM-BINDING NO-PLAN (2026-08-21): when the
       only way forward is to RE-PICK an occluder the robot itself already
       placed (relocate it a second time), PDDLStream finds valid action
       skeletons but binding dies silently (sample_time ~0 s, no
@@ -648,6 +648,44 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       relocate-again demand hits it again.  Suspect: re-pick kin/grasp
       streams for an object sitting at a free_* boxel.  #P2 scope
       (failure classification + a binding diagnostic), root cause open.
+      [DIAGNOSTIC + DISCLOSURE LANDED 2026-08-22 — the "never silent"
+      half; the binding failure itself continues as a #P2 root-cause
+      item.  plan() now runs solve() through a stdout tee (_StdoutTee:
+      pddlstream PRINTS its skeleton lines and the final
+      Summary{skeletons, sample_time} but returns only (plan, cost,
+      certificate), and patching the sibling ../pddlstream_lib
+      checkout would leave the repo depending on an untracked library
+      divergence).  On a no-plan with skeletons > 0 it prints
+      [F7-diag] (count, sample_time, the LAST skeleton line) and
+      stashes last_no_plan_binding_death; the replan loop classifies
+      the ending as exit_reason "no_plan_binding_death" (a
+      goal-critical pick giveup still takes precedence — it explains
+      the no-plan provably), the audit-#58 disposal path discloses it
+      when the disposal itself dies, and report_run_outcome prints
+      the honest FAILED line.
+      REFINED ROOT-CAUSE EVIDENCE (2026-08-22, run 15-25-35 plan #3 —
+      holding seed 0, a live repro caught during the F11 smoke): the
+      11-action skeleton (relocate red, RE-PICK orange from free_005,
+      place free_010, sense shadow_of_red) bound blue's kin and red's
+      free_016 kin, then the skeleton queue NEVER INVOKED compute-kin
+      for the re-pick — no success line, no failure line, the stream
+      was simply not called — while it re-queried the already-
+      productive blue-kin instance and the orange GRASP generator,
+      which exhausted (the 2129bf3 altitude gate leaves 13 cm
+      occluders exactly ONE valid z-offset: z=0.06 rejected, z=0.10
+      already produced).  sample_time froze at 0.036 s while
+      search_time grew 4.4 -> 9.3 s; the terminal INFEASIBLE came
+      from skeleton.py process_until_new() returning 0 (queue drained
+      to standby, no new outputs).  compute-kin's :domain
+      ((Obj)(Boxel)(valid_grasp)) is trivially satisfied, so this is
+      NOT a grounding gap; suspects narrowed to pddlstream's
+      skeleton-queue scheduling — the priority term
+      complexity + (visits - calls) starving deeper bindings, and/or
+      check_downstream STANDBY-ing them after upstream generator
+      exhaustion.  The #P2 follow-up needs live queue
+      instrumentation; the exhausted-after-one-output grasp generator
+      is also a lead for step (4)'s sampler (more valid grasps =
+      harder to exhaust).]
   F8. [OPEN] POST-LIFT GRIP SLIP (2026-08-21, run 15-49-02, seed
       343879192): blue_object lifted cleanly, then pad_normal_force
       dropped to 0 N in transit; the one-shot in-pick grasp resample

@@ -295,6 +295,17 @@ def report_run_outcome(
         elif exit_reason == "planner_failed":
             print(f"FAILED: Planner returned no plan "
                   f"({len(remaining)} unsearched shadows remaining)")
+        elif exit_reason == "no_plan_binding_death":
+            # #P1 F7 (2026-08-22): FastDownward found action skeletons
+            # but stream binding never delivered values (sample_time
+            # ~0) — the silent re-pick binding death, disclosed as its
+            # own class so "skeletons existed" is never silent.  Root
+            # cause (skeleton-queue scheduling) is #P2 scope.
+            print(f"FAILED: No plan — but action skeleton(s) existed "
+                  f"and stream binding failed to deliver values "
+                  f"(#P1 F7 binding death; [F7-diag] in the log has "
+                  f"the skeleton; {len(remaining)} unsearched shadows "
+                  f"remaining)")
         elif exit_reason == "drop_failed":
             print(f"FAILED: Could not release held object after retries — "
                   f"aborted to avoid double-grasp "
