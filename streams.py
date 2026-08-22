@@ -513,9 +513,14 @@ class BoxelStreams:
         Whether a target can be physically hidden, fully occluded, inside a
         shadow region (audit #62 refinement).
 
-        Feeds the (can_hide ?o ?b) init facts gating :action sense (F6
-        two-bound split 2026-08-22): hideability uses the class LOWER
-        bound for unobserved objects, place fits keep the upper bound.
+        NOTE (F6, 2026-08-22): this full two-stage test is NO LONGER the
+        sense gate — its stage-2 occlusion sampling (9 candidate
+        placements x 8 corners) is a SUFFICIENT-style check and, used as
+        a hard gate, it false-negatives whenever the target hides at a
+        spot the 3x3 grid does not sample (A/B rounds: different trap
+        seeds each round).  The (can_hide ?o ?b) facts now come from
+        test_can_hide() below (necessary conditions only).  This
+        function remains for callers that want the strong check.
 
         Two-stage filter:
           1. AABB extent pre-screen with the HIDE extents (deliberately
@@ -622,6 +627,45 @@ class BoxelStreams:
         )
         occluded = [r[0] != -1 and r[2] < 0.999 for r in results]
         return any(all(occluded[s:s + 8]) for s in starts)
+
+    def test_can_hide(self, obj_id: str, shadow_id: str) -> bool:
+        """NECESSARY conditions that a sought object could hide in a shadow
+        fragment — the (can_hide ?o ?b) sense-gate criterion (F6 v2,
+        2026-08-22).
+
+        A gate must never reject a fragment the target can legally be in,
+        so only necessary conditions apply:
+          1. extent fit with the class LOWER bound for unobserved objects
+             ("could ANY sought-class instance fit inside") — known
+             objects use their estimated extents;
+          2. stability: the fragment reaches the table (a cube cannot
+             rest inside a lifted z-split sliver).
+
+        Deliberately NO occlusion-sampling stage: a shadow fragment is
+        camera-occluded volume by construction, and the sampled 8-corner
+        check (test_target_can_hide_in_shadow stage 2) false-negatives
+        when the target hides between sample points — the A/B eval's
+        changing trap seeds.  Over-approving here costs one wasted
+        sense; under-approving loses the episode.
+        """
+        shadow = self.registry.get_boxel(shadow_id)
+        if shadow is None:
+            return False
+        obj_boxel = self.registry.get_boxel(obj_id)
+        if obj_boxel is not None:
+            obj_extent = (obj_boxel.max_corner - obj_boxel.min_corner) / 2.0
+        else:
+            obj_extent = NOMINAL_HIDDEN_EXTENTS_MIN / 2.0
+        shadow_extent = (np.asarray(shadow.max_corner, dtype=float)
+                         - np.asarray(shadow.min_corner, dtype=float))
+        if not bool(np.all(shadow_extent / 2.0 >= obj_extent)):
+            return False
+        table_z = min(
+            (float(b.min_corner[2]) for b in self.registry.boxels.values()
+             if b.boxel_type == BoxelType.SHADOW),
+            default=float(shadow.min_corner[2]),
+        )
+        return float(shadow.min_corner[2]) <= table_z + 1e-3
 
     # =========================================================================
     # STREAM 1: Sample Grasp

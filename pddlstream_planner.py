@@ -575,8 +575,7 @@ class PDDLStreamPlanner:
                 if self.streams.test_boxel_fits(o, bid):
                     init.append(('boxel_fits', o, bid))
             for bid in shadow_ids:
-                if self.streams.test_target_can_hide_in_shadow(
-                        o, bid, self.camera_pos):
+                if self.streams.test_can_hide(o, bid):
                     init.append(('can_hide', o, bid))
 
         init.append(('Config', current_config))
