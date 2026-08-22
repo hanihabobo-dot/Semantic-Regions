@@ -171,6 +171,7 @@
       (Boxel ?region)
       (handempty)
       (view_clear ?region)
+      (boxel_fits ?o ?region)              ; audit #62 / F6: ?o could hide inside ?region (restored 2026-08-22, reverts a0e536b; the fact is nominal-prior-based for hidden objects since step 2d)
       (not (obj_at_boxel_KIF ?o ?region))  ; Only sense if unknown
     )
     :effect (and
