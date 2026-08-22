@@ -304,41 +304,28 @@ class PDDLStreamPlanner:
         t_exit = np.min(np.maximum(t1, t2))
         return bool(t_enter <= t_exit and t_exit > 0.0 and t_enter < 1.0)
 
-    def _compute_placement_view_blocks(self, shadow_ids, free_boxels,
-                                       object_extents):
+    def _compute_placement_view_blocks(self, shadow_ids, free_boxels):
         """
-        For each (object, free_boxel, shadow) triple, test whether the
-        OBJECT PLACED AT the free boxel would sit in the camera→shadow
-        line of sight.
+        For each (free_boxel, shadow) pair, test whether the free boxel
+        lies in the camera→shadow line of sight.
 
         F5 alignment (2026-08-21, the previously deferred "placement-
         blocking slice alignment"): endpoints and tolerance are the SAME
         shared sense grid the live sense and compute_shadow_blockers use
         (perception.sense_ray_slices + SENSE_MARGINAL_BLOCKED_FRACTION).
-        The old 5x5 mid-height grid missed low blockers entirely.
-
-        F11 (2026-08-22): the blocking VOLUME is a virtual box with the
-        candidate object's own extents, centred on the free cell's XY
-        centre with its bottom on the cell floor — NOT the cell's AABB.
-        A 13 cm occluder placed in a shorter/narrower cell blocks slice
-        rays the cell itself does not; testing the cell let the planner
-        park orange at free_005 where the census then flagged it as a
-        blocker of shadow_of_red, forcing the F7 relocate-again dead
-        end (user GUI run 12-09-28).  An (obj, cell, shadow) triple is
-        blocking iff, on ANY slice, the virtual box would intercept
-        MORE than the marginal fraction of that slice's rays — exactly
-        the census's listing criterion for the later real placement.
-
-        Args:
-            shadow_ids: shadow boxel ids to protect.
-            free_boxels: candidate FREE_SPACE BoxelData.
-            object_extents: dict obj_boxel_id -> full extents (np.array
-                of 3) from the object's registry boxel (perception
-                estimate).
+        The old 5x5 mid-height grid missed low blockers entirely: a
+        ~13 cm block placed at a free boxel passes UNDER the shadow's
+        mid-height rays but clips the dense low slice, so the planner
+        placed occluders into corridors the census then flagged blocked
+        (seed 0: orange placed at free_005 immediately listed as a
+        blocker of shadow_of_red, forcing a re-pick the binding layer
+        cannot deliver — F7).  A free boxel now blocks a shadow iff, on
+        ANY slice, it would intercept MORE than the marginal fraction of
+        that slice's rays — exactly the census's listing criterion.
 
         Returns:
-            Set of (obj_id, free_boxel_id, shadow_id) triples where the
-            placement would block the camera's view to the shadow.
+            Set of (free_boxel_id, shadow_id) pairs where placement would
+            block the camera's view to the shadow.
         """
         cam = np.asarray(self.camera_pos, dtype=float)
         blocking = set()
@@ -350,21 +337,13 @@ class PDDLStreamPlanner:
             slices, _ = sense_ray_slices(sb.min_corner, sb.max_corner)
 
             for fb in free_boxels:
-                cx, cy = float(fb.center[0]), float(fb.center[1])
-                floor_z = float(fb.min_corner[2])
-                for obj_id, ext in object_extents.items():
-                    vmin = np.array([cx - ext[0] / 2.0,
-                                     cy - ext[1] / 2.0, floor_z])
-                    vmax = np.array([cx + ext[0] / 2.0,
-                                     cy + ext[1] / 2.0,
-                                     floor_z + ext[2]])
-                    for sl in slices:
-                        hits = segment_aabb_hit_mask(
-                            cam, sl.points, vmin, vmax)
-                        if (float(np.count_nonzero(hits)) / len(sl.points)
-                                > SENSE_MARGINAL_BLOCKED_FRACTION):
-                            blocking.add((obj_id, fb.id, shadow_id))
-                            break
+                for sl in slices:
+                    hits = segment_aabb_hit_mask(
+                        cam, sl.points, fb.min_corner, fb.max_corner)
+                    if (float(np.count_nonzero(hits)) / len(sl.points)
+                            > SENSE_MARGINAL_BLOCKED_FRACTION):
+                        blocking.add((fb.id, shadow_id))
+                        break
 
         return blocking
 
@@ -501,19 +480,16 @@ class PDDLStreamPlanner:
                 b for b in self.registry.boxels.values()
                 if b.boxel_type == BoxelType.FREE_SPACE
             ]
-            # F11: per-object blocking volumes (the object's estimated
-            # extents placed at the cell), not the cell's own AABB.
-            object_extents = {
-                b.id: (np.asarray(b.max_corner, dtype=float)
-                       - np.asarray(b.min_corner, dtype=float))
-                for b in self.registry.boxels.values()
-                if b.boxel_type == BoxelType.OBJECT
-            }
             placement_blocks = self._compute_placement_view_blocks(
-                shadows, free_boxels, object_extents
+                shadows, free_boxels
             )
-            for (obj_id, free_id, shadow_id) in placement_blocks:
-                init.append(('blocks_view_at', obj_id, free_id, shadow_id))
+            obj_boxel_ids = [
+                b.id for b in self.registry.boxels.values()
+                if b.boxel_type == BoxelType.OBJECT
+            ]
+            for (free_id, shadow_id) in placement_blocks:
+                for obj_id in obj_boxel_ids:
+                    init.append(('blocks_view_at', obj_id, free_id, shadow_id))
 
         for obj in target_objects:
             init.append(('Obj', obj))
