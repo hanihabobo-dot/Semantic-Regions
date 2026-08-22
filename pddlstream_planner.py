@@ -41,6 +41,25 @@ from streams import BoxelStreams, RobotConfig, Trajectory, Grasp, REACH_LIMIT_M
 from robot_utils import REST_POSES
 
 
+# F11 (2026-08-22): prospective per-object placement-blocking tolerance.
+# The census lists a placed blocker at SENSE_MARGINAL_BLOCKED_FRACTION
+# (0.05), but forbidding placements prospectively at that same margin
+# (the reverted 335ddc1) declared so much of the table corridor-blocking
+# under the shallow camera that no-gate planning time doubled and the
+# gated eval arm collapsed.  This looser threshold forbids only
+# EGREGIOUS placements: > 1/7 of a slice's rays means the virtual box
+# would blind more than one full row of the 7x7 coarse sense grid —
+# it stands IN the corridor, not grazing its edge.  Measured over the
+# 20 A/B eval seeds (tools/_probe_f11_volume.py): the edge-graze
+# cluster sits at 5/49-7/49 (0.102/0.122/0.143) and drops sharply
+# above 1/7; at 0.15 the median seed gains 3 triples (max 21) vs a
+# median 7 (max 49) at the census margin.  Placements in the marginal
+# band (0.05, 0.15] stay allowed and the rare census re-block is
+# handled by replanning, as before the F11 fix.  0.15 rather than the
+# exact 1/7 so a one-row hit (7/49) never flips on a float ulp.
+PLACEMENT_EGREGIOUS_BLOCKED_FRACTION = 0.15
+
+
 def read_pddl_file(filename: str) -> str:
     """Read PDDL file content."""
     pddl_dir = os.path.join(os.path.dirname(__file__), 'pddl')
@@ -304,10 +323,14 @@ class PDDLStreamPlanner:
         t_exit = np.min(np.maximum(t1, t2))
         return bool(t_enter <= t_exit and t_exit > 0.0 and t_enter < 1.0)
 
-    def _compute_placement_view_blocks(self, shadow_ids, free_boxels):
+    def _compute_placement_view_blocks(self, shadow_ids, free_boxels,
+                                       object_extents):
         """
-        For each (free_boxel, shadow) pair, test whether the free boxel
-        lies in the camera→shadow line of sight.
+        Prospective placement-blocking geometry for the blocks_view_at
+        init facts, two criteria per (free_boxel, shadow):
+
+        1. PAIR criterion (unchanged): the free boxel's own AABB
+           intercepts more than the census margin of some slice's rays.
 
         F5 alignment (2026-08-21, the previously deferred "placement-
         blocking slice alignment"): endpoints and tolerance are the SAME
@@ -319,16 +342,56 @@ class PDDLStreamPlanner:
         placed occluders into corridors the census then flagged blocked
         (seed 0: orange placed at free_005 immediately listed as a
         blocker of shadow_of_red, forcing a re-pick the binding layer
-        cannot deliver — F7).  A free boxel now blocks a shadow iff, on
+        cannot deliver — F7).  A free boxel blocks a shadow iff, on
         ANY slice, it would intercept MORE than the marginal fraction of
         that slice's rays — exactly the census's listing criterion.
 
+        2. F11 EGREGIOUS per-object criterion (2026-08-22): the cell's
+           AABB under-approximates the blocking volume of an object
+           TALLER or WIDER than the cell — a 13 cm occluder placed in a
+           short cell blocks low slice rays the cell itself does not
+           (user GUI run 12-09-28: orange judged corridor-safe at
+           free_005, immediately census-listed as a blocker of
+           shadow_of_red, F7 relocate-again death).  For each object
+           extent class, a virtual box with the object's estimated
+           extents (footprint centred on the cell, bottom on the cell
+           floor — what the census will later see) is tested at the
+           LOOSER PLACEMENT_EGREGIOUS_BLOCKED_FRACTION: testing at the
+           census margin itself (reverted 335ddc1) over-constrained the
+           fact set (see the constant's comment).  Skipped when the
+           virtual box fits inside the cell AABB (the pair test is then
+           a superset) and when the pair already fired (the caller
+           expands pair facts over every object).
+
+        Args:
+            shadow_ids: shadow boxel ids to protect.
+            free_boxels: candidate FREE_SPACE BoxelData.
+            object_extents: dict obj_boxel_id -> full extents (3-array)
+                from the object's registry boxel (perception estimate).
+
         Returns:
-            Set of (free_boxel_id, shadow_id) pairs where placement would
-            block the camera's view to the shadow.
+            (pairs, egregious): pairs is the set of (free_boxel_id,
+            shadow_id) where the cell AABB blocks the view; egregious is
+            the set of extra (obj_id, free_boxel_id, shadow_id) triples
+            where only the placed object's own volume blocks it.
         """
         cam = np.asarray(self.camera_pos, dtype=float)
         blocking = set()
+        egregious = set()
+
+        # Objects with identical estimated extents (mm-quantized) share
+        # one virtual-box test per (cell, shadow).  The tray is excluded:
+        # it is unpickable by design (audit #49 — no obj_at_boxel fact),
+        # so a blocks_view_at(tray, free_X, S) volume triple can never
+        # fire; without the filter its wide flat extents dominated the
+        # egregious set (7 dead triples in the first tray-goal smoke).
+        ext_classes: Dict[Tuple, List[str]] = {}
+        for obj_id, ext in object_extents.items():
+            if obj_id == self.tray_name:
+                continue
+            key = tuple(int(v) for v in
+                        np.round(np.asarray(ext, dtype=float) * 1000.0))
+            ext_classes.setdefault(key, []).append(obj_id)
 
         for shadow_id in shadow_ids:
             sb = self.registry.get_boxel(shadow_id)
@@ -337,15 +400,40 @@ class PDDLStreamPlanner:
             slices, _ = sense_ray_slices(sb.min_corner, sb.max_corner)
 
             for fb in free_boxels:
+                fmin = np.asarray(fb.min_corner, dtype=float)
+                fmax = np.asarray(fb.max_corner, dtype=float)
+                pair_blocked = False
                 for sl in slices:
-                    hits = segment_aabb_hit_mask(
-                        cam, sl.points, fb.min_corner, fb.max_corner)
+                    hits = segment_aabb_hit_mask(cam, sl.points, fmin, fmax)
                     if (float(np.count_nonzero(hits)) / len(sl.points)
                             > SENSE_MARGINAL_BLOCKED_FRACTION):
                         blocking.add((fb.id, shadow_id))
+                        pair_blocked = True
                         break
+                if pair_blocked:
+                    continue
+                cx, cy = float(fb.center[0]), float(fb.center[1])
+                floor_z = float(fb.min_corner[2])
+                for key, members in ext_classes.items():
+                    ext = np.asarray(key, dtype=float) / 1000.0
+                    vmin = np.array([cx - ext[0] / 2.0,
+                                     cy - ext[1] / 2.0, floor_z])
+                    vmax = np.array([cx + ext[0] / 2.0,
+                                     cy + ext[1] / 2.0,
+                                     floor_z + ext[2]])
+                    if (np.all(vmin >= fmin - 1e-9)
+                            and np.all(vmax <= fmax + 1e-9)):
+                        continue
+                    for sl in slices:
+                        hits = segment_aabb_hit_mask(
+                            cam, sl.points, vmin, vmax)
+                        if (float(np.count_nonzero(hits)) / len(sl.points)
+                                > PLACEMENT_EGREGIOUS_BLOCKED_FRACTION):
+                            for obj_id in members:
+                                egregious.add((obj_id, fb.id, shadow_id))
+                            break
 
-        return blocking
+        return blocking, egregious
 
     def _build_init(self,
                     target_objects: List[str],
@@ -475,21 +563,37 @@ class PDDLStreamPlanner:
         # as blocks_view_at(obj, free_boxel, shadow) so that the existing
         # derived predicates (blocks_view / view_blocked / view_clear)
         # automatically prevent placements that re-block a cleared corridor.
+        # F11: the pair criterion is complemented by per-object egregious
+        # triples — placements whose OWN volume (taller/wider than the
+        # cell) would blind the corridor even though the cell AABB does
+        # not (see _compute_placement_view_blocks).
         if self.camera_pos is not None and shadows:
             free_boxels = [
                 b for b in self.registry.boxels.values()
                 if b.boxel_type == BoxelType.FREE_SPACE
             ]
-            placement_blocks = self._compute_placement_view_blocks(
-                shadows, free_boxels
-            )
-            obj_boxel_ids = [
-                b.id for b in self.registry.boxels.values()
+            object_extents = {
+                b.id: (np.asarray(b.max_corner, dtype=float)
+                       - np.asarray(b.min_corner, dtype=float))
+                for b in self.registry.boxels.values()
                 if b.boxel_type == BoxelType.OBJECT
-            ]
+            }
+            placement_blocks, egregious_triples = \
+                self._compute_placement_view_blocks(
+                    shadows, free_boxels, object_extents)
+            obj_boxel_ids = list(object_extents.keys())
             for (free_id, shadow_id) in placement_blocks:
                 for obj_id in obj_boxel_ids:
                     init.append(('blocks_view_at', obj_id, free_id, shadow_id))
+            # New F11 triples appended AFTER the pair expansion so the
+            # relative order of the pre-existing facts (FastDownward
+            # tie-break input) is untouched; sorted for determinism.
+            for (obj_id, free_id, shadow_id) in sorted(egregious_triples):
+                init.append(('blocks_view_at', obj_id, free_id, shadow_id))
+            # Stashed for plan()'s [#76-diag] block (_build_init runs for
+            # both create_problem and export_problem_pddl — printing here
+            # would double every line).
+            self._last_egregious_triples = sorted(egregious_triples)
 
         for obj in target_objects:
             init.append(('Obj', obj))
@@ -765,6 +869,11 @@ class PDDLStreamPlanner:
         print(f"  [#76-diag] sense_options per obj (view-clear AND fits AND "
               f"not-KIF): {sense_options_per_obj}")
         print(f"  [#76-diag] obj_at_boxel per obj: {obj_at_boxel_per_obj}")
+        egregious = getattr(self, '_last_egregious_triples', [])
+        if egregious:
+            print(f"  [F11-diag] {len(egregious)} egregious per-object "
+                  f"placement-blocking triple(s) beyond the cell "
+                  f"criterion: {egregious}")
         _plan_start_t = time.perf_counter()
 
         # Call PDDLStream solver

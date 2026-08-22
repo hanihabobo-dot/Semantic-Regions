@@ -117,10 +117,11 @@ _DROP_PATTERNS = (
     r"Window closing in",
     r"Warning! All actions have no cost",
     r"=====+",
-    # Audit-tagged diagnostic prints (e.g. [#60-diag], [#76-diag]).
+    # Audit-tagged diagnostic prints (e.g. [#60-diag], [#76-diag],
+    # [F11-diag] for the paper-audit F-block findings).
     # Kept in the log file via the separate RunLogger file handler;
     # dropped from the terminal so smart-mode stays narrative.
-    r"\s*\[#\d+-diag\]",
+    r"\s*\[(?:#\d+|F\d+)-diag\]",
     # Audit #76 confirmation when a hidden target's OBJECT boxel is
     # first registered — purely informational, not part of the user-
     # facing narrative.
