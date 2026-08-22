@@ -32,6 +32,23 @@ JOINT_RANGES = JOINT_LIMITS_HIGH - JOINT_LIMITS_LOW
 
 REST_POSES = [0, -0.785, 0, -2.356, 0, 1.571, 0.785]
 
+# Franka Emika Panda joint velocity limits, rad/s (panda.urdf lines 80-216,
+# matching the datasheet: 2.175 for joints 1-4, 2.610 for the wrist 5-7).
+JOINT_VELOCITY_LIMITS = np.array([
+    2.175, 2.175, 2.175, 2.175, 2.610, 2.610, 2.610
+])
+
+# PyBullet's default fixed timestep.  The pipeline never calls
+# p.setTimeStep, so one stepSimulation advances the world by this much;
+# the interpolation schedule below converts a joint-space distance into a
+# step count against it.
+SIM_TIMESTEP = 1.0 / 240.0
+
+# Hard ceiling on the interpolation schedule (#P1 F14).  A pathological
+# waypoint pair should slow the arm down, not stall the episode: 1200
+# steps is 5 s of simulated motion, far beyond any legitimate transit.
+MAX_INTERP_STEPS = 1200
+
 
 # =============================================================================
 # Low-level control utilities
@@ -578,16 +595,44 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
 
 
 def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
-                      steps: int = 60, settle: bool = False):
+                      steps: int = 60, settle: bool = False,
+                      velocity_bounded: bool = True):
     """
     Smoothly interpolate joint positions from the current state to
     *target_joints*.
+
+    The step count is a FLOOR, not a fixed schedule (#P1 F14, 2026-08-22).
+    Callers pass a nominal ``steps``; if covering the joint-space distance
+    in that many steps would command a joint faster than the Panda can
+    actually move, the schedule is stretched until it does not.
+
+    Why this matters (measured, run 17-14-10 + tools/swarm_2026-08-22/
+    C_motion_deltas.md): the RRT bounds every tree edge to
+    ``RRT_STEP_SIZE`` = 0.2 rad, but the shortcut smoother
+    (``streams._smooth_path``, SMOOTH_ATTEMPTS=75) splices several such
+    edges into one straight edge and certifies it with a collision check
+    that has no distance bound.  A transit that smoothed "8 wps -> 3 wps"
+    therefore handed the executor a single 1.15 rad hop, which the old
+    fixed ``steps=30`` schedule ran at 0.038 rad/step = 9.2 rad/s — 4.2x
+    joint 2's real 2.175 rad/s limit.  POSITION_CONTROL chases that
+    target with a 240 N-m budget and no velocity cap, so the arm swings
+    hard enough to throw a friction-held block off the gripper (the F14
+    field failure: pad_normal_force 112 N at pick, 0.00 N at place
+    entry, the cargo on the floor).  Telemetry caught the same class on
+    ORDINARY linear moves too — the first hop from the arm's real pose
+    to the trajectory's first executed waypoint reached 17.7 rad/s — so
+    the bound belongs in the executor, where every caller gets it, not
+    in the smoother.
 
     Args:
         robot_id: PyBullet body ID of the robot.
         target_joints: Sequence of 7 target joint angles.
         gui: If True, sleep between steps for real-time visualisation.
-        steps: Number of interpolation steps.
+        steps: MINIMUM number of interpolation steps.  Short hops keep
+            exactly this many, so existing call sites are unchanged; only
+            hops that would exceed a joint's velocity limit are stretched.
+        velocity_bounded: Set False to restore the old fixed schedule
+            (diagnostic use only — it can throw the cargo).
         settle: When True, hold the final target after the stream until
             the arm converges in joint space (endpoint convergence hold,
             #P1).  Opt-in ONLY at precision-critical endpoints — the
@@ -599,6 +644,28 @@ def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
     """
     import time
     current = [p.getJointState(robot_id, i)[0] for i in range(7)]
+
+    # Stretch the schedule until no joint is commanded past its datasheet
+    # velocity.  steps_needed = |delta_i| / (v_max_i * dt), worst joint
+    # wins; the nominal count is the floor, so a short hop is untouched.
+    if velocity_bounded:
+        delta = np.abs(np.asarray(target_joints, dtype=float)[:7]
+                       - np.asarray(current, dtype=float))
+        needed = int(np.ceil(np.max(
+            delta / (JOINT_VELOCITY_LIMITS * SIM_TIMESTEP))))
+        if needed > steps:
+            capped = min(needed, MAX_INTERP_STEPS)
+            worst = int(np.argmax(delta / JOINT_VELOCITY_LIMITS))
+            logger.debug(
+                "move_robot_smooth: stretching %d -> %d steps — joint %d "
+                "moves %.4f rad, which needs %.3f s at its %.3f rad/s "
+                "limit%s [F14]",
+                steps, capped, worst, float(delta[worst]),
+                needed * SIM_TIMESTEP, float(JOINT_VELOCITY_LIMITS[worst]),
+                "" if capped == needed else
+                f" (clamped at MAX_INTERP_STEPS={MAX_INTERP_STEPS})")
+            steps = capped
+
     for t in range(steps):
         alpha = (t + 1) / steps
         interp = [(1 - alpha) * c + alpha * tgt
