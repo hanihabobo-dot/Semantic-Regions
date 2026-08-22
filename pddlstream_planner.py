@@ -546,12 +546,21 @@ class PDDLStreamPlanner:
         for obj in target_objects:
             if obj not in obj_ids:
                 obj_ids.append(obj)
-        # Containment candidates (audit #62): boxel_fits now gates BOTH
-        # :action place (free-space destination) and :action sense
-        # (shadow region that could hide ?o).  Same predicate, both
-        # preconditions.  OBJECT boxels are excluded — not valid place
-        # destinations (is_free_space false) and not valid sense regions
-        # (view_clear only derives over shadows).
+        # Containment candidates — F6 two-predicate split (2026-08-22,
+        # user direction; supersedes the audit #62 single-predicate
+        # design and closes the F6 stale-comment finding):
+        #   (boxel_fits ?o ?b)  gates :action place — "will ?o always
+        #       fit at destination ?b" — class UPPER bound for
+        #       unobserved objects (NOMINAL_HIDDEN_EXTENTS).
+        #   (can_hide ?o ?b)    gates :action sense — "could ANY
+        #       sought-class instance of ?o be hiding in ?b" — class
+        #       LOWER bound (NOMINAL_HIDDEN_EXTENTS_MIN), because a
+        #       gate that assumes the largest instance rules out
+        #       fragments that hide a real smaller one (the A/B trap:
+        #       seeds 7/10/13 structurally unwinnable).
+        # OBJECT boxels are excluded — not valid place destinations
+        # (is_free_space false) and not valid sense regions (view_clear
+        # only derives over shadows).
         #
         # SHADOW branch (audit #62 refinement): the AABB extent check
         # would over-emit because shadow_calculator subtracts the
@@ -570,8 +579,8 @@ class PDDLStreamPlanner:
         # search round (~40-60 s post-F3) on the doomed skeleton
         # (observed: GUI run 22-01-06, free_008 at 0.802 m, one wasted
         # 99 s round).  Gating the FACT keeps unreachable placements out
-        # of the search space entirely.  SHADOW fits stay un-gated:
-        # (boxel_fits target shadow) encodes hideability for sense —
+        # of the search space entirely.  SHADOW facts stay un-gated:
+        # (can_hide target shadow) encodes hideability for sense —
         # a target can hide beyond arm reach; reach is a pick concern,
         # enforced by the kin stream when a pick is actually planned.
         free_ids = [
@@ -592,7 +601,7 @@ class PDDLStreamPlanner:
             for bid in shadow_ids:
                 if self.streams.test_target_can_hide_in_shadow(
                         o, bid, self.camera_pos):
-                    init.append(('boxel_fits', o, bid))
+                    init.append(('can_hide', o, bid))
 
         init.append(('Config', current_config))
         init.append(('at_config', current_config))
@@ -760,14 +769,15 @@ class PDDLStreamPlanner:
               f"{len(view_clear_shadows)} view-clear NOW): "
               f"{unknown_shadows}")
         # Per target, count how many view-clear unknown shadows accept it
-        # (boxel_fits AND view_clear AND NOT obj_at_boxel_KIF).  If 0, the
+        # (can_hide AND view_clear AND NOT obj_at_boxel_KIF — F6 split:
+        # sense is gated by can_hide, not boxel_fits).  If 0, the
         # planner can't ground a sense for that target → infeasibility.
         kif_set = {(str(f[1]), str(f[2])) for f in problem.init
                    if isinstance(f, tuple) and len(f) == 3
                    and f[0] == 'obj_at_boxel_KIF'}
         boxel_fits_pairs = {(str(f[1]), str(f[2])) for f in problem.init
                             if isinstance(f, tuple) and len(f) == 3
-                            and f[0] == 'boxel_fits'}
+                            and f[0] == 'can_hide'}
         obj_ids_in_init = sorted({str(f[1]) for f in problem.init
                                    if isinstance(f, tuple) and len(f) == 2
                                    and f[0] == 'Obj'})

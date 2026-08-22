@@ -55,7 +55,8 @@
     (motion ?q1 ?q2 ?t)           ; Trajectory ?t from ?q1 to ?q2
     (kin_solution ?o ?b ?g ?q)    ; Config ?q for picking ?o from ?b with ?g
     (config_for_boxel ?q ?b)      ; Config ?q targets boxel ?b (EE inside ?b)
-    (boxel_fits ?o ?b)            ; Boxel ?b is large enough to contain ?o (place dest or sense region; audit #62)
+    (boxel_fits ?o ?b)            ; Place destination ?b always fits ?o (class UPPER bound for unobserved; audit #62 / F6 split)
+    (can_hide ?o ?b)              ; Some sought-class instance of ?o could hide in ?b (class LOWER bound; F6 split 2026-08-22)
     (on_surface ?b)               ; Boxel ?b rests on a support surface (table)
     
     ;; --- Stacking (audit #30, #41, --goal stack) ---
@@ -171,7 +172,7 @@
       (Boxel ?region)
       (handempty)
       (view_clear ?region)
-      (boxel_fits ?o ?region)              ; audit #62 / F6: ?o could hide inside ?region (restored 2026-08-22, reverts a0e536b; the fact is nominal-prior-based for hidden objects since step 2d)
+      (can_hide ?o ?region)                ; F6 two-bound split: some sought-class instance of ?o could hide in ?region (lower-bound prior; place fits keep the upper bound)
       (not (obj_at_boxel_KIF ?o ?region))  ; Only sense if unknown
     )
     :effect (and

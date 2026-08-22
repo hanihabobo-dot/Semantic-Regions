@@ -47,6 +47,16 @@ REACH_LIMIT_M = 0.80
 # target fits the real one.
 NOMINAL_HIDDEN_EXTENTS = np.array([0.04, 0.04, 0.04])
 
+# F6 two-bound split (2026-08-22, user direction): the bounds must
+# differ by CONSUMER.  PLACING asks "will my object always fit" — the
+# class UPPER bound above.  FINDING (the sense gate's hideability test)
+# asks "could ANY sought-class instance be hiding here" — that needs
+# the class LOWER bound, or the gate rules out fragments that hide a
+# real 3 cm target because a hypothetical 4 cm one would not fit (the
+# A/B eval's false-negative trap: seeds 7/10/13 unwinnable, the
+# target's own fragment had no fits fact).
+NOMINAL_HIDDEN_EXTENTS_MIN = np.array([0.03, 0.03, 0.03])
+
 from boxel_data import BoxelRegistry, BoxelData, BoxelType
 from robot_utils import (ARM_JOINT_INDICES, END_EFFECTOR_LINK, FINGER_JOINTS,
                          JOINT_LIMITS_LOW, JOINT_LIMITS_HIGH, JOINT_RANGES,
@@ -503,8 +513,13 @@ class BoxelStreams:
         Whether a target can be physically hidden, fully occluded, inside a
         shadow region (audit #62 refinement).
 
+        Feeds the (can_hide ?o ?b) init facts gating :action sense (F6
+        two-bound split 2026-08-22): hideability uses the class LOWER
+        bound for unobserved objects, place fits keep the upper bound.
+
         Two-stage filter:
-          1. AABB extent (test_boxel_fits) — cheap pre-screen.
+          1. AABB extent pre-screen with the HIDE extents (deliberately
+             not test_boxel_fits, which serves place destinations).
           2. Visibility raycast — cast camera rays to the 8 corners of the
              target's AABB at a small grid of candidate placements; return
              True iff at least one placement has all 8 corners occluded.
@@ -528,11 +543,6 @@ class BoxelStreams:
             True iff target physically fits, stably and fully occluded,
             somewhere inside the shadow.
         """
-        if not self.test_boxel_fits(obj_id, shadow_id):
-            return False
-        if camera_pos is None:
-            return True
-
         shadow = self.registry.get_boxel(shadow_id)
         if shadow is None:
             return False
@@ -541,10 +551,24 @@ class BoxelStreams:
         if obj_boxel is not None:
             obj_extent = (obj_boxel.max_corner - obj_boxel.min_corner) / 2.0
         else:
-            # #P1 step (2d): class prior, not the hidden instance's true
-            # size (see NOMINAL_HIDDEN_EXTENTS).
-            obj_extent = NOMINAL_HIDDEN_EXTENTS / 2.0
+            # F6 two-bound split (2026-08-22): HIDEABILITY uses the
+            # class LOWER bound — "could any sought-class instance hide
+            # here" — while place fits (test_boxel_fits) keeps the
+            # upper bound.  Using the upper bound here made 3/20 A/B
+            # scenes structurally unwinnable (the target's own fragment
+            # was fits-rejected because a 4 cm cube would not fit where
+            # the real 3 cm one hid).
+            obj_extent = NOMINAL_HIDDEN_EXTENTS_MIN / 2.0
         hx, hy, hz = float(obj_extent[0]), float(obj_extent[1]), float(obj_extent[2])
+
+        # Extent pre-screen with the SAME (hide) extents — deliberately
+        # NOT test_boxel_fits, which serves place destinations with the
+        # upper bound.
+        shadow_extent = shadow.max_corner - shadow.min_corner
+        if not bool(np.all(shadow_extent / 2.0 >= obj_extent)):
+            return False
+        if camera_pos is None:
+            return True
 
         # Stable resting pose: target must rest on the table (the only
         # horizontal support in our scenes), not float inside a shadow
