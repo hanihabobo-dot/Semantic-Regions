@@ -1,0 +1,155 @@
+==============================================================================
+Body id map (S1, as-spawned):
+  plane          -> body_id 0
+  table          -> body_id 1
+  robot          -> body_id 2
+  red_object     -> body_id 3
+  green_object   -> body_id 4
+  orange_object  -> body_id 5
+  blue_object    -> body_id 6
+  robot_id=2 support_ids={0, 1} target(blue)=6
+  DETECTION_MIN_PIXELS=6  SENSE_MARGINAL_BLOCKED_FRACTION=0.05
+  camera_position=[np.float64(0.1), np.float64(-0.8), np.float64(0.7)] camera_target=[np.float64(0.1), np.float64(0.0), np.float64(0.5)]
+
+==============================================================================
+STATE S1 -- as-spawned (matches boxel_data.json)
+  [S1] GLOBAL seg pixel counts (whole 640x480 image):
+      body  0 (plane         ) pixels= 47409
+      body  1 (table         ) pixels=113487
+      body  2 (robot         ) pixels= 30369
+      body  3 (red_object    ) pixels=  4199
+      body  4 (green_object  ) pixels=  1315
+      body  5 (orange_object ) pixels=  1397
+  [S1 shadow_of_green_object (unblocked by any occluder list -- own caster still on table at spawn)] endpoints=674 off_image=0 intercepted=156 capped=False
+      body  4 (green_object  ) ignored(robot/support)   endpoints_hit= 156  global_seg_px=  1315
+        endpoint indices (first 20): [383, 398, 399, 400, 401, 402, 403, 404, 405, 406, 407, 413, 414, 415, 416, 417, 418, 419, 420, 421]
+  [S1 shadow_of_red_object] endpoints=388 off_image=0 intercepted=185 capped=False
+      body  3 (red_object    ) ignored(robot/support)   endpoints_hit= 185  global_seg_px=  4199
+        endpoint indices (first 20): [44, 45, 46, 47, 48, 49, 50, 51, 52, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77]
+
+==============================================================================
+STATE S2 -- green placed at free_003; orange thrown (two endings)
+
+  -- S2a floor-beside-table: teleporting orange_object to (0.0, -0.55, 0.0341) --
+  [S2a floor-beside-table] GLOBAL seg pixel counts (whole 640x480 image):
+      body  0 (plane         ) pixels= 48243
+      body  1 (table         ) pixels=112190
+      body  2 (robot         ) pixels= 30369
+      body  3 (red_object    ) pixels=  4199
+      body  4 (green_object  ) pixels=  3175
+  [S2a floor-beside-table / shadow_of_green_object] endpoints=674 off_image=0 intercepted=0 capped=False
+      orange_object global_seg_px=0 (<6 -> NOT in sense_detections)
+      REPRODUCES log pattern (<6px AND intercepts shadow_of_green endpoints)? False
+
+  -- S2b on-table frame-edge (near free_005 corner): teleporting orange_object to (-0.08, -0.38, 0.35910000000000003) --
+  [S2b on-table frame-edge (near free_005 corner)] GLOBAL seg pixel counts (whole 640x480 image):
+      body  0 (plane         ) pixels= 48243
+      body  1 (table         ) pixels=105818
+      body  2 (robot         ) pixels= 30369
+      body  3 (red_object    ) pixels=  4199
+      body  4 (green_object  ) pixels=  3175
+      body  5 (orange_object ) pixels=  6372
+  [S2b on-table frame-edge (near free_005 corner) / shadow_of_green_object] endpoints=674 off_image=0 intercepted=0 capped=False
+      orange_object global_seg_px=6372 (<6 -> IN sense_detections)
+      REPRODUCES log pattern (<6px AND intercepts shadow_of_green endpoints)? False
+
+==============================================================================
+STATE S3 -- green@free_003, red@free_011, orange missing (log line 529/583 -- shadow_of_red_object unlocalizable strikes 2/3)
+
+  -- S2a floor-beside-table: orange_object at (0.0, -0.55, 0.0341) --
+  [S3/S2a floor-beside-table] GLOBAL seg pixel counts (whole 640x480 image):
+      body  0 (plane         ) pixels= 48243
+      body  1 (table         ) pixels=114504
+      body  2 (robot         ) pixels= 30369
+      body  3 (red_object    ) pixels=  1242
+      body  4 (green_object  ) pixels=  3175
+      body  6 (blue_object   ) pixels=   643
+  [S3/S2a floor-beside-table / shadow_of_red_object (ORIGINAL spawn AABB)] endpoints=388 off_image=0 intercepted=15 capped=False
+      body  6 (blue_object   ) TARGET                   endpoints_hit=  15  global_seg_px=   643
+        endpoint indices (first 20): [148, 149, 150, 151, 152, 177, 178, 179, 180, 181, 206, 207, 208, 209, 210]
+      reconstructed shrunk AABB (HYPOTHESIS center): min=[-0.0022770625837276806, -0.09529368410622968, 0.3477354595601705] max=[0.040722937416272316, -0.012293684106229684, 0.43873545956017046] size_cm=[4.3, 8.299999999999999, 9.099999999999998]
+  [S3/S2a floor-beside-table / shadow_of_red_object (RECONSTRUCTED shrunk AABB)] endpoints=138 off_image=0 intercepted=0 capped=False
+      [original-AABB] orange global_px=0 REPRODUCES unlocalizable-interceptor pattern? False
+      [shrunk-AABB] orange global_px=0 REPRODUCES unlocalizable-interceptor pattern? False
+
+  -- S2b on-table frame-edge (near free_005 corner): orange_object at (-0.08, -0.38, 0.35910000000000003) --
+  [S3/S2b on-table frame-edge (near free_005 corner)] GLOBAL seg pixel counts (whole 640x480 image):
+      body  0 (plane         ) pixels= 48243
+      body  1 (table         ) pixels=108132
+      body  2 (robot         ) pixels= 30369
+      body  3 (red_object    ) pixels=  1242
+      body  4 (green_object  ) pixels=  3175
+      body  5 (orange_object ) pixels=  6372
+      body  6 (blue_object   ) pixels=   643
+  [S3/S2b on-table frame-edge (near free_005 corner) / shadow_of_red_object (ORIGINAL spawn AABB)] endpoints=388 off_image=0 intercepted=15 capped=False
+      body  6 (blue_object   ) TARGET                   endpoints_hit=  15  global_seg_px=   643
+        endpoint indices (first 20): [148, 149, 150, 151, 152, 177, 178, 179, 180, 181, 206, 207, 208, 209, 210]
+      reconstructed shrunk AABB (HYPOTHESIS center): min=[-0.0022770625837276806, -0.09529368410622968, 0.3477354595601705] max=[0.040722937416272316, -0.012293684106229684, 0.43873545956017046] size_cm=[4.3, 8.299999999999999, 9.099999999999998]
+  [S3/S2b on-table frame-edge (near free_005 corner) / shadow_of_red_object (RECONSTRUCTED shrunk AABB)] endpoints=138 off_image=0 intercepted=0 capped=False
+      [original-AABB] orange global_px=6372 REPRODUCES unlocalizable-interceptor pattern? False
+      [shrunk-AABB] orange global_px=6372 REPRODUCES unlocalizable-interceptor pattern? False
+
+==============================================================================
+S2-SWEEP -- grid search for an orange pose reproducing the log's '<6px AND intercepts shadow_of_green_object' pattern
+  region 'floor-beside-table': grid 13x13 over x=(-0.35, 0.35) y=(-0.95, -0.5) z=0.0341  -> 0 pose(s) intercept >=1 shadow_of_green endpoint
+  region 'table-frame-edge (near-y strip, y=-0.40..-0.30)': grid 13x13 over x=(-0.1, 0.3) y=(-0.4, -0.3) z=0.3591  -> 0 pose(s) intercept >=1 shadow_of_green endpoint
+  region 'table-frame-edge (near-x strip, x=-0.10)': grid 1x19 over x=(-0.1, -0.1) y=(-0.45, 0.45) z=0.3591  -> 10 pose(s) intercept >=1 shadow_of_green endpoint
+      pos=(-0.100,+0.450,0.359) orange_global_px=  700 endpoints_hit= 44
+      pos=(-0.100,+0.400,0.359) orange_global_px=  769 endpoints_hit= 71
+      pos=(-0.100,+0.350,0.359) orange_global_px=  848 endpoints_hit= 97
+      pos=(-0.100,+0.300,0.359) orange_global_px=  933 endpoints_hit=126
+      pos=(-0.100,+0.250,0.359) orange_global_px= 1026 endpoints_hit=163
+      pos=(-0.100,+0.200,0.359) orange_global_px= 1129 endpoints_hit=167
+      pos=(-0.100,+0.150,0.359) orange_global_px= 1224 endpoints_hit=142
+      pos=(-0.100,+0.100,0.359) orange_global_px= 1404 endpoints_hit=113
+      pos=(-0.100,+0.050,0.359) orange_global_px= 1554 endpoints_hit= 71
+      pos=(-0.100,+0.000,0.359) orange_global_px= 1783 endpoints_hit= 28
+
+  TOTAL sub-DETECTION_MIN_PIXELS interceptor poses found: 0 / 10 intercepting poses tried
+  No sub-DETECTION_MIN_PIXELS interceptor pose found in either swept region -- see report for the geometric explanation (orange's own footprint is >= 6px whenever it is close/large enough to a sense endpoint's line of sight to intercept it; the interceptor is more likely visible from ONE endpoint's narrow projection while occluded from most of the frame by another body, not a free-standing sliver).
+
+==============================================================================
+S2-WEDGE -- partially-occluded / frame-corner candidate poses
+  behind red_object (+3cm further from camera)     pos=(0.204, 0.028, 0.395) orange_px=  134 shadow_green_hits=  0
+  behind red_object (+1.5cm further, tighter graze) pos=(0.204, 0.013, 0.395) orange_px=   41 shadow_green_hits=  0
+  table far corner (near image edge, +x+y)         pos=(0.66, 0.46, 0.359) orange_px=  846 shadow_green_hits=  0
+  table near corner (near image edge, -x-y)        pos=(-0.08, -0.39, 0.359) orange_px= 6557 shadow_green_hits=  0
+
+==============================================================================
+blue_object global seg pixels in final S3 render: 643 (id=6)
+blue_object CANNOT be the 'unlocalizable interceptor' by construction: sense_shadow_from_render returns found_target immediately on ANY endpoint hit against target_pybullet_id, before the DETECTION_MIN_PIXELS/localizability check is ever reached (execution.py sense_shadow_from_render ~line 190).
+
+==============================================================================
+PART 2 -- authoritative replay via the REAL execution.sense_shadow_from_render (with #P1 F15 interceptor_counts), occluder_pybullet_ids CORRECTED to the actual audit-78 census (empty for both shadows once their caster relocated)
+
+  -- shadow_of_green_object, orange HIDDEN (sanity: is anything ELSE -- green's own new position, red at original spawn -- an interceptor once orange is out of the picture?) --
+  [REAL sense_shadow_from_render / green-shadow / orange hidden far away] outcome=clear_but_empty blocked_fraction=0.000 detected_bodies=[] interceptor_counts={}
+
+  -- shadow_of_green_object, orange at S2a (floor-beside-table) --
+  [REAL sense_shadow_from_render / green-shadow / S2a] outcome=clear_but_empty blocked_fraction=0.000 detected_bodies=[] interceptor_counts={}
+
+  -- shadow_of_green_object, orange at S2b (on-table frame-edge) --
+  [REAL sense_shadow_from_render / green-shadow / S2b] outcome=clear_but_empty blocked_fraction=0.000 detected_bodies=[] interceptor_counts={}
+
+  -- shadow_of_red_object (ORIGINAL AABB), orange HIDDEN (sanity) --
+  [REAL sense_shadow_from_render / red-shadow(orig) / orange hidden far away] outcome=found_target blocked_fraction=0.000 detected_bodies=[] interceptor_counts={6: 1}
+      seg id  6 (blue_object   ) endpoints=   1 global_px=   643  TARGET
+
+  -- shadow_of_red_object (ORIGINAL AABB), orange at S2a --
+  [REAL sense_shadow_from_render / red-shadow(orig) / S2a] outcome=found_target blocked_fraction=0.000 detected_bodies=[] interceptor_counts={6: 1}
+      seg id  6 (blue_object   ) endpoints=   1 global_px=   643  TARGET
+
+  -- shadow_of_red_object (ORIGINAL AABB), orange at S2b --
+  [REAL sense_shadow_from_render / red-shadow(orig) / S2b] outcome=found_target blocked_fraction=0.000 detected_bodies=[] interceptor_counts={6: 1}
+      seg id  6 (blue_object   ) endpoints=   1 global_px=   643  TARGET
+
+  -- shadow_of_red_object (RECONSTRUCTED SHRUNK AABB), orange at S2a --
+  [REAL sense_shadow_from_render / red-shadow(shrunk) / S2a] outcome=clear_but_empty blocked_fraction=0.000 detected_bodies=[] interceptor_counts={}
+
+  -- shadow_of_red_object (RECONSTRUCTED SHRUNK AABB), orange at S2b --
+  [REAL sense_shadow_from_render / red-shadow(shrunk) / S2b] outcome=clear_but_empty blocked_fraction=0.000 detected_bodies=[] interceptor_counts={}
+
+==============================================================================
+PART 3 -- does orange_object's OWN original-spawn OBJECT boxel ever render 'observed empty' (which would flip it LOST instead of staying 'stale/keeping last estimate')?  refresh_object_aabbs check_lost path uses first_surface_interceptors with NO ignore_ids at all.
+  [orange-own-boxel LOST-check / green@free_003, red@ORIGINAL, orange hidden (models plan #2/3/4 refresh)] observed_empty=True worst_slice_blocked_fraction=0.000 worst_slice_blockers={}
+  [orange-own-boxel LOST-check / green@free_003, red@free_011, orange hidden (models plan #6/7 refresh)] observed_empty=True worst_slice_blocked_fraction=0.000 worst_slice_blockers={}
