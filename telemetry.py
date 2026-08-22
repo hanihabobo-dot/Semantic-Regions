@@ -167,6 +167,7 @@ class WorldTelemetry:
         self._phase_start_time = 0.0
         self._phase_start_pos = {}          # body -> pos at phase start
         self._phase_peak_speed = {}         # body -> peak |v|
+        self._phase_flung = set()           # bodies that fired FLING
         self._phase_events = {}             # event kind -> count
         self._phase_peak_ee_speed = 0.0
         self._phase_peak_joint_vel = 0.0
@@ -182,6 +183,7 @@ class WorldTelemetry:
         self._held_this_phase = set()       # bodies the arm held this action
         self._grip_pending = set()          # left the pads, awaiting confirm
         self._latched_states = set()        # (body, kind) already reported
+        self._prev_fingers = None           # last max finger opening
         self._spawn_pos = {}                # body -> pose at enable()
         self._support_z = {}                # body -> z it started resting at
 
@@ -253,6 +255,7 @@ class WorldTelemetry:
         self._phase_start_step = self.step_count
         self._phase_start_time = self.sim_time
         self._phase_peak_speed = {}
+        self._phase_flung = set()
         self._phase_events = {}
         self._phase_peak_ee_speed = 0.0
         self._phase_peak_joint_vel = 0.0
@@ -456,7 +459,16 @@ class WorldTelemetry:
             # the object drops the last millimetre onto its support, and
             # that transient is not a lost grip.  A slip or a fling stays
             # contact-free for many steps, so it still reports.
-            fingers_closed = max(rob['fingers']) < 0.035
+            # "Still closed" must also mean "not in the act of opening":
+            # a release passes through the 0.03-0.035 band on its way to
+            # 0.04, and the object separates while it does.  Comparing
+            # against the previous reading distinguishes a gripper that
+            # is opening from one that is holding on.
+            fingers_now = max(rob['fingers'])
+            opening = (self._prev_fingers is not None
+                       and fingers_now > self._prev_fingers + 1e-5)
+            self._prev_fingers = fingers_now
+            fingers_closed = fingers_now < 0.035 and not opening
             confirmed = set()
             for bid in self._grip_pending:
                 if bid in held_ids or not fingers_closed:
@@ -487,12 +499,30 @@ class WorldTelemetry:
             name = st['name']
             if st['speed'] > self._phase_peak_speed.get(bid, 0.0):
                 self._phase_peak_speed[bid] = st['speed']
-            if st['speed'] > FLING_SPEED:
-                fired |= self._event(
-                    'FLING',
-                    f"{name} moving at {st['speed']:.2f} m/s "
-                    f"(v={np.round(st['v'], 3).tolist()})"
-                    + (" WHILE GRASPED" if bid in held_ids else ""))
+            # Carried cargo travels at the hand's speed by definition, so
+            # raw speed alone cannot separate "being carried briskly" from
+            # "being slung off".  For a held body the signal is the cargo
+            # OUTRUNNING the hand; for an unheld body, any large speed.
+            if bid in held_ids:
+                ee_speed = rob['ee_speed'] if rob is not None else 0.0
+                # Both conditions: fast in absolute terms AND outrunning
+                # the hand.  Setting an object down releases it at
+                # 0.1-0.2 m/s while the hand is still — that is a
+                # release, not a sling, and only the absolute floor
+                # tells the two apart.
+                slung = (st['speed'] > FLING_SPEED
+                         and st['speed'] > ee_speed * 1.5)
+                detail = (f"{name} is outrunning the gripper: "
+                          f"{st['speed']:.2f} m/s vs hand "
+                          f"{ee_speed:.2f} m/s — the grasp is losing it")
+            else:
+                slung = st['speed'] > FLING_SPEED
+                detail = (f"{name} moving at {st['speed']:.2f} m/s "
+                          f"untouched by the arm "
+                          f"(v={np.round(st['v'], 3).tolist()})")
+            if slung:
+                self._phase_flung.add(bid)
+                fired |= self._event('FLING', detail)
             # Latched: TOPPLE / OFF_SUPPORT / AIRBORNE describe a STATE,
             # not an instant.  A block lying on the floor satisfies two of
             # them on every sample for the rest of the episode, which
@@ -705,8 +735,8 @@ class WorldTelemetry:
                        f"now z={st['pos'][2]:.3f})")
             elif st['tilt_deg'] > TILT_WARN_DEG:
                 tag = "  <-- TOPPLED"
-            elif peak > FLING_SPEED:
-                tag = "  <-- FLUNG"
+            elif bid in self._phase_flung:
+                tag = "  <-- FLUNG (left the gripper's control)"
             body_bits.append(
                 f"{st['name']}: displaced {st['moved_mm']:.1f} mm, peak "
                 f"{peak:.2f} m/s, ended pos=[{st['pos'][0]:.3f},"
