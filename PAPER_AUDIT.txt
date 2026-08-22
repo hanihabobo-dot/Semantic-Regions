@@ -1038,6 +1038,49 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       census margin), or let sense ground on marginally blocked
       shadows at a cost penalty.  Evaluate together with the parked
       F6 criterion work on its A/B harness.
+      [FIELD EVIDENCE 2026-08-22, NO THRESHOLD CHANGED
+      (tools/swarm_2026-08-22/D_marginal_band_evidence.md +
+      D_marginal_band_sweep.py, parsing all 159 of today's run logs =
+      258 place actions; the 1478-cell pre-F11 sweep_full corpus was
+      parsed separately and never mixed in).  Signature counted: a
+      "*** X PLACED at Y! ***" whose immediately preceding audit-#78
+      census already lists X as a blocker — i.e. a placement that
+      cleared the prospective gate and was re-flagged at the 0.05 census
+      margin by the very next census.
+        * 57 incidents over 258 placements; 23 ended the episode, 34
+          were absorbed by replanning.
+        * 17 re-blocked the oracle's TRUE hiding shadow, and 15 of those
+          17 (88 %) ended the episode, against 8 of 40 (20 %) for
+          non-target shadows — re-blocking the target's own shadow is
+          the lethal case, because sensing it is then unavoidable and
+          relocating its blocker is exactly F7's machinery.
+        * The 0.15 egregious gate (c0fb6ec, 15:40) barely moved the
+          rate: 22.5 % of placements before, 19.4 % after.  The seed-0
+          signature (orange@free_005 re-blocking shadow_of_red)
+          reproduces 7 times spanning the fix boundary — 3 of them AFTER
+          the gate went live — and ends the episode every time.  F11's
+          own "RESIDUAL (accepted, by design)" note predicted exactly
+          this.
+        * The narrower candidate from the work order (triple the
+          prospective margin only for shadows whose blockers the current
+          plan RELOCATES) is measured NEGATIVE on this corpus: it would
+          have fired on 0 of the 6 post-gate incidents, because every
+          one is COLLATERAL — a placement that frees one shadow occludes
+          a different, untouched one — not a relocation of the blocked
+          shadow's own occupant.  3 x 0.05 is also numerically today's
+          0.15, so it is a scoping change, not a threshold change.
+      CONCLUSION: the band is real and unchanged by F11, but this
+      evidence can rule a candidate OUT and cannot size a replacement —
+      the post-gate sample is 6 incidents over 31 placements dominated
+      by one repeated seed, and the incident counts are repeated
+      observations of ~a dozen distinct scene/plan interactions, not
+      independent trials.  THRESHOLDS LEFT ALONE, as F11's revert
+      history warrants (335ddc1's 0.05 attempt doubled planning time and
+      collapsed the gated arm 20/20 -> 11/20).  Any replacement must be
+      defined first and then measured on the 20-seed A/B harness.  This
+      corroborates F11's own verdict that the actual lever is F7: 23 of
+      57 primary and 4 of 6 post-gate incidents are absorbed only once
+      the binding death is fixed, which no margin threshold touches.]
 
   F13. [MINOR] DUPLICATE obj_at_boxel INIT ATOMS FOR VISIBLE TARGETS
       (2026-08-22, run 15-26-10 [#76-diag]: cyan_object listed at
@@ -1047,6 +1090,286 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       visible_target_locations.  Harmless — PDDLStream's evaluations
       dict dedupes — but the #76-diag counts are inflated; dedupe in
       _build_init when convenient.
+
+  F14. [DONE] THE EXECUTOR SPENDS A FIXED STEP COUNT PER WAYPOINT PAIR,
+      SO A SMOOTHED TRANSIT THROWS THE CARGO (2026-08-22, user GUI run
+      17-14-10, holding seed 0): orange was picked with
+      pad_normal_force=112.25 N (:133), the transit to free_005 needed
+      RRT ("direct path blocked", :139) and smoothed "8 wps -> 3 wps"
+      (:140), the arm slung the block off the table, and the place entry
+      found pad_normal_force=0.00 N (:145).  Every later refresh render
+      then logged "1 object(s) not visible — keeping last estimate:
+      ['orange_object']" while the planner kept believing orange sat in
+      its original boxel — the episode searched a world that no longer
+      existed and died in the F7 binding death (:635).
+      MECHANISM (measured, tools/swarm_2026-08-22/C_motion_deltas.md +
+      probe_C_motion.py, 7 RNG realizations of the same transit): the
+      RRT bounds every tree edge to RRT_STEP_SIZE = 0.2 rad
+      (streams.py:952), but _smooth_path (SMOOTH_ATTEMPTS=75,
+      streams.py:1101) splices several such edges into ONE straight edge
+      and certifies it with is_path_collision_free, which checks 8
+      samples for collisions and NEVER bounds the edge's joint-space
+      length.  The dispatcher then ran that edge through
+      move_robot_smooth with a hardcoded steps=30
+      (test_full_pipeline.py:1348) — the same schedule it gives a
+      0.2 rad edge.  Worst measured pair: 1.146 rad in one hop =
+      0.0382 rad/step = 9.16 rad/s, 4.2x joint 2's 2.175 rad/s URDF
+      limit; median 8.0 rad/s.  POSITION_CONTROL chases that target with
+      a 240 N-m budget and no maxVelocity anywhere in the path, so the
+      arm swings hard enough to break a friction grasp.  The F10 fix
+      (held cargo checked at its true pose) correctly forces RRT more
+      often, so exposure to this went UP — F14 is the pre-existing
+      defect F10 surfaced, not a regression in F10.
+      SCOPE IS WIDER THAN SMOOTHED RRT (F17 telemetry, run 17-50-31):
+      ordinary 10-waypoint LINEAR moves showed the same class on their
+      first hop — the arm's real pose to the trajectory's first executed
+      waypoint measured 2.29 rad in one pair = 17.7 rad/s with the EE at
+      4.4 m/s.  The bound therefore belongs in the executor, where every
+      caller inherits it, not in the smoother.
+      [FIXED 2026-08-22: move_robot_smooth's step count is now a FLOOR,
+      not a schedule.  It measures the joint-space delta and stretches
+      the interpolation until no joint is commanded past its datasheet
+      velocity (JOINT_VELOCITY_LIMITS, the panda.urdf/datasheet 2.175
+      rad/s for joints 1-4 and 2.610 for the wrist, against the default
+      1/240 s timestep), clamped at MAX_INTERP_STEPS=1200 so a
+      pathological pair slows the arm instead of stalling the episode.
+      Short hops keep exactly the caller's nominal count, so the
+      contact descents and every other call site are byte-identical;
+      only hops that would exceed a limit are stretched, and each one is
+      disclosed at DEBUG ([F14]).  Deliberately NOT fixed in the
+      smoother: bounding shortcut length would change planning geometry
+      and risk the F11-class regression, while the executor bound is
+      exact, local and covers the linear-move case too.
+      VERIFIED (3 consecutive holding seed 0 runs, F17 telemetry
+      reading the physics): peak |qd| fell from 17.7 rad/s to <= 2.55
+      rad/s — inside the limits — worst per-step delta from 0.0737 to
+      0.0106 rad, and ZERO GRIP_LOST and ZERO OFF_SUPPORT events across
+      all three runs (pre-fix the same seed threw orange 838 mm to
+      [0.480,-1.237,0.027], i.e. onto the floor).  Honest cost: an
+      episode's simulated motion time roughly doubles (a real Panda
+      needs 1.05 s for a 2.29 rad joint move; the old schedule did it in
+      0.125 s).  Planning time — the metric CB#113 reports — is
+      untouched.  The two of three runs that still failed failed in the
+      F7 binding-death class, disclosed, not by a throw.]
+
+  F15. [PARTIAL] "CONTAINS SOMETHING THE RENDER CANNOT LOCALIZE" RETIRES
+      THE FRAGMENT THE TARGET IS SITTING IN, AND NEVER SAYS WHAT IT SAW
+      (2026-08-22, run 17-14-10, step-(3) regression): shadow_of_green
+      (:243,:303,:357) and then shadow_of_red — blue's ACTUAL hiding
+      place per the oracle (:53) — each burned 3 strikes of the new
+      sense_contains_unlocalizable guard and were marked not_here
+      (:358, :584); the episode then died in the F7 binding death with
+      the target still physically inside a fragment the planner had
+      eliminated.
+      MECHANISM (tools/swarm_2026-08-22/B_sense_code_path.md): the guard
+      compares two DIFFERENT tests.  sense_shadow_from_render classifies
+      each grid endpoint by a single-pixel seg lookup with no pixel-count
+      floor (execution.py:189-201), while sense_detections comes from
+      detect_objects_from_render, which drops any body whose WHOLE-FRAME
+      footprint is under DETECTION_MIN_PIXELS=6 (perception.py:404).  A
+      body can therefore trip an endpoint while being absent from the
+      detection set, and the branch then refuses to act.  Note also that
+      occluder_pybullet_ids passed to sense is only THIS shadow's
+      current blockers (execution.py:1850), so a relocated occluder is
+      no longer in the ignore set and any body it now intercepts is
+      treated as newly discovered "content".
+      THE 3-STRIKE BUDGET IS SHARED BY TWO DIFFERENT FAILURE MODES
+      (found by the swarm code-path pass, B_sense_code_path.md §2, and
+      it is what actually killed the target's fragment in this run):
+      blocked_counts is ONE dict keyed by shadow id
+      (test_full_pipeline.py:1013, never reset per plan) and is
+      incremented from BOTH execution.py:1967 (contains_nontarget-
+      unlocalizable) and execution.py:2277 (still_blocked), with both
+      giveup tests reading >= 3.  shadow_of_red_object therefore died on
+      a mixed budget: attempt 1 was still_blocked (:466-468, which
+      legitimately shrank the fragment), attempts 2 and 3 were
+      unlocalizable (:529, :583) — three strikes, but never three of the
+      SAME observation, and not one of them evidence of absence.  Split
+      the counters (or at minimum stop the two modes from feeding one
+      budget) as part of (c).
+      WHY THE not_here IS A BELIEF LIE: the branch's own comment says
+      "the content stays unmodelled" — the observation is "this volume
+      contains SOMETHING I could not resolve", which is evidence of
+      OCCUPANCY, not of the target's absence.  Site B in B_sense_code_
+      path.md §5 confirms it writes belief.mark_sensed(found=False)
+      without removing the boxel and without any geometric proof of
+      absence, and that the F5 grid_would_hit contract is only ever
+      checked once at spawn against the ORIGINAL fragment — never
+      re-checked after a partial-reveal shrink.
+      [DONE (a) 2026-08-22: the refusal now NAMES what it saw.
+      sense_shadow_from_render returns a fifth value, interceptor_counts
+      {seg id -> endpoints it stood in front of}, covering every
+      intercepting body; it is diagnostic only and no branch reads it.
+      The guard prints [F15-diag] with, per discovery, its name, its
+      endpoint count, its whole-frame seg pixel count, whether it
+      cleared the detection minimum, and the full set of bodies the
+      render did localize.  Without this the field log could not say
+      which body cost the target its fragment.]
+      [DONE (b) 2026-08-22: LOCALIZE FROM WHAT IS THERE.  Before burning
+      a strike, the branch re-runs the SAME unprojection
+      (detect_objects_from_render) at min_pixels=1 restricted to the
+      intercepting bodies.  The endpoints they intercepted prove they
+      have pixels, and those pixels carry depth — DETECTION_MIN_PIXELS
+      is a whole-frame CONFIDENCE gate, not a statement that the body
+      cannot be located.  Because a 1-5 pixel cloud measures far smaller
+      than the object, the estimate is GROWN to the
+      NOMINAL_HIDDEN_EXTENTS class box centred on the cloud (support-
+      snapped when it sits on the table), mirroring the hidden-object
+      class prior the streams already use: the box only ever
+      over-estimates, so "could something hide here / does this fit"
+      stays conservative.  The discovery then flows through the normal
+      contains_nontarget bookkeeping instead of being refused.  A body
+      with genuinely ZERO pixels still cannot be localized and still
+      burns a strike — the bound stays finite.]
+      [DONE (c) 2026-08-22: NO MORE FALSE not_here, AND SPLIT BUDGETS.
+      belief gains a third status, 'unresolved' (mark_unresolved /
+      get_parked_shadows).  Both giveup sites now park instead of
+      eliminating: the unlocalizable path (whose observation is evidence
+      of OCCUPANCY) and the still_blocked path (whose own message always
+      said "Shadow is NOT observed empty" while writing not_here
+      anyway).  The planner behaviour is unchanged — the replan loop
+      passes known_empty + parked as known_empty_shadows, so a parked
+      fragment is withheld exactly as before and the episode still
+      terminates — but the BELIEF no longer asserts an absence nobody
+      observed, and run_logger discloses parked fragments in the outcome
+      ("parked UNRESOLVED, not eliminated ... the target may be
+      inside"), excluding them from the "Shadows searched" count so a
+      success can never imply the robot cleared a region it gave up on.
+      The unlocalizable strikes also get their own key namespace
+      ("<sid>::unlocalizable") so the two failure modes stop sharing one
+      budget.]
+      NOTE the guard is RARE headless: 0 trips in 4 consecutive seed-0
+      runs, and probe_A_interceptor.py could not find any pose of a
+      thrown orange that renders under 6 px while intercepting a sense
+      endpoint (347 poses swept, disclosed negative).  F14 is the likely
+      upstream cause — a block flung to the floor at the frame edge is
+      exactly the sliver body this branch cannot resolve — so with F14
+      landed the (b) path should fire rarely; (c) is the guarantee that
+      when it does, the target's fragment is not written off.
+      OPEN SUB-FINDING (F15.1): THE THROWN OBJECT WAS NEVER RETIRED.
+      Across all 8 plans the run logged "1 object(s) not visible in the
+      refresh render — keeping last estimate: ['orange_object']" 7 times
+      (:148,:244,:304,:359,:470,:530,:585) and NEVER once reported the
+      step-(3c) LOST verdict, so the planner kept orange in its original
+      boxel for the whole episode while the object was on the floor.
+      Reconstructing the same scene offline WITHOUT the arm renders
+      orange's believed region fully observed-empty (probe_A_
+      interceptor.py PART 3), which points at the retirement check being
+      defeated by transient ARM occlusion at exactly the refresh
+      moments: retire_lost_objects only fires when EVERY slice of the
+      believed region is visible-through, and an arm parked over that
+      region during the post-sense refresh makes it "occluded, therefore
+      not lost" — correct in isolation, but it means a stale belief can
+      persist indefinitely as long as the arm keeps happening to stand
+      in front of it.  Evaluate with (b)/(c): the honest fix is probably
+      to remember the un-observed verdict and retry the region when the
+      arm is elsewhere, not to relax the occlusion rule.  Note the
+      audit-#78 census DID track reality correctly over the same period
+      (shadow_of_orange's blocker flips orange -> red at :455), so the
+      census and the object registry disagreed for the whole episode.
+
+  F16. [DONE] SENSE RE-CHECKS ONLY THE SAME CASTER'S SIBLING FRAGMENTS,
+      AND ONLY ON clear_but_empty (2026-08-22): the sibling batch-sense
+      (execution.py:2052) re-runs sense_shadow_from_render only over
+      fragments of the SAME caster and only when the primary outcome was
+      clear_but_empty.  Nothing regressed here — the user's broader
+      expectation was simply never implemented — but now that sense is
+      render-based, ONE depth+seg render already contains the evidence
+      for EVERY registry fragment.  Direction: classify every fragment
+      against the sense render, remove all observed clear_but_empty ones
+      (each removal observation-backed, mirroring the existing path),
+      surface found_target immediately, and leave blocked/nontarget
+      fragments to planned senses.  This directly cuts the wasted-sense
+      loops that F15 exposes and reduces mission actions.  Step counts
+      change, so CB#113 re-baselines regardless.
+      [FIXED 2026-08-22: the caster-scoped loop is replaced by
+      execution.sweep_all_fragments, which classifies EVERY registry
+      SHADOW fragment against the sense render and is called from THREE
+      sites, not one — the clear_but_empty/contains_nontarget branch (as
+      before), the still_blocked branch, and the F15 unlocalizable
+      branch.  The last two are the point: a sense that could not settle
+      ITS fragment still rendered the whole table, and that observation
+      used to be discarded — exactly the loop where the field run burned
+      six senses learning nothing.  The removal criterion is byte-
+      identical to the sibling pass (delete only on clear_but_empty,
+      i.e. every grid endpoint of that fragment was seen; each removal
+      observation-backed via belief.mark_sensed(found=False)), and
+      still_blocked fragments get the same partial-reveal shrink a
+      planned sense would give them.  contains_nontarget fragments are
+      deliberately left untouched for a planned sense that can run the
+      discovery bookkeeping.  A found_target on some OTHER fragment is
+      reported loudly ([F16]) but NOT acted on — promoting it would mean
+      running the audit-#76 registration chain from inside a sweep, and
+      that chain is the found-path's contract; surfacing it lets the
+      next plan target it.  Promoting that surface to a belief update is
+      the natural follow-up.]
+
+  F18. [OPEN] A TRANSIT KNOCKS A BYSTANDER FLAT AND THE EPISODE STILL
+      REPORTS SUCCESS (2026-08-22, found BY the new F17 telemetry on the
+      first tray run after F15/F16 landed, run 19-07-38, seed
+      343879192, find-and-tray-stack): during
+      "plan#1 action 3/9: move(tray)" — carrying cyan_object — the arm
+      hit orange_object, which the arm was never holding: DISTURBED x44,
+      TOPPLE, displaced 75.9 mm and ending at tilt 90.0 deg (flat on its
+      side) at [-0.018,0.197,0.354].  It stayed toppled for the rest of
+      the episode, and the run reported SUCCESS because the goal
+      (cyan and blue on the tray) did not happen to need orange.
+      This is the F10 family surviving F10's fix: F10 corrected the
+      held-cargo POSE used in collision checking, and this transit's
+      cargo (cyan) was checked — so either the executed motion diverges
+      from the validated one, or it was the ARM's own links rather than
+      the cargo that swept orange, in which case the arm's own check
+      should have rejected the edge.  Establish which before proposing a
+      fix; the telemetry frame stream for that action has the per-step
+      poses of both bodies and the arm.
+      This is exactly #P2's thesis (prove the failures are EXECUTION,
+      detect physical failure, fail honestly) with a concrete, cheap
+      detector now available: the world-integrity monitor #P2 asks for is
+      largely already computed — telemetry's DISTURBED event is "a body
+      the arm never grasped moved", which is the definition #P2 needs.
+      Wiring that event into the run outcome (a success that toppled a
+      bystander is not a clean success) is the natural next step and
+      would give the paper an honest per-episode integrity flag.
+
+  F17. [DONE] HEADLESS RUNS RECORDED DECISIONS BUT NOT PHYSICS
+      (2026-08-22, user-directed): a GUI run let the user WATCH the
+      episode; a headless run logged plans, senses and census verdicts
+      and almost nothing about the world, so F14 — a block visibly slung
+      off the table — was caught by eye and left only downstream
+      symptoms in the log.  Every field failure of this class needed a
+      human at the GUI.
+      [FIXED 2026-08-22: new telemetry.py, hooked at all seven
+      p.stepSimulation sites (robot_utils x4, execution x1, boxel_env
+      x2).  Per FRAME (default every 0.05 s of sim time, plus a forced
+      frame on every event): each body's pose, rpy, tilt, linear and
+      angular velocity, resting height, contact partners with normal
+      forces, displacement this action, drift since spawn and offset
+      RELATIVE to the end effector, plus the arm's joint positions,
+      velocities, per-step deltas, EE pose and EE speed — to
+      telemetry.log and telemetry.jsonl in the run directory.  Per
+      HEARTBEAT (default 0.5 s of sim time): a compact where-is-
+      everything line into the MAIN run log.  EVENTS fire on physical
+      anomalies — FLING (an unheld body moving fast, or held cargo
+      OUTRUNNING the gripper), GRIP_LOST (cargo leaving the pads in
+      mid-air with the fingers still closed, confirmed on the next
+      check so a normal release does not trip it), TOPPLE, OFF_SUPPORT,
+      AIRBORNE, JOINT_JUMP, JOINT_OVERSPEED, DISTURBED (a body the arm
+      never grasped moved) — with the state-like ones LATCHED to their
+      transition so a block lying on the floor does not re-fire forever.
+      Per ACTION: peak EE speed, peak joint velocity, worst per-step
+      joint delta and every body's net displacement, peak speed and end
+      state.  SCOPE: a pure observer — log text is its only output, it
+      never feeds the registry, the belief or the planner, and it reads
+      the simulator directly (the same accepted category as the eval
+      verifiers and the execution servo, NOT the perception path).
+      CONSOLE: everything goes through logger.debug or straight to the
+      telemetry files, so no telemetry line ever reaches the console.
+      DEFAULT ON headless, OFF under the GUI (user direction: the GUI
+      already shows this); --telemetry / --no-telemetry override, and
+      eval_runner passes --no-telemetry because the sweep MEASURES
+      wall-clock and an observer that costs time would shift the numbers
+      it reports.  This is what caught F14's mechanism headlessly on the
+      first try, and its numbers are the F14 verification evidence.]
 
 ================================================================================
 #P2. [OPEN T0]  STACKING-ACCURACY DROP: PROVE IT IS EXECUTION, DETECT PHYSICAL
