@@ -95,6 +95,7 @@ from execution import (audit_robot_held_state,
                        compute_shadow_blockers,
                        refresh_object_aabbs,
                        release_held_object_in_place,
+                       retire_lost_objects,
                        execute_pick, execute_place, execute_stack,
                        handle_sense_action, EmptyHandError)
 
@@ -1474,7 +1475,15 @@ def main(gui=True, run_logger=None, scene_config=None,
                     # random-pairs seed 3: ee_vs_obj_xy ~130 mm on
                     # every retry against a toppled occluder).
                     env.update_object_positions()
-                    refresh_object_aabbs(env, registry, viz=viz)
+                    # #P1 step (3c): hand is empty here — also check
+                    # for objects whose believed region renders empty.
+                    _lost = refresh_object_aabbs(env, registry, viz=viz,
+                                                 check_lost=True)
+                    if _lost:
+                        retire_lost_objects(
+                            _lost, registry, viz, shadows,
+                            shadow_occluder_map, boxel_centers,
+                            occluders, belief)
                     break
                 held_body_id, current_config = result
                 # #P1 F2: a successful pick proves the object is
@@ -1556,7 +1565,18 @@ def main(gui=True, run_logger=None, scene_config=None,
                         env, robot_id, expected_held_body_id=None,
                         tag=f"post-empty-hand-place:{obj_str}")
                     env.update_object_positions()
-                    refresh_object_aabbs(env, registry, viz=viz)
+                    # #P1 step (3c): a transit-slipped object that fell
+                    # somewhere visible is re-posed by the refresh; one
+                    # that fell OFF the table (or out of view) leaves
+                    # its believed region rendering empty — retire it
+                    # instead of re-picking a stale fiction.
+                    _lost = refresh_object_aabbs(env, registry, viz=viz,
+                                                 check_lost=True)
+                    if _lost:
+                        retire_lost_objects(
+                            _lost, registry, viz, shadows,
+                            shadow_occluder_map, boxel_centers,
+                            occluders, belief)
                     break
                 if place_result is None:
                     # audit #79 (#P1 rework) — distinguish IK failure
@@ -1761,7 +1781,14 @@ def main(gui=True, run_logger=None, scene_config=None,
                         env, robot_id, expected_held_body_id=None,
                         tag=f"post-empty-hand-stack:{obj_str}")
                     env.update_object_positions()
-                    refresh_object_aabbs(env, registry, viz=viz)
+                    # #P1 step (3c): see the place-edition comment.
+                    _lost = refresh_object_aabbs(env, registry, viz=viz,
+                                                 check_lost=True)
+                    if _lost:
+                        retire_lost_objects(
+                            _lost, registry, viz, shadows,
+                            shadow_occluder_map, boxel_centers,
+                            occluders, belief)
                     break
                 if stack_result is None:
                     # audit #79 (#P1 rework) — mirror of the place

@@ -866,7 +866,28 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   and the next observation corrects it.  Remaining p.getAABB reads
   are eval verifiers (stack checks, Phase-4 split, F5 pre-flight
   target box) and the execution servo (live re-aim, grip/release
-  verification, stack top measurement) — the accepted scope.]
+  verification, stack top measurement) — the accepted scope.
+  (3c) LOST-OBJECT BELIEF UPDATE (the step-(2c) follow-on):
+  refresh_object_aabbs(check_lost=True) classifies each STALE
+  object's believed region — the object boxel's own sense-grid
+  slices — against the same render: when every slice is
+  visible-through up to the shared marginal tolerance, the object is
+  LOST, and retire_lost_objects removes its OBJECT boxel and its
+  shadow fragments (each marked not_here: those regions are now
+  camera-visible and the target did not render there, so the removal
+  is observation-backed, mirroring clear_but_empty; the object
+  re-enters through detection or discovery when it resurfaces).
+  Wired at the HANDEMPTY refresh sites only: the four sense-action
+  branches (reusing the sense render) and the three handempty
+  failure paths (pick failure, EmptyHandError at place and stack —
+  where transit slips actually strand stale boxels); the two
+  still-holding IK-failure refreshes stay plain (the held object's
+  believed region is legitimately empty — checking it would retire
+  the cargo).  An occluded region (arm, another body, tray walls in
+  front) is never claimed lost.  Probe
+  tools/_probe_lost_object.py: control refresh loses nothing; a
+  vanished occluder (p.removeBody, the knocked-off-table simulation)
+  is reported LOST with zero false positives.]
 
   F11. [DONE] PLACEMENT-BLOCKING FACTS USE THE FREE BOXEL'S OWN AABB AS
       THE BLOCKING VOLUME, NOT THE PLACED OBJECT'S (2026-08-22, user
