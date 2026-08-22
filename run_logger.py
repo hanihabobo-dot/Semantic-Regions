@@ -247,13 +247,31 @@ def report_run_outcome(
             print(f"  Target: {target_name}")
             print(f"  Found in: {belief.target_found_in}")
             print(f"  Plans executed: {plan_count}")
-            print(f"  Shadows searched: {len(shadows) - len(belief.get_unknown_shadows())}")
+            # #P1 F15(c): parked-unresolved fragments are not searched —
+            # count them separately so a success never implies the
+            # robot cleared regions it merely gave up on.
+            _parked_ok = belief.get_parked_shadows()
+            print(f"  Shadows searched: "
+                  f"{len(shadows) - len(belief.get_unknown_shadows()) - len(_parked_ok)}"
+                  + (f" ({len(_parked_ok)} parked unresolved)"
+                     if _parked_ok else ""))
         else:
             print(f"  Stack goal: {goal}")
             print(f"  Final on-relations: {on_relations}")
             print(f"  Plans executed: {plan_count}")
     else:
         remaining = belief.get_unknown_shadows()
+        # #P1 F15(c): fragments parked UNRESOLVED were never observed
+        # empty — the robot saw them occupied by something it could not
+        # localize, or never cleared the view at all.  They are excluded
+        # from planning but must never read as "searched", or a run that
+        # gave up on the region actually holding the target would look
+        # like an exhaustive search that came up empty.
+        _parked = belief.get_parked_shadows()
+        if _parked:
+            print(f"  NOTE: {len(_parked)} shadow fragment(s) parked "
+                  f"UNRESOLVED, not eliminated — sensing never settled "
+                  f"them and the target may be inside: {sorted(_parked)}")
         if exit_reason is None:
             # audit #107: replan cap removed; a failed run with no explicit
             # give-up means the runner's per-cell wall-clock budget was

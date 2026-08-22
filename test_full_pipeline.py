@@ -1073,7 +1073,12 @@ def main(gui=True, run_logger=None, scene_config=None,
     while not _loop_done():
         plan_count += 1
         unknown_shadows = belief.get_unknown_shadows()
-        known_empty = belief.get_known_empty_shadows()
+        # #P1 F15: parked-unresolved fragments are withheld from the
+        # planner exactly like eliminated ones (or the episode loops on
+        # them forever), but the BELIEF keeps them distinct — they were
+        # never observed empty, and the run outcome discloses them.
+        known_empty = (belief.get_known_empty_shadows()
+                       + belief.get_parked_shadows())
 
         # Giveup parole (2026-08-21): see the pick_giveup_marked_at
         # comment above.  Runs before planner.plan() so the paroled
