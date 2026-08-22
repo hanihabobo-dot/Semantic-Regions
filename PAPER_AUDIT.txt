@@ -816,6 +816,58 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   feeding planning: ONLY the sense-discovery BoxelData builds in
   handle_sense_action — exactly step (3)'s scope.]
 
+  [STEP (3) SENSE OVER THE RENDERED OBSERVATION — 2026-08-22.
+  (3a) SENSE + CENSUS CLASSIFY AGAINST THE RENDER.  perception.py
+  gains the exact inverse of the step-(2) unprojection
+  (project_points_to_pixels) and first_surface_interceptors
+  (endpoint -> is a rendered surface strictly in front, and whose seg
+  id is it; SENSE_RENDER_DEPTH_TOL 3 mm — the buffer's own
+  quantisation is micrometres, the tolerance absorbs pixel-centre-ray
+  parallax), and sense_shadow_raycasting is REPLACED by
+  sense_shadow_from_render: same shared grid (sense_ray_slices), same
+  four outcomes, same per-slice marginal tolerance and partial-reveal
+  shrink bbox, but every endpoint is classified against ONE
+  TinyRenderer depth+seg render instead of rayTestBatch body-id casts
+  (the seg mask is the accepted sim-grade identity map; the
+  pre-step-3 functions live in git history).  Criterion equivalence
+  measured BEFORE the swap (tools/_probe_render_sense.py, the 20 A/B
+  eval seeds + 343879192): 96.8 % raw endpoint agreement, ZERO
+  fragment-level outcome differences, ZERO found-chain differences —
+  grid_would_hit therefore KEEPS its pure-geometry segment test as
+  the spawn-time findability contract (pixel-limit idealization;
+  the F5 one-criterion chain is verified, not redefined).
+  compute_shadow_blockers gets the same treatment: one render per
+  census, endpoints classified by first_surface_interceptors, the
+  minimal-blocker tolerance selection unchanged — sense, census,
+  placement facts and pre-flight now share grid geometry AND (for
+  the two live classifiers) the observation channel.
+  handle_sense_action renders ONCE per sense action and threads the
+  same observation through the main classification, the sibling
+  batch-sense, the audit-#76 found-target registration
+  (estimate-based, no p.getAABB; a target below DETECTION_MIN_PIXELS
+  stays unregistered this round, logged, next observation localizes
+  it), the contains_nontarget discovery builds (estimate-based; an
+  un-localizable discovery is skipped with a log, and when NO
+  discovery is localizable the fragment is KEPT and an
+  audit-#21-style strike burned — removing an observed-occupied
+  volume would lie, an unbounded keep-loop would hang) and the
+  closing refresh (refresh_object_aabbs gained detections= to reuse
+  the render).  Off-image endpoints are never claimed observed
+  (counted blocked; zero occurrences on the table scenes,
+  probe-verified).
+  (3b) GREP-GATE CLEANUP: the two remaining p.getAABB writes feeding
+  the registry — the post-place free-space carve
+  (update_after_place's placed AABB) and the post-stack boxel
+  refresh — now use the post-action RENDER estimate with the
+  rigid-size formula (per-axis max of known and estimated extents,
+  XY centred on the estimate, z top-anchored); when the arm occludes
+  the just-manipulated object, the known-size box is re-posed at the
+  plan's intended destination (consumed cell / support top), logged,
+  and the next observation corrects it.  Remaining p.getAABB reads
+  are eval verifiers (stack checks, Phase-4 split, F5 pre-flight
+  target box) and the execution servo (live re-aim, grip/release
+  verification, stack top measurement) — the accepted scope.]
+
   F11. [DONE] PLACEMENT-BLOCKING FACTS USE THE FREE BOXEL'S OWN AABB AS
       THE BLOCKING VOLUME, NOT THE PLACED OBJECT'S (2026-08-22, user
       GUI run 12-09-28 seed 0 + no-gate eval arm seed 0, same

@@ -1739,7 +1739,7 @@ class BoxelTestEnv:
         visibility where an object edge sticks out from behind an occluder.
 
         Only used for initial scene observation — the sensing action uses
-        ``sense_shadow_raycasting()`` with its own ray grid.
+        ``sense_shadow_from_render()`` against the rendered observation.
         
         Returns:
             Tuple of (visible object names, dict of all object poses)

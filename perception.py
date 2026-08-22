@@ -4,7 +4,7 @@ perception module).
 
 Single source of truth for WHERE the sense action's rays terminate
 inside a shadow fragment.  Both the physical sense
-(execution.sense_shadow_raycasting), the scheduler's blocker census
+(execution.sense_shadow_from_render), the scheduler's blocker census
 (execution.compute_shadow_blockers) and the spawn-time findability
 guarantee (F5 pre-flight / Phase-4 classification, via grid_would_hit)
 build their geometry from sense_ray_slices(), so "the harness promised
@@ -182,6 +182,93 @@ def _segments_intersect_aabb(origin: np.ndarray, endpoints: np.ndarray,
                              bmin: np.ndarray, bmax: np.ndarray) -> bool:
     """True if any segment origin->endpoint intersects the AABB."""
     return bool(np.any(segment_aabb_hit_mask(origin, endpoints, bmin, bmax)))
+
+
+# #P1 step (3): metric depth slack for the render-based sense.  An
+# endpoint is INTERCEPTED when the rendered first surface at its pixel
+# lies more than this many metres in front of it (view-axis depth).
+# The depth buffer's own quantisation is micrometres here (float32 at
+# 0.6-0.9 m with near 0.01 / far 5.0); the real mismatch source is that
+# the buffer samples the PIXEL-CENTRE ray while the endpoint projects
+# off-centre — worst near grazing surfaces.  3 mm absorbs that without
+# masking any real interposition: a body in front of an endpoint
+# overlaps it by >= the 1 cm-scale margins the grid guarantees
+# (SENSE_LOW_SLICE_OFFSET puts the dense endpoints >= 5 mm inside any
+# >= 3 cm target).
+SENSE_RENDER_DEPTH_TOL = 0.003
+
+
+def project_points_to_pixels(points, view_matrix, projection_matrix,
+                             width: int, height: int):
+    """World points -> (rows, cols, view_depth_m, in_view) for the render.
+
+    Exact inverse of :func:`unproject_depth_pixels`'s pixel convention:
+    a point unprojected from pixel centre (r, c) projects back to
+    rows[i] == r, cols[i] == c.  ``view_depth_m`` is the distance along
+    the camera FORWARD axis (the quantity a metric depth image stores),
+    NOT the euclidean ray length.  ``in_view`` marks points that land
+    inside the image and in front of the near plane; rows/cols are
+    rounded to the nearest pixel and only valid where ``in_view``.
+    """
+    pts = np.asarray(points, dtype=float)
+    proj = np.asarray(projection_matrix, dtype=float).reshape(4, 4, order="F")
+    view = np.asarray(view_matrix, dtype=float).reshape(4, 4, order="F")
+    ones = np.ones((len(pts), 1))
+    homo = np.hstack([pts, ones])
+    view_pts = homo @ view.T
+    depth_m = -view_pts[:, 2]           # OpenGL camera looks down -Z
+    clip = view_pts @ proj.T
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ndc = clip[:, :3] / clip[:, 3:4]
+    cols = np.rint((ndc[:, 0] + 1.0) * width / 2.0 - 0.5).astype(int)
+    rows = np.rint((1.0 - ndc[:, 1]) * height / 2.0 - 0.5).astype(int)
+    in_view = ((depth_m > 0.0)
+               & (rows >= 0) & (rows < height)
+               & (cols >= 0) & (cols < width))
+    return rows, cols, depth_m, in_view
+
+
+def first_surface_interceptors(endpoints, depth_image_m, seg_mask,
+                               view_matrix, projection_matrix,
+                               depth_tol: float = SENSE_RENDER_DEPTH_TOL):
+    """Which rendered surface, if any, stands in FRONT of each endpoint?
+
+    The render-based counterpart of a terminating ray cast (#P1 step 3):
+    for each world endpoint, look up the rendered first surface at its
+    pixel and compare view-axis depths.  Returns (intercepted, hit_ids,
+    in_view):
+
+      * intercepted[i] — a surface lies more than ``depth_tol`` metres
+        in front of endpoint i, i.e. the camera cannot see the endpoint;
+        the sense semantics of "the ray never reached its target".
+      * hit_ids[i] — the seg-mask id of that surface (valid only where
+        intercepted; the seg mask is the accepted sim-grade identity
+        map).
+      * in_view[i] — endpoint projects into the image; endpoints outside
+        the frame are never claimed observed (callers treat them as
+        blocked/unknown, not clear).
+
+    A surface AT or BEYOND the endpoint leaves it un-intercepted: rays
+    terminate at their endpoints, so bodies behind the endpoint never
+    count — matching pybullet.rayTestBatch semantics.
+    """
+    endpoints = np.asarray(endpoints, dtype=float)
+    depth_image_m = np.asarray(depth_image_m, dtype=float)
+    seg = np.asarray(seg_mask)
+    h, w = depth_image_m.shape
+    rows, cols, depth_m, in_view = project_points_to_pixels(
+        endpoints, view_matrix, projection_matrix, w, h)
+    intercepted = np.zeros(len(endpoints), dtype=bool)
+    hit_ids = np.full(len(endpoints), -1, dtype=int)
+    iv = np.nonzero(in_view)[0]
+    if iv.size:
+        r, c = rows[iv], cols[iv]
+        surf = depth_image_m[r, c]
+        front = surf < (depth_m[iv] - depth_tol)
+        idx = iv[front]
+        intercepted[idx] = True
+        hit_ids[idx] = seg[rows[idx], cols[idx]]
+    return intercepted, hit_ids, in_view
 
 
 def grid_would_hit(camera_pos, frag_min, frag_max,
