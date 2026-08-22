@@ -126,8 +126,10 @@ def is_config_collision_free(robot_id: int, joint_positions,
     When *held_body_ids* is provided, those bodies are repositioned to
     follow the end-effector at the hypothetical configuration and checked
     for environment collisions.  ``resetJointState`` does not move
-    constraint-attached bodies, so we manually compute the EE world
-    pose and teleport each held body there before collision detection.
+    grasped bodies, so we manually compute the EE world pose and
+    teleport each held body to ``ee_pos - held_body_ee_offset`` (WORLD
+    frame — the inverse of compute_kin's ``target = centre + offset``),
+    keeping the body's own orientation (#P1 F10).
 
     Rendering is managed via ``RenderingLock`` — safe to call both
     standalone and from within an outer lock (e.g. planning phase).
@@ -147,11 +149,12 @@ def is_config_collision_free(robot_id: int, joint_positions,
                                   for environment collisions.
         held_body_ee_offset:      Optional [x, y, z] offset from the EE
                                   to the held object center (the grasp
-                                  clearance).  The held body is placed at
-                                  ``ee_pos - offset`` in the EE frame.
-                                  Without this, the body is placed at the
-                                  EE origin, which is too high for
-                                  top-down grasps.
+                                  clearance, world frame — grasp.position
+                                  as used by compute_kin).  The held body
+                                  is placed at ``ee_pos - offset`` in the
+                                  WORLD frame.  Without this, the body is
+                                  placed at the EE origin, which is too
+                                  high for top-down grasps.
 
     Returns:
         True if the configuration has no disallowed contacts.
@@ -176,22 +179,35 @@ def is_config_collision_free(robot_id: int, joint_positions,
                 ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK,
                                          computeForwardKinematics=True,
                                          physicsClientId=physics_client)
-                ee_pos, ee_orn = ee_state[4], ee_state[5]
+                ee_pos = ee_state[4]
 
+                # #P1 F10 (2026-08-22): the cargo hangs BELOW the hand
+                # by the WORLD-frame grasp offset — compute_kin aims
+                # the EE at object_center + grasp.position (world
+                # frame), so the carried body's centre sits at
+                # ee_pos - offset.  The previous code computed an
+                # EE-frame transform and then teleported the body to
+                # the raw EE pose anyway (the computed pose was never
+                # used): every held-cargo check ran ~10 cm above the
+                # true carried height with the flange orientation, so
+                # a 13 cm block hanging under the hand was invisible
+                # to RRT validation — the run 20-17-18 held-red-
+                # through-green mechanism.  The body KEEPS its own
+                # orientation: the top-down friction grasp carries it
+                # essentially upright, while the flange quaternion
+                # would tip the tested box onto its side.
                 if held_body_ee_offset is not None:
-                    offset_local = [-held_body_ee_offset[0],
-                                    -held_body_ee_offset[1],
-                                    -held_body_ee_offset[2]]
-                    held_pos, held_orn = p.multiplyTransforms(
-                        ee_pos, ee_orn, offset_local, [0, 0, 0, 1])
+                    held_pos = [ee_pos[0] - held_body_ee_offset[0],
+                                ee_pos[1] - held_body_ee_offset[1],
+                                ee_pos[2] - held_body_ee_offset[2]]
                 else:
-                    held_pos, held_orn = ee_pos, ee_orn
+                    held_pos = ee_pos
 
                 for hid in held_body_ids:
                     saved_held[hid] = p.getBasePositionAndOrientation(
                         hid, physicsClientId=physics_client)
                     p.resetBasePositionAndOrientation(
-                        hid, ee_pos, ee_orn,
+                        hid, held_pos, saved_held[hid][1],
                         physicsClientId=physics_client)
 
             p.performCollisionDetection(physicsClientId=physics_client)
