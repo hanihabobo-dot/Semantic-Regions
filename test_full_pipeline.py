@@ -77,6 +77,7 @@ from boxel_env import (BoxelTestEnv, SceneConfig,
                        default_scene, mixed_shapes_scene,
                        scalability_scene, stack_scene,
                        random_pairs_scene)
+import telemetry          # #P1 F17 world telemetry
 from boxel_data import BoxelRegistry, BoxelType
 from cell_merger import merge_free_space_cells
 from perception import grid_would_hit
@@ -455,7 +456,10 @@ def main(gui=True, run_logger=None, scene_config=None,
          baseline: str = 'semantic',
          uniform_cell_size: float = 0.05,
          min_boxel_size: Optional[float] = None,  # audit #77
-         run_config: Optional[Dict[str, Any]] = None):
+         run_config: Optional[Dict[str, Any]] = None,
+         telemetry_enabled: Optional[bool] = None,   # #P1 F17
+         telemetry_period: float = 0.05,
+         telemetry_heartbeat: float = 0.5):
     print("=" * 60)
     print("FULL PIPELINE: PDDLStream + Replanning")
     print("=" * 60)
@@ -903,6 +907,37 @@ def main(gui=True, run_logger=None, scene_config=None,
     body_id_to_name = {info.object_id: name
                        for name, info in env.objects.items()}
 
+    # -----------------------------------------------------------------
+    # #P1 F17 — arm the world telemetry recorder.
+    #
+    # A GUI run lets the user WATCH the physics; a headless run used to
+    # record only decisions, so an ejected block or a toppled tower left
+    # no trace beyond its downstream symptoms (the F14 transit throw was
+    # caught by eye, not by the log).  The recorder samples every
+    # simulation step and writes telemetry.log / telemetry.jsonl into the
+    # run directory, with half-second heartbeats, physical events and
+    # per-action summaries mirrored into the run log.  It is a pure
+    # observer: log text is its only output, nothing here feeds the
+    # registry, the belief or the planner.
+    #
+    # Default ON headless, OFF under the GUI (user direction 2026-08-22);
+    # --telemetry / --no-telemetry override.  Every line goes through
+    # logger.debug or straight to the telemetry files, so the console is
+    # untouched either way.
+    # -----------------------------------------------------------------
+    _tele_on = (not gui) if telemetry_enabled is None else telemetry_enabled
+    if _tele_on and run_logger is not None:
+        telemetry.enable(
+            env.client_id, robot_id, body_id_to_name, run_logger.run_dir,
+            frame_period_s=telemetry_period,
+            heartbeat_period_s=telemetry_heartbeat,
+        )
+        print(f"  [F17] world telemetry recording to "
+              f"{run_logger.run_dir}/telemetry.log "
+              f"(frames {telemetry_period:.3f}s, "
+              f"heartbeat {telemetry_heartbeat:.2f}s of sim time)")
+        telemetry.phase("phase-5 planning (pre-execution)")
+
     # Initialise belief (all shadows unknown) and the planner.
     # The planner is stateless between calls — all context it needs
     # (known-empty shadows, moved occluders, current config) is passed
@@ -1291,6 +1326,16 @@ def main(gui=True, run_logger=None, scene_config=None,
             params = action[1:]
 
             print(f"\n  Executing: {action_name}")
+            # #P1 F17: segment the telemetry stream by dispatched action,
+            # so every frame, event and summary is attributable to the
+            # action that produced it.
+            # Only the string params (object / boxel names) go in the
+            # label — configs and trajectories carry numpy arrays whose
+            # repr would swamp the line.
+            telemetry.phase(
+                f"plan#{plan_count} action {i + 1}/{len(plan)}: "
+                f"{action_name}("
+                f"{', '.join(x for x in params if isinstance(x, str))})")
 
             if action_name == 'move':
                 # MOVE: follow a collision-free trajectory from q1 to q2.
@@ -1345,6 +1390,21 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # report 2026-08-20).
                 last_wp_idx = len(traj.waypoints) - 1
                 for wi, wp in enumerate(traj.waypoints[1:], start=1):
+                    # #P1 F17: record the joint-space size of every
+                    # waypoint pair BEFORE executing it.  The executor
+                    # spends a fixed step count per pair, so this number
+                    # divided by the step count is the commanded per-step
+                    # jump — the quantity behind a thrown cargo.
+                    if telemetry.is_active():
+                        _q_now = np.array([p.getJointState(robot_id, j)[0]
+                                           for j in range(7)])
+                        _dq = np.asarray(wp.joint_positions) - _q_now
+                        telemetry.note(
+                            f"waypoint {wi}/{last_wp_idx} -> "
+                            f"max|dq|={np.max(np.abs(_dq)):.4f} rad "
+                            f"(j{int(np.argmax(np.abs(_dq)))}), "
+                            f"||dq||={np.linalg.norm(_dq):.4f} rad, "
+                            f"settle={wi == last_wp_idx}")
                     move_robot_smooth(robot_id, wp.joint_positions,
                                       gui, steps=30,
                                       settle=(wi == last_wp_idx))
@@ -2253,7 +2313,13 @@ if __name__ == "__main__":
             uniform_cell_size=args.uniform_cell_size,
             min_boxel_size=args.min_boxel_size,  # audit #77 step 2
             run_config=run_config,
+            telemetry_enabled=args.telemetry,       # #P1 F17
+            telemetry_period=args.telemetry_period,
+            telemetry_heartbeat=args.telemetry_heartbeat,
         )
     finally:
+        # #P1 F17: flush the final action summary before the log file
+        # closes; a no-op when telemetry was never armed.
+        telemetry.disable()
         logger.close()
     sys.exit(0 if success else 1)

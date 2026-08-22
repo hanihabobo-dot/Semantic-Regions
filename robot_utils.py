@@ -9,6 +9,8 @@ import logging
 import numpy as np
 import pybullet as p
 
+import telemetry          # #P1 F17 world telemetry (no-op unless armed)
+
 logger = logging.getLogger(__name__)
 
 
@@ -607,6 +609,7 @@ def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
             p.setJointMotorControl2(robot_id, i, p.POSITION_CONTROL,
                                     targetPosition=interp[i], force=240)
         p.stepSimulation()
+        telemetry.tick()
         if gui:
             time.sleep(1 / 120)
 
@@ -635,6 +638,7 @@ def move_robot_smooth(robot_id: int, target_joints, gui: bool = False,
             p.setJointMotorControl2(robot_id, i, p.POSITION_CONTROL,
                                     targetPosition=target[i], force=240)
         p.stepSimulation()
+        telemetry.tick()
         if gui:
             time.sleep(1 / 120)
 
@@ -672,6 +676,7 @@ def open_gripper(robot_id: int, gui: bool = False):
                                 p.POSITION_CONTROL,
                                 targetPosition=0.04, force=200)
         p.stepSimulation()
+        telemetry.tick()
         if gui:
             time.sleep(1 / 120)
     finger_pos = [p.getJointState(robot_id, fj)[0] for fj in FINGER_JOINTS]
@@ -723,5 +728,6 @@ def close_gripper(robot_id: int, gui: bool = False,
                                 targetPosition=target_finger_pos,
                                 force=force)
         p.stepSimulation()
+        telemetry.tick()
         if gui:
             time.sleep(1 / 120)

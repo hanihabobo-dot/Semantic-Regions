@@ -550,6 +550,43 @@ def parse_pipeline_args(argv=None):
              'remain per-object regardless of this knob.',
     )
     parser.add_argument(
+        '--telemetry',
+        dest='telemetry',
+        action='store_true',
+        default=None,
+        help='Force the #P1 F17 world telemetry recorder ON. Default: ON '
+             'for headless runs, OFF under the GUI (a GUI run already '
+             'shows the physics, and sampling should not tax it). The '
+             'recorder writes telemetry.log / telemetry.jsonl into the run '
+             'directory (every body pose, velocity, tilt, contacts, '
+             'relative-to-EE offset and every arm joint at frame '
+             'resolution) plus half-second heartbeats, physical events '
+             '(fling, grip loss, topple, off-support, joint jump) and '
+             'per-action summaries into the run log. Nothing telemetry '
+             'writes ever reaches the console.',
+    )
+    parser.add_argument(
+        '--no-telemetry',
+        dest='telemetry',
+        action='store_false',
+        help='Force the world telemetry recorder OFF, including headless.',
+    )
+    parser.add_argument(
+        '--telemetry-period',
+        type=float,
+        default=0.05,
+        help='Telemetry FRAME cadence in simulated seconds (default 0.05 = '
+             'every 12 steps at 240 Hz). Events force extra frames on top, '
+             'so anomalies are always captured densely.',
+    )
+    parser.add_argument(
+        '--telemetry-heartbeat',
+        type=float,
+        default=0.5,
+        help='Cadence in simulated seconds of the compact where-is-'
+             'everything dump written into the MAIN run log (default 0.5).',
+    )
+    parser.add_argument(
         '--max-plan-time',
         type=float,
         default=1800.0,
