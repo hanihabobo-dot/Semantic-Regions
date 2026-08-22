@@ -1652,6 +1652,7 @@ def handle_sense_action(
     shadow_occluder_map,
     blocked_counts,
     blocked_giveup_shadows,
+    nontarget_rediscovery_counts=None,
     boxel_centers,
     boxel_to_pybullet,
     object_body_ids,
@@ -1907,6 +1908,20 @@ def handle_sense_action(
                     if viz is not None:
                         viz.remove_boxel_viz(obj_name)
 
+                # #P1 F9: strike counter for REDISCOVERIES — this
+                # object was already registered (spawn occluder or a
+                # previous discovery) and a sense has hit it inside a
+                # fragment again.  Mirrors the audit-#21 3-strike
+                # sense giveup; see the counter's declaration in
+                # test_full_pipeline for the semantics.
+                if (nontarget_rediscovery_counts is not None
+                        and old_obj is not None):
+                    nontarget_rediscovery_counts[obj_name] = \
+                        nontarget_rediscovery_counts.get(obj_name, 0) + 1
+                    print(f"      -> rediscovery "
+                          f"{nontarget_rediscovery_counts[obj_name]}/3 "
+                          f"for {obj_name} (#P1 F9 strike counter)")
+
                 obj_bd = BoxelData(
                     id=obj_name,
                     boxel_type=BoxelType.OBJECT,
@@ -1950,13 +1965,35 @@ def handle_sense_action(
                 # ShadowCalculator now accepts BoxelData directly,
                 # so we can pass obj_bd and the OBJECT registry
                 # entries with no conversion (audit #35).
-                other_solids = [
-                    bd for bd in registry.boxels.values()
-                    if (bd.boxel_type == BoxelType.OBJECT
-                        and bd.id != obj_name)
-                ]
-                shadow_parts = env.shadow_calculator.calculate_shadow_boxel(
-                    obj_bd, other_solids)
+                # #P1 F9: after 3 rediscoveries the object's shadows
+                # are no longer re-created — the rediscover-relocate
+                # cycle it fed is bounded, like the audit-#21 giveup.
+                # The OBJECT boxel above still refreshed (census and
+                # collision mirroring stay correct); only the
+                # occlusion model goes un-rebuilt, so the belief may
+                # end incomplete and the episode ends honestly if the
+                # target actually hides behind this object.
+                if (nontarget_rediscovery_counts is not None
+                        and nontarget_rediscovery_counts.get(
+                            obj_name, 0) >= 3):
+                    print(f"    ERROR: {obj_name} rediscovered "
+                          f"{nontarget_rediscovery_counts[obj_name]} "
+                          f"times — giving up re-creating its shadows "
+                          f"(#P1 F9 strike counter, mirrors audit "
+                          f"#21).  Belief may be incomplete for "
+                          f"regions it occludes.")
+                    _capture_freeze(f"give-up: {obj_name} rediscovered "
+                                    f"3x (F9)")
+                    shadow_parts = []
+                else:
+                    other_solids = [
+                        bd for bd in registry.boxels.values()
+                        if (bd.boxel_type == BoxelType.OBJECT
+                            and bd.id != obj_name)
+                    ]
+                    shadow_parts = \
+                        env.shadow_calculator.calculate_shadow_boxel(
+                            obj_bd, other_solids)
 
                 if shadow_parts:
                     obj_bd.is_occluder = True

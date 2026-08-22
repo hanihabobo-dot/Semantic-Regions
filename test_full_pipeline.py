@@ -1015,6 +1015,17 @@ def main(gui=True, run_logger=None, scene_config=None,
     # proves nothing about transport); cleared by a delivered
     # place/stack of the object.  3 strikes → same giveup path.
     transit_loss_counts: Dict[str, int] = {}
+    # #P1 F9: contains_nontarget REDISCOVERY strike counter, closing the
+    # asymmetry with the audit-#21 blocked-view / F2 pick / transit-loss
+    # bounds.  A sense that rediscovers an ALREADY-REGISTERED object
+    # inside a fragment rebuilds that object's boxel and re-creates its
+    # shadows — each cycle burns mission actions, and nothing bounded
+    # how often the same object could be rediscovered across replans.
+    # After 3 rediscoveries of the same object its shadows are no longer
+    # re-created (the OBJECT boxel still refreshes for census/collision);
+    # like the audit-#21 giveup this is absorbing — the belief may end
+    # incomplete, and the episode ends honestly if the target hid there.
+    nontarget_rediscovery_counts: Dict[str, int] = {}
 
     def _loop_done() -> bool:
         # Holding goals stop when belief.target_found flips; stack goals
@@ -1355,6 +1366,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                     shadow_occluder_map=shadow_occluder_map,
                     blocked_counts=blocked_counts,
                     blocked_giveup_shadows=blocked_giveup_shadows,
+                    nontarget_rediscovery_counts=nontarget_rediscovery_counts,
                     boxel_centers=boxel_centers,
                     boxel_to_pybullet=boxel_to_pybullet,
                     object_body_ids=object_body_ids,

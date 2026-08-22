@@ -656,7 +656,7 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       planning): the F5 re-roll seed reaches the target but cannot hold
       it.  Fold into #P2(b)'s root-cause round alongside the level-4
       pad-contact finding.
-  F9. [OPEN] CONTAINS_NONTARGET REDISCOVERY HAS NO STRIKE COUNTER
+  F9. [DONE] CONTAINS_NONTARGET REDISCOVERY HAS NO STRIKE COUNTER
       (2026-08-21): blocked-view, pick, and transit-loss failures all
       carry 3-strike giveups, but senses that end contains_nontarget
       (rediscovering an occluder inside a fragment) can repeat across
@@ -664,6 +664,24 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       practice by the c4b9b05 shared census (the relocate-loop trigger is
       gone) but the asymmetry remains; add the counter when #P2's
       failure-classification layer lands.
+      [FIXED 2026-08-22 (pulled ahead of #P2 per the work order):
+      nontarget_rediscovery_counts in the replan loop, passed into
+      handle_sense_action.  A contains_nontarget discovery of an
+      object that ALREADY has a registry OBJECT boxel (spawn occluder
+      or earlier discovery) counts a strike, logged
+      "rediscovery N/3"; at 3 strikes the object's shadows are no
+      longer re-created — the OBJECT boxel itself still refreshes, so
+      the census and collision mirroring stay correct, only the
+      occlusion model goes un-rebuilt (loud ERROR + freeze capture,
+      belief disclosed as possibly incomplete).  ABSORBING like the
+      audit-#21 sense giveup (no parole: it is a sense-side bound,
+      not a grasp-side one — the F2 parole rationale, "the world may
+      have physically changed", does not apply to rediscovery
+      geometry).  First discoveries never count.  Smoke: holding
+      seed 0 SUCCESS, stack h=2 SUCCESS, find-and-tray-stack 999
+      SUCCESS, F5 diag + perception probe PASS (the counter path
+      itself stays dormant in these scenes — c4b9b05 removed the
+      common trigger; the bound exists for the residual class).]
 
   ORDER OF WORK (proposal): (1) resize objects + friction-grasp + real release,
   drop weld and teleports [changes execution.py, robot_utils.py, boxel_env.py
