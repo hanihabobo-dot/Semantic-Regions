@@ -1198,6 +1198,13 @@ def main(gui=True, run_logger=None, scene_config=None,
             plan_dt += time.perf_counter() - plan_t1
             if plan is None:
                 exit_reason = "no_plan_while_holding"
+                _bd = getattr(planner, 'last_no_plan_binding_death', None)
+                if _bd:
+                    print(f"  note: the disposal no-plan was a #P1 F7 "
+                          f"binding death — {_bd['skeletons']} action "
+                          f"skeleton(s) existed, stream binding failed "
+                          f"(sample_time={_bd['sample_time']:.3f}s; "
+                          f"[F7-diag] in the log has the skeleton).")
                 print(f"ERROR: no disposal plan for {held_obj_name} either — "
                       f"ending the episode honestly while holding (no blind "
                       f"drop; user directive 2026-08-21).")
@@ -1221,11 +1228,28 @@ def main(gui=True, run_logger=None, scene_config=None,
             # runs keep "planner_failed" with a disclosure line.
             goal_critical_giveups = (
                 pick_giveup_objects & set(planner_target_objects))
+            binding_death = getattr(planner,
+                                    'last_no_plan_binding_death', None)
             if goal_critical_giveups:
                 exit_reason = "pick_giveup"
                 print(f"ERROR: No plan found — goal-critical object(s) "
                       f"marked ungraspable after repeated pick failures: "
                       f"{sorted(goal_critical_giveups)} (#P1 F2 giveup).")
+            elif binding_death:
+                # #P1 F7: FastDownward found action skeletons but the
+                # stream-binding layer never delivered values — the
+                # silent re-pick binding death, now disclosed and
+                # classified instead of folding into the generic
+                # planner_failed bucket.  Root cause (skeleton-queue
+                # scheduling; see the F7 audit entry) is #P2 scope.
+                exit_reason = "no_plan_binding_death"
+                print(f"ERROR: No plan found — but PDDLStream DID find "
+                      f"{binding_death['skeletons']} action skeleton(s) "
+                      f"and stream binding failed to deliver values "
+                      f"(sample_time="
+                      f"{binding_death['sample_time']:.3f}s) — the "
+                      f"#P1 F7 binding-death class.  The last skeleton "
+                      f"is in the log ([F7-diag]).")
             else:
                 exit_reason = "planner_failed"
                 if pick_giveup_objects:
