@@ -20,8 +20,17 @@ class BeliefState:
     already-checked shadows.
 
     Lifecycle per shadow:
-      unknown  ─── sense ───► not_here  (target absent → eliminate)
-                         └──► found     (target present → goal reached)
+      unknown  ─── sense ───► not_here    (target absent → eliminate)
+                         ├──► found       (target present → goal reached)
+                         └──► unresolved  (#P1 F15: repeatedly observed to
+                              contain SOMETHING the render could not
+                              localize.  The planner stops offering it —
+                              otherwise the episode loops on it forever —
+                              but this is NOT a claim that the target is
+                              absent, and the run outcome discloses it.
+                              Marking such a fragment 'not_here' was the
+                              F15 belief lie: it retired the fragment the
+                              target was physically sitting in.)
 
     ``occluders_moved`` records physical relocations so the planner can
     emit correct ``obj_at_boxel`` facts for objects that are no longer at
@@ -41,6 +50,24 @@ class BeliefState:
             self.target_found_in = shadow_id
         else:
             self.shadow_status[shadow_id] = 'not_here'
+
+    def mark_unresolved(self, shadow_id: str) -> None:
+        """Park a shadow the robot could observe but never resolve (#P1 F15).
+
+        Distinct from ``mark_sensed(found=False)``: that asserts the
+        target is NOT in the region, which a "contains something I could
+        not localize" observation does not support.  This records only
+        that sensing it repeatedly failed to settle the question, so the
+        planner should stop spending actions on it.
+        """
+        if self.shadow_status.get(shadow_id) == 'found':
+            return
+        self.shadow_status[shadow_id] = 'unresolved'
+
+    def get_parked_shadows(self) -> List[str]:
+        """Shadows parked unresolved — not eliminated, just not plannable."""
+        return [s for s, status in self.shadow_status.items()
+                if status == 'unresolved']
 
     def mark_occluder_moved(self, occluder_id: str, destination: str) -> None:
         """

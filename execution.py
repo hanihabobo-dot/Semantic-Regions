@@ -42,11 +42,12 @@ import pybullet as p
 
 import telemetry          # #P1 F17 world telemetry (no-op unless armed)
 from boxel_data import BoxelData, BoxelType
-from perception import (DETECTION_MIN_PIXELS,
-                        SENSE_MARGINAL_BLOCKED_FRACTION,
+from perception import (DETECTION_MIN_PIXELS, DETECTION_SUPPORT_SNAP,
+                        SENSE_MARGINAL_BLOCKED_FRACTION, ObjectDetection,
+                        detect_objects_from_render,
                         first_surface_interceptors, sense_ray_slices)
 from reboxelize import reboxelize_free_space
-from streams import RobotConfig
+from streams import NOMINAL_HIDDEN_EXTENTS, RobotConfig
 from robot_utils import (END_EFFECTOR_LINK, FINGER_JOINTS, solve_ik,
                          move_robot_smooth, open_gripper, close_gripper)
 
@@ -1796,6 +1797,81 @@ def _shrink_shadow_fragment(registry, shadow_bd, blocked_min, blocked_max,
     return True
 
 
+def sweep_all_fragments(*, registry, belief, viz, shadows,
+                        shadow_occluder_map, boxel_centers,
+                        boxel_to_pybullet, target_pybullet_id, robot_id,
+                        sense_support_ids, sense_depth_m, sense_seg,
+                        sense_view, sense_proj, skip_ids=frozenset()):
+    """Classify EVERY registry shadow fragment against one render (#P1 F16).
+
+    The sense action already pays for a full depth+seg render, and that
+    ONE observation carries the evidence for every fragment in the
+    registry, not just the one the planner named.  Before this, the batch
+    pass re-checked only the SAME CASTER's sibling fragments, and only
+    when the primary outcome was clear_but_empty — so fragments belonging
+    to other casters kept their planned senses even when the render
+    already showed them empty, and a sense that ended blocked or
+    unresolved (the F15 path) threw the whole observation away.
+
+    Every removal here is observation-backed exactly as the sibling pass
+    was: the fragment is deleted only on ``clear_but_empty``, i.e. every
+    one of its grid endpoints was seen.  ``still_blocked`` fragments get
+    the same partial-reveal shrink a planned sense would give them, and
+    ``contains_nontarget`` fragments are left entirely alone for a
+    planned sense that can do the discovery bookkeeping.
+
+    A ``found_target`` on some OTHER fragment is reported loudly but NOT
+    acted on: promoting it would have to run the audit-#76 registration
+    chain from inside a sweep, and that chain is the found-path's
+    contract.  Surfacing it lets the next plan plan for it.
+
+    Returns (removed_ids, shrunk_ids, target_seen_ids).
+    """
+    removed, shrunk, target_seen = [], [], []
+    for bd in list(registry.get_shadow_boxels()):
+        sid = str(bd.id)
+        if sid in skip_ids:
+            continue
+        occ_ids = set()
+        for blocker_bid in shadow_occluder_map.get(sid, []):
+            if blocker_bid in boxel_to_pybullet:
+                occ_ids.add(boxel_to_pybullet[blocker_bid]['pybullet_id'])
+        outcome, _, _, bbox, _ = sense_shadow_from_render(
+            bd, target_pybullet_id, sense_depth_m, sense_seg,
+            sense_view, sense_proj, occ_ids, robot_id=robot_id,
+            support_body_ids=sense_support_ids)
+        if outcome == "found_target":
+            target_seen.append(sid)
+            print(f"    [F16] the sense render also shows the TARGET in "
+                  f"{sid} — left for a planned sense to register.")
+            continue
+        if outcome == "still_blocked":
+            if bbox:
+                _shrink_shadow_fragment(registry, bd, bbox[0], bbox[1],
+                                        viz, boxel_centers)
+                shrunk.append(sid)
+            continue
+        if outcome != "clear_but_empty":
+            continue
+        belief.mark_sensed(sid, found=False)
+        registry.remove_boxel(sid)
+        if viz is not None:
+            viz.remove_boxel_viz(sid)
+        if sid in shadows:
+            shadows.remove(sid)
+        shadow_occluder_map.pop(sid, None)
+        boxel_centers.pop(sid, None)
+        caster_id = bd.created_by_boxel_id or bd.created_by_object
+        caster_bd = registry.get_boxel(caster_id) if caster_id else None
+        if caster_bd is not None and sid in getattr(
+                caster_bd, "shadow_boxel_ids", []):
+            caster_bd.shadow_boxel_ids.remove(sid)
+        removed.append(sid)
+        print(f"    -> fragment {sid} observed empty in this render — "
+              f"removed (F16 full sweep)")
+    return removed, shrunk, target_seen
+
+
 def handle_sense_action(
     *,
     action_params,
@@ -1979,13 +2055,69 @@ def handle_sense_action(
         _loc_names = [body_id_to_name[b] for b in detected_bodies
                       if b in body_id_to_name
                       and body_id_to_name[b] in sense_detections]
+
+        # #P1 F15(b): before refusing, LOCALIZE FROM WHAT IS THERE.
+        # The endpoints this body intercepted prove it has pixels, and
+        # those pixels carry depth — they are simply too few to clear
+        # DETECTION_MIN_PIXELS, which is a whole-frame confidence gate,
+        # not a statement that the body is unlocatable.  Re-run the same
+        # unprojection at min_pixels=1 restricted to the intercepting
+        # bodies and, because a 1-5 pixel cloud measures far smaller than
+        # the object, GROW the estimate to the NOMINAL class box centred
+        # on it.  That mirrors the hidden-object prior the streams already
+        # use: the box only ever over-estimates, so downstream
+        # "could something hide here / does this fit" reasoning stays
+        # conservative.  A body with genuinely zero pixels cannot be
+        # localized this way and still burns a strike below.
+        if not _loc_names and detected_bodies:
+            _cand = {b: body_id_to_name[b] for b in detected_bodies
+                     if b in body_id_to_name}
+            _sliver = detect_objects_from_render(
+                sense_seg, _sense_depth_buf, sense_view, sense_proj,
+                _cand, env.camera_position, env.table_surface_height,
+                min_pixels=1) if _cand else {}
+            for _nm, _det in _sliver.items():
+                _c = _det.est_center
+                _half = np.maximum(
+                    (np.asarray(_det.est_max) - np.asarray(_det.est_min)) / 2.0,
+                    NOMINAL_HIDDEN_EXTENTS / 2.0)
+                _lo = _c - _half
+                _hi = _c + _half
+                if _lo[2] <= env.table_surface_height + DETECTION_SUPPORT_SNAP:
+                    _lo[2] = env.table_surface_height
+                    _hi[2] = max(_hi[2],
+                                 env.table_surface_height
+                                 + float(NOMINAL_HIDDEN_EXTENTS[2]))
+                sense_detections[_nm] = ObjectDetection(
+                    name=_nm, body_id=_det.body_id,
+                    pixel_count=_det.pixel_count,
+                    est_min=_lo, est_max=_hi)
+                print(f"    [F15] {_nm} renders {_det.pixel_count} px — under "
+                      f"the {DETECTION_MIN_PIXELS} px detection minimum, but "
+                      f"its pixels localize it: registering a conservative "
+                      f"{NOMINAL_HIDDEN_EXTENTS[0] * 100:.0f} cm class box at "
+                      f"[{_c[0]:.3f},{_c[1]:.3f},{_c[2]:.3f}] instead of "
+                      f"refusing the observation.")
+            _loc_names = [body_id_to_name[b] for b in detected_bodies
+                          if b in body_id_to_name
+                          and body_id_to_name[b] in sense_detections]
+
         if not _loc_names:
             sid_str = str(shadow_id)
-            blocked_counts[sid_str] = blocked_counts.get(sid_str, 0) + 1
+            # #P1 F15(c): its OWN strike budget.  blocked_counts is keyed
+            # by shadow id and is also incremented by the still_blocked
+            # branch, so before this the two unrelated failure modes
+            # shared one budget — the field run retired blue's actual
+            # hiding place on 1 blocked strike + 2 unlocalizable ones,
+            # three strikes that were never three of the same
+            # observation.  A shared "_unlocalizable" key namespace keeps
+            # the counters separate without a signature change.
+            _ukey = f"{sid_str}::unlocalizable"
+            blocked_counts[_ukey] = blocked_counts.get(_ukey, 0) + 1
             print(f"    Shadow {shadow_id} contains something the render "
                   f"cannot localize (below the detection minimum) — "
                   f"keeping the fragment. [attempt "
-                  f"{blocked_counts[sid_str]}]")
+                  f"{blocked_counts[_ukey]}]")
             # #P1 F15: NAME what was seen.  Before this the refusal was
             # anonymous — three strikes could retire the fragment the
             # target was actually sitting in and the log never said which
@@ -2004,13 +2136,40 @@ def handle_sense_action(
                   f" | detection minimum {DETECTION_MIN_PIXELS} px"
                   f" | localized this render: "
                   f"{sorted(sense_detections)}")
-            if blocked_counts[sid_str] >= 3:
+            if blocked_counts[_ukey] >= 3:
+                # #P1 F15(c): PARKED, not eliminated.  The observation
+                # backing this giveup is "this volume contains something
+                # I could not resolve" — evidence of OCCUPANCY, not of
+                # the target's absence — so mark_sensed(found=False)
+                # would assert something the robot never saw.  It did
+                # exactly that in the field run and retired the fragment
+                # the target was physically inside.  Parking stops the
+                # planner spending more actions here (the episode would
+                # otherwise loop) while the belief stays truthful and the
+                # run outcome discloses the fragment as unsearched.
                 print(f"    ERROR: {shadow_id} unlocalizable-content "
-                      f"{blocked_counts[sid_str]} times — giving up "
-                      f"(mirrors audit #21).  Marked not_here; the "
-                      f"content stays unmodelled.")
+                      f"{blocked_counts[_ukey]} times — parking it "
+                      f"UNRESOLVED (not marked empty: the observation "
+                      f"says the volume is OCCUPIED, not that the target "
+                      f"is absent).  The content stays unmodelled and "
+                      f"the fragment stays in the registry.")
                 blocked_giveup_shadows.add(sid_str)
-                belief.mark_sensed(sid_str, found=False)
+                belief.mark_unresolved(sid_str)
+            # #P1 F16: this render is still evidence about every OTHER
+            # fragment even though it could not settle this one — the
+            # exact loop F15 exposed, where repeated senses of one
+            # fragment learned nothing while the observation in hand
+            # could have cleared others.
+            sweep_all_fragments(
+                registry=registry, belief=belief, viz=viz, shadows=shadows,
+                shadow_occluder_map=shadow_occluder_map,
+                boxel_centers=boxel_centers,
+                boxel_to_pybullet=boxel_to_pybullet,
+                target_pybullet_id=target_pybullet_id, robot_id=robot_id,
+                sense_support_ids=sense_support_ids,
+                sense_depth_m=sense_depth_m, sense_seg=sense_seg,
+                sense_view=sense_view, sense_proj=sense_proj,
+                skip_ids={sid_str})
             _lost = refresh_object_aabbs(
                 env, registry, viz, detections=sense_detections,
                 render=(sense_depth_m, sense_seg, sense_view,
@@ -2072,41 +2231,17 @@ def handle_sense_action(
         if caster_bd is not None and sid_str in getattr(
                 caster_bd, "shadow_boxel_ids", []):
             caster_bd.shadow_boxel_ids.remove(sid_str)
-        if caster_bd is not None:
-            for sib_sid in list(getattr(caster_bd, "shadow_boxel_ids", [])):
-                sib_bd = registry.get_boxel(sib_sid)
-                if sib_bd is None:
-                    continue
-                sib_occluder_ids = set()
-                for blocker_bid in shadow_occluder_map.get(sib_sid, []):
-                    if blocker_bid in boxel_to_pybullet:
-                        sib_occluder_ids.add(
-                            boxel_to_pybullet[blocker_bid]['pybullet_id'])
-                sib_outcome, _, _, sib_bbox, _ = sense_shadow_from_render(
-                    sib_bd, target_pybullet_id,
-                    sense_depth_m, sense_seg, sense_view, sense_proj,
-                    sib_occluder_ids, robot_id=robot_id,
-                    support_body_ids=sense_support_ids)
-                if sib_outcome != "clear_but_empty":
-                    # Partial-reveal shrink for a still-blocked sibling:
-                    # its clear rays observed part of it empty even
-                    # though the fragment as a whole stays.
-                    if sib_outcome == "still_blocked" and sib_bbox:
-                        _shrink_shadow_fragment(registry, sib_bd,
-                                                sib_bbox[0], sib_bbox[1],
-                                                viz, boxel_centers)
-                    continue
-                belief.mark_sensed(sib_sid, found=False)
-                registry.remove_boxel(sib_sid)
-                if viz is not None:
-                    viz.remove_boxel_viz(sib_sid)
-                if sib_sid in shadows:
-                    shadows.remove(sib_sid)
-                shadow_occluder_map.pop(sib_sid, None)
-                boxel_centers.pop(sib_sid, None)
-                caster_bd.shadow_boxel_ids.remove(sib_sid)
-                print(f"    -> sibling fragment {sib_sid} also observed "
-                      f"empty — removed (batch-sense)")
+        # #P1 F16: sweep EVERY fragment against this render, not just the
+        # caster's siblings.  Same observation, same removal criterion —
+        # it simply stops discarding evidence the render already has.
+        sweep_all_fragments(
+            registry=registry, belief=belief, viz=viz, shadows=shadows,
+            shadow_occluder_map=shadow_occluder_map,
+            boxel_centers=boxel_centers, boxel_to_pybullet=boxel_to_pybullet,
+            target_pybullet_id=target_pybullet_id, robot_id=robot_id,
+            sense_support_ids=sense_support_ids, sense_depth_m=sense_depth_m,
+            sense_seg=sense_seg, sense_view=sense_view,
+            sense_proj=sense_proj, skip_ids={sid_str})
 
         if sense_outcome == "contains_nontarget":
             # Non-target objects discovered inside the shadow.
@@ -2323,19 +2458,36 @@ def handle_sense_action(
                                 blocked_bbox[0], blocked_bbox[1],
                                 viz, boxel_centers)
     if blocked_counts[sid_str] >= 3:
+        # #P1 F15(c): PARKED, not eliminated.  This branch's own message
+        # always said "Shadow is NOT observed empty" while nonetheless
+        # writing not_here — the planner needs the fragment withheld so
+        # it stops re-attempting, but the BELIEF must not claim an
+        # absence nobody observed.  mark_unresolved gives the planner the
+        # same exclusion and keeps the run outcome honest.  Real remedy
+        # for the blockage itself is still audit #47 (re-ground blocker
+        # atoms after repeated failure).
         print(f"    ERROR: {shadow_id} blocked "
-              f"{blocked_counts[sid_str]} times — giving "
-              f"up (audit #21).  Shadow is NOT observed "
-              f"empty; marking not_here so the planner "
-              f"stops re-attempting it.  Real remedy: "
-              f"re-ground blocker atoms after repeated "
-              f"failure — audit #47 (deferred out of scope "
-              f"2026-05-06).")
+              f"{blocked_counts[sid_str]} times — parking it "
+              f"UNRESOLVED so the planner stops re-attempting it.  The "
+              f"shadow is NOT observed empty and is not marked as such; "
+              f"it stays disclosed as unsearched.  Real remedy: "
+              f"re-ground blocker atoms after repeated failure — "
+              f"audit #47 (deferred out of scope 2026-05-06).")
         _capture_freeze(f"give-up: {shadow_id} blocked 3x (still-blocked 3/3)")
         blocked_giveup_shadows.add(sid_str)
-        belief.mark_sensed(sid_str, found=False)
+        belief.mark_unresolved(sid_str)
     else:
         print(f"    -> REPLANNING without marking shadow empty...")
+    # #P1 F16: a blocked sense still rendered the whole table — use it on
+    # every other fragment instead of discarding the observation.
+    sweep_all_fragments(
+        registry=registry, belief=belief, viz=viz, shadows=shadows,
+        shadow_occluder_map=shadow_occluder_map,
+        boxel_centers=boxel_centers, boxel_to_pybullet=boxel_to_pybullet,
+        target_pybullet_id=target_pybullet_id, robot_id=robot_id,
+        sense_support_ids=sense_support_ids, sense_depth_m=sense_depth_m,
+        sense_seg=sense_seg, sense_view=sense_view, sense_proj=sense_proj,
+        skip_ids={sid_str})
     _lost = refresh_object_aabbs(
         env, registry, viz, detections=sense_detections,
         render=(sense_depth_m, sense_seg, sense_view, sense_proj),
