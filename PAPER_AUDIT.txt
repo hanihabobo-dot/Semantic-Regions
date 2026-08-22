@@ -895,7 +895,7 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       F8 transit-slip ending on an earlier attempt), F5 diag PASS,
       perception probe PASS.]
 
-  F10. [OPEN] HELD-CARGO SWEPT VOLUME IS NEVER COLLISION-CHECKED
+  F10. [DONE] HELD-CARGO SWEPT VOLUME IS NEVER COLLISION-CHECKED
       (2026-08-21, run 20-17-18, seed 343879192): plan_motion excludes
       the grasped body from ALL collision checks (necessary at the pick
       endpoint, where gripper-object contact is intended), so the ~13 cm
@@ -911,6 +911,38 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       EE waypoints against the obstacle set in plan_motion — strict on
       the transit interior, endpoints keep their intended contacts,
       mirroring the f35d88a gripper-interior rule.
+      [FIXED 2026-08-22 (pulled ahead of #P2 per the work order): the
+      held-cargo check EXISTED — is_config_collision_free takes
+      held_body_ids + held_body_ee_offset, threaded from plan_motion
+      through both endpoints, the direct-path samples, every RRT edge
+      and the smoothing pass — but was VOIDED by a pose bug: the code
+      computed an EE-frame offset transform and then teleported the
+      cargo to the RAW EE pose anyway (the computed pose was never
+      used).  Every held-cargo check therefore ran ~10 cm above the
+      true carried height (z=0.10 grasp) with the flange quaternion —
+      the 13 cm block hanging under the hand was invisible exactly
+      where it swept low.  The unused EE-frame math was itself wrong:
+      compute_kin's target = centre + grasp.position is WORLD-frame,
+      and for the top-down flange the EE-frame transform would have
+      parked the test box ABOVE the hand.  Fix: cargo centre =
+      ee_pos - grasp_ee_offset in the WORLD frame, keeping the body's
+      own orientation (the friction grasp carries it essentially
+      upright; the flange quaternion would tip the tested box onto
+      its side).  With the pose right, the existing per-sample checks
+      ARE the swept-volume validation this entry asked for — denser
+      than an AABB corridor sweep (8 samples per edge; endpoints keep
+      intended contacts through the ignored sets).  VERIFIED on the
+      repro seed (holding 999 --seed-retry -> 343879192, run
+      16-06-25): ZERO held-cargo collision lines (pre-fix: held red
+      through green 4x), transits that used to certify "direct path
+      clear" through obstacles now log "direct path blocked — running
+      RRT-Connect" and route around; the episode still fails honestly
+      in this seed's known F8 grip-slip trait (pad_normal_force 0 N
+      at place entry, 3 slips) ending in a disclosed F7-class
+      no-plan — physical, #P2's data point, not a sweep collision.
+      Battery: holding seed 0 SUCCESS, stack h=2 SUCCESS,
+      find-and-tray-stack 999 SUCCESS, F5 diag + perception probe
+      PASS.]
 
   F12. [OPEN] VIEW_BLOCKED GATES SENSE ABSOLUTELY WHILE THE EXECUTED
       SENSE MAKES PROGRESS ON PARTIALLY BLOCKED FRAGMENTS (2026-08-22,
