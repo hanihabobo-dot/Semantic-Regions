@@ -75,7 +75,7 @@ from the listing at the bottom of this skill.  Usage:
 
     wsl -e bash -c 'cd /mnt/c/Users/HaniAlassiriAlhabbou/git/Semantic_Boxels &&
       wsl_env/bin/python tools/_eval_ab.py --tag <arm> [--seeds 0-19]
-      [--scene random-pairs] [--goal holding] [--pipeline-args "--seed-retry"]'
+      [--scene random-pairs] [--goal holding] [--pipeline-args ""]'
 
 Resumable per tag (incremental JSON in `eval_results/ab_eval/`); a killed
 arm continues where it stopped.  Default shape: 20 seeds, holding,
@@ -89,10 +89,16 @@ For each arm: checkout the ref (foreground git; arm 0 needs no checkout),
 `py_compile` the key modules as a sanity check, then run the harness as a
 tool-managed background command and wait on it.  Two ref-specific checks:
 
-- **Flag drift**: old refs may not support current CLI flags
-  (`--seed-retry` only exists since 2026-08-21).  Check the ref's argparse
+- **Flag drift**: old refs may not support current CLI flags.  Notably
+  `--seed-retry` existed ONLY 2026-08-21..23 (removed per user directive;
+  since then pre-flight rejections fail loud and seeds are strictly
+  pinned) — pass it via `--pipeline-args` only for arms checked out
+  inside that window.  Check the ref's argparse
   (`git show <ref>:run_logger.py` or where the parser lives) and trim
-  `--pipeline-args` accordingly.
+  `--pipeline-args` accordingly.  Expect rejected-seed episodes to show
+  as loud pre-flight failures on current refs; compare arms on the
+  INTERSECTION of seeds that ran everywhere, and report rejections
+  separately.
 - **Parse drift**: after the FIRST episode of each arm, confirm
   `plans_executed` and `planning_time_s` parsed non-null; if the ref's
   console format differs, adapt the harness regexes before burning the arm.
