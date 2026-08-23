@@ -40,7 +40,7 @@ def _run_one(seed: int) -> dict:
         "--no-gui", "--scene", "random-pairs",
         "--seed", str(seed), "--goal", "holding",
         "--baseline", "semantic", "--log-level", "quiet",
-        "--n-occluders", "2", "--seed-retry",
+        "--n-occluders", "2",
     ]
     t0 = time.time()
     try:
