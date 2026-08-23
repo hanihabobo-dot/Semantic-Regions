@@ -313,8 +313,8 @@ def scalability_scene(n_occluders: int = 3, n_targets: int = 4,
     # halves stay below occluder halves so the lateral jitter window
     # in ``_hidden_xy_positions`` (≈ occ_half − target_half) stays
     # positive and multiple hidden targets can sit behind the same
-    # occluder; the raycast verifier + seed-retry layer backstop the
-    # guarantee either way.
+    # occluder; the raycast verifier backstops the guarantee either
+    # way (pre-flight fails loud; seed retry removed 2026-08-23).
     occluders = []
     for _ in range(n_occluders):
         xy_half = rng.uniform(0.025, 0.030)
@@ -407,7 +407,7 @@ def random_pairs_scene(n_occluders: int = 3,
     # hidden target lands outside reach despite its occluder being
     # inside, the post-spawn assert in _create_objects /
     # _create_targets (audit #70 hardening) will catch it and
-    # raise so the seed-retry layer can re-roll.
+    # raise — the pre-flight fails loud (seed retry removed 2026-08-23).
     cfg.constrain_to_reach = True
     return cfg
 
@@ -968,8 +968,9 @@ class BoxelTestEnv:
         samples behind occluders without filtering), and defends any
         future caller-supplied cfg.{occluder,target}_positions that
         sidesteps _random_xy_positions' filter.  RuntimeError surfaces
-        to the seed-retry layer in test_full_pipeline.main() (mirrors
-        audit #29's hidden-target post-spawn check).
+        to the pre-flight in test_full_pipeline.main(), which fails loud
+        (seed retry removed 2026-08-23; mirrors audit #29's
+        hidden-target post-spawn check).
         """
         bx, by = self._ROBOT_BASE_XY
         r_max = self._PANDA_REACH_RADIUS
@@ -980,7 +981,7 @@ class BoxelTestEnv:
                     f"audit #70: {label}[{i}] spawned at "
                     f"({float(xy[0]):.3f}, {float(xy[1]):.3f}) is "
                     f"{d:.3f} m from robot base — outside reach disk "
-                    f"(r_max={r_max} m). Re-roll seed (--seed-retry) "
+                    f"(r_max={r_max} m). Use a different --seed "
                     f"or widen --n-occluders."
                 )
 
@@ -1145,8 +1146,8 @@ class BoxelTestEnv:
         # behaviour for visible-target placement) AND apply the
         # Panda reach-disk filter at sample time inside the candidate
         # loop below.  Without this the post-spawn _assert_xys_in_-
-        # reach catches out-of-reach hidden targets and aborts under
-        # strict --seed pinning (no --seed-retry).  Defended on
+        # reach catches out-of-reach hidden targets and aborts (all
+        # seeds are strictly pinned; seed retry removed).  Defended on
         # 2026-05-12 (later) repro: --seed 505998003 placed target[0]
         # at (0.225, 0.190), 3 mm beyond the reach disk, after the
         # original (i)+(ii) fix.
@@ -1215,9 +1216,9 @@ class BoxelTestEnv:
             # ~25 us/iter so worst-case wall-clock per failing seed is
             # ~100 ms.
             # On exhaustion we return None and _create_targets raises
-            # 'Could not place ...' which the seed-retry layer in
-            # test_full_pipeline.main() treats as retryable (audit #68
-            # auto-rolls under --seed-retry / seed_auto).
+            # 'Could not place ...' — the test_full_pipeline.main()
+            # pre-flight fails loud on it (seed retry removed
+            # 2026-08-23; audit #68's re-roll is history).
             for _ in range(4000):
                 idx = int(rng.randint(len(occluder_info)))
                 (ox, oy), occ_half = occluder_info[idx]
@@ -1370,8 +1371,8 @@ class BoxelTestEnv:
         # sits at the back of the reach disk can land beyond it.  This
         # assert catches that case (and any caller-supplied
         # cfg.target_positions sidestepping the filter).  RuntimeError
-        # triggers seed-retry via test_full_pipeline.main() (audit #29
-        # mechanism).
+        # fails the pre-flight loud in test_full_pipeline.main()
+        # (audit #29 mechanism; seed retry removed 2026-08-23).
         if cfg.constrain_to_reach:
             self._assert_xys_in_reach(xys, "target")
 

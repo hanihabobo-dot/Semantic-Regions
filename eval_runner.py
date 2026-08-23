@@ -421,32 +421,26 @@ def cell_to_argv(cell: Dict, extra_args: List[str]) -> List[str]:
     # them unconditionally turned every (default, holding) cell into a
     # scalability run.
     if cell["scene"] == "scalability":
-        # --seed-retry (F5, 2026-08-21): the sensable-guarantee
-        # pre-flight re-rolls seeds whose hidden target lands outside
-        # every sense-hittable shadow fragment (structurally
-        # unwinnable).  Without the flag those cells would hard-fail
-        # into exit_reason=no_summary and silently shrink the
-        # scalability arm's N; the deterministic re-roll (seeded from
-        # the cell seed) keeps re-runs reproducible.  Also covers the
-        # pre-existing "Could not place" placement exhaustion the same
-        # way random-pairs cells always did.
+        # SEED RETRY REMOVED (2026-08-23, user directive): the F5
+        # sensable-guarantee pre-flight still vets every cell but now
+        # FAILS LOUD instead of re-rolling — a cell whose seed draws an
+        # unbuildable or structurally unwinnable scene fails outright
+        # and must be counted as a scene failure (or the seed list
+        # pre-vetted).  See the PAPER_AUDIT.txt seed-retry-removal
+        # note before CB#113.
         argv.extend([
             "--n-occluders", str(cell["n_occluders"]),
             "--n-targets",   str(cell["n_targets"]),
             "--n-hidden",    str(cell["n_hidden"]),
-            "--seed-retry",
         ])
     elif cell["scene"] == "random-pairs":
         # random-pairs derives n_hidden/n_targets internally from seed
         # and the user-supplied --n-occluders; the other count flags
-        # are mutually exclusive with this scene.  --seed-retry lets
-        # the pre-flight retry layer re-roll past infeasible-geometry
-        # seeds deterministically (some small seeds at n_occluders=2
-        # produce occluder layouts with no valid shadow lane); without
-        # it the cell would fail outright on the first bad draw.
+        # are mutually exclusive with this scene.  Seed retry removed
+        # (2026-08-23): infeasible-geometry seeds fail outright, see
+        # the scalability comment above.
         argv.extend([
             "--n-occluders", str(cell["n_occluders"]),
-            "--seed-retry",
         ])
     elif cell["scene"] == "stack":
         # audit #77 — stack has no occluders, so the stack sub-tier

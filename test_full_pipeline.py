@@ -683,8 +683,8 @@ def main(gui=True, run_logger=None, scene_config=None,
     # AABB.  AABB containment is now a best-effort follow-up that
     # supplies one shadow id per hidden target for the oracle log
     # line; it is allowed to be empty for individual targets without
-    # aborting the run.  Since the F5 pre-flight (sensable guarantee in
-    # the seed-retry loop) every scene with n_hidden > 0 is vetted
+    # aborting the run.  Since the F5 pre-flight (sensable guarantee;
+    # fails loud, seed retry removed) every scene with n_hidden > 0 is vetted
     # before main() runs: each hidden target sits inside a fragment the
     # shared sense grid can hit, so an empty lookup here signals
     # probe-vs-run drift and prints a loud warning below.
@@ -2158,34 +2158,18 @@ if __name__ == "__main__":
 
     # RunLogger captures all artefacts (PDDL files, boxel data, logs)
     # regardless of console verbosity for post-mortem analysis.
-    # Placement pre-flight (audit #68 follow-up).  ``random-pairs`` with
-    # no explicit ``--seed`` auto-rolls a fresh seed (run_logger sets
-    # ``args.seed_auto=True``); at unlucky seeds the hidden-target placer
-    # exhausts its budget because each occluder hosts only ~1 hidden
-    # target (lateral jitter ≈ occ_half − target_half ≈ 0) and the
-    # back-of-table occluders project shadows off the safe-window edge.
-    # We probe scene construction headlessly (DIRECT mode) and re-roll
-    # the seed on failure BEFORE the GUI is opened — otherwise every
-    # retry flashes a new PyBullet window open and closed and the user
-    # only sees the final scene appear after several aborted ones (real
-    # bug report).  Up to 10 retries when ``seed_auto``; an explicit
-    # ``--seed`` is checked once and must succeed or fail loud so
-    # reproducibility is preserved.  Scene construction is deterministic
-    # in scene_cfg.seed, so the pre-flight verifies the EXACT scene that
-    # the real run will build a moment later.
-    seed_auto = getattr(args, 'seed_auto', False)
-    seed_retry = getattr(args, 'seed_retry', False)
-    allow_retry = seed_auto or seed_retry
-    max_attempts = 11 if allow_retry else 1
-    # When --seed-retry is set (eval-runner path), use a deterministic
-    # re-roll source seeded from the original --seed so re-runs of the
-    # same matrix cell produce the same effective-seed sequence.  When
-    # --seed-retry is not set, ``seed_auto`` implies the seed was
-    # auto-drawn in the first place — pull rerolls from the unseeded
-    # global random so each invocation differs (consistent with the
-    # interactive "draw fresh seed" intent).
-    retry_rng = random.Random(args.seed) if seed_retry else random
-    for attempt in range(max_attempts):
+    # Placement pre-flight (audit #68 follow-up; SEED RETRY REMOVED
+    # 2026-08-23 per user directive — no re-rolling of any kind, pinned
+    # or auto seed).  We probe scene construction headlessly (DIRECT
+    # mode) BEFORE the GUI is opened; a seed whose scene is unbuildable
+    # or structurally unwinnable FAILS LOUD here, once, so the GUI never
+    # flashes and the seed on the command line is always the seed that
+    # ran.  Scene construction is deterministic in scene_cfg.seed, so
+    # the pre-flight verifies the EXACT scene the real run will build a
+    # moment later.  Consequence for eval sweeps: cells on such seeds
+    # fail outright — seed lists must be pre-vetted or these count as
+    # scene failures (see the PAPER_AUDIT.txt seed-retry-removal note).
+    if True:
         try:
             probe_env = BoxelTestEnv(gui=False, scene_config=scene_cfg)
             # Perception probe (settle + oracle), shared by the
@@ -2217,11 +2201,15 @@ if __name__ == "__main__":
                 n_vis = sum(1 for t in probe_targets if t in probe_visible)
                 n_hid = len(probe_targets) - n_vis
                 if n_vis < 1 or n_hid < 1:
-                    probe_env.close()
-                    raise RuntimeError(
-                        f"find-and-tray-stack pre-flight: {n_vis} visible / "
-                        f"{n_hid} hidden (need >=1 of each)"
-                    )
+                    msg = (f"find-and-tray-stack pre-flight: {n_vis} "
+                           f"visible / {n_hid} hidden (need >=1 of each)")
+                    if getattr(args, 'allow_unwinnable', False):
+                        print(f"[pre-flight] WARNING (--allow-unwinnable): "
+                              f"{msg} — running anyway for inspection",
+                              file=sys.stderr)
+                    else:
+                        probe_env.close()
+                        raise RuntimeError(msg)
             # F5 sensable guarantee: every oracle-hidden target must sit
             # inside a final F3 shadow fragment that the shared sense
             # ray grid would actually hit (perception.grid_would_hit
@@ -2231,10 +2219,9 @@ if __name__ == "__main__":
             # every fragment (seed 999: blue occluded, 0 segmentation
             # pixels, centre in no fragment) — and sense is the ONLY
             # mid-episode discovery mechanism, so such an episode is
-            # structurally unwinnable at spawn.  Retryable: --seed-retry
-            # / auto-seed re-rolls past it; an explicit pinned seed
-            # fails loud here instead of burning a whole episode that
-            # cannot be won.
+            # structurally unwinnable at spawn.  Fails loud (seed retry
+            # removed 2026-08-23) instead of burning a whole episode
+            # that cannot be won.
             if int(getattr(scene_cfg, 'n_hidden_targets', 0) or 0) > 0:
                 probe_obs = probe_env.get_camera_observation()
                 probe_frags = [b for b in probe_obs.boxels
@@ -2255,52 +2242,32 @@ if __name__ == "__main__":
                                            t_min, t_max)
                         for fb in probe_frags)
                     if not sensable:
-                        probe_env.close()
-                        raise RuntimeError(
-                            f"F5 pre-flight: hidden target {t} is not "
-                            f"inside any sense-hittable shadow fragment "
-                            f"(seed={scene_cfg.seed}) — the episode "
-                            f"would be structurally unwinnable. "
-                            f"Use --seed-retry or a different --seed."
-                        )
+                        msg = (f"F5 pre-flight: hidden target {t} is not "
+                               f"inside any sense-hittable shadow fragment "
+                               f"(seed={scene_cfg.seed}) — the episode "
+                               f"would be structurally unwinnable. "
+                               f"Use a different --seed.")
+                        if getattr(args, 'allow_unwinnable', False):
+                            print(f"[pre-flight] WARNING "
+                                  f"(--allow-unwinnable): {msg} — running "
+                                  f"anyway for inspection",
+                                  file=sys.stderr)
+                        else:
+                            probe_env.close()
+                            raise RuntimeError(msg)
             probe_env.close()
-            break
         except RuntimeError as e:
-            # Retryable placement errors:
-            # - "Could not place" from _random_xy_positions exhausting
-            #   its 400-attempt budget (pre-existing path).
-            # - "audit #70" from _assert_xys_in_reach catching a hidden
-            #   target placed beyond the reach disk by _hidden_xy_-
-            #   positions (still reach-disk-unaware; audit #70
-            #   hardening (iii) deferred until the assert fires often
-            #   enough to warrant plumbing constrain_to_reach into the
-            #   helper).
-            # - "find-and-tray-stack pre-flight" from the role probe above
-            #   (a constructible scene perceived with 0 visible or 0 hidden
-            #   targets) -- re-roll past it like an unplaceable seed.
-            # - "F5 pre-flight" from the sensable guarantee above (a
-            #   hidden target outside every sense-hittable fragment —
-            #   structurally unwinnable, re-roll past it).
-            retryable = any(s in str(e)
-                            for s in ("Could not place", "audit #70",
-                                      "find-and-tray-stack pre-flight",
-                                      "F5 pre-flight"))
-            if not retryable or attempt + 1 >= max_attempts:
-                raise
-            args.seed = retry_rng.randint(0, 2**31 - 1)
-            random.seed(args.seed)
-            np.random.seed(args.seed)
-            scene_cfg = scene_builders[args.scene]()
-            if args.goal == 'find-and-tray-stack':
-                scene_cfg.enable_tray = True
-            run_config["seed"] = args.seed
-            run_config["n_occluders"] = len(scene_cfg.occluders)
-            run_config["n_targets"] = len(scene_cfg.targets)
-            run_config["n_hidden"] = scene_cfg.n_hidden_targets
-            print(f"[retry {attempt + 1}/{max_attempts - 1}] "
-                  f"placement failed ({e}); rerolling to "
-                  f"seed={args.seed}",
+            # SEED RETRY REMOVED (2026-08-23, user directive): there is
+            # no re-roll of any kind any more.  Pre-flight rejections
+            # ("Could not place", "audit #70" reach assert,
+            # "find-and-tray-stack pre-flight" role split, "F5
+            # pre-flight" sensable guarantee) classify the seed loudly
+            # and abort before any GUI opens — the seed on the command
+            # line is always the seed that ran, or the run did not
+            # happen.
+            print(f"[pre-flight] seed {scene_cfg.seed} rejected: {e}",
                   file=sys.stderr)
+            raise
 
     # Single real-pipeline run with the validated scene_cfg.
     logger = RunLogger(verbosity=args.log_level)

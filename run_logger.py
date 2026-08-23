@@ -509,6 +509,16 @@ def parse_pipeline_args(argv=None):
              '--goal stack. Defaults to 2 (one stacking action).',
     )
     parser.add_argument(
+        '--allow-unwinnable',
+        action='store_true',
+        help='Inspection mode: downgrade the pre-flight CLASSIFICATION '
+             'rejections (F5 sensable guarantee, find-and-tray-stack '
+             'role split) to loud warnings and run the episode anyway, '
+             'e.g. to confirm in the GUI that a rejected seed is truly '
+             'unwinnable.  Scene-construction failures still abort — '
+             'there is no scene to show.  Never use in eval sweeps.',
+    )
+    parser.add_argument(
         '--unit-costs',
         action='store_true',
         help='Pass unit_costs=True to PDDLStream solve(): override the '
@@ -517,19 +527,6 @@ def parse_pipeline_args(argv=None):
              '(stack=2, others=1; see THESIS_NOTES section 17). Useful '
              'for evaluation sweeps that compare planner behaviour with '
              'and without the stack-cost bias.',
-    )
-    parser.add_argument(
-        '--seed-retry',
-        action='store_true',
-        help='Allow the placement-retry layer to re-roll the seed even '
-             'when --seed was passed explicitly (default: strict pinning, '
-             'fail loud).  Re-roll source is deterministic — a Python '
-             'random.Random seeded from the original --seed — so the '
-             'effective seed sequence is reproducible from the matrix '
-             'seed.  Used by eval_runner --matrix random-pairs to recover '
-             'from infeasible geometries (some small seeds produce '
-             'occluder layouts with no valid shadow lane) without '
-             'silently mutating an interactive --seed.',
     )
     parser.add_argument(
         '--baseline',
