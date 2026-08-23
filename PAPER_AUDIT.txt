@@ -1486,6 +1486,79 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       it reports.  This is what caught F14's mechanism headlessly on the
       first try, and its numbers are the F14 verification evidence.]
 
+  F20. [OPEN — TOP PRIORITY] THE PIPELINE NEVER RE-DETECTS A NEWLY VISIBLE
+      OBJECT: DISCOVERY IS SENSE-ONLY, SO A TARGET IN PLAIN VIEW STAYS
+      UNKNOWN (2026-08-23, user GUI report on seed 999 + headless run
+      13-25-19).  Objects enter the registry in exactly two places: the
+      Phase-2 initial observation, and handle_sense_action when a SENSE
+      action discovers them inside a shadow fragment.  Nothing re-runs
+      detection as the world changes, so an object that becomes plainly
+      camera-visible mid-episode — because the robot just moved the
+      occluder that was hiding it — is never noticed.  The robot walks
+      past its own target.
+      EVIDENCE (seed 999, holding): blue spawns behind red as seen from
+      the camera (user screenshot: blue clearly seated behind the red
+      occluder).  Run 13-25-19 relocated red, orange AND green, sensed
+      every shadow fragment, reported "target not here" on each, and
+      ended "All 0 shadows searched — target not found" — with blue
+      sitting unoccluded in the open, in full view of the camera, for
+      the last three plans.  Every individual step was correct; the
+      belief simply has no path from "the camera can see it now" to
+      "the planner knows where it is".
+      WHY IT WAS INVISIBLE UNTIL NOW: the F5 pre-flight guardrail
+      REJECTED exactly the scenes that expose it (target outside every
+      sense-hittable fragment), so the failure could never be observed
+      in a run.  The guardrail was removed on the same day (user
+      directive, see the note below); this finding is what came out
+      from under it.
+      FIX DIRECTION (this is #P1 step (3)'s natural completion, and it
+      is what makes "everything is winnable" true): refresh detection
+      from the observation on every replan — get_camera_observation /
+      env.detect_objects() already returns per-object estimates — and
+      register any DETECTED object that has no registry boxel as an
+      OBJECT boxel with obj_at_boxel / obj_at_boxel_KIF /
+      obj_pose_known, exactly as the sense-discovery branch does.  A
+      target found this way is directly pickable with no sense action
+      at all.  Watch three interactions: (i) it must not resurrect
+      objects the F19/step-3c lost-object logic just retired — the
+      same observation drives both, so run them off ONE render;
+      (ii) the shadow fragments of a newly detected object have to be
+      cast, or it becomes an occluder nobody accounts for;
+      (iii) re-detection while HOLDING an object must not register the
+      held object as table-resting.
+      RELATED (found while diagnosing, keep separate): on seed 999
+      blue's centre lies in a GAP between shadow fragments — green's
+      fragments stop at y≈0.11, red's start at y≈0.31, and blue sits
+      at y≈0.16 in the x-band both cover.  So the carve drops volume
+      that is genuinely camera-occluded.  Fragment coverage is
+      therefore NOT a partition of the occluded space; sensing alone
+      cannot be complete, which is independent motivation for
+      re-detection.  Root-cause forensics on the carve are pending.
+
+  [F5 SENSABLE-GUARANTEE GUARDRAIL REMOVED 2026-08-23, USER DIRECTIVE
+  ("remove all f5 pre-flight guardrails ... everything is winnable").
+  The pre-flight no longer judges winnability at all: the sensable
+  guarantee is gone from test_full_pipeline, the Phase-4 oracle line no
+  longer claims a scene is unwinnable (it states that discovery must
+  come from re-detection instead), and the "pre-flight and real run
+  disagree" warning is now a plain note.  What remains in the
+  pre-flight is scene CONSTRUCTIBILITY (placement exhaustion, the
+  audit-#70 reach assert) plus the find-and-tray-stack role split,
+  which is goal FORMATION (the goal builder needs one visible and one
+  hidden target to build a tower), not a winnability judgement.
+  RATIONALE: the guardrail encoded "fragment containment is the only
+  route to discovery", which is false — clearing the occluders and
+  LOOKING is another, and the render already supports it.  Its real
+  effect was to suppress the F20 bug report by rejecting every scene
+  that would have produced it.  perception.grid_would_hit survives (it
+  still picks which fragment the oracle line names, and
+  tools/_diag_f5_seed0.py uses it); --allow-unwinnable survives as an
+  inspection flag for the remaining role-split rejection.  CONSEQUENCE:
+  until F20 lands, seeds whose target sits outside every fragment run
+  to an honest "searched everything, not found" failure instead of
+  being rejected at spawn — that is the intended, informative
+  behaviour, and those episodes are the F20 test set.]
+
 ================================================================================
 #P2. [OPEN T0]  STACKING-ACCURACY DROP: PROVE IT IS EXECUTION, DETECT PHYSICAL
      FAILURE (KNOCKED TOWERS, OBJECTS OFF THE TABLE) AND FAIL HONESTLY
