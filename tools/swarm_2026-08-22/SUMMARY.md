@@ -100,3 +100,30 @@ lost-object probe PASS · render-sense probe PASS (97.91% endpoint agreement,
   negative result, not smoothed over.
 * Step counts and search behaviour changed (F16 removes fragments earlier),
   so CB#113 re-baselines.
+
+## Correction (2026-08-23) — the real interceptor was the GUI overlay (F19)
+
+The user's next GUI run (11-25-45) tripped the guard again and the new
+F15-diag NAMED the interceptors: seg ids 10 and 12 (348-1197 px), outside
+the 0-6 scene-body range. They are the boxel visualizer's own phantom AABB
+bodies: visual-only multibodies that rayTestBatch ignores (no collision
+shape) but TinyRenderer renders — so step (3)'s switch to the rendered
+observation put the debug overlay INTO the observation, GUI runs only.
+A fragment's own translucent box stood in front of its own sense endpoints
+(found_target could never fire with the target in plain sight through the
+overlay), and an object's overlay hid the object from the refresh render.
+
+This CORRECTS two claims above: agent A's orange-by-elimination hypothesis
+is refuted (only scene bodies were considered — the 347-pose negative sweep
+was the fingerprint of a non-scene cause), and F15.1's arm-occlusion
+hypothesis is superseded (the overlay, not the arm, gated off the 3c
+retirement; resolved by F19).
+
+Fix (F19, commit on 2026-08-23): every phantom registers its home position;
+`BoxelTestEnv.detect_objects` — the single chokepoint for all perception
+renders — conceals the overlay (teleport 100 m down, try/finally) for
+exactly the duration of the camera pass. Verified by
+`tools/_probe_viz_observation.py`: raw render shows 6137/891 phantom px
+with the covered object reduced to 1 px; the fixed observation has zero
+phantom pixels, detects the covered object at 892 px, classifies the
+phantom-covered fragment clear_but_empty, and restores the phantoms.
