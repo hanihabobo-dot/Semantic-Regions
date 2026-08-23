@@ -1246,7 +1246,16 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       exactly the sliver body this branch cannot resolve — so with F14
       landed the (b) path should fire rarely; (c) is the guarantee that
       when it does, the target's fragment is not written off.
-      OPEN SUB-FINDING (F15.1): THE THROWN OBJECT WAS NEVER RETIRED.
+      [CORRECTED 2026-08-23 by F19: the field interceptor was neither
+      thrown orange nor any scene body — it was the GUI's own overlay
+      phantom boxes rendering into the observation (run 11-25-45's
+      [F15-diag] named seg ids 10/12, 348-1197 px, outside the 0-6
+      scene-body range).  The headless-rare / probe-negative pattern
+      above was the fingerprint of a GUI-only cause: the visualizer
+      only exists under the GUI.  (b) remains correct for genuine
+      slivers, (c) remains the guarantee; F19 removes the overlay
+      class entirely.]
+      SUB-FINDING (F15.1): THE THROWN OBJECT WAS NEVER RETIRED.
       Across all 8 plans the run logged "1 object(s) not visible in the
       refresh render — keeping last estimate: ['orange_object']" 7 times
       (:148,:244,:304,:359,:470,:530,:585) and NEVER once reported the
@@ -1267,6 +1276,16 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       audit-#78 census DID track reality correctly over the same period
       (shadow_of_orange's blocker flips orange -> red at :455), so the
       census and the object registry disagreed for the whole episode.
+      [RESOLVED 2026-08-23 BY F19: the "something not modeled by
+      teleport reconstruction" that kept the region occluded was the
+      OVERLAY, not the arm — orange's believed-region slices rendered
+      overlay-intercepted at every GUI refresh, gating off the 3c
+      retirement, while the no-viz probe (and every headless run)
+      retired the object cleanly.  With F19 concealing the overlay for
+      every observation render, GUI runs see exactly what the probe
+      saw; no separate retry-when-arm-elsewhere machinery is needed for
+      this class.  The narrower arm-parked-over-the-region case remains
+      theoretically possible but has no observed instance.]
 
   F16. [DONE] SENSE RE-CHECKS ONLY THE SAME CASTER'S SIBLING FRAGMENTS,
       AND ONLY ON clear_but_empty (2026-08-22): the sibling batch-sense
@@ -1303,6 +1322,73 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       that chain is the found-path's contract; surfacing it lets the
       next plan target it.  Promoting that surface to a belief update is
       the natural follow-up.]
+
+  F19. [DONE] THE OBSERVATION RENDERS THE DEBUG OVERLAY — GUI RUNS WERE
+      SENSING THEIR OWN VISUALIZATION (2026-08-23, user GUI run
+      11-25-45; ROOT CAUSE of the F15 field stalls in 17-14-10 and of
+      the user's "the target is still invisible even though it was in
+      plain sight"): BoxelVisualizer's phantom AABB fills are
+      VISUAL-ONLY multibodies (createMultiBody with a visual shape and
+      no collision shape, visualization.py _draw_boxel_phantom).
+      rayTestBatch intersects COLLISION shapes, so the pre-step-3
+      ray-based sense passed straight through them; getCameraImage's
+      TinyRenderer renders VISUAL shapes, so step (3)'s switch to the
+      rendered depth+seg observation put the overlay INTO the
+      observation.  A GUI-only regression, invisible to every headless
+      battery because test_full_pipeline only creates the visualizer
+      when gui=True (line ~651).
+      FIELD EVIDENCE (run 11-25-45, the F15(a) diagnostic doing its
+      job): [F15-diag] named the interceptors as seg id 12 (1197 px,
+      118 of shadow_of_red's 138 endpoints) and seg id 10 (348 px, 73
+      endpoints of shadow_of_green) — ids outside the 0-6 scene-body
+      range, i.e. the fragments' OWN translucent overlay boxes — while
+      blue_object was LOCALIZED in the same frames.  The fragment's
+      phantom is drawn at the fragment's AABB, so its front face stands
+      strictly in front of every interior sense endpoint: found_target
+      can never fire (the first surface at those pixels is the overlay,
+      not the target), the discovery is unnameable, and the F15 guard
+      burned its strikes — the robot was blinded by its own debug HUD
+      while the user watched the target sit in plain sight through the
+      translucent box.  Same mechanism hid placed objects from the
+      refresh ("1 object(s) not visible — keeping last estimate:
+      ['green_object']": green's own OBJECT-boxel phantom covered it).
+      CORRECTIONS THIS CONFIRMS: (i) agent A's by-elimination
+      hypothesis that thrown orange was the 17-14-10 interceptor is
+      REFUTED — the sweep only considered scene bodies; the interceptor
+      class was the overlay all along, which is also why no teleport
+      pose could reproduce a sub-6px interceptor and why headless
+      repro attempts (0/4) never tripped the guard.  (ii) F15.1's
+      arm-occlusion hypothesis for why thrown orange was never retired
+      as LOST is SUPERSEDED: orange's believed-region slices rendered
+      overlay-intercepted ("occluded region — never claimed lost"), so
+      the 3c retirement was gated off in every GUI run while the
+      no-viz probe retired it cleanly.
+      [FIXED 2026-08-23: every phantom registers its home position in a
+      module-level map (visualization.py _PHANTOM_HOME, maintained by
+      _draw_boxel_phantom / remove_boxel_viz / clear_all), and
+      BoxelTestEnv.detect_objects — the single chokepoint every
+      perception render goes through (sense, census, refresh,
+      post-place/post-stack estimates) — brackets getCameraImage with
+      conceal_overlay_for_observation / restore (teleport 100 m down,
+      try/finally, re-entrancy-guarded).  Teleporting is renderer-
+      agnostic (TinyRenderer still writes seg/depth for transparent
+      visuals, so alpha tricks are not); the bodies are massless and
+      collisionless so physics cannot notice; the user's ExampleBrowser
+      view is drawn by the separate OpenGL renderer and keeps its
+      overlays (at worst a one-frame flicker per sense).  The F15-diag
+      also now distinguishes NOT_A_SCENE_OBJECT from BELOW_MIN, so an
+      overlay-class interceptor can never again masquerade as a
+      detection-minimum case.  VERIFIED: tools/_probe_viz_observation.py
+      (visualizer forced on in DIRECT mode) — raw render shows phantom
+      ids 6137/891 px and the covered object reduced to 1 px
+      (reproducing "not visible" and the unlocalizable stall), the
+      fixed observation has ZERO phantom pixels, the covered object
+      detects at 892 px, the phantom-covered fragment classifies
+      clear_but_empty, and the phantoms restore to their drawn
+      positions.  Headless battery unchanged (concealment iterates an
+      empty map when no GUI).  GUI-observable effect for the user:
+      senses on plainly visible targets now return found_target instead
+      of three unlocalizable strikes.]
 
   F18. [OPEN] A TRANSIT KNOCKS A BYSTANDER FLAT AND THE EPISODE STILL
       REPORTS SUCCESS (2026-08-22, found BY the new F17 telemetry on the
