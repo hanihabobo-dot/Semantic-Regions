@@ -17,6 +17,75 @@ from typing import Dict, List, Optional, Set
 from boxel_data import BoxelData, BoxelType
 
 
+# ---------------------------------------------------------------------------
+# #P1 F19 (2026-08-23): the debug overlay must NEVER appear in the robot's
+# observation.
+#
+# The phantom AABB fills are VISUAL-ONLY multibodies (no collision shape):
+# pybullet.rayTestBatch intersects collision shapes, so the pre-step-3
+# ray-based sense passed straight through them — but getCameraImage's
+# TinyRenderer renders VISUAL shapes, so once step (3) moved sensing onto
+# the rendered depth+seg observation, every GUI run handed the classifiers
+# an image containing the overlay itself.  A shadow fragment's own
+# translucent box stands in front of its own sense-grid endpoints: the
+# first surface at those pixels is the phantom (a seg id that is not in
+# body_id_to_name), found_target can never fire even with the target
+# plainly visible through the overlay, the discovery is "unlocalizable",
+# and an OBJECT boxel's phantom hides its own object from the refresh
+# render ("not visible — keeping last estimate").  Field evidence: run
+# 2026-08-23_11-25-45 ([F15-diag] seg id 12, 1197 px, 118/138 endpoints of
+# shadow_of_red intercepted while blue_object was localized in the same
+# frame).  Headless runs were never affected — the visualizer only exists
+# under the GUI — which is exactly why the regression survived a green
+# headless battery.
+#
+# Fix: every phantom registers its home position here, and the perception
+# render (BoxelTestEnv.detect_objects — the single observation chokepoint)
+# brackets getCameraImage with conceal/restore.  Concealment teleports the
+# phantoms 100 m below the scene for the microseconds of the TinyRenderer
+# pass; teleporting is renderer-agnostic (alpha tricks are not — TinyRenderer
+# still writes seg/depth for transparent visuals) and the bodies are
+# massless and collisionless, so physics cannot notice.  The user-facing
+# ExampleBrowser view is drawn by the separate OpenGL renderer and keeps
+# its overlays; at worst a single frame flickers during a sense.
+# ---------------------------------------------------------------------------
+
+_PHANTOM_HOME: Dict[int, tuple] = {}
+_CONCEAL_DROP = 100.0          # metres straight down, far below any camera
+_conceal_depth = 0             # re-entrancy guard
+
+
+def conceal_overlay_for_observation() -> None:
+    """Teleport every phantom overlay body out of camera view (#P1 F19)."""
+    global _conceal_depth
+    _conceal_depth += 1
+    if _conceal_depth > 1:
+        return
+    for body_id, home in list(_PHANTOM_HOME.items()):
+        try:
+            p.resetBasePositionAndOrientation(
+                body_id, [home[0], home[1], home[2] - _CONCEAL_DROP],
+                [0, 0, 0, 1])
+        except Exception:
+            # A body removed between registration and concealment is not
+            # an error — it simply no longer needs hiding.
+            _PHANTOM_HOME.pop(body_id, None)
+
+
+def restore_overlay_after_observation() -> None:
+    """Return every phantom overlay body to its drawn position (#P1 F19)."""
+    global _conceal_depth
+    _conceal_depth = max(0, _conceal_depth - 1)
+    if _conceal_depth > 0:
+        return
+    for body_id, home in list(_PHANTOM_HOME.items()):
+        try:
+            p.resetBasePositionAndOrientation(
+                body_id, list(home), [0, 0, 0, 1])
+        except Exception:
+            _PHANTOM_HOME.pop(body_id, None)
+
+
 _EDGE_INDICES = [
     (0, 1), (0, 2), (0, 4), (1, 3), (1, 5),
     (2, 3), (2, 6), (3, 7), (4, 5), (4, 6),
@@ -111,6 +180,8 @@ class BoxelVisualizer:
             baseOrientation=[0, 0, 0, 1],
         )
         self.shadow_bodies.add(body_id)
+        _PHANTOM_HOME[body_id] = (float(center[0]), float(center[1]),
+                                  float(center[2]))
         return body_id
 
     def _draw_one_boxel(self, bd: BoxelData, *, duration: float,
@@ -255,6 +326,7 @@ class BoxelVisualizer:
         for body_id in self._bodies_by_id.pop(boxel_id, []):
             p.removeBody(body_id)
             self.shadow_bodies.discard(body_id)
+            _PHANTOM_HOME.pop(body_id, None)
 
     def tracks_boxel(self, boxel_id: str) -> bool:
         """Whether any debug item or phantom body is still tracked for ``boxel_id``.
@@ -270,6 +342,7 @@ class BoxelVisualizer:
         """Clear all debug items and shadow bodies."""
         for body_id in self.shadow_bodies:
             p.removeBody(body_id)
+            _PHANTOM_HOME.pop(body_id, None)
         self.shadow_bodies.clear()
 
         for item_id in self.debug_items:

@@ -2128,10 +2128,21 @@ def handle_sense_action(
             for _b in sorted(detected_bodies):
                 _nm = body_id_to_name.get(_b, f"<seg id {_b}>")
                 _px = int(np.count_nonzero(sense_seg == _b))
+                # Three distinct reasons a discovery is unresolvable, and
+                # they must not share a label: a known object under the
+                # pixel gate (BELOW_MIN), versus a seg id that is not a
+                # scene object at all (F19 caught the debug overlay's
+                # phantom bodies here with 1197 px — nothing about a
+                # detection minimum applied).
+                if _nm in sense_detections:
+                    _why = 'localized'
+                elif _b in body_id_to_name:
+                    _why = 'BELOW_MIN'
+                else:
+                    _why = 'NOT_A_SCENE_OBJECT'
                 _diag.append(
                     f"{_nm}(id={_b}) endpoints={interceptor_counts.get(_b, 0)} "
-                    f"seg_px={_px} "
-                    f"{'localized' if _nm in sense_detections else 'BELOW_MIN'}")
+                    f"seg_px={_px} {_why}")
             print(f"      [F15-diag] discoveries: {'; '.join(_diag)}"
                   f" | detection minimum {DETECTION_MIN_PIXELS} px"
                   f" | localized this render: "
