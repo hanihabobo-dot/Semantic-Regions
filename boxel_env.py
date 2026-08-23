@@ -19,7 +19,9 @@ from perception import ObjectDetection, detect_objects_from_render
 from shadow_calculator import ShadowCalculator
 from free_space import FreeSpaceGenerator
 from uniform_grid import UniformGridGenerator
-from visualization import BoxelVisualizer
+from visualization import (BoxelVisualizer,
+                           conceal_overlay_for_observation,
+                           restore_overlay_after_observation)
 
 
 # ---------------------------------------------------------------------------
@@ -1671,14 +1673,24 @@ class BoxelTestEnv:
         is the caller's concern).
         """
         view_matrix, projection_matrix = self._view_and_projection_matrices()
-        _, _, rgb_array, depth_array, seg_array = p.getCameraImage(
-            width=self.image_width,
-            height=self.image_height,
-            viewMatrix=view_matrix,
-            projectionMatrix=projection_matrix,
-            renderer=p.ER_TINY_RENDERER,
-            physicsClientId=self.client_id,
-        )
+        # #P1 F19: the observation must not contain the debug overlay.
+        # The boxel visualizer's phantom AABB fills are visual-only bodies
+        # that TinyRenderer renders like any surface — under the GUI, a
+        # shadow fragment's own translucent box intercepted its own sense
+        # endpoints and hid objects from this very render.  Conceal the
+        # overlay for exactly the duration of the camera pass.
+        conceal_overlay_for_observation()
+        try:
+            _, _, rgb_array, depth_array, seg_array = p.getCameraImage(
+                width=self.image_width,
+                height=self.image_height,
+                viewMatrix=view_matrix,
+                projectionMatrix=projection_matrix,
+                renderer=p.ER_TINY_RENDERER,
+                physicsClientId=self.client_id,
+            )
+        finally:
+            restore_overlay_after_observation()
         rgb_image = np.array(rgb_array, dtype=np.uint8).reshape(
             (self.image_height, self.image_width, 4)
         )[:, :, :3]
