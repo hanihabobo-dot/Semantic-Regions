@@ -683,11 +683,10 @@ def main(gui=True, run_logger=None, scene_config=None,
     # AABB.  AABB containment is now a best-effort follow-up that
     # supplies one shadow id per hidden target for the oracle log
     # line; it is allowed to be empty for individual targets without
-    # aborting the run.  Since the F5 pre-flight (sensable guarantee;
-    # fails loud, seed retry removed) every scene with n_hidden > 0 is vetted
-    # before main() runs: each hidden target sits inside a fragment the
-    # shared sense grid can hit, so an empty lookup here signals
-    # probe-vs-run drift and prints a loud warning below.
+    # aborting the run.  An empty lookup is legitimate (2026-08-23, F5
+    # guardrail removed): a camera-occluded target may sit outside every
+    # shadow fragment — sensing cannot reach it, but clearing its
+    # occluders and re-detecting it can, so the episode still runs.
     visible_now, _ = env.oracle_detect_objects()
     hidden_targets_set = set(all_targets) - set(visible_now)
     target_to_shadow = {}
@@ -700,10 +699,11 @@ def main(gui=True, run_logger=None, scene_config=None,
             if not (sb and np.all(tpos >= sb.min_corner)
                     and np.all(tpos <= sb.max_corner)):
                 continue
-            # F5: prefer the fragment the shared sense ray grid would
-            # actually hit — the same criterion the pre-flight
-            # guaranteed, so the classification names a fragment whose
-            # sense can really find the target.
+            # Prefer the fragment the shared sense ray grid would
+            # actually hit, so the oracle line names a fragment whose
+            # sense can really find the target (diagnostic preference
+            # only — no guarantee is enforced anywhere since the F5
+            # guardrail was removed 2026-08-23).
             if grid_would_hit(env.camera_position, sb.min_corner,
                               sb.max_corner, t_min, t_max):
                 target_to_shadow[tname] = shadow_id
@@ -712,9 +712,10 @@ def main(gui=True, run_logger=None, scene_config=None,
                 containing_only = shadow_id
         if tname not in target_to_shadow and containing_only is not None:
             target_to_shadow[tname] = containing_only
-            print(f"  WARNING: {tname}'s containing fragment "
-                  f"{containing_only} is not sense-hittable at Phase 4 — "
-                  f"pre-flight and real run disagree (settle drift?)",
+            print(f"  note: {tname}'s containing fragment "
+                  f"{containing_only} is not sense-hittable — sensing it "
+                  f"cannot reveal the target; discovery has to come from "
+                  f"re-detection after its occluders move",
                   file=sys.stderr)
 
     visible_target_locations = {}
@@ -735,9 +736,9 @@ def main(gui=True, run_logger=None, scene_config=None,
                       f"its centre)")
             else:
                 print(f"  ORACLE: Actually hidden by camera-ray occlusion "
-                      f"but inside NO shadow fragment — the F5 pre-flight "
-                      f"should have re-rolled this scene; the episode is "
-                      f"likely structurally unwinnable (boundary case)")
+                      f"but inside NO shadow fragment — sensing alone "
+                      f"cannot reach it; discovery must come from "
+                      f"re-detecting it once its occluders are cleared")
             print(f"  Robot must search to find it!")
         else:
             # No target is hidden — all are visible from the camera.
@@ -2169,105 +2170,68 @@ if __name__ == "__main__":
     # moment later.  Consequence for eval sweeps: cells on such seeds
     # fail outright — seed lists must be pre-vetted or these count as
     # scene failures (see the PAPER_AUDIT.txt seed-retry-removal note).
-    if True:
-        try:
-            probe_env = BoxelTestEnv(gui=False, scene_config=scene_cfg)
-            # Perception probe (settle + oracle), shared by the
-            # find-and-tray-stack role split and the F5 sensable
-            # guarantee below.  Settled once per attempt, not per check.
-            probe_visible = probe_targets = None
-            needs_probe = (args.goal == 'find-and-tray-stack'
-                           or int(getattr(scene_cfg, 'n_hidden_targets', 0)
-                                  or 0) > 0)
-            if needs_probe:
-                for _ in range(50):
-                    probe_env.step_simulation()
-                probe_env.update_object_positions()
-                probe_visible, _ = probe_env.oracle_detect_objects()
-                probe_targets = [
-                    n for n, info in probe_env.objects.items()
-                    if not info.is_occluder and not info.is_tray
-                    and n not in ("plane", "table", "robot")
-                ]
-            # find-and-tray-stack needs >=1 VISIBLE and >=1 HIDDEN target,
-            # but visibility is a camera-occlusion property (not just
-            # placement), so a constructible scene can still leave every
-            # target occluded.  Probe the role split here -- settle +
-            # oracle perception, exactly as main() does -- and treat a
-            # missing role as a retryable re-roll, instead of letting
-            # main() abort later with no timing_summary (exit_reason
-            # "no_summary").
-            if args.goal == 'find-and-tray-stack':
-                n_vis = sum(1 for t in probe_targets if t in probe_visible)
-                n_hid = len(probe_targets) - n_vis
-                if n_vis < 1 or n_hid < 1:
-                    msg = (f"find-and-tray-stack pre-flight: {n_vis} "
-                           f"visible / {n_hid} hidden (need >=1 of each)")
-                    if getattr(args, 'allow_unwinnable', False):
-                        print(f"[pre-flight] WARNING (--allow-unwinnable): "
-                              f"{msg} — running anyway for inspection",
-                              file=sys.stderr)
-                    else:
-                        probe_env.close()
-                        raise RuntimeError(msg)
-            # F5 sensable guarantee: every oracle-hidden target must sit
-            # inside a final F3 shadow fragment that the shared sense
-            # ray grid would actually hit (perception.grid_would_hit
-            # consumes the IDENTICAL endpoint list the live sense
-            # casts).  Camera-ray occlusion alone is NOT enough: the
-            # fragment carve can leave a camera-hidden target outside
-            # every fragment (seed 999: blue occluded, 0 segmentation
-            # pixels, centre in no fragment) — and sense is the ONLY
-            # mid-episode discovery mechanism, so such an episode is
-            # structurally unwinnable at spawn.  Fails loud (seed retry
-            # removed 2026-08-23) instead of burning a whole episode
-            # that cannot be won.
-            if int(getattr(scene_cfg, 'n_hidden_targets', 0) or 0) > 0:
-                probe_obs = probe_env.get_camera_observation()
-                probe_frags = [b for b in probe_obs.boxels
-                               if b.boxel_type == BoxelType.SHADOW]
-                for t in probe_targets:
-                    if t in probe_visible:
-                        continue
-                    t_info = probe_env.objects[t]
-                    t_min, t_max = p.getAABB(
-                        t_info.object_id,
-                        physicsClientId=probe_env.client_id)
-                    tpos = np.asarray(t_info.position)
-                    sensable = any(
-                        np.all(tpos >= np.asarray(fb.min_corner))
-                        and np.all(tpos <= np.asarray(fb.max_corner))
-                        and grid_would_hit(probe_env.camera_position,
-                                           fb.min_corner, fb.max_corner,
-                                           t_min, t_max)
-                        for fb in probe_frags)
-                    if not sensable:
-                        msg = (f"F5 pre-flight: hidden target {t} is not "
-                               f"inside any sense-hittable shadow fragment "
-                               f"(seed={scene_cfg.seed}) — the episode "
-                               f"would be structurally unwinnable. "
-                               f"Use a different --seed.")
-                        if getattr(args, 'allow_unwinnable', False):
-                            print(f"[pre-flight] WARNING "
-                                  f"(--allow-unwinnable): {msg} — running "
-                                  f"anyway for inspection",
-                                  file=sys.stderr)
-                        else:
-                            probe_env.close()
-                            raise RuntimeError(msg)
-            probe_env.close()
-        except RuntimeError as e:
-            # SEED RETRY REMOVED (2026-08-23, user directive): there is
-            # no re-roll of any kind any more.  Pre-flight rejections
-            # ("Could not place", "audit #70" reach assert,
-            # "find-and-tray-stack pre-flight" role split, "F5
-            # pre-flight" sensable guarantee) classify the seed loudly
-            # and abort before any GUI opens — the seed on the command
-            # line is always the seed that ran, or the run did not
-            # happen.
-            print(f"[pre-flight] seed {scene_cfg.seed} rejected: {e}",
-                  file=sys.stderr)
-            raise
+    try:
+        probe_env = BoxelTestEnv(gui=False, scene_config=scene_cfg)
+        # find-and-tray-stack needs >=1 VISIBLE and >=1 HIDDEN target to
+        # BUILD ITS GOAL (a visible cube on the tray, the hidden one on
+        # top), so a scene perceived with only one role gives the goal
+        # builder nothing to work with.  This is goal FORMATION, not a
+        # winnability judgement — the F5 winnability guardrail that used
+        # to live below is gone (2026-08-23).  Probe it here with settle
+        # + oracle perception exactly as main() does, instead of letting
+        # main() abort later with no timing_summary (exit_reason
+        # "no_summary").
+        if args.goal == 'find-and-tray-stack':
+            for _ in range(50):
+                probe_env.step_simulation()
+            probe_env.update_object_positions()
+            probe_visible, _ = probe_env.oracle_detect_objects()
+            probe_targets = [
+                n for n, info in probe_env.objects.items()
+                if not info.is_occluder and not info.is_tray
+                and n not in ("plane", "table", "robot")
+            ]
+            n_vis = sum(1 for t in probe_targets if t in probe_visible)
+            n_hid = len(probe_targets) - n_vis
+            if n_vis < 1 or n_hid < 1:
+                msg = (f"find-and-tray-stack pre-flight: {n_vis} "
+                       f"visible / {n_hid} hidden (need >=1 of each)")
+                if getattr(args, 'allow_unwinnable', False):
+                    print(f"[pre-flight] WARNING (--allow-unwinnable): "
+                          f"{msg} — running anyway for inspection",
+                          file=sys.stderr)
+                else:
+                    probe_env.close()
+                    raise RuntimeError(msg)
+        # F5 SENSABLE-GUARANTEE GUARDRAIL REMOVED 2026-08-23 (user
+        # directive: "everything is winnable").  It used to reject any
+        # scene whose oracle-hidden target sat outside every
+        # sense-hittable shadow fragment, on the premise that fragment
+        # containment is the ONLY route to discovery.  That premise is
+        # false: a target sensing cannot reach is still discoverable by
+        # LOOKING once its occluders are gone — the render sees it
+        # directly.  Seed 999 is the counter-example (user GUI,
+        # 2026-08-23): blue sits squarely behind red from the camera,
+        # and the run the guardrail used to forbid cleared every
+        # occluder cleanly (run 13-25-19).  What that run exposed is a
+        # REAL DEFECT the guardrail was hiding — the pipeline never
+        # re-detects newly visible objects, so blue stayed unknown even
+        # in plain view (F20 in PAPER_AUDIT.txt).  Rejecting those
+        # scenes suppressed the bug report; running them produces it.
+        # No winnability gate remains: the pre-flight vets scene
+        # CONSTRUCTIBILITY only (plus the tray-stack role split above,
+        # which is goal formation).
+        probe_env.close()
+    except RuntimeError as e:
+        # SEED RETRY REMOVED (2026-08-23, user directive): there is no
+        # re-roll of any kind.  A rejection ("Could not place", the
+        # "audit #70" reach assert, or the tray-stack role split)
+        # classifies the seed loudly and aborts before any GUI opens —
+        # the seed on the command line is always the seed that ran, or
+        # the run did not happen.
+        print(f"[pre-flight] seed {scene_cfg.seed} rejected: {e}",
+              file=sys.stderr)
+        raise
 
     # Single real-pipeline run with the validated scene_cfg.
     logger = RunLogger(verbosity=args.log_level)
