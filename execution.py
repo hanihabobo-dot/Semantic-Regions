@@ -1934,6 +1934,16 @@ def register_new_detections(*, env, registry, belief, viz, detections,
         det = detections[name]
         aabb_min = np.array(det.est_min, dtype=float)
         aabb_max = np.array(det.est_max, dtype=float)
+        # A body seen BELOW the table surface is on the floor (knocked
+        # off, #P2 territory): it is not a workspace object any more and
+        # must not get on_table facts or a shadow.  Logged, not
+        # registered.
+        if aabb_min[2] < table_z - 0.02:
+            print(f"    [F20] {name} is visible ({det.pixel_count} px) but "
+                  f"lies below the table surface (z_min "
+                  f"{aabb_min[2]:.3f} < {table_z:.3f}) — off the table, "
+                  f"not registered (#P2 knocked_off_table).")
+            continue
         obj_bd = BoxelData(
             id=name,
             boxel_type=BoxelType.OBJECT,
@@ -1952,10 +1962,14 @@ def register_new_detections(*, env, registry, belief, viz, detections,
             'pybullet_id': info.object_id,
             'position': np.array(det.est_center),
         }
+        # `occluders` is the census's body list (every OBJECT boxel joins
+        # it at startup, targets included, test_full_pipeline Phase 3):
+        # a body absent from it can never be recorded as a blocker.
+        if name not in occluders:
+            occluders.append(name)
+        belief.redetected.add(name)
         n_shadows = 0
         if name != target_name:
-            if name not in occluders:
-                occluders.append(name)
             obstacles = [bd for bd in registry.boxels.values()
                          if bd.boxel_type == BoxelType.OBJECT
                          and bd.id != name]
@@ -1997,6 +2011,22 @@ def register_new_detections(*, env, registry, belief, viz, detections,
               f"[{c[0]:.3f},{c[1]:.3f},{c[2]:.3f}] ({det.pixel_count} px); "
               f"{role}.")
         registered.append(name)
+    if registered:
+        # A newly registered body may stand between the camera and an
+        # EXISTING fragment.  The blocker census only maps listed bodies
+        # and is otherwise re-run after a place, so without this the
+        # planner would keep deriving view_clear for that fragment, the
+        # next sense of it would classify the body as CONTENT
+        # (contains_nontarget) and delete the fragment with the target
+        # possibly still behind the body (review finding 2026-09-18).
+        # One extra render; the map is updated in place so the planner's
+        # reference stays current.
+        new_map = compute_shadow_blockers(
+            env.camera_position, registry, shadows, occluders, env)
+        shadow_occluder_map.clear()
+        shadow_occluder_map.update(new_map)
+        print(f"    [F20] blocker census refreshed for {len(shadows)} "
+              f"fragment(s) after registering {registered}")
     return registered
 
 
@@ -2464,6 +2494,10 @@ def handle_sense_action(
                             shadows.remove(old_sid)
                         shadow_occluder_map.pop(old_sid, None)
                         boxel_centers.pop(old_sid, None)
+                        # #P1 F20 follow-up: the belief must forget the
+                        # superseded fragment too, or it stays 'unknown'
+                        # forever and blocks the all-searched exit.
+                        belief.remove_shadow(old_sid)
                     if viz is not None:
                         viz.remove_boxel_viz(obj_name)
 
@@ -2473,13 +2507,20 @@ def handle_sense_action(
                 # fragment again.  Mirrors the audit-#21 3-strike
                 # sense giveup; see the counter's declaration in
                 # test_full_pipeline for the semantics.
+                # #P1 F20 follow-up: a body that entered the registry from
+                # a whole-workspace observation is being DISCOVERED inside
+                # a fragment for the first time here — that is not the
+                # relocate-rediscover cycle F9 bounds.  One exemption, then
+                # it counts like any other object.
                 if (nontarget_rediscovery_counts is not None
-                        and old_obj is not None):
+                        and old_obj is not None
+                        and obj_name not in belief.redetected):
                     nontarget_rediscovery_counts[obj_name] = \
                         nontarget_rediscovery_counts.get(obj_name, 0) + 1
                     print(f"      -> rediscovery "
                           f"{nontarget_rediscovery_counts[obj_name]}/3 "
                           f"for {obj_name} (#P1 F9 strike counter)")
+                belief.redetected.discard(obj_name)
 
                 obj_bd = BoxelData(
                     id=obj_name,

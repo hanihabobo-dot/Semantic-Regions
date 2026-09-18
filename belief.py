@@ -42,6 +42,10 @@ class BeliefState:
         self.shadow_status: Dict[str, str] = {s: 'unknown' for s in shadows}
         self.target_found_in: Optional[str] = None
         self.occluders_moved: Dict[str, str] = {}
+        # #P1 F20 follow-up: bodies registered from a whole-workspace sense
+        # observation (register_new_detections).  Their FIRST discovery
+        # inside a fragment is a discovery, not an F9 "rediscovery".
+        self.redetected: set = set()
 
     def add_shadow(self, shadow_id: str) -> None:
         """Register a shadow fragment created AFTER construction as unknown.
@@ -55,6 +59,17 @@ class BeliefState:
         A fragment that already has a status keeps it.
         """
         self.shadow_status.setdefault(shadow_id, 'unknown')
+
+    def remove_shadow(self, shadow_id: str) -> None:
+        """Forget a fragment that left the registry WITHOUT an observation
+        (the discovery branch's rediscovery cleanup supersedes an object's
+        old fragments when it re-registers the object).  An entry left
+        behind as 'unknown' would keep get_unknown_shadows() non-empty for
+        a fragment nobody can sense, so the loop could never reach its
+        all-searched exit and the run summary would name phantom
+        unsearched shadows (review finding 2026-09-18).  Observation-backed
+        removals keep using mark_sensed(found=False)."""
+        self.shadow_status.pop(shadow_id, None)
 
     def mark_sensed(self, shadow_id: str, found: bool) -> None:
         """Update belief after sensing a shadow."""
