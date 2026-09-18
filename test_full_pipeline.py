@@ -1106,7 +1106,21 @@ def main(gui=True, run_logger=None, scene_config=None,
                   f"(unknown shadows: {len(unknown_shadows)})")
         elif goal_kind == 'holding':
             print(f"Unknown shadows remaining: {len(unknown_shadows)}")
-            if not unknown_shadows:
+            # #P1 F20 (2026-09-18): "nothing left to sense" is not
+            # "target not found" when the target's location IS known —
+            # a sense observation may have registered it in plain view
+            # (register_new_detections), in which case the planner can
+            # ground a direct pick from its OBJECT boxel.  belief.
+            # target_found_in stays None until the pick sets it, so the
+            # loop keeps going on the registry, not on the belief flag.
+            _target_bd = registry.get_boxel(target_name)
+            if not unknown_shadows and _target_bd is not None:
+                _tc = _target_bd.center
+                print(f"  no unknown shadows remain, but {target_name} is "
+                      f"registered at [{_tc[0]:.3f},{_tc[1]:.3f},"
+                      f"{_tc[2]:.3f}] (seen by an observation) — "
+                      f"planning a direct pick (#P1 F20)")
+            elif not unknown_shadows:
                 # Audit #21: 'all_searched' is the loop-termination tag,
                 # but with the still_blocked 3-strike give-up some of
                 # the shadows below were never observed empty.  The

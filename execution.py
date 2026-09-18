@@ -1680,6 +1680,21 @@ def refresh_object_aabbs(env, registry, viz=None, detections=None,
         if viz is not None and viz.tracks_boxel(obj_boxel.id):
             viz.remove_boxel_viz(obj_boxel.id)
             viz.draw_boxel_data(obj_boxel)
+    # #P1 F20 visibility: name every detection that has NO registry boxel.
+    # This refresh only re-poses boxels that already exist; the sense
+    # action's observation is what registers new ones (register_new_
+    # detections).  Before this line existed, run 13-25-19 carried the
+    # target in five consecutive sense detection dicts without a trace.
+    _unregistered = sorted(
+        n for n in detections
+        if registry.get_boxel(n) is None and n in env.objects
+        and n not in ("plane", "table", "robot")
+        and not getattr(env.objects[n], "is_tray", False))
+    if _unregistered:
+        print(f"    [perception] detected but UNREGISTERED (no boxel): "
+              f"{_unregistered} — only a sense observation registers "
+              f"new objects (#P1 F20); this refresh re-poses known "
+              f"boxels only")
     lost = []
     if stale and check_lost and render is not None:
         depth_m, seg, view_m, proj_m = render
@@ -1872,6 +1887,118 @@ def sweep_all_fragments(*, registry, belief, viz, shadows,
     return removed, shrunk, target_seen
 
 
+def register_new_detections(*, env, registry, belief, viz, detections,
+                            target_name, shadows, occluders,
+                            shadow_occluder_map, boxel_centers,
+                            boxel_to_pybullet, object_body_ids,
+                            skip_names=frozenset()):
+    """Register every detected object that has no registry boxel (#P1 F20).
+
+    The sense action observes the WHOLE workspace: its render detects
+    every body the camera can see, not only what stands inside the named
+    fragment.  Until 2026-09-18 that whole-frame evidence was thrown
+    away — objects entered the registry only through the initial
+    observation or when a sense hit them INSIDE the sensed fragment, so a
+    target that became plainly visible after its occluders were moved
+    (seed 999, run 13-25-19: five consecutive sense detections of the
+    target, all discarded) stayed unknown and the episode ended
+    "searched everything, not found".
+
+    This is the belief update the thesis's sensor model prescribes for a
+    sense observation ("target found, region known-empty, or a new
+    occluder revealed"), applied to the full observation: a detected but
+    unregistered body becomes an OBJECT boxel at its render estimate,
+    exactly like the sense-discovery registration.  A non-target also
+    joins ``occluders`` (compute_shadow_blockers maps only listed bodies)
+    and casts its shadow fragments against the current solids AND the
+    existing fragments (the audit-#68 cross-shadow carve, as the initial
+    observation does), and every new fragment is added to the BELIEF as
+    unknown so the replan loop cannot declare "all searched" over it.
+    The search target itself gets no shadows (it is about to be picked)
+    and the belief's found flag stays untouched: the pick sets it, and
+    the loop's all-searched exit consults the registry instead.
+
+    ``skip_names``: bodies never to register here (the held object, which
+    a sense cannot see resting anywhere).  Returns the registered names.
+    """
+    registered = []
+    table_z = env.table_surface_height
+    for name in sorted(detections):
+        if name in skip_names or registry.get_boxel(name) is not None:
+            continue
+        info = env.objects.get(name)
+        if (info is None or name in ("plane", "table", "robot")
+                or getattr(info, "is_tray", False)):
+            continue
+        det = detections[name]
+        aabb_min = np.array(det.est_min, dtype=float)
+        aabb_max = np.array(det.est_max, dtype=float)
+        obj_bd = BoxelData(
+            id=name,
+            boxel_type=BoxelType.OBJECT,
+            min_corner=aabb_min,
+            max_corner=aabb_max,
+            object_name=name,
+            is_occluder=False,
+            on_surface="table" if aabb_min[2] <= table_z + 0.01 else None,
+            surface_z=table_z,
+        )
+        registry.add_boxel(obj_bd)
+        boxel_centers[name] = obj_bd.center
+        object_body_ids[name] = env.plan_body_id(info.object_id)
+        boxel_to_pybullet[name] = {
+            'name': name,
+            'pybullet_id': info.object_id,
+            'position': np.array(det.est_center),
+        }
+        n_shadows = 0
+        if name != target_name:
+            if name not in occluders:
+                occluders.append(name)
+            obstacles = [bd for bd in registry.boxels.values()
+                         if bd.boxel_type == BoxelType.OBJECT
+                         and bd.id != name]
+            obstacles.extend(registry.get_shadow_boxels())
+            shadow_parts = env.shadow_calculator.calculate_shadow_boxel(
+                obj_bd, obstacles)
+            if shadow_parts:
+                obj_bd.is_occluder = True
+            for sp in shadow_parts:
+                sp.created_by_boxel_id = name
+                sp.created_by_object = name
+                sp.on_surface = ("table"
+                                 if sp.min_corner[2] <= table_z + 0.01
+                                 else None)
+                sp.surface_z = table_z
+                s_id = registry.add_boxel(sp)
+                obj_bd.shadow_boxel_ids.append(s_id)
+                shadows.append(s_id)
+                shadow_occluder_map[s_id] = [name]
+                boxel_centers[s_id] = sp.center
+                belief.add_shadow(s_id)
+                n_shadows += 1
+        if viz is not None:
+            viz.draw_boxel_data(obj_bd)
+            for s_id in obj_bd.shadow_boxel_ids:
+                s_bd = registry.get_boxel(s_id)
+                if s_bd is not None:
+                    viz.draw_boxel_data(s_bd)
+        # The free-space partition must be re-carved around the new solid
+        # before the next plan (the loop's dirty check does it).
+        setattr(registry, "_dirty", True)
+        c = obj_bd.center
+        role = ("the SEARCH TARGET — directly pickable, no sense needed"
+                if name == target_name else
+                f"non-target, now an occluder with {n_shadows} shadow "
+                f"fragment(s) added to the belief as unknown")
+        print(f"    [F20] {name} is visible in this observation but had no "
+              f"boxel — registered at the render estimate "
+              f"[{c[0]:.3f},{c[1]:.3f},{c[2]:.3f}] ({det.pixel_count} px); "
+              f"{role}.")
+        registered.append(name)
+    return registered
+
+
 def handle_sense_action(
     *,
     action_params,
@@ -1959,6 +2086,20 @@ def handle_sense_action(
     sense_depth_m = env._depth_buffer_to_meters(_sense_depth_buf)
     sense_view, sense_proj = env._view_and_projection_matrices()
 
+    # #P1 F20: this ONE observation also registers every visible body that
+    # has no boxel yet.  Called at the end of each outcome branch, AFTER
+    # that branch's own registration (found-target hook, discovery
+    # branch) so those keep their bookkeeping (audit #76, F9 strikes) and
+    # this only catches what the fragment-scoped paths never looked at.
+    def _register_new_detections():
+        return register_new_detections(
+            env=env, registry=registry, belief=belief, viz=viz,
+            detections=sense_detections, target_name=str(target_name),
+            shadows=shadows, occluders=occluders,
+            shadow_occluder_map=shadow_occluder_map,
+            boxel_centers=boxel_centers, boxel_to_pybullet=boxel_to_pybullet,
+            object_body_ids=object_body_ids)
+
     (sense_outcome, blocked_fraction, detected_bodies,
      blocked_bbox, interceptor_counts) = sense_shadow_from_render(
         shadow_boxel,
@@ -2033,6 +2174,7 @@ def handle_sense_action(
                       f"{target_obj_str} at the render estimate "
                       f"(audit #76, step 3).")
 
+        _register_new_detections()
         _lost = refresh_object_aabbs(
             env, registry, viz, detections=sense_detections,
             render=(sense_depth_m, sense_seg, sense_view, sense_proj),
@@ -2181,6 +2323,7 @@ def handle_sense_action(
                 sense_depth_m=sense_depth_m, sense_seg=sense_seg,
                 sense_view=sense_view, sense_proj=sense_proj,
                 skip_ids={sid_str})
+            _register_new_detections()
             _lost = refresh_object_aabbs(
                 env, registry, viz, detections=sense_detections,
                 render=(sense_depth_m, sense_seg, sense_view,
@@ -2414,6 +2557,11 @@ def handle_sense_action(
                         shadows.append(s_id)
                         shadow_occluder_map[s_id] = [obj_name]
                         boxel_centers[s_id] = sp.center
+                        # #P1 F20 follow-up: the belief must know the
+                        # fragment exists, or get_unknown_shadows() never
+                        # lists it and the loop can exit "all searched"
+                        # with it unsensed.
+                        belief.add_shadow(s_id)
 
                 if viz is not None:
                     viz.draw_boxel_data(obj_bd)
@@ -2437,6 +2585,7 @@ def handle_sense_action(
         # not the spawn-time snapshot.  SHADOW boxels intentionally
         # left stale (scope cut).  Lost objects retire BEFORE the
         # carve so free space reclaims their vacated regions.
+        _register_new_detections()
         _lost = refresh_object_aabbs(
             env, registry, viz, detections=sense_detections,
             render=(sense_depth_m, sense_seg, sense_view, sense_proj),
@@ -2499,6 +2648,7 @@ def handle_sense_action(
         sense_support_ids=sense_support_ids, sense_depth_m=sense_depth_m,
         sense_seg=sense_seg, sense_view=sense_view, sense_proj=sense_proj,
         skip_ids={sid_str})
+    _register_new_detections()
     _lost = refresh_object_aabbs(
         env, registry, viz, detections=sense_detections,
         render=(sense_depth_m, sense_seg, sense_view, sense_proj),
