@@ -12,6 +12,20 @@ from typing import List, Optional
 from boxel_data import BoxelData, BoxelType
 
 
+# #P1 F21 (2026-09-18): two AABBs intersect only when they overlap by MORE
+# than this on every axis.  A face, edge or corner touch is not an
+# intersection.  Touches are the NORM here, not a corner case: a fragment
+# carved out of one shadow by an object's estimated box ends exactly on
+# that box's faces, and the object's own shadow starts on those same
+# floats (seed 999: green's top-Z remainder above red touched red's near
+# slab on y=0.1125 and z=0.4525 bit-for-bit, and the inclusive test then
+# let the carve delete the slab that contained the target).  1 mm sits
+# above float noise and above the 1e-4 tolerance the retired downstream
+# test used, and well below any object or fragment dimension that matters
+# (MIN_EXTENT is 1 mm half-extent; targets are >= 3 cm).
+AABB_OVERLAP_EPS = 1e-3
+
+
 class ShadowCalculator:
     """
     Calculates shadow boxels for objects in the scene.
@@ -313,9 +327,23 @@ class ShadowCalculator:
         return active_shadows
 
     def _check_aabb_intersection(self, b1: BoxelData, b2: BoxelData) -> bool:
-        """Check if two boxels intersect."""
-        return (np.all(b1.min_corner <= b2.max_corner) and
-                np.all(b1.max_corner >= b2.min_corner))
+        """True only when the two boxels overlap by more than
+        AABB_OVERLAP_EPS on EVERY axis (#P1 F21: strict, epsilon-guarded).
+
+        The previous inclusive <= / >= test counted a zero-volume face or
+        edge touch as an intersection, which sent touching fragments into
+        _subtract_aabb and (with the downstream drop of the time) deleted
+        whole slabs.
+        """
+        return self._aabbs_overlap(b1.min_corner, b1.max_corner,
+                                   b2.min_corner, b2.max_corner)
+
+    @staticmethod
+    def _aabbs_overlap(a_min, a_max, b_min, b_max,
+                       eps: float = AABB_OVERLAP_EPS) -> bool:
+        """Strict per-axis overlap test shared by every carve decision."""
+        return bool(np.all(np.minimum(a_max, b_max)
+                           - np.maximum(a_min, b_min) > eps))
 
     def _overhang_overlaps_obstacle(self, s_min: np.ndarray, s_max: np.ndarray,
                                     o_min: np.ndarray, o_max: np.ndarray,
@@ -333,8 +361,10 @@ class ShadowCalculator:
         for obstacle in obstacles:
             om = obstacle.min_corner
             oM = obstacle.max_corner
-            if not (np.all(s_min <= oM) and np.all(s_max >= om)):
-                continue  # obstacle doesn't touch the shadow at all
+            # #P1 F21: same strict overlap test as Step 3 — a face touch
+            # is not a collision here either.
+            if not self._aabbs_overlap(s_min, s_max, om, oM):
+                continue  # obstacle doesn't overlap the shadow at all
             for pa in lateral_axes:
                 lo = max(s_min[pa], om[pa])
                 hi = min(s_max[pa], oM[pa])
@@ -345,7 +375,27 @@ class ShadowCalculator:
     def _subtract_aabb(self, shadow: BoxelData, obstacle: BoxelData,
                        direction: np.ndarray) -> List[BoxelData]:
         """
-        Subtract obstacle from shadow, keeping parts 'before' and 'around' the obstacle.
+        Subtract obstacle from shadow: plain AABB set difference, returned
+        as up to six axis-aligned remainders (left/right of, in front of/
+        behind, below/above the obstacle).
+
+        #P1 F21 (2026-09-18): the remainder BEHIND the obstacle along the
+        shadow direction used to be dropped as "downstream, already
+        accounted for by the obstacle's own shadow".  That premise was
+        only ever true for a table-resting OBJECT obstacle, and since
+        audit #68 the obstacle list also carries the earlier casters'
+        SHADOW fragments, whose wake nobody else covers (seed 999: the
+        far slab's region behind green's fragment was dropped and no
+        fragment claimed it).  It was also applied to every candidate,
+        not just the one behind the obstacle, so a right-X or bottom-Z
+        remainder that merely inherited the shadow's y-range was
+        "downstream" too — with an exact face touch that deleted the
+        slab holding the target.  The cross-shadow carve already
+        de-duplicates overlapping shadows (each later shadow loses what
+        an earlier one claims), so a plain difference keeps coverage
+        exact: union of fragments = union of raw shadows minus solids.
+        ``direction`` is kept in the signature for callers; it no longer
+        influences the result.
         """
         s_min = shadow.min_corner.copy()
         s_max = shadow.max_corner.copy()
@@ -353,7 +403,7 @@ class ShadowCalculator:
         o_max = obstacle.max_corner
 
         fragments: List[BoxelData] = []
-        
+
         # Split along each axis
         # 1. Left of Obstacle (Min X)
         if s_min[0] < o_min[0]:
@@ -397,13 +447,10 @@ class ShadowCalculator:
             fragments.append(self._create_boxel_from_bounds(new_min, s_max, shadow))
             s_max[2] = min(s_max[2], o_max[2])
         
-        # Filter out None and downstream fragments
-        filtered_fragments = []
-        for frag in fragments:
-            if frag is not None and not self._is_downstream(frag, obstacle, direction):
-                filtered_fragments.append(frag)
-                
-        return filtered_fragments
+        # Keep every non-degenerate remainder (#P1 F21: no downstream drop;
+        # a remainder thinner than MIN_EXTENT on some axis cannot hold a
+        # target and is the only thing discarded).
+        return [frag for frag in fragments if frag is not None]
 
     def _create_boxel_from_bounds(self, min_pt: np.ndarray, max_pt: np.ndarray,
                                   template_boxel: BoxelData) -> "BoxelData | None":
@@ -423,7 +470,13 @@ class ShadowCalculator:
 
     def _is_downstream(self, frag: BoxelData, obstacle: BoxelData,
                        direction: np.ndarray) -> bool:
-        """Check if a fragment is 'behind' the obstacle relative to shadow direction."""
+        """Check if a fragment is 'behind' the obstacle relative to shadow direction.
+
+        RETIRED by #P1 F21 (2026-09-18): no longer called from
+        _subtract_aabb (see its docstring for why the drop was unsound).
+        Kept per the dead-code policy and for the probes that trace the
+        pre-F21 carve (tools/_probe_seed999_gap.py).
+        """
         dom_axis = int(np.argmax(np.abs(direction)))
         sign = np.sign(direction[dom_axis])
 
