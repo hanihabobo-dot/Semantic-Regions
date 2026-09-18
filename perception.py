@@ -322,9 +322,17 @@ DETECTION_MIN_PIXELS = 6
 # When the cloud's lowest point comes within this height of a known support
 # surface, the estimated AABB is extended down to rest ON the surface: the
 # bottom edge of a resting object is almost always cut by the surface
-# itself, never observed.  Objects floating higher (stacked cubes, tray
-# contents) keep their observed bottom — no guess.
+# itself, never observed.  A bottom higher than that is unobserved too
+# (#P1 F22): a body in front hides the lower image rows, and nothing in
+# this world floats, so _rest_on_support lowers it onto the highest
+# support under its footprint — another detection (a stacked cube keeps
+# its support, tray contents keep the rim cut) or else the table.
 DETECTION_SUPPORT_SNAP = 0.02
+
+# A detection counts as resting on another one only when their footprints
+# overlap by at least this fraction of the upper body's footprint — a
+# grazing corner overlap is not a support.
+SUPPORT_FOOTPRINT_MIN_FRACTION = 0.25
 
 
 @dataclass
@@ -409,8 +417,6 @@ def detect_objects_from_render(seg_mask: np.ndarray,
             view_matrix, projection_matrix, width, height)
         est_min = pts.min(axis=0)
         est_max = pts.max(axis=0)
-        if est_min[2] <= support_z + DETECTION_SUPPORT_SNAP:
-            est_min[2] = support_z
         if name not in no_footprint_completion:
             away = (est_min[:2] + est_max[:2]) / 2.0 - cam_xy
             ext_x = est_max[0] - est_min[0]
@@ -428,4 +434,55 @@ def detect_objects_from_render(seg_mask: np.ndarray,
         detections[name] = ObjectDetection(
             name=name, body_id=int(body_id), pixel_count=int(rows.size),
             est_min=est_min, est_max=est_max)
+    _rest_on_support(detections, support_z)
     return detections
+
+
+def _rest_on_support(detections: Dict[str, "ObjectDetection"],
+                     support_z: float) -> None:
+    """Lower every estimate's bottom onto the highest support under it.
+
+    #P1 F22 (2026-09-18, seed 24): green_object stood behind orange with
+    only its top 1.3 cm visible, so its cloud spanned z [0.424, 0.437]
+    against a true [0.325, 0.436] — a slice floating 9.9 cm above the
+    table.  The support snap fired only within DETECTION_SUPPORT_SNAP of
+    the table, and the audit-#103 mid-air rule then refused to let an
+    11 cm table-resting occluder cast any shadow: everything hidden
+    behind it outside orange's frustum was in no fragment.
+
+    The fixed camera never observes a resting body's bottom: the support
+    cuts it, or a body in front hides the lower image rows.  Nothing in
+    this world floats (a held body is excluded by the callers that can
+    run while holding, F26), so a bottom above the table is placed on the
+    highest support under the body's footprint: another detection whose
+    footprint overlaps this one's by SUPPORT_FOOTPRINT_MIN_FRACTION and
+    whose top is at or below this bottom (a stacked cube keeps its
+    support; tray contents keep the rim cut, as before), else the table.
+    The box only ever grows downward — conservative for "could something
+    hide behind this" reasoning, and the execution layer sizes grasps
+    from its own live sensing.  Mutates the detections in place.
+    """
+    for det in detections.values():
+        bottom = float(det.est_min[2])
+        if bottom <= support_z + DETECTION_SUPPORT_SNAP:
+            det.est_min[2] = support_z
+            continue
+        footprint = float((det.est_max[0] - det.est_min[0])
+                          * (det.est_max[1] - det.est_min[1]))
+        rest = support_z
+        for other in detections.values():
+            if other is det:
+                continue
+            top = float(other.est_max[2])
+            if top > bottom + DETECTION_SUPPORT_SNAP:
+                continue          # beside or in front of it, not under it
+            ox = (min(det.est_max[0], other.est_max[0])
+                  - max(det.est_min[0], other.est_min[0]))
+            oy = (min(det.est_max[1], other.est_max[1])
+                  - max(det.est_min[1], other.est_min[1]))
+            if ox <= 0.0 or oy <= 0.0:
+                continue
+            if footprint > 0.0 and ox * oy < SUPPORT_FOOTPRINT_MIN_FRACTION * footprint:
+                continue
+            rest = max(rest, min(top, bottom))
+        det.est_min[2] = rest

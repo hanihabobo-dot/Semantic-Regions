@@ -1079,11 +1079,26 @@ def main(gui=True, run_logger=None, scene_config=None,
     # incomplete, and the episode ends honestly if the target hid there.
     nontarget_rediscovery_counts: Dict[str, int] = {}
 
+    # #P1 F29 (2026-09-18): a holding goal ends when the target IS HELD,
+    # not when the belief says "found".  A sense that finds the target
+    # sets belief.target_found_in before the pick runs (mark_sensed), so
+    # a pick that then failed — post-lift grip loss, F8 — used to end the
+    # loop at once and the run died physics_mismatch instead of
+    # re-planning the pick the audit-#76 registration exists for (A/B
+    # seeds 112 and 117, both arms).  held_body_id is the dispatcher's
+    # own verified held state (set only by a pad-force-verified pick and
+    # cleared on every release/loss path); the belief keeps
+    # target_found_in as the record of WHERE the target was found.
+    _target_body_id = (env.objects[target_name].object_id
+                       if goal_kind == 'holding' and target_name in env.objects
+                       else None)
+
     def _loop_done() -> bool:
-        # Holding goals stop when belief.target_found flips; stack goals
+        # Holding goals stop when the target body is held; stack goals
         # stop when every (on a b) clause is satisfied (audit #30).
         if goal_kind == 'holding':
-            return belief.is_target_found()
+            return (held_body_id is not None
+                    and held_body_id == _target_body_id)
         return goal_satisfied(goal, on_relations)
 
     while not _loop_done():
