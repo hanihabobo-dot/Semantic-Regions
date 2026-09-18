@@ -78,6 +78,7 @@ from boxel_env import (BoxelTestEnv, SceneConfig,
                        scalability_scene, stack_scene,
                        random_pairs_scene)
 import telemetry          # #P1 F17 world telemetry
+import world_eye          # textual world/belief/camera snapshots (2026-09-18)
 from boxel_data import BoxelRegistry, BoxelType
 from cell_merger import merge_free_space_cells
 from perception import grid_would_hit
@@ -955,6 +956,19 @@ def main(gui=True, run_logger=None, scene_config=None,
                                 camera_pos=env.camera_position,
                                 tray_name=tray_name)
 
+    # World eye (2026-09-18): textual snapshots of world + belief + camera
+    # view at every decision and observation point of the loop, into
+    # eye.log / eye.jsonl in the run directory (tools/eye.py queries them
+    # by plan / step / time).  Pure observer, GUI and headless alike.
+    if run_logger is not None:
+        world_eye.enable(run_logger.run_dir, env, robot_id, body_id_to_name)
+        world_eye.snapshot("initial observation (phase 2-4)",
+                           registry=registry, belief=belief, plan_count=0,
+                           with_view=True, on_relations=on_relations,
+                           shadow_occluder_map=shadow_occluder_map,
+                           extra={"goal": str(goal),
+                                  "hidden_targets": sorted(hidden_targets_set)})
+
     # The planner needs to reason about every object that may participate
     # in the goal.  For 'holding' that's just the chosen target; for
     # 'stack' it's every cube in the requested tower.
@@ -1212,6 +1226,13 @@ def main(gui=True, run_logger=None, scene_config=None,
             held_obj=held_obj_name,  # audit #58 — preserve grasp across replans
         )
         plan_dt = time.perf_counter() - plan_t0
+        world_eye.snapshot(
+            f"plan#{plan_count} planned ({'no plan' if plan is None else str(len(plan)) + ' actions'})",
+            registry=registry, belief=belief, plan_count=plan_count,
+            held=held_obj_name, on_relations=on_relations,
+            shadow_occluder_map=shadow_occluder_map,
+            init_facts=planner.last_init, plan=plan,
+            extra={"plan_time_s": round(plan_dt, 2)})
 
         # No-plan-while-holding (2026-08-21, user directive: NEVER
         # blind-drop the held object — the audit-#58 release-in-place is
@@ -1346,6 +1367,15 @@ def main(gui=True, run_logger=None, scene_config=None,
             params = action[1:]
 
             print(f"\n  Executing: {action_name}")
+            world_eye.snapshot(
+                f"plan#{plan_count} before action {i + 1}/{len(plan)} "
+                f"{action_name}("
+                f"{', '.join(x for x in params if isinstance(x, str))})",
+                registry=registry, belief=belief, plan_count=plan_count,
+                held=(body_id_to_name.get(held_body_id)
+                      if held_body_id is not None else None),
+                on_relations=on_relations,
+                shadow_occluder_map=shadow_occluder_map)
             # #P1 F17: segment the telemetry stream by dispatched action,
             # so every frame, event and summary is attributable to the
             # action that produced it.
@@ -2047,6 +2077,17 @@ def main(gui=True, run_logger=None, scene_config=None,
                 print(f"  PHYSICAL_FAILURE (goal): {pf}")
         success = symbolic_ok and not physics_failures
 
+    world_eye.snapshot(
+        f"final ({'SUCCESS' if success else 'FAILED'}: {exit_reason})",
+        registry=registry, belief=belief, plan_count=plan_count,
+        held=(body_id_to_name.get(held_body_id)
+              if held_body_id is not None else None),
+        with_view=True, on_relations=on_relations,
+        shadow_occluder_map=shadow_occluder_map,
+        init_facts=planner.last_init,
+        extra={"physical_failures": physical_failures,
+               "physics_failures": physics_failures})
+
     report_run_outcome(
         success=success,
         exit_reason=exit_reason,
@@ -2271,5 +2312,6 @@ if __name__ == "__main__":
         # #P1 F17: flush the final action summary before the log file
         # closes; a no-op when telemetry was never armed.
         telemetry.disable()
+        world_eye.disable()
         logger.close()
     sys.exit(0 if success else 1)
