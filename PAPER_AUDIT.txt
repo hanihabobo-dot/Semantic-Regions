@@ -1900,7 +1900,17 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       trajectory is re-planned from the arm's real configuration by the
       existing audit-#60 runtime re-plan, same held-body metadata) and
       logs "[F30] pruned a redundant relocation".  Deterministic, no
-      search change, plans/episode unaffected.  Cost of the detours: wasted
+      search change, plans/episode unaffected.  REGRESSION ARM
+      f2021c_51fd444 (seeds 0-19, same night, machine otherwise idle):
+      14/20, mean 12.1 s, median 7.2 s vs f2021b_ba924bd 15/20, 10.8 s,
+      7.4 s — flips: seed 0 won, seeds 1 (binding death) and 8 (physics
+      mismatch) lost; ZERO pruning events fired in any of the night's
+      runs (the detour is rare), so the two arms ran identical planning
+      code and the three flips are pure trajectory noise (the per-
+      placement camera image adds ~0.2 s of wall clock, which is enough
+      to move PDDLStream's wall-clock budgets).  Use this pair as the
+      measured noise floor: ±1-2 seeds per 20 for the SAME code.
+      Cost of the detours: wasted
       actions, an extra chance to disturb the scene, and every
       placement is a chance to hide something (the eye audit of the
       same run shows the later place of orange at free_017 cut the
