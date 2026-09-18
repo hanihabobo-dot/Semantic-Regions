@@ -538,7 +538,7 @@ def parse_pipeline_args(argv=None):
              'PDDLStream\'s own: eager weighted A* with the FF heuristic '
              'doubled (f = g + 2h), which can return a 10-action plan when '
              'a 7-action one exists (a place-then-pick detour of the same '
-             'object; such detours are now pruned before execution). '
+             'object; the plan is executed as returned, nothing edits it). '
              'ff-astar1 is the same search with w=1 (f = g + h): no '
              'detours, but seed 13 planned 12 -> 103 s and seed 999 hit a '
              '900 s cap, so it is opt-in. ff-astar is plain A*(ff) without '
