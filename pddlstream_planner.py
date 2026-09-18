@@ -554,6 +554,19 @@ class PDDLStreamPlanner:
                     for obj in target_objects:
                         init.append(('obj_at_boxel_KIF', obj, boxel.id))
 
+        # #P1 F20 follow-up (2026-09-18): an object that has its own OBJECT
+        # boxel has a KNOWN location, so whether it is in any shadow
+        # fragment is known too (it is not).  Emitting the Know-If for
+        # every (registered object, fragment) pair collapses the belief
+        # properly: a re-detected target no longer leaves sense(t, F)
+        # groundable beside obj_at_boxel(t, t), and no object with a
+        # known pose can be "searched for" in a fragment.  Objects
+        # without a boxel (the hidden target) get nothing here.
+        for boxel in self.registry.boxels.values():
+            if boxel.boxel_type == BoxelType.OBJECT:
+                for shadow_id in shadows:
+                    init.append(('obj_at_boxel_KIF', boxel.id, shadow_id))
+
         # Geometric facts: blocks_view_at(occ, occ_current_boxel, shadow).
         # shadow_occluder_map comes from compute_shadow_blockers' LIVE
         # raycast, so a listed blocker blocks the shadow from wherever it
