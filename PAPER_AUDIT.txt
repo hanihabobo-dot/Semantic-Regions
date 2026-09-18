@@ -1738,9 +1738,28 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   up) scored the same 15/20 and 12/20 with different flips (won 0 and
   8, lost 17 and 101/110/117), confirming the trajectory noise.]
 
-  F22. [OPEN] A PARTIALLY OCCLUDED OCCLUDER GETS A FLOATING-SLICE
+  F22. [DONE 2026-09-18] A PARTIALLY OCCLUDED OCCLUDER GETS A FLOATING-SLICE
       ESTIMATE AND CASTS NO SHADOW AT ALL (2026-09-18, found by the F21
-      review on seed 24).  green_object stands behind orange with only
+      review on seed 24).  FIXED the same day in perception.py
+      (_rest_on_support, run at the end of detect_objects_from_render):
+      the fixed camera never observes a resting body's bottom (the
+      support cuts it, or a body in front hides the lower image rows),
+      and nothing in this world floats except a held body (excluded by
+      the callers that can run while holding, F26), so an estimate whose
+      bottom is above the table is lowered onto the highest support
+      under its footprint: another detection whose footprint overlaps
+      this one's by >= 25 % and whose top is at or below this bottom (a
+      stacked cube keeps its support; tray contents keep the rim cut, as
+      before), else the table.  The old 2 cm snap is the special case.
+      Grows the box downward only.  PROBE tools/_probe_f22.py (seeds
+      0-24 + 999, 23 buildable scenes, 66 detected bodies): before 3
+      floating slices (seed 19 red +7.3 cm, seed 22 green +8.1 cm, seed
+      24 green +9.9 cm), all 3 table-resting occluders with NO shadow;
+      after 0 and 0, tops unchanged (+0.1 cm).  Fragment counts moved on
+      exactly those seeds (19: 6 -> 12, 22: 9 -> 8, 24: 6 -> 7); the F21
+      coverage probe still puts 44/44 hidden targets in a fragment with
+      zero fragment overlaps.  The #103 rule is untouched (the estimate
+      now rests on the table, so it passes).  Original finding:  green_object stands behind orange with only
       its top 1.3 cm visible: the render cloud spans est z
       [0.4239,0.4369] against ground truth [0.3250,0.4360]; the support
       snap in perception.py:412 fires only when the cloud bottom is
@@ -1812,6 +1831,12 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       report its table region "lost" and retire it.  Pass the held name
       as exclude_ids at any future refresh that can run while holding
       (#P2 world-integrity monitor is the likely first such site).
+      [VERIFIED STILL LATENT 2026-09-18: all nine refresh sites (four
+      in handle_sense_action, five in the dispatcher's failure
+      branches) run with the hand empty; the F22 support completion
+      relies on this.  The #P2 monitor's post-move/post-pick hooks are
+      the first while-holding refreshes and must pass
+      exclude_ids={held name}.]
 
   F27. [OPEN, MINOR] SHADOW AABBs MISS THE SIDE LOBES OF OFF-AXIS
       OCCLUDERS (theory review 2026-09-18, pre-existing, unchanged by
@@ -1851,9 +1876,17 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       same seed (16-4x) succeeded in 3 plans: the seed is trajectory-
       intermittent, not F20/F21-related.
 
-  F29. [OPEN — SMALL, #P2(c)] THE HOLDING LOOP STOPS ON "FOUND", NOT ON
+  F29. [DONE 2026-09-18] THE HOLDING LOOP STOPS ON "FOUND", NOT ON
       "HELD" (2026-09-18 A/B, seeds 112 and 117 on both arms; the
-      theory review's finding 2): _loop_done() for holding returns
+      theory review's finding 2).  FIXED: _loop_done for holding goals
+      now returns held_body_id == the target's body id (the dispatcher's
+      own verified held state: set only by a pad-force-verified pick,
+      cleared on every release/loss path), so a grip lost after the
+      sense found the target re-plans the pick instead of ending the
+      run; belief.target_found_in stays the record of where it was
+      found and the S-18 physics gate is unchanged.  Smoke: seed 999
+      holding SUCCESS in 2 plans.  Measured in the WP1 A/B (F22 + F29,
+      seeds 0-19 and 100-119) below.  Original finding: _loop_done() for holding returns
       belief.is_target_found(), which a found_target SENSE sets before
       the pick runs (belief.py mark_sensed).  Seed 117: sense found blue
       in shadow_of_green_object, the pick verified 160 N of pad force,
