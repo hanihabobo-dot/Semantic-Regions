@@ -42,6 +42,7 @@ import pybullet as p
 
 import telemetry
 from boxel_data import BoxelType
+from perception import first_surface_interceptors
 
 EE_LINK = 11            # panda_grasptarget (robot_utils.END_EFFECTOR_LINK)
 ARM_JOINTS = (0, 1, 2, 3, 4, 5, 6)
@@ -144,7 +145,25 @@ class WorldEye:
             return None
         return {"ee_pos": _r(st[0]), "q": _r(q, 4), "fingers": _r(fingers, 4)}
 
-    def _objects(self, registry, detections, seg) -> List[dict]:
+    def _hidden_by(self, pos, render) -> Optional[str]:
+        """Name of the body the camera sees INSTEAD of this object's centre
+        (None when the centre is visible or the render is absent).  The
+        same first-surface test the sense uses, on one point."""
+        if render is None:
+            return None
+        try:
+            depth_m, seg, view_m, proj_m = render
+            icp, hids, in_view = first_surface_interceptors(
+                np.asarray([pos], dtype=float), depth_m, seg, view_m, proj_m)
+            if not in_view[0]:
+                return "(off-frame)"
+            if not icp[0]:
+                return None
+            return self.body_names.get(int(hids[0]), str(int(hids[0])))
+        except Exception:
+            return None
+
+    def _objects(self, registry, detections, seg, render=None) -> List[dict]:
         out = []
         for name, info in self.env.objects.items():
             if name in _SUPPORTS:
@@ -176,6 +195,10 @@ class WorldEye:
                 rec["believed_aabb"] = None
             if seg is not None:
                 rec["visible_px"] = int(np.count_nonzero(seg == bid))
+                hb = self._hidden_by(pos, render)
+                # A body whose centre is hidden by itself (the top face
+                # is the first surface) is simply visible.
+                rec["hidden_by"] = None if hb == name else hb
             if detections is not None and name in detections:
                 d = detections[name]
                 rec["detected"] = {"px": int(d.pixel_count),
@@ -300,11 +323,14 @@ class WorldEye:
             seg = render[1]
         elif with_view:
             try:
-                dets, _, _, seg = self.env.detect_objects()
+                dets, _, depth_buf, seg = self.env.detect_objects()
                 if detections is None:
                     detections = dets
+                render = (self.env._depth_buffer_to_meters(depth_buf), seg,
+                          *self.env._view_and_projection_matrices())
             except Exception:
                 seg = None
+                render = None
         tele = telemetry.active()
         if action is None and tele is not None:
             action = getattr(tele, "_phase", None)
@@ -320,7 +346,7 @@ class WorldEye:
             "robot": self._robot(),
             "camera": {"position": _r(self.env.camera_position),
                        "target": _r(self.env.camera_target)},
-            "objects": self._objects(registry, detections, seg),
+            "objects": self._objects(registry, detections, seg, render),
             "shadows": self._shadows(registry, belief, shadow_occluder_map),
             "free": self._free(registry),
             "belief": self._belief(belief, on_relations),
@@ -388,6 +414,8 @@ def render_snapshot(rec: dict, *, view: bool = True, facts: bool = True,
         det = o.get("detected")
         if det:
             tail += f" det={det['px']}px"
+        if o.get("hidden_by"):
+            tail += f" HIDDEN-BY={o['hidden_by']}"
         L.append(f"  {o['name']:<15} {o['role']:<8} {_fmt3(o['true_pos']):<24} "
                  f"{bel:<24} {err:>7} {px_s:>5}  {tail}")
     sh = rec.get("shadows") or []
