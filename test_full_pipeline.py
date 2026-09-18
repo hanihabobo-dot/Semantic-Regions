@@ -964,7 +964,8 @@ def main(gui=True, run_logger=None, scene_config=None,
         world_eye.enable(run_logger.run_dir, env, robot_id, body_id_to_name)
         world_eye.snapshot("initial observation (phase 2-4)",
                            registry=registry, belief=belief, plan_count=0,
-                           with_view=True, on_relations=on_relations,
+                           with_view=True, save_image=True,
+                           on_relations=on_relations,
                            shadow_occluder_map=shadow_occluder_map,
                            extra={"goal": str(goal),
                                   "hidden_targets": sorted(hidden_targets_set)})
@@ -1850,6 +1851,14 @@ def main(gui=True, run_logger=None, scene_config=None,
                     print(f"    *** {placed_obj_name} PLACED at {boxel_id_str}! ***")
                 else:
                     print(f"    *** {obj_str} PLACED at {boxel_id_str}! ***")
+                # World eye: what the camera (and the user) sees right
+                # after a placement — the moment a placed body can hide
+                # another (F31).
+                world_eye.snapshot(
+                    f"plan#{plan_count} after place({obj_str}, {boxel_id_str})",
+                    registry=registry, belief=belief, plan_count=plan_count,
+                    save_image=True, on_relations=on_relations,
+                    shadow_occluder_map=shadow_occluder_map)
 
             elif action_name == 'stack':
                 # STACK: drop the held object on top of ?on_obj.  Mirrors
@@ -2031,6 +2040,11 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # the AABB update will be picked up at the top of the
                 # next plan iteration via the existing dirty-flag check.
                 print(f"    *** {obj_str} STACKED on {on_obj_str}! ***")
+                world_eye.snapshot(
+                    f"plan#{plan_count} after stack({obj_str}, {on_obj_str})",
+                    registry=registry, belief=belief, plan_count=plan_count,
+                    save_image=True, on_relations=on_relations,
+                    shadow_occluder_map=shadow_occluder_map)
 
             if gui:
                 env.refresh_debug_camera_views()
@@ -2084,7 +2098,7 @@ def main(gui=True, run_logger=None, scene_config=None,
         registry=registry, belief=belief, plan_count=plan_count,
         held=(body_id_to_name.get(held_body_id)
               if held_body_id is not None else None),
-        with_view=True, on_relations=on_relations,
+        with_view=True, save_image=True, on_relations=on_relations,
         shadow_occluder_map=shadow_occluder_map,
         init_facts=planner.last_init,
         extra={"physical_failures": physical_failures,

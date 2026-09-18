@@ -2113,7 +2113,7 @@ def handle_sense_action(
     # discovery estimates and the closing AABB refresh all read the
     # same instant (GUI and headless twins render identical pixels,
     # ER_TINY_RENDERER both modes).
-    sense_detections, _, _sense_depth_buf, sense_seg = env.detect_objects()
+    sense_detections, sense_rgb, _sense_depth_buf, sense_seg = env.detect_objects()
     sense_depth_m = env._depth_buffer_to_meters(_sense_depth_buf)
     sense_view, sense_proj = env._view_and_projection_matrices()
 
@@ -2146,6 +2146,7 @@ def handle_sense_action(
         f"sense {shadow_id} -> {sense_outcome}",
         registry=registry, belief=belief, detections=sense_detections,
         render=(sense_depth_m, sense_seg, sense_view, sense_proj),
+        rgb=sense_rgb, save_image=True,
         shadow_occluder_map=shadow_occluder_map,
         extra={"outcome": sense_outcome,
                "blocked_fraction": round(float(blocked_fraction), 3),

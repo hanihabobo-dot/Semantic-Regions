@@ -56,9 +56,10 @@ def one_line(r):
         + ("" if o.get("believed_aabb") is not None else "[NO BOXEL]")
         for o in r.get("objects", []))
     b = r.get("belief") or {}
+    img = " [img]" if r.get("images") else ""
     return (f"#{r['k']:<3} plan={str(r.get('plan')):<4} wall={r.get('t_wall'):>7}s "
             f"step={str(r.get('sim_step')):<6} held={r.get('held') or '-':<12} "
-            f"unknown={len(b.get('unknown', [])) if b else '-':<3} {r['tag']:<48} {objs}")
+            f"unknown={len(b.get('unknown', [])) if b else '-':<3} {r['tag']:<48}{img} {objs}")
 
 
 def nearest(recs, key, value):
@@ -191,9 +192,13 @@ def audit(recs):
 
     # 4. Per object: was it ever a blocker of an unknown fragment, ever in
     #    a plan, ever moved?  A body that never blocked anything gave the
-    #    planner no reason to relocate it.
+    #    planner no reason to relocate it; a body that DID block an unknown
+    #    fragment and still never entered a plan is the search never
+    #    getting to that branch (equal-cost tie-breaks, then an F7
+    #    binding death before the next replan could pick it).
     out.append("== per-object planner relevance ==")
     names = sorted({o["name"] for r in recs for o in r.get("objects", [])})
+    never_planned_blockers = []
     for n in names:
         blocked = set()
         for r in recs:
@@ -209,6 +214,27 @@ def audit(recs):
         out.append(f"  {n:<15} role={'/'.join(sorted(x for x in roles if x)):<9} "
                    f"registered_at=#{registered_at} moved={moved} in_plans={in_plans} "
                    f"blocker_of_unknown={sorted(blocked) or 'never'}")
+        if blocked and in_plans == 0:
+            never_planned_blockers.append((n, sorted(blocked)))
+    out.append("== blockers of unknown fragments that never entered a plan ==")
+    if never_planned_blockers:
+        last = recs[-1]
+        still = {s["id"] for s in last.get("shadows", []) if s.get("status") == "unknown"}
+        for n, frags in never_planned_blockers:
+            open_frags = [f for f in frags if f in still]
+            out.append(f"  {n}: blocked {frags}; still unknown at the end: "
+                       f"{open_frags or 'none'} — the planner never planned to "
+                       f"relocate it (equal-cost alternatives were tried first, "
+                       f"or the run ended before its turn)")
+    else:
+        out.append("  none")
+    out.append("== images ==")
+    imgs = [(r["k"], r["tag"], r.get("images")) for r in recs if r.get("images")]
+    if imgs:
+        for k, tag, names_ in imgs:
+            out.append(f"  #{k:<3} {tag[:50]:<50} {', '.join(names_)}")
+    else:
+        out.append("  none (run predates image saving)")
     return "\n".join(out)
 
 

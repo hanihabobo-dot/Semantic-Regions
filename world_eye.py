@@ -308,29 +308,76 @@ class WorldEye:
 
     # ----- the snapshot ----------------------------------------------------
 
+    # ----- images ------------------------------------------------------------
+
+    def _save_images(self, k: int, rgb) -> List[str]:
+        """Write the camera image (what the robot sees) and, under the GUI,
+        the user's viewpoint (what the user sees) as PNGs next to eye.log.
+        Names come back for the record; failures never break the run."""
+        names: List[str] = []
+        try:
+            from PIL import Image
+        except Exception:
+            return names
+        if rgb is not None:
+            try:
+                path = self.run_dir / f"eye_{k:03d}_camera.png"
+                Image.fromarray(np.asarray(rgb, dtype=np.uint8)).save(path)
+                names.append(path.name)
+            except Exception:
+                pass
+        if getattr(self.env, "_gui", False):
+            try:
+                info = p.getDebugVisualizerCamera()
+                w, h, view_m, proj_m = int(info[0]), int(info[1]), info[2], info[3]
+                if w > 0 and h > 0:
+                    _, _, rgba, _, _ = p.getCameraImage(
+                        width=w, height=h, viewMatrix=view_m,
+                        projectionMatrix=proj_m,
+                        renderer=p.ER_BULLET_HARDWARE_OPENGL)
+                    img = Image.fromarray(
+                        np.asarray(rgba, dtype=np.uint8).reshape(h, w, 4)[:, :, :3])
+                    if w > 960:
+                        img = img.resize((960, int(h * 960 / w)))
+                    path = self.run_dir / f"eye_{k:03d}_gui.png"
+                    img.save(path)
+                    names.append(path.name)
+            except Exception:
+                pass
+        return names
+
+    # ----- the snapshot ----------------------------------------------------
+
     def snapshot(self, tag: str, *, registry=None, belief=None,
                  plan_count=None, action=None, held=None, detections=None,
-                 render=None, with_view: bool = False, on_relations=None,
+                 render=None, rgb=None, with_view: bool = False,
+                 save_image: bool = False, on_relations=None,
                  shadow_occluder_map=None, init_facts=None, plan=None,
                  extra=None) -> dict:
         """Write one snapshot.  ``render`` is (depth_m, seg, view, proj)
-        from an observation already taken (the sense action's); with
-        ``with_view=True`` and no render, one TinyRenderer pass is made
-        here and its detections are recorded too."""
+        from an observation already taken (the sense action's) and
+        ``rgb`` its colour image; with ``with_view=True`` (or
+        ``save_image=True``) and no render, one TinyRenderer pass is made
+        here and its detections are recorded too.  ``save_image`` also
+        writes eye_<k>_camera.png (the robot's camera) and, under the
+        GUI, eye_<k>_gui.png (the user's viewpoint)."""
         self.count += 1
         seg = None
         if render is not None:
             seg = render[1]
-        elif with_view:
+        elif with_view or save_image:
             try:
-                dets, _, depth_buf, seg = self.env.detect_objects()
+                dets, rgb_img, depth_buf, seg = self.env.detect_objects()
                 if detections is None:
                     detections = dets
+                if rgb is None:
+                    rgb = rgb_img
                 render = (self.env._depth_buffer_to_meters(depth_buf), seg,
                           *self.env._view_and_projection_matrices())
             except Exception:
                 seg = None
                 render = None
+        images = self._save_images(self.count, rgb) if save_image else []
         tele = telemetry.active()
         if action is None and tele is not None:
             action = getattr(tele, "_phase", None)
@@ -355,6 +402,7 @@ class WorldEye:
                                        + [x for x in a[1:] if isinstance(x, str)])
                               for a in plan] if plan else None),
             "view": self._view(seg),
+            "images": images,
             "extra": extra,
         }
         self._jsonl.write(json.dumps(rec) + "\n")
@@ -447,6 +495,8 @@ def render_snapshot(rec: dict, *, view: bool = True, facts: bool = True,
                 L.append(f"    {f}")
     if rec.get("plan_actions"):
         L.append("  PLAN: " + " ; ".join(rec["plan_actions"]))
+    if rec.get("images"):
+        L.append("  IMAGES: " + ", ".join(rec["images"]))
     if rec.get("extra"):
         L.append(f"  extra: {rec['extra']}")
     v = rec.get("view")
