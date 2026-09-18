@@ -43,6 +43,19 @@ class BeliefState:
         self.target_found_in: Optional[str] = None
         self.occluders_moved: Dict[str, str] = {}
 
+    def add_shadow(self, shadow_id: str) -> None:
+        """Register a shadow fragment created AFTER construction as unknown.
+
+        #P1 F20 follow-up (2026-09-18): fragments cast for an object that
+        enters the registry mid-episode (contains_nontarget discovery, or
+        a whole-workspace re-detection) used to be added to the registry
+        and the planner's shadow list but never to this belief, so
+        ``get_unknown_shadows`` omitted them and the replan loop could
+        declare "all searched" with unsensed fragments still standing.
+        A fragment that already has a status keeps it.
+        """
+        self.shadow_status.setdefault(shadow_id, 'unknown')
+
     def mark_sensed(self, shadow_id: str, found: bool) -> None:
         """Update belief after sensing a shadow."""
         if found:
