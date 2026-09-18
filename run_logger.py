@@ -529,6 +529,22 @@ def parse_pipeline_args(argv=None):
              'and without the stack-cost bias.',
     )
     parser.add_argument(
+        '--planner',
+        choices=['ff-astar1', 'ff-astar2', 'ff-astar', 'ff-wastar1',
+                 'ff-wastar2', 'dijkstra'],
+        default='ff-astar2',
+        help='FastDownward search PDDLStream runs for every action-plan '
+             'search (2026-09-18, audit F30). Default ff-astar2 is '
+             'PDDLStream\'s own: eager weighted A* with the FF heuristic '
+             'doubled (f = g + 2h), which can return a 10-action plan when '
+             'a 7-action one exists (a place-then-pick detour of the same '
+             'object; such detours are now pruned before execution). '
+             'ff-astar1 is the same search with w=1 (f = g + h): no '
+             'detours, but seed 13 planned 12 -> 103 s and seed 999 hit a '
+             '900 s cap, so it is opt-in. ff-astar is plain A*(ff) without '
+             'preferred operators; dijkstra is blind, cost-optimal, slow.',
+    )
+    parser.add_argument(
         '--baseline',
         choices=['semantic', 'uniform'],
         default='semantic',

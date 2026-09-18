@@ -1223,6 +1223,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                                                 'find-and-tray-stack')
                                else None),
             unit_costs=unit_costs,
+            planner=args.planner,    # F30: search weight is a CLI choice
             held_obj=held_obj_name,  # audit #58 — preserve grasp across replans
         )
         plan_dt = time.perf_counter() - plan_t0
@@ -1270,6 +1271,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                                                     'find-and-tray-stack')
                                    else None),
                 unit_costs=unit_costs,
+                planner=args.planner,
                 held_obj=held_obj_name,
             )
             plan_dt += time.perf_counter() - plan_t1
@@ -2203,6 +2205,7 @@ if __name__ == "__main__":
         "goal":         args.goal,
         "stack_height": args.stack_height,
         "unit_costs":   args.unit_costs,
+        "planner":      args.planner,
         "baseline":     args.baseline,
         "uniform_cell_size": args.uniform_cell_size,
         "min_boxel_size": args.min_boxel_size,  # audit #77 step 2
