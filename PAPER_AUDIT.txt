@@ -1486,7 +1486,7 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       it reports.  This is what caught F14's mechanism headlessly on the
       first try, and its numbers are the F14 verification evidence.]
 
-  F20. [OPEN — TOP PRIORITY] THE PIPELINE NEVER RE-DETECTS A NEWLY VISIBLE
+  F20. [DONE 2026-09-18] THE PIPELINE NEVER RE-DETECTS A NEWLY VISIBLE
       OBJECT: DISCOVERY IS SENSE-ONLY, SO A TARGET IN PLAIN VIEW STAYS
       UNKNOWN (2026-08-23, user GUI report on seed 999 + headless run
       13-25-19).  Objects enter the registry in exactly two places: the
@@ -1531,8 +1531,59 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       coverage is NOT a partition of the occluded space, which is
       independent motivation for re-detection — but on this seed the
       gap is itself a carve BUG, not geometry.
+      [VERIFIED AND FIXED 2026-09-18 (commit c697233; independent
+      adversarial review of the 08-23 write-up, four reviewers + a
+      critic, plus telemetry replays of run 13-25-19).  The PHENOMENON
+      and the registry analysis above hold; the MECHANISM sentence was
+      wrong: detection DOES re-run on the whole workspace at every sense
+      (execution.py detect_objects render, every body >= 6 px), after
+      every place and after pick failures.  The defect was that
+      handle_sense_action registered bodies only from the NAMED
+      fragment's ray endpoints and refresh_object_aabbs re-posed only
+      boxels that already existed, so whole-frame detections of
+      unregistered bodies were discarded.  Corrected timeline: blue was
+      in the sense detection dict at FIVE consecutive senses (plans 2-4:
+      54 px half behind green, centre error 4.6 mm; plans 5-6: 267 px,
+      1.5 mm), not "the last three plans"; plan 7 never rendered (the
+      all_searched exit at test_full_pipeline.py:1109 precedes any
+      observation).  FIX, per the thesis sensor model (methods.tex:102,
+      :166: the percept rides on the sense action; alg. line 214
+      "update belief: target found, region known-empty, or a new
+      occluder revealed") and the user's statement that a sense
+      observes the entire workspace: execution.register_new_detections,
+      called at the end of EVERY sense outcome branch after that
+      branch's own registration — any detected body with no registry
+      boxel becomes an OBJECT boxel at the render estimate; the search
+      target gets no shadows and is directly pickable (the generic
+      OBJECT-boxel facts in _build_init satisfy pick; obj_pose_known is
+      a DEAD predicate — declared, set by sense, emitted for visible
+      targets, read by nothing); a non-target joins `occluders` (else
+      compute_shadow_blockers never lists it), casts fragments against
+      the current solids AND existing fragments (#68 carve) and every
+      new fragment enters the belief as unknown (BeliefState.add_shadow
+      — the pre-existing discovery branch never did this: its fragments
+      were invisible to get_unknown_shadows(), F23 below).  Companion
+      change the 08-23 fix direction omitted: the holding loop's
+      all_searched exit now yields when the target has a registry boxel
+      (belief.target_found_in stays None until the pick sets it — setting
+      it on registration would end the loop before any pick and report
+      physics_mismatch).  NOT adopted: the 08-23 "refresh detection on
+      every replan" — an observation outside a sensing action, which
+      the thesis model excludes; a target revealed by the very last
+      place with no sense afterwards ends honestly as not found (with
+      F21 fixed it lies in a fragment, so a sense is planned first).
+      refresh_object_aabbs now prints "[perception] detected but
+      UNREGISTERED" so a dropped detection can never again pass in
+      silence.  EVIDENCE: seed 999 holding (run 16-35-40): SUCCESS in 3
+      plans / 5.4 s — plan-2 sense registered blue at 54 px while still
+      half behind green, plan 3 = move + pick; find-and-tray-stack seed
+      343879192: SUCCESS, F20 registered blue at 208 px after the second
+      sense; holding seed 0 and stack h=2 unchanged SUCCESS.  Held-object
+      interaction (iii) is moot at the sense sites (sense requires
+      handempty; a successful pick keeps the held object's boxel) and
+      refresh_object_aabbs' exclude_ids hook still has no caller (F26).]
 
-  F21. [OPEN] THE SHADOW CARVE SILENTLY DELETES A SLAB THAT CONTAINS THE
+  F21. [DONE 2026-09-18] THE SHADOW CARVE SILENTLY DELETES A SLAB THAT CONTAINS THE
       TARGET: ZERO-VOLUME FACE TOUCH COUNTS AS OVERLAP, AND THE
       DOWNSTREAM TEST IS APPLIED TO CANDIDATES FROM EVERY SPLIT AXIS
       (2026-08-23, forensics on seed 999; probe
@@ -1569,6 +1620,138 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       999's shadow_of_red must retain a fragment containing blue, the
       F5 diagnostic must still pass, and the whole smoke battery
       re-runs (this changes fragment geometry on EVERY seed).
+      [VERIFIED AND FIXED 2026-09-18 (commit df2eba0).  The chain above
+      reproduces link by link at full float precision (near_slab
+      min=(0.043623,0.112540,0.325) max=(0.101135,0.306270,0.452469)
+      contains blue (0.063487,0.163318,0.342126); the sliver's y-max and
+      z-min are red's estimated max_y 0.1125398467014736 and max_z
+      0.4524687757231305 bit-for-bit; overlap volume 0.0; both
+      candidates dropped by _is_downstream).  Three corrections to the
+      write-up: (i) min_corner[1] EQUALS obstacle max_corner[1] exactly
+      (diff 0.0), it is not "max - 1e-4"; (ii) the sliver is NOT a
+      product of c4b9b05 (that commit touched execution.py,
+      perception.py, test_full_pipeline.py only) — it is the ordinary
+      top-Z remainder of green's shadow above red's estimated top
+      (green 5.4 mm taller), produced for ANY taller-in-front-of-shorter
+      caster pair, so the "reachable by any elevated fragment"
+      conclusion stands for a different reason; (iii) fix (b) as
+      written was INEFFECTIVE: the candidate containing blue is the
+      back-Y one, which IS a dominant-axis split, so restricting the
+      downstream test to dominant-axis candidates still drops it, and
+      once (a) is in, side/bottom candidates cannot test downstream
+      anyway.  The real second defect was the downstream drop ITSELF:
+      its premise (the obstacle's own shadow covers the wake) holds
+      only for a table-resting OBJECT, but audit #68 feeds earlier
+      casters' SHADOW fragments as obstacles, whose wake nobody covers
+      (seed 999 far slab: back-Y x[-0.0086,0.0436] y[0.3230,0.5]
+      dropped behind green __00, covered by no fragment), and the X-Y-Z
+      cut order let the downstream candidate inherit the slab's full
+      z-range, so any genuinely overlapping elevated obstacle deleted
+      the whole column beneath it (probe: 876 cm^3 for a 3 mm x 5 mm
+      overlap).  FIX LANDED: _check_aabb_intersection is strict with
+      AABB_OVERLAP_EPS = 1 mm on every axis (a touch is not an
+      intersection; _overhang_overlaps_obstacle uses the same test), and
+      _subtract_aabb is a plain AABB set difference — every non-
+      degenerate remainder kept, no downstream drop; the #68 cross-
+      shadow carve already de-duplicates, so union(fragments) =
+      union(raw shadows) minus solids exactly.  _is_downstream stays in
+      the file unused (dead-code policy; the seed-999 probe traces the
+      old carve through it).  VERIFIED: seed 999 blue now lies in
+      shadow_of_green_object__02 (green's wake behind red, correctly
+      owned by the earlier caster; 6 -> 10 fragments); coverage probe
+      over the 22 buildable random-pairs seeds 0-24 + 999: 44/44 hidden
+      target centres inside a fragment, 0.00 cm^3 fragment-fragment
+      overlap, 0.00 cm^3 fragment-object overlap on every seed; smoke
+      battery green (holding 0/999, stack h=2, tray-stack 343879192).
+      With this fix alone seed 999 would already have been found by a
+      planned sense of the restored slab; F20 makes it robust to any
+      residual coverage gap.]
+
+  F22. [OPEN] A PARTIALLY OCCLUDED OCCLUDER GETS A FLOATING-SLICE
+      ESTIMATE AND CASTS NO SHADOW AT ALL (2026-09-18, found by the F21
+      review on seed 24).  green_object stands behind orange with only
+      its top 1.3 cm visible: the render cloud spans est z
+      [0.4239,0.4369] against ground truth [0.3250,0.4360]; the support
+      snap in perception.py:412 fires only when the cloud bottom is
+      within DETECTION_SUPPORT_SNAP = 0.02 of the table, so the estimate
+      stays a floating slice 9.9 cm above the table, and the audit-#103
+      mid-air rule (shadow_calculator.py:74) then refuses to cast a
+      shadow for an 11 cm table-resting occluder — anything hidden
+      behind green outside orange's frustum is in NO fragment.  Larger
+      than F21 in principle (a whole occluder's occlusion unmodelled);
+      seed 24's hidden targets happen to sit in other fragments.  Also
+      the reachable trigger of the "elevated obstacle overlapping a
+      slab" column loss the F21 fix now covers.  FIX DIRECTION: snap to
+      the support when the object's lower image rows are occluded by
+      another detected body (segmentation says the cut-off is an
+      occluder edge, not a floating bottom), or grow the estimate to the
+      nominal class height when the cloud bottom is unobserved; and let
+      the #103 rule consult the registry (an object it has seen resting
+      on the table does not become mid-air by being half hidden).
+      Probe: the old session's scratchpad probe_f21_est.py 24 (re-create
+      from tools/_probe_seed999_gap.py's scene build + env.detect_objects
+      vs p.getAABB).
+
+  F23. [DONE 2026-09-18, with F20] DISCOVERY-CAST FRAGMENTS NEVER
+      ENTERED THE BELIEF: belief.shadow_status was filled once at
+      construction from the spawn fragment list and written only by
+      mark_sensed / mark_unresolved; the contains_nontarget discovery
+      branch added its new fragments to the registry, `shadows` and
+      shadow_occluder_map but never to the belief, so
+      get_unknown_shadows() omitted them and the holding loop could
+      exit "all searched" with discovered fragments still unsensed.
+      Fixed by BeliefState.add_shadow (status 'unknown' unless already
+      set), called from the discovery branch and from
+      register_new_detections.  Also noted: the discovery branch casts
+      against OBJECT boxels only (no #68 cross-shadow carve), so its
+      fragments may overlap existing ones; register_new_detections
+      carves against both.  Aligning the discovery branch is a small
+      follow-up.
+
+  F24. [OPEN — #P1 LEFTOVER ORACLE READ] THE PICK HANDLER AIMS AT THE
+      SIMULATOR POSE, NOT THE ESTIMATE: test_full_pipeline.py pick branch
+      resolves pick_pos from env.objects[name].position (ground truth)
+      for both the boxel_to_pybullet path and the target special case,
+      and execute_pick's live re-aim reads the same source.  The
+      registry estimate (1-5 mm off, rigid-size tracked) is what the
+      robot is entitled to; the planner's grasp was sampled over it.
+      Belongs with #P1 step (4) (grasp sampler over the estimated AABB):
+      aim at the registered boxel centre / the latest detection, and
+      let the F1(d) plausibility check and the F2 giveup absorb the
+      residual.  Expect a small pick-success cost that the paper must
+      report honestly rather than hide behind the oracle.
+
+  F25. [OPEN, MINOR] SHADOW AABBs CARRY PHANTOM LATERAL SPREAD: a back-
+      corner ray that misses the table hits the ground plane at z=0,
+      and shadow_calculator.py:150-159 clamps the hit's y to the table
+      but keeps its far-off x, so the far slab inherits x extents the
+      true frustum never reaches (seed 999: far slab to x=-0.0594 while
+      red's frustum edge at y=0.5 is about x=0.02).  Camera-visible
+      volume flagged unknown — extra fragments, extra sense work, no
+      correctness loss.  Fix: intersect the ray with the table plane
+      analytically (as the miss branch already does) instead of using
+      a ground-plane hit.
+
+  F26. [OPEN, LATENT] refresh_object_aabbs' exclude_ids hook has NO
+      CALLER, and the held object's boxel survives a successful pick;
+      every current refresh site runs handempty (sense requires it, the
+      pipeline sites clear held state first), so nothing is wrong today,
+      but the first while-holding refresh would re-pose the held
+      object's boxel to its in-air estimate or, if the arm hides it,
+      report its table region "lost" and retire it.  Pass the held name
+      as exclude_ids at any future refresh that can run while holding
+      (#P2 world-integrity monitor is the likely first such site).
+
+  [WORLD EYE, 2026-09-18 (commit 4940420), user request: every run now
+  writes eye.log / eye.jsonl (world_eye.py) — snapshots at the initial
+  observation, every replan (planner init facts + plan), before every
+  action, every sense observation (camera ASCII view + detections) and
+  the final state, each with true vs believed pose per object, pixel
+  visibility, every fragment with belief status and blockers, free
+  cells and the belief.  tools/eye.py <run> --list|--index|--plan|
+  --step|--wall|--tag|--diff renders any moment; tools/prune_runs.py
+  keeps two runs per week beyond two weeks (audit-cited runs protected).
+  Ground truth is read for logging only.]
 
   [F5 SENSABLE-GUARANTEE GUARDRAIL REMOVED 2026-08-23, USER DIRECTIVE
   ("remove all f5 pre-flight guardrails ... everything is winnable").
@@ -1889,3 +2072,9 @@ REMARKS: #P6 (real robot: not needed), #P10 (supervisors write; framing question
        open).
 ORDER: P1 -> P2 -> P3 -> (CB#113 sweep) -> P4 -> P5 -> P7/P8 in parallel with
        supervisor writing; P9 only if time.  Deadline: DECEMBER 2026.
+STATUS 2026-09-18: F20, F21, F23 DONE (commits df2eba0 / c697233); world eye
+       landed (4940420).  #P1 steps (1)-(3) complete; NEXT = step (4) grasp
+       sampler (+ F24 oracle pick aim), then #P2 (F7 root cause, F8, F18,
+       F26), #P3 remainder, CB#113 on a pre-vetted corpus; F22 (floating-
+       slice occluder casts no shadow) is the open perception hole to close
+       before CB#113; F6 last.  Post-fix A/B: see the F20 note / eval_results.
