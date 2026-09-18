@@ -819,9 +819,11 @@ class PDDLStreamPlanner:
                 with w = 1, f = g + h: it removed that detour but its
                 extra expansions are not free — seed 13 planned 12 -> 103 s
                 and seed 999 (4-15 s at w = 2) hit a 900 s cap in its
-                fourth plan — so the default stays 'ff-astar2' and the
-                detour is removed deterministically instead
-                (_prune_redundant_relocations).  'dijkstra' is blind and
+                fourth plan — so the default stays 'ff-astar2' and its
+                detours are executed as planned: the loop acts on the plan
+                the planner returned and nothing edits it in between (a
+                post-planning rewrite of the plan was tried and withdrawn
+                the same day on the user's directive).  'dijkstra' is blind and
                 cost-optimal.  Every call returns the FIRST plan under the
                 bound (success_cost stays INF): cheaper-first, not
                 certified optimal.
@@ -1016,57 +1018,7 @@ class PDDLStreamPlanner:
             action_args = action.args
             actions.append((action_name,) + tuple(action_args))
 
-        actions, pruned = self._prune_redundant_relocations(actions)
-        for obj, boxel, n_before in pruned:
-            print(f"  [F30] pruned a redundant relocation: {obj} was to be "
-                  f"placed at {boxel} and picked up again from there — "
-                  f"{n_before} -> {len(actions)} actions")
         return actions
-
-    @staticmethod
-    def _prune_redundant_relocations(actions):
-        """Drop a place/stack of ?o that is immediately picked up again from
-        the same boxel (F30, 2026-09-18).
-
-        The search is satisficing (weighted A* with the FF heuristic, the
-        first plan under the bound is returned), and it does produce
-        plans like "place red at free_003; pick red from free_003; place
-        red at free_005" — the GUI run 22-12-06 opened with one.  Such a
-        detour changes nothing the goal can see (the object ends where the
-        LAST placement puts it) and every placement is a chance to disturb
-        the scene or hide a body (F31).  Removing the triple (move to the
-        cell, place, pick) leaves the following move starting from a
-        config the arm never reached; the dispatcher already re-plans a
-        move's trajectory from the arm's actual configuration when it
-        differs from the trajectory's first waypoint (audit #60 fix (i)),
-        with the same held-body metadata, so the pruned plan executes as
-        the direct relocation.  Returns (actions, [(obj, boxel, n_before)]).
-        """
-        out = list(actions)
-        pruned = []
-        changed = True
-        while changed:
-            changed = False
-            for i, a in enumerate(out):
-                if a[0] not in ('place', 'stack') or len(a) < 3:
-                    continue
-                obj, boxel = str(a[1]), str(a[2])
-                j = i + 1
-                while j < len(out) and out[j][0] == 'move':
-                    j += 1
-                if (j < len(out) and out[j][0] == 'pick' and len(out[j]) >= 3
-                        and str(out[j][1]) == obj and str(out[j][2]) == boxel):
-                    start = i
-                    if (start > 0 and out[start - 1][0] == 'move'
-                            and len(out[start - 1]) >= 4
-                            and str(out[start - 1][3]) == boxel):
-                        start -= 1
-                    n_before = len(out)
-                    del out[start:j + 1]
-                    pruned.append((obj, boxel, n_before))
-                    changed = True
-                    break
-        return out, pruned
 
 
 def test_planner():

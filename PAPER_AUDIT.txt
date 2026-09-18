@@ -1883,8 +1883,8 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       preferred-operator alternation — so the path cost g is
       outweighed by the heuristic and a 10-action plan is accepted
       when h happens to look better along the detour; success_cost
-      stays inf, so the first plan under the bound is returned.  FIXED
-      2026-09-18 in two parts.  (1) New CLI flag --planner (run_logger.py;
+      stays inf, so the first plan under the bound is returned.
+      2026-09-18: (1) New CLI flag --planner (run_logger.py;
       ff-astar1 / ff-astar2 / ff-astar / ff-wastar1 / ff-wastar2 /
       dijkstra), plumbed to planner.plan(planner=) -> solve(planner=).
       Tried 'ff-astar1' (w = 1, f = g + h) as the default: seed 13's plan
@@ -1893,37 +1893,44 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       900 s cap in its fourth plan; both still ended in their F7 binding
       deaths.  The unweighted search expands far more nodes in exactly
       the searches that end without a plan, so it is NOT the default;
-      the flag keeps it available.  (2) Default remedy: planner.plan()
-      prunes a place/stack of ?o that is immediately picked up again
-      from the same boxel (_prune_redundant_relocations: the move to the
-      cell, the place and the pick are dropped; the next move's
-      trajectory is re-planned from the arm's real configuration by the
-      existing audit-#60 runtime re-plan, same held-body metadata) and
-      logs "[F30] pruned a redundant relocation".  Deterministic, no
-      search change, plans/episode unaffected.  REGRESSION ARM
-      f2021c_51fd444 (seeds 0-19, same night, machine otherwise idle):
-      14/20, mean 12.1 s, median 7.2 s vs f2021b_ba924bd 15/20, 10.8 s,
-      7.4 s — flips: seed 0 won, seeds 1 (binding death) and 8 (physics
-      mismatch) lost; ZERO pruning events fired in any of the night's
-      runs (the detour is rare), so the two arms ran identical planning
-      code and the three flips are pure trajectory noise (the per-
-      placement camera image adds ~0.2 s of wall clock, which is enough
-      to move PDDLStream's wall-clock budgets).  Use this pair as the
-      measured noise floor: ±1-2 seeds per 20 for the SAME code.
+      the flag keeps it available.  (2) A post-planning rewrite of the
+      plan (commit c2867ac: planner.plan() dropped a place/stack of ?o
+      that was immediately picked up again from the same boxel and let
+      the dispatcher's audit-#60 runtime motion re-plan bridge the gap)
+      was REVERTED the same day on the user's directive: "never do
+      that. this is cheating".  The rule: the loop acts on the plan the
+      planner returned; nothing edits a plan between the planner and
+      the executor.  A plan-quality problem is fixed in the search or
+      the model (weight, heuristic, anytime bound, domain) or it is
+      reported as it is.  REGRESSION ARM f2021c_51fd444 (seeds 0-19,
+      same night, machine otherwise idle) ran with the rewrite still in
+      but ZERO of its events fired in any of the night's runs (the
+      detour is rare), so it measured the flag-only code that is now
+      HEAD: 14/20, mean 12.1 s, median 7.2 s vs f2021b_ba924bd 15/20,
+      10.8 s, 7.4 s; flips: seed 0 won, seeds 1 (binding death) and 8
+      (physics mismatch) lost; identical planning code, so the three
+      flips are pure trajectory noise (the per-placement camera image
+      adds ~0.2 s of wall clock, which is enough to move PDDLStream's
+      wall-clock budgets).  Use this pair as the measured noise floor:
+      ±1-2 seeds per 20 for the SAME code.
       Cost of the detours: wasted
       actions, an extra chance to disturb the scene, and every
       placement is a chance to hide something (the eye audit of the
       same run shows the later place of orange at free_017 cut the
       visible target-class body blue from 507 to 62 px, and red at
       free_005 stood on the camera ray to purple, which surfaced only
-      at 113 px once orange moved).  Fix direction: (a) prune a
-      place/stack of ?o that is immediately followed by a pick of ?o
-      before execution (pure post-processing, no search change);
-      (b) or give solve() a success_cost bound / a short anytime
-      improvement window so a cheaper plan wins when one exists;
-      (c) for the paper report plans per episode with and without the
-      pruning.  Not a correctness defect; interacts with F11 (placement
-      corridor blocking) and #P3(c) (reach-bounded placements).
+      at 113 px once orange moved).  Fix direction, all inside the
+      planner: (a) REJECTED: any rewrite of the plan after solve()
+      returns (user directive above); (b) give solve() a success_cost
+      bound / a short anytime improvement window after the first plan
+      so a cheaper plan wins when one exists, at a planning-time price
+      to be measured per search configuration; (c) a search portfolio:
+      w = 1 under a short per-search cap, falling back to w = 2, so the
+      w = 1 price is paid only where it is bounded; (d) for the paper
+      report plan length per episode as the satisficing search
+      produces it.  Not a correctness defect; interacts with F11
+      (placement corridor blocking) and #P3(c) (reach-bounded
+      placements).
 
   F31. [OPEN — PRE-BRIDGE, user directive 2026-09-18] A PLACEMENT MAY
       HIDE A KNOWN BODY FROM THE CAMERA: the placement-blocking facts
