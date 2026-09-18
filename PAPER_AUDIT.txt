@@ -1875,10 +1875,32 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       that placed red_object at free_003, picked it up again and placed
       it at free_005 before sensing — a 7-action plan without the
       detour was available (tools/eye.py --audit flags it: "red_object
-      is put down 2 times in one plan").  Cause: solve() runs
-      algorithm='adaptive' with PDDLStream's default satisficing search
-      (FF-heuristic A*, non-admissible) and success_cost=inf, so the
-      FIRST plan found is returned, not the cheapest.  Cost: wasted
+      is put down 2 times in one plan").  Cause (corrected after
+      reading pddlstream/algorithms/downward.py): the domain DOES have
+      action costs (total-cost, stack=2, others=1) and the search DOES
+      use them, but PDDLStream's default search is 'ff-astar2' — eager
+      WEIGHTED A* with the FF heuristic doubled, f = g + 2h, plus
+      preferred-operator alternation — so the path cost g is
+      outweighed by the heuristic and a 10-action plan is accepted
+      when h happens to look better along the detour; success_cost
+      stays inf, so the first plan under the bound is returned.  FIXED
+      2026-09-18 in two parts.  (1) New CLI flag --planner (run_logger.py;
+      ff-astar1 / ff-astar2 / ff-astar / ff-wastar1 / ff-wastar2 /
+      dijkstra), plumbed to planner.plan(planner=) -> solve(planner=).
+      Tried 'ff-astar1' (w = 1, f = g + h) as the default: seed 13's plan
+      1 became the 7-action plan (detour gone) BUT its planning time rose
+      12 -> 103 s over 4 plans, and seed 999 — 4-15 s at w = 2 — hit a
+      900 s cap in its fourth plan; both still ended in their F7 binding
+      deaths.  The unweighted search expands far more nodes in exactly
+      the searches that end without a plan, so it is NOT the default;
+      the flag keeps it available.  (2) Default remedy: planner.plan()
+      prunes a place/stack of ?o that is immediately picked up again
+      from the same boxel (_prune_redundant_relocations: the move to the
+      cell, the place and the pick are dropped; the next move's
+      trajectory is re-planned from the arm's real configuration by the
+      existing audit-#60 runtime re-plan, same held-body metadata) and
+      logs "[F30] pruned a redundant relocation".  Deterministic, no
+      search change, plans/episode unaffected.  Cost of the detours: wasted
       actions, an extra chance to disturb the scene, and every
       placement is a chance to hide something (the eye audit of the
       same run shows the later place of orange at free_017 cut the
@@ -1892,6 +1914,43 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       (c) for the paper report plans per episode with and without the
       pruning.  Not a correctness defect; interacts with F11 (placement
       corridor blocking) and #P3(c) (reach-bounded placements).
+
+  F31. [OPEN — PRE-BRIDGE, user directive 2026-09-18] A PLACEMENT MAY
+      HIDE A KNOWN BODY FROM THE CAMERA: the placement-blocking facts
+      (audit #5 / F11, blocks_view_at over FREE cells) protect only the
+      sense corridors to SHADOW fragments; nothing stops the planner
+      from putting an occluder between the camera and a registered
+      object.  Evidence (user GUI run 22-12-06, seed 13, eye --audit):
+      place(orange -> free_017) cut blue_object from 507 to 62 visible
+      px, and red at free_005 stood on the camera ray to purple, which
+      surfaced at only 113 px once orange left.  Harm: a hidden known
+      body cannot be re-posed by refresh_object_aabbs (its belief goes
+      stale the moment a transit disturbs it), cannot be re-detected
+      (F20 channel closed), and in find-and-tray-stack or a multi-
+      target goal it may be the next target; every such placement also
+      creates un-modelled occlusion behind the placed object (relocated
+      objects cast no new shadow, methods.tex:157 — sound for the
+      TARGET only because the cell behind was observed clear, i.e. a
+      free cell, before the placement).  FIX DESIGN (domain surgery,
+      hence its own audit round + A/B before landing, like F6): (1) in
+      _build_init, next to the F11 egregious-triple test, evaluate for
+      every (movable object o, free cell b) whether o's box placed at b
+      intercepts the camera rays to any OTHER registered object's boxel
+      (ray-vs-AABB slab test on the boxel's top-face corners + centre;
+      ~6 objects x ~40 cells x 5 rays per replan, negligible) and emit
+      a static (placement_hides ?o ?b) fact; (2) add (not
+      (placement_hides ?o ?b)) to :action place's precondition
+      (domain_pddlstream.pddl; stack onto an object is exempt — the
+      support is the thing being covered); (3) prefer a SOFT form if
+      the hard form starves placements on crowded tables: cost 3
+      instead of 1 for a hiding placement via a conditional (increase
+      (total-cost)) — check FastDownward's cost handling for
+      conditional effects first; (4) A/B on seeds 0-19 + 100-119 for
+      success, plans/episode and planning time; (5) the eye's --audit
+      "placements that changed what the camera sees" is the acceptance
+      test: zero entries on the smoke battery.  Interacts with #P3(c)
+      (reach-bounded placement candidates: fewer cells, more pressure)
+      and F11 (the corridor facts already remove many cells).
 
   [WORLD EYE, 2026-09-18 (commit 4940420), user request: every run now
   writes eye.log / eye.jsonl (world_eye.py) — snapshots at the initial
