@@ -1870,6 +1870,29 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       the physics_mismatch bucket to convert into successes or honest
       pick_giveup endings.  Do with the next eval cycle, not alone.
 
+  F30. [OPEN, PLANNING QUALITY] PLANS CARRY REDUNDANT RELOCATIONS: the
+      user's GUI run 22-12-06 (seed 13) opened with a 10-action plan
+      that placed red_object at free_003, picked it up again and placed
+      it at free_005 before sensing — a 7-action plan without the
+      detour was available (tools/eye.py --audit flags it: "red_object
+      is put down 2 times in one plan").  Cause: solve() runs
+      algorithm='adaptive' with PDDLStream's default satisficing search
+      (FF-heuristic A*, non-admissible) and success_cost=inf, so the
+      FIRST plan found is returned, not the cheapest.  Cost: wasted
+      actions, an extra chance to disturb the scene, and every
+      placement is a chance to hide something (the eye audit of the
+      same run shows the later place of orange at free_017 cut the
+      visible target-class body blue from 507 to 62 px, and red at
+      free_005 stood on the camera ray to purple, which surfaced only
+      at 113 px once orange moved).  Fix direction: (a) prune a
+      place/stack of ?o that is immediately followed by a pick of ?o
+      before execution (pure post-processing, no search change);
+      (b) or give solve() a success_cost bound / a short anytime
+      improvement window so a cheaper plan wins when one exists;
+      (c) for the paper report plans per episode with and without the
+      pruning.  Not a correctness defect; interacts with F11 (placement
+      corridor blocking) and #P3(c) (reach-bounded placements).
+
   [WORLD EYE, 2026-09-18 (commit 4940420), user request: every run now
   writes eye.log / eye.jsonl (world_eye.py) — snapshots at the initial
   observation, every replan (planner init facts + plan), before every
