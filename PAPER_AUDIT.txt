@@ -1707,6 +1707,37 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       planned sense of the restored slab; F20 makes it robust to any
       residual coverage gap.]
 
+  [POST-F20/F21 A/B, 2026-09-18 (tools/_eval_ab.py, holding, random-
+  pairs; JSONs in eval_results/ab_eval/, report tools/_eval_report_
+  f2021.py).  Final code ba924bd vs baseline 88dc010, seed-for-seed:
+    seeds 0-19:    new 15/20 (mean plan 10.8 s, 3.1 plans/episode)
+                   base 13/20 (8.2 s, 2.5 plans, 1 timeout)
+                   flips: new WINS 8 and 17; none lost
+    seeds 100-119: new 12/20 (16.0 s, 4.2 plans)
+                   base 14/20 (8.8 s, 3.4 plans)
+                   flips: new WINS 108, 118; new LOSES 101, 107, 110, 117
+    total 27/40 vs 27/40.  Seeds 4/6/12/106/115 fail the pre-flight on
+    both arms (unbuildable, no re-roll since aa4f376).
+  READING: success is unchanged within the n=20 noise band (the 08-22
+  A/B measured a 11-17/20 spread across same-quality configs); the
+  fixes buy CORRECTNESS on the F20/F21 class (seed 999 and the seeds
+  whose target sat in a carve gap), not a headline gain, because the
+  residual failures are a different class: every new-code loss is F7
+  binding death / planner_failed (the only bound skeleton senses a
+  stale fragment at the reach margin with IK failing at 12-29 mm FK
+  error while the true blocker's relocation never gets sampled: seeds
+  0, 13, 101, 107, 110, 119) or physics_mismatch (pick counted then
+  slipped: 112, 117) — #P2/#P3(c) work that the plan already schedules
+  before the bridge.  COST: mean planning time rose (8.2 -> 10.8 s and
+  8.8 -> 16.0 s) and plans per episode rose (2.5 -> 3.1, 3.4 -> 4.2):
+  F21 keeps every remainder, so each caster contributes more (often
+  thin, largely camera-visible) fragments that are all 'unknown' and
+  get sensed — the F6 sense-gate question (parked last) is now worth
+  more than before, and F25/F27 (phantom spread, side lobes) set the
+  geometry.  An intermediate arm at 4940420 (before the review follow-
+  up) scored the same 15/20 and 12/20 with different flips (won 0 and
+  8, lost 17 and 101/110/117), confirming the trajectory noise.]
+
   F22. [OPEN] A PARTIALLY OCCLUDED OCCLUDER GETS A FLOATING-SLICE
       ESTIMATE AND CASTS NO SHADOW AT ALL (2026-09-18, found by the F21
       review on seed 24).  green_object stands behind orange with only
@@ -1819,6 +1850,25 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       and end the episode honestly after N.  The earlier smoke of the
       same seed (16-4x) succeeded in 3 plans: the seed is trajectory-
       intermittent, not F20/F21-related.
+
+  F29. [OPEN — SMALL, #P2(c)] THE HOLDING LOOP STOPS ON "FOUND", NOT ON
+      "HELD" (2026-09-18 A/B, seeds 112 and 117 on both arms; the
+      theory review's finding 2): _loop_done() for holding returns
+      belief.is_target_found(), which a found_target SENSE sets before
+      the pick runs (belief.py mark_sensed).  Seed 117: sense found blue
+      in shadow_of_green_object, the pick verified 160 N of pad force,
+      the post-lift re-verify then saw GRIP_LOST (F8 class), the dispatch
+      broke to replan — and the loop exited at once because "found" was
+      already true, so the run ended physics_mismatch instead of
+      re-planning the pick the audit-#76 registration exists for.  The
+      S-18 physics gate makes the outcome honest, but it is a needless
+      loss: the target is registered and pickable and F2's 3-strike
+      giveup bounds the retries.  FIX (five lines): track a
+      target_held flag set only at the successful pick (test_full_
+      pipeline.py :1576-1578 path) and make _loop_done use it for
+      holding goals; keep target_found_in as the belief record.  Expect
+      the physics_mismatch bucket to convert into successes or honest
+      pick_giveup endings.  Do with the next eval cycle, not alone.
 
   [WORLD EYE, 2026-09-18 (commit 4940420), user request: every run now
   writes eye.log / eye.jsonl (world_eye.py) — snapshots at the initial
