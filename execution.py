@@ -41,6 +41,7 @@ import numpy as np
 import pybullet as p
 
 import telemetry          # #P1 F17 world telemetry (no-op unless armed)
+import world_eye          # textual world/belief/camera snapshots (no-op unless armed)
 from boxel_data import BoxelData, BoxelType
 from perception import (DETECTION_MIN_PIXELS, DETECTION_SUPPORT_SNAP,
                         SENSE_MARGINAL_BLOCKED_FRACTION, ObjectDetection,
@@ -2109,6 +2110,19 @@ def handle_sense_action(
         robot_id=robot_id,
         support_body_ids=sense_support_ids,
     )
+    # World eye: the observation itself (camera view + detections) plus
+    # how this sense classified the named fragment.
+    world_eye.snapshot(
+        f"sense {shadow_id} -> {sense_outcome}",
+        registry=registry, belief=belief, detections=sense_detections,
+        render=(sense_depth_m, sense_seg, sense_view, sense_proj),
+        shadow_occluder_map=shadow_occluder_map,
+        extra={"outcome": sense_outcome,
+               "blocked_fraction": round(float(blocked_fraction), 3),
+               "detected_bodies": sorted(
+                   body_id_to_name.get(b, str(b)) for b in detected_bodies),
+               "interceptors": {body_id_to_name.get(b, str(b)): n
+                                for b, n in interceptor_counts.items()}})
 
     if sense_outcome == "found_target":
         belief.mark_sensed(str(shadow_id), found=True)
