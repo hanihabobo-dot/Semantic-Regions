@@ -1581,7 +1581,47 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       sense; holding seed 0 and stack h=2 unchanged SUCCESS.  Held-object
       interaction (iii) is moot at the sense sites (sense requires
       handempty; a successful pick keeps the held object's boxel) and
-      refresh_object_aabbs' exclude_ids hook still has no caller (F26).]
+      refresh_object_aabbs' exclude_ids hook still has no caller (F26).
+      REVIEW FOLLOW-UP (two independent read-only reviewers over the
+      landed diff, fixes in ba924bd): (1) the discovery branch's
+      rediscovery cleanup removed an object's superseded fragments from
+      the registry but never from the belief — harmless while
+      discovery fragments were not in the belief, but with add_shadow
+      an orphaned 'unknown' id would have kept get_unknown_shadows()
+      non-empty forever and blocked the all-searched exit (and the
+      same applied to SPAWN fragments of a rediscovered spawn occluder
+      all along, ending such runs planner_failed with phantom
+      "unsearched shadows"): BeliefState.remove_shadow, called from the
+      cleanup.  (2) A re-detected body standing between the camera and
+      an EXISTING fragment was never listed as that fragment's blocker
+      (the census runs only at spawn and after a place), so the planner
+      derived view_clear, the next sense classified the body as CONTENT
+      and deleted the fragment with the target possibly behind it:
+      register_new_detections now re-runs compute_shadow_blockers for
+      every fragment (one extra render) and updates the map in place.
+      (3) A re-detected body's first in-fragment discovery no longer
+      burns an F9 rediscovery strike (belief.redetected, one exemption).
+      (4) Bodies seen below the table surface are logged, not
+      registered (knocked-off-table is #P2's).  (5) Re-detected targets
+      join the census body list like every spawn boxel does.  (6) The
+      belief now COLLAPSES on localisation: _build_init emits
+      obj_at_boxel_KIF(o, F) for every registered OBJECT boxel o and
+      every fragment F — an object with a known pose is known to be in
+      no fragment — so sense(t, F) is no longer groundable beside
+      obj_at_boxel(t, t) (the reviewers' semantic objection to relying
+      on the all-searched gate alone; the gate stays as the loop-level
+      guard).  Smoke after the follow-up: holding 999 SUCCESS (4 plans,
+      15.6 s), holding 0 and stack h=2 SUCCESS; tray-stack 343879192
+      this time ended in the known intermittent #P2 class (see F28).
+      PAPER-TEXT NOTES for #P10 (reviewer T1/T6): the thesis wording
+      "a blocked shadow yields no observation" (methods.tex:166), the
+      two-outcome sensor model (:102) and "moving an object cannot
+      spawn new shadows" (:157) no longer describe the code — a sense
+      is a frame-scoped observation whose belief update covers every
+      fragment (F16) and every visible body (F20), and a relocation can
+      reveal bodies whose fresh fragments extend the search; the
+      post-place render also re-poses boxels and re-derives blockers.
+      The paper must state the observation model once, consistently.]
 
   F21. [DONE 2026-09-18] THE SHADOW CARVE SILENTLY DELETES A SLAB THAT CONTAINS THE
       TARGET: ZERO-VOLUME FACE TOUCH COUNTS AS OVERLAP, AND THE
@@ -1741,6 +1781,44 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       report its table region "lost" and retire it.  Pass the held name
       as exclude_ids at any future refresh that can run while holding
       (#P2 world-integrity monitor is the likely first such site).
+
+  F27. [OPEN, MINOR] SHADOW AABBs MISS THE SIDE LOBES OF OFF-AXIS
+      OCCLUDERS (theory review 2026-09-18, pre-existing, unchanged by
+      F21): rays are cast from the BACK corners only and the AABB is
+      clamped to start at the occluder's back face on the dominant
+      horizontal axis (shadow_calculator.py Step 4), so the wedge
+      occluded by a side face of an object off the camera azimuth is
+      never claimed.  Line-of-sight probe: a single 5 cm cube at
+      (0.50, 0.00) occludes 253 cm^3, the fragment claims 224, a 2 cm
+      wide lobe of 29 cm^3 is unclaimed; a taller box in front of a
+      shorter one leaves 114-120 cm^3 unclaimed (a 4.9 cm cube's worth).
+      A target there is reachable only through F20 after the occluder
+      moves, never through a planned sense.  Same review measured the
+      over-approximation the other way: 54-69 % of every fragment's
+      volume is camera-VISIBLE (height overestimate + F25 spread; F21's
+      kept remainders add a little more), a cost the paper must state
+      when it calls a shadow Boxel "the occluded space".  Fix: cast from
+      all corners whose outward face is visible, or build the fragment
+      from the frustum's table footprint instead of hit-point extremes.
+
+  F28. [OPEN — #P2] REPEATED PHYSICAL STACK FAILURES ARE UNBOUNDED
+      (2026-09-18, tray-stack smoke seed 343879192 after the F20
+      follow-up, run 17-07-01): plan 2's place of red_object failed on
+      a transit slip (F8/F10 class, red's belief stayed 43 mm off), the
+      target blue was then F20-registered and picked, and stack(blue,
+      cyan) on the tray FAILED DROP VERIFICATION five times in a row
+      (plans 4-9; the eye shows blue at cyan's coordinates each time —
+      it lands on/at the tower but not within the on-support tolerance)
+      with the identical plan re-issued every time, until plan 10's
+      stream sampling ran into the wall-clock cap.  Picks have the F2
+      3-strike giveup, transits the transit-loss counter, senses the
+      audit-#21 strikes; a failed stack/place has NO counter and no
+      alternative (re-grasp, re-aim from the estimate, honest failure).
+      Belongs to #P2 (a)/(b)/(d): count physical stack failures per
+      (object, support), re-aim from the refreshed estimate on retry,
+      and end the episode honestly after N.  The earlier smoke of the
+      same seed (16-4x) succeeded in 3 plans: the seed is trajectory-
+      intermittent, not F20/F21-related.
 
   [WORLD EYE, 2026-09-18 (commit 4940420), user request: every run now
   writes eye.log / eye.jsonl (world_eye.py) — snapshots at the initial
