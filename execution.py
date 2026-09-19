@@ -1917,8 +1917,9 @@ def refresh_object_aabbs(env, registry, viz=None, detections=None,
     ``render`` is (depth_image_m, seg_mask, view_matrix,
     projection_matrix) from the same observation as ``detections``;
     rendered internally when needed.  ``exclude_ids`` names boxels
-    never checked (e.g. the held object mid-manipulation — its region
-    is legitimately empty).  Returns the list of LOST boxel ids; the
+    never touched — neither re-posed nor lost-checked (the held object
+    mid-manipulation: its region is legitimately empty and its
+    detection is in the air).  Returns the list of LOST boxel ids; the
     caller owns the retirement bookkeeping (retire_lost_objects).
     """
     _aabb_tol = 1e-4
@@ -1933,6 +1934,13 @@ def refresh_object_aabbs(env, registry, viz=None, detections=None,
     for obj_boxel in registry.get_boxels_by_type(BoxelType.OBJECT):
         obj_info = env.objects.get(obj_boxel.id)
         if obj_info is None:
+            continue
+        if obj_boxel.id in exclude_ids:
+            # F26 (2026-09-19): a boxel named here is never touched — the
+            # held object mid-manipulation renders in the air, and re-
+            # posing its boxel there (with the F22 support completion
+            # stretching the cloud down to the table) turned a 12 cm
+            # block into a 20 cm one in the first #P2 monitor smoke.
             continue
         det = detections.get(obj_boxel.id)
         if det is None:

@@ -2327,6 +2327,31 @@ folds into the post-#P1 canonical sweep (CB#113).
   seed 0 plan #1 dropped 31 s -> 2.1 s, stack h=2 -> 0.96 s.
   Remaining for (c): stack/tray destinations and the TAMPURA-style
   shortened-table PLACE band; spawns (a)/(b) unchanged.]
+  [LANDED 2026-09-19.  (a) scalability_scene sets constrain_to_reach=
+  True (random-pairs and stack already did; the fixed preset scenes
+  keep their pre-baked positions) — every eval scene now spawns in the
+  _SAFE_TABLE_* window inside the 0.65 m disk.  Changes every
+  scalability seed's layout; CB#113 re-sweeps.  (c) HEIGHT-AWARE REACH:
+  tools/_probe_reach_envelope.py measured the top-down IK envelope on
+  an empty table with the real 8-seed FK-gated IK (342 XY targets x 6
+  heights x 2 yaws): the boundary is a sphere of radius ~0.823 m
+  centred 0.066 m above the robot base — reach 0.765 m at 4.5 cm above
+  the table, 0.743 at 10 cm, 0.711 at 16 cm, 0.680 at 20 cm, 0.652 at
+  24.5 cm, 0.604 at 30 cm (fit within 3 mm of every row; both yaws
+  identical to 1 %).  streams.ee_reachable(target) = inside that
+  sphere (R 0.815, 8 mm margin) AND the flat 0.80 m limit; used by
+  compute_kin's pre-IK gate, by compute_stack_kin (which had no gate:
+  a tower at the reach margin ate full 8-seed IK rounds per grasp) and
+  by _build_init's placement filter per (object, cell) with the place
+  EE target = cell + object half-height + the lowest admissible grasp
+  offset — so a far cell is not offered for a tall object while a
+  low one may still be.  Trigger: the first step-(4) A/B, seed 5
+  plan 5, cells 0.69 m out at z 0.57 passed the flat gate and failed
+  IK by 36 mm at every attempt.  (b) quantifying the damage in the
+  old sweep is moot — the system under test changed — CB#113 on the
+  constrained scenes is the number.  The TAMPURA shortened-table
+  PLACE band is subsumed by the envelope (a geometric statement of the
+  same thing, measured instead of copied).]
 
 ================================================================================
 #P4. [OPEN T0]  RUN OUR PIPELINE INSIDE THE TAMPURA ENV FOR A VALID COMPARISON

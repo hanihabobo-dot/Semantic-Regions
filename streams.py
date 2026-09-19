@@ -37,6 +37,19 @@ logger = logging.getLogger(__name__)
 # every observed 8-seed IK failure (0.886-1.02 m).
 REACH_LIMIT_M = 0.80
 
+# #P3(c) height-aware reach (2026-09-19): the flat 0.80 m limit admits
+# targets the arm cannot reach at approach height — seed 5 plan 5 of the
+# first step-(4) A/B burned a 900 s cap on cells 0.69 m out at z 0.57.
+# tools/_probe_reach_envelope.py measured the top-down IK envelope on
+# an empty table (342 XY targets x 6 heights x 2 yaws, the real 8-seed
+# FK-gated IK): the boundary is a sphere of radius ~0.823 m centred
+# 0.066 m above the robot base (reach 0.765 m at 4.5 cm above the table,
+# 0.743 at 10 cm, 0.711 at 16 cm, 0.680 at 20 cm, 0.652 at 24.5 cm,
+# 0.604 at 30 cm; the fit reproduces every row within 3 mm).  The gate
+# uses R = 0.815 (8 mm inside the measured boundary) AND the flat limit.
+REACH_SPHERE_CENTER_DZ = 0.066
+REACH_SPHERE_R_M = 0.815
+
 # #P1 step (2d): nominal size prior for objects the robot has not yet
 # observed (pre-sense hidden targets — no registry boxel, no perception
 # estimate).  TASK knowledge, not perception: the robot knows what CLASS
@@ -219,7 +232,9 @@ class BoxelStreams:
         base_pos, _ = p.getBasePositionAndOrientation(
             self.robot_id, physicsClientId=self.physics_client)
         self._robot_base_xy = np.asarray(base_pos[:2], dtype=float)
-        
+        self._reach_center = np.asarray(base_pos, dtype=float) + np.array(
+            [0.0, 0.0, REACH_SPHERE_CENTER_DZ])
+
         # Home configuration — the Panda's neutral rest pose, used as the
         # default start/end for transit motions.
         self.home_config = RobotConfig(
@@ -423,6 +438,20 @@ class BoxelStreams:
                     for i, angle in zip(ARM_JOINT_INDICES, saved_joints):
                         p.resetJointState(self.robot_id, i, angle,
                                           physicsClientId=pc)
+
+    def ee_reachable(self, target_pos) -> bool:
+        """#P3(c): can the top-down end effector reach ``target_pos``?
+
+        The measured envelope (REACH_SPHERE_*) and the flat horizontal
+        limit; design-time robot-model knowledge, no scene reads.  Shared
+        by the kin streams' pre-IK gates and _build_init's placement-
+        candidate filter so the planner never proposes what the streams
+        would reject.
+        """
+        t = np.asarray(target_pos, dtype=float)
+        if float(np.linalg.norm(t[:2] - self._robot_base_xy)) > REACH_LIMIT_M:
+            return False
+        return float(np.linalg.norm(t - self._reach_center)) <= REACH_SPHERE_R_M
 
     def _ik_seeds(self):
         """Yield IK seed configurations: REST_POSES first, then perturbations."""
@@ -1249,12 +1278,10 @@ class BoxelStreams:
         # setup (the F4 reach-margin stack case is at 0.61 m) and below
         # every observed burn (0.886-1.02 m), so this changes wall-clock
         # only, never the reachable plan space.
-        reach = float(np.linalg.norm(
-            np.asarray(target_pos[:2], dtype=float) - self._robot_base_xy))
-        if reach > REACH_LIMIT_M:
+        if not self.ee_reachable(target_pos):
             logger.debug("compute_kin: %s at %s rejected pre-IK — target "
-                         "%.3f m from the base (> %.2f m reach limit, "
-                         "#P3(c))", obj_id, boxel_id, reach, REACH_LIMIT_M)
+                         "%s outside the reach envelope (#P3(c))",
+                         obj_id, boxel_id, np.round(target_pos, 3).tolist())
             return
 
         # --- Resolve the grasped object's PyBullet body ID --------------------
@@ -1403,6 +1430,14 @@ class BoxelStreams:
         target_obj_pos = np.array([cx, cy, top_z + held_half_height])
         target_pos = target_obj_pos + grasp.position
         ee_orn = grasp.orientation
+        # #P3(c) (2026-09-19): the same pre-IK reach gate as compute_kin —
+        # this stream had none, so a tower at the reach margin ate full
+        # 8-seed IK rounds per grasp before failing.
+        if not self.ee_reachable(target_pos):
+            logger.debug("compute_stack_kin: %s on %s rejected pre-IK — "
+                         "target %s outside the reach envelope (#P3(c))",
+                         obj_id, on_obj_id, np.round(target_pos, 3).tolist())
+            return
 
         # audit #55 — ignore BOTH held cube AND support cube; see section
         # comment above for the lazy-collision rationale.

@@ -709,8 +709,24 @@ class PDDLStreamPlanner:
             b.id for b in self.registry.boxels.values()
             if b.boxel_type == BoxelType.SHADOW
         ]
+        # #P3(c) height-aware half (2026-09-19): the place EE target is
+        # the object's centre at the cell + the lowest admissible grasp
+        # offset, and the reach envelope shrinks with height
+        # (streams.ee_reachable); a cell only the flat limit admits is
+        # not offered for THAT object.
+        _offsets = sorted(self.streams._GRASP_Z_OFFSETS)
         for o in obj_ids:
+            _obd = self.registry.get_boxel(o)
+            _half_h = (float(_obd.extent[2]) if _obd is not None
+                       else float(NOMINAL_HIDDEN_EXTENTS[2]) / 2.0)
+            _z_off = next((z for z in _offsets if z >= _half_h + 0.01),
+                          _offsets[-1])
             for bid in free_ids:
+                _b = self.registry.get_boxel(bid)
+                _ee = np.array([float(_b.center[0]), float(_b.center[1]),
+                                float(_b.min_corner[2]) + _half_h + _z_off])
+                if not self.streams.ee_reachable(_ee):
+                    continue
                 if self.streams.test_boxel_fits(o, bid):
                     init.append(('boxel_fits', o, bid))
             for bid in shadow_ids:
