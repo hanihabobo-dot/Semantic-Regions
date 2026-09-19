@@ -1672,16 +1672,30 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # (for placing onto another object's boxel).
                 if boxel_id_str in boxel_centers:
                     place_pos = boxel_centers[boxel_id_str]
-                elif boxel_id_str in boxel_to_pybullet:
-                    place_pos = boxel_to_pybullet[boxel_id_str]['position']
+                elif registry.get_boxel(boxel_id_str) is not None:
+                    # #P1 WP2b: the registry estimate, not the spawn-time
+                    # simulator position boxel_to_pybullet carries.
+                    place_pos = np.asarray(
+                        registry.get_boxel(boxel_id_str).center, dtype=float)
                 else:
                     print(f"    ERROR: Cannot resolve position for boxel '{boxel_id_str}'")
                     break
 
                 try:
+                    # #P1 WP2b: the held object's estimated box (registry,
+                    # rigid size; it survives the pick) gives the release
+                    # height — no simulator read.
+                    _held_bd = registry.get_boxel(obj_str)
+                    if _held_bd is None:
+                        print(f"    ERROR: no registry estimate for the held "
+                              f"{obj_str} — cannot size the release; "
+                              f"replanning (#P1 WP2b)")
+                        break
                     place_result = execute_place(
                         robot_id, env, obj_str, place_pos, grasp, config,
-                        held_body_id, gui)
+                        held_body_id, gui,
+                        held_aabb=(np.asarray(_held_bd.min_corner, dtype=float).copy(),
+                                   np.asarray(_held_bd.max_corner, dtype=float).copy()))
                 except EmptyHandError:
                     # #P1 F1(c): the held object was not in the gripper at
                     # place entry (transport slip / residual phantom hold).
@@ -1906,9 +1920,23 @@ def main(gui=True, run_logger=None, scene_config=None,
                 print(f"    Stacking {obj_str} on {on_obj_str}...")
 
                 try:
+                    # #P1 WP2b: the held object's and the support's
+                    # estimated boxes (registry) give the destination and
+                    # the release height — no simulator read.
+                    _held_bd = registry.get_boxel(obj_str)
+                    _sup_bd = registry.get_boxel(on_obj_str)
+                    if _held_bd is None or _sup_bd is None:
+                        print(f"    ERROR: no registry estimate for "
+                              f"{'the held ' + obj_str if _held_bd is None else 'the support ' + on_obj_str}"
+                              f" — cannot aim the stack; replanning (#P1 WP2b)")
+                        break
                     stack_result = execute_stack(
                         robot_id, env, obj_str, on_obj_str, grasp, config,
-                        held_body_id, gui)
+                        held_body_id, gui,
+                        held_aabb=(np.asarray(_held_bd.min_corner, dtype=float).copy(),
+                                   np.asarray(_held_bd.max_corner, dtype=float).copy()),
+                        support_aabb=(np.asarray(_sup_bd.min_corner, dtype=float).copy(),
+                                      np.asarray(_sup_bd.max_corner, dtype=float).copy()))
                 except EmptyHandError:
                     # #P1 F1(c): mirror of the place branch — empty hand at
                     # stack entry gets its own path so the fingers_open
