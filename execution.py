@@ -1777,9 +1777,14 @@ def world_integrity_check(*, env, registry, belief, viz, shadows, occluders,
     An object the render does not show and whose region is occluded is
     kept as believed (cannot see, cannot claim).  Telemetry's ground-
     truth DISTURBED / TOPPLE / OFF_SUPPORT events are the validation
-    labels for these verdicts in the run log.  Returns the event list
-    (dicts with kind, object, label and a measure); mutates the registry,
-    belief, shadows, boxel_centers, on_relations and shadow_occluder_map
+    labels for these verdicts in the run log.  Returns (events, dets):
+    the event list (dicts with kind, object, label and a measure) and
+    the render's detections, which the caller hands to
+    register_new_detections so a body this observation shows for the
+    first time enters the belief here too (review 2026-09-19: a knocked-
+    away occluder can leave the target in plain view, and a run must
+    not end "all searched" on it).  Mutates the registry, belief,
+    shadows, boxel_centers, on_relations and shadow_occluder_map
     exactly as the sense action's discovery paths do.
     """
     dets, _, depth_buf, seg = env.detect_objects()
@@ -1826,8 +1831,21 @@ def world_integrity_check(*, env, registry, belief, viz, shadows, occluders,
         shift = float(np.hypot(*((np.asarray(bd.center, dtype=float)
                                   - before[bd.id][0])[:2])))
         if bd.id in toppled:
+            # Review 2026-09-19: the rigid-size fusion is monotone, so a
+            # topple would inflate the box for good (a 4 x 4 x 12 block on
+            # its side became a 12 x 4 x 12 box that no grasp spans).  A
+            # toppled body is re-initialised from the raw detection: its
+            # box IS a new rigid size until it stands again.
+            det = dets[bd.id]
+            bd.min_corner = np.asarray(det.est_min, dtype=float).copy()
+            bd.max_corner = np.asarray(det.est_max, dtype=float).copy()
+            if viz is not None and viz.tracks_boxel(bd.id):
+                viz.remove_boxel_viz(bd.id)
+                viz.draw_boxel_data(bd)
             events.append({"kind": "toppled", "object": bd.id, "label": label,
-                           "shift_mm": round(shift * 1000, 1)})
+                           "shift_mm": round(shift * 1000, 1),
+                           "box_cm": [round(float(v) * 100, 1)
+                                      for v in (bd.max_corner - bd.min_corner)]})
         elif shift > INTEGRITY_DISTURB_M:
             events.append({"kind": "disturbed", "object": bd.id,
                            "label": label, "shift_mm": round(shift * 1000, 1)})
@@ -1867,7 +1885,7 @@ def world_integrity_check(*, env, registry, belief, viz, shadows, occluders,
                     if bd.id in dets and dets[bd.id].pixel_count >= DETECTION_MIN_PIXELS)
         print(f"    [integrity] after {label}: {n_obs}/{len(obj_boxels)} "
               f"believed bodies observed where believed, none disturbed")
-    return events
+    return events, dets
 
 
 def refresh_object_aabbs(env, registry, viz=None, detections=None,
@@ -1978,6 +1996,10 @@ def refresh_object_aabbs(env, registry, viz=None, detections=None,
             continue
         obj_boxel.min_corner = new_min
         obj_boxel.max_corner = new_max
+        # Review 2026-09-19: a re-posed body may now overlap FREE cells
+        # (a rejected release left the object where the cell still reads
+        # free); the dirty flag makes the next replan re-carve free space.
+        setattr(registry, "_dirty", True)
         if viz is not None and viz.tracks_boxel(obj_boxel.id):
             viz.remove_boxel_viz(obj_boxel.id)
             viz.draw_boxel_data(obj_boxel)
