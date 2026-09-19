@@ -133,7 +133,7 @@ def audit(recs):
         placed = {}
         for a in acts:
             verb, obj, dest = _action_obj(a)
-            if verb in ("place", "stack") and obj:
+            if verb in ("place", "place_hiding", "stack") and obj:
                 placed.setdefault(obj, []).append(dest)
         for obj, dests in placed.items():
             if len(dests) > 1:
@@ -150,9 +150,11 @@ def audit(recs):
     hit = False
     for i, r in enumerate(recs):
         tag = r.get("tag", "")
-        if "before action" not in tag or not (" place(" in tag or " stack(" in tag):
+        if "before action" not in tag or not (" place(" in tag or " place_hiding(" in tag
+                                              or " stack(" in tag):
             continue
-        verb = "place" if " place(" in tag else "stack"
+        verb = ("place" if " place(" in tag
+                else "place_hiding" if " place_hiding(" in tag else "stack")
         inner = tag.split(f" {verb}(", 1)[1].rstrip(")")
         obj = inner.split(",")[0].strip()
         dest = inner.split(",")[1].strip() if "," in inner else "?"

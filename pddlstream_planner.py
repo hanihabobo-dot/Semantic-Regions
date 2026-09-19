@@ -355,6 +355,64 @@ class PDDLStreamPlanner:
         t_exit = np.min(np.maximum(t1, t2))
         return bool(t_enter <= t_exit and t_exit > 0.0 and t_enter < 1.0)
 
+    # F31: a placement hides a known body when at least this fraction of
+    # the camera rays to the body's sample points (a 3 x 3 x 3 lattice
+    # over its box) pass through the placed object's box.  Half the rays
+    # is "mostly hidden" — the 22-12-06 evidence cut 88 % of the pixels;
+    # from this camera the low points go first, so the top face (the
+    # surface the estimate is anchored to) is still seen below this.
+    # A grazed corner is not a hidden body.
+    PLACEMENT_HIDES_MIN_FRACTION = 0.5
+
+    def _compute_placement_hides(self):
+        """F31 (2026-09-19): the set of (object, free cell) pairs where
+        the object's estimated box, placed at the cell (footprint centred
+        on the cell, bottom on the cell floor — what the camera would
+        then see), would intercept at least PLACEMENT_HIDES_MIN_FRACTION
+        of the camera rays to another registered object's sample points
+        (a 3 x 3 x 3 lattice over its box).  The fact makes :action
+        place_hiding (cost 3) the only way to use that cell for that
+        object — the planner prefers a placement that keeps every known
+        body in view, and still has one when the table is crowded.
+        Pure belief geometry: registry boxes and the camera pose.  The
+        tray is never the hidden body nor the placed one.  Objects with
+        identical estimated extents share one virtual-box test per cell,
+        as in the F11 egregious test.
+        """
+        cam = np.asarray(self.camera_pos, dtype=float)
+        free_boxels = [b for b in self.registry.boxels.values()
+                       if b.boxel_type == BoxelType.FREE_SPACE]
+        known = []
+        ext_classes: Dict[Tuple, List[str]] = {}
+        for b in self.registry.boxels.values():
+            if b.boxel_type != BoxelType.OBJECT or b.id == self.tray_name:
+                continue
+            bmin = np.asarray(b.min_corner, dtype=float)
+            bmax = np.asarray(b.max_corner, dtype=float)
+            _g = [np.linspace(bmin[k], bmax[k], 3) for k in range(3)]
+            pts = np.array([[x, y, z] for x in _g[0] for y in _g[1] for z in _g[2]])
+            known.append((b.id, pts))
+            key = tuple(int(v) for v in np.round((bmax - bmin) * 1000.0))
+            ext_classes.setdefault(key, []).append(b.id)
+        hides = set()
+        for fb in free_boxels:
+            cx, cy = float(fb.center[0]), float(fb.center[1])
+            floor_z = float(fb.min_corner[2])
+            for key, members in ext_classes.items():
+                ext = np.asarray(key, dtype=float) / 1000.0
+                vmin = np.array([cx - ext[0] / 2.0, cy - ext[1] / 2.0, floor_z])
+                vmax = np.array([cx + ext[0] / 2.0, cy + ext[1] / 2.0,
+                                 floor_z + ext[2]])
+                for tid, pts in known:
+                    hit = segment_aabb_hit_mask(cam, pts, vmin, vmax)
+                    if (float(np.count_nonzero(hit)) / len(pts)
+                            < self.PLACEMENT_HIDES_MIN_FRACTION):
+                        continue
+                    for obj_id in members:
+                        if obj_id != tid:
+                            hides.add((obj_id, fb.id))
+        return hides
+
     def _compute_placement_view_blocks(self, shadow_ids, free_boxels,
                                        object_extents):
         """
@@ -639,6 +697,21 @@ class PDDLStreamPlanner:
             # both create_problem and export_problem_pddl — printing here
             # would double every line).
             self._last_egregious_triples = sorted(egregious_triples)
+
+        # F31 (2026-09-19): a placement must not hide a KNOWN body from
+        # the camera.  The facts above protect the sense corridors to
+        # shadow fragments only; nothing kept the planner from standing
+        # an occluder between the camera and a registered object (user
+        # GUI run 22-12-06: orange at free_017 cut blue from 507 to 62
+        # px; red at free_005 stood on the ray to purple).  A hidden
+        # known body cannot be re-posed by any refresh, cannot be re-
+        # detected, and may be the next target.  Static per-(object,
+        # cell) facts; :action place requires (not (placement_hides)).
+        if self.camera_pos is not None:
+            hides = self._compute_placement_hides()
+            for (obj_id, free_id) in sorted(hides):
+                init.append(('placement_hides', obj_id, free_id))
+            self._last_placement_hides = sorted(hides)
 
         for obj in target_objects:
             init.append(('Obj', obj))
@@ -957,6 +1030,14 @@ class PDDLStreamPlanner:
             print(f"  [F11-diag] {len(egregious)} egregious per-object "
                   f"placement-blocking triple(s) beyond the cell "
                   f"criterion: {egregious}")
+        _hides = getattr(self, '_last_placement_hides', [])
+        if _hides:
+            _by_obj: Dict[str, int] = {}
+            for o, _b in _hides:
+                _by_obj[o] = _by_obj.get(o, 0) + 1
+            print(f"  [F31-diag] {len(_hides)} (object, cell) placement(s) "
+                  f"would hide a known body from the camera — withheld "
+                  f"from place: {_by_obj}")
         _plan_start_t = time.perf_counter()
 
         # F7 (2026-08-22): reset the binding-death record so a stale
