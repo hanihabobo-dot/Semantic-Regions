@@ -2092,8 +2092,36 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       (placement corridor blocking) and #P3(c) (reach-bounded
       placements).
 
-  F31. [OPEN — PRE-BRIDGE, user directive 2026-09-18] A PLACEMENT MAY
-      HIDE A KNOWN BODY FROM THE CAMERA: the placement-blocking facts
+  F31. [DONE 2026-09-19, A/B pending] A PLACEMENT MAY HIDE A KNOWN BODY
+      FROM THE CAMERA.  LANDED: pddlstream_planner._compute_placement_
+      hides emits a static (placement_hides ?o ?b) for every (movable
+      object, free cell) whose virtual box at the cell (footprint
+      centred, bottom on the cell floor, the object's estimated
+      extents; identical-extent objects share one test as in F11)
+      intercepts at least PLACEMENT_HIDES_MIN_FRACTION 0.5 of the
+      camera rays to a 3 x 3 x 3 lattice over another registered
+      object's box (the tray excluded either way; pure belief
+      geometry: registry boxes + camera pose).  Domain: :action place
+      requires (not (placement_hides ?o ?b)); the SOFT form is a second
+      action place_hiding with the positive fact and cost 3 (FastDownward
+      action costs are static, so a conditional increase was not an
+      option) — the executor treats it exactly as place.  The hard form
+      alone starved placements: seed 13 plan 4 went from the usual F7
+      binding death to "no plan at all"; with the soft form the
+      skeletons are back (the no-plan search there now takes 33 s
+      instead of 2.5 s: two place actions double the grounded
+      placements; measured in the A/B).  Threshold rationale: the
+      22-12-06 evidence cut 88 % of a body's pixels; from this camera
+      the low lattice points are intercepted first, so at 50 % the top
+      face — the surface the estimate is anchored to — is still seen;
+      a grazed corner is not a hidden body.  Seed 13's own evidence
+      (orange over blue, red over purple) is NOT reproduced by the
+      fact: blue and purple were unregistered (hidden) bodies at the
+      time — the fact protects KNOWN bodies only, by definition.  Smoke
+      seed 13 (F31 code): red at free_005 still cut orange from 1708 to
+      996 px (42 %) with its top in view, below the criterion; seed 999
+      emitted 2 facts and succeeded.  [F31-diag] prints the per-object
+      count each replan.  Original finding: the placement-blocking facts
       (audit #5 / F11, blocks_view_at over FREE cells) protect only the
       sense corridors to SHADOW fragments; nothing stops the planner
       from putting an occluder between the camera and a registered
@@ -2278,6 +2306,32 @@ DELIVERABLES:
   OPEN in #P2: (b) the h=4 root cause with the monitor's data (needs
   the stack sweep), F7 root cause (binding death), F8 grip slip data,
   F18's mechanism question (arm link vs cargo).]
+  [REVIEW FOLLOW-UP 2026-09-19 (adversarial reviewer over 067630e..
+  f6ae28e; findings acted on): (i) retire_lost_objects no longer
+  declares a retired object's shadow fragments empty on the strength
+  of "the caster is gone" — with the observation at hand (the sense
+  render, the monitor's render, or one it takes via env=) each
+  fragment is tested with the sense slices and only an observed-empty
+  fragment is marked not_here and removed; a still-occluded one is
+  kept as an unknown region without a caster.  (ii) refresh_object_
+  aabbs has an arm-occlusion guard: a body whose 3 x 3 x 3 box lattice
+  has any point behind the ROBOT in the render keeps its last estimate
+  (a partial cloud's centre is off by centimetres; re-posing on it
+  would have the #P2 monitor call every arm-adjacent bystander
+  "disturbed" and replan in a loop).  (iii) the audit-#40 _verify_cube_
+  on gate is SCORING ONLY: the on-relation after a stack is written
+  from the robot's own verdict (execute_stack's release observation),
+  the ground-truth disagreement is logged as PHYSICAL_FAILURE (scoring)
+  and persisted (scoring_only flag), and the #P2 off_support check +
+  the end-of-run physics check keep the outcome honest; the F28
+  strikes count only the robot's own failures.  Noted, not changed:
+  execute_pick's pre-descent re-observation updates the local aim only
+  (the registry top may differ by <= 1 cm, inside the release
+  observation's tolerance); the rigid-size fusion never shrinks a box
+  a topple inflated (a re-standing object keeps the inflated box until
+  a full-view detection is trusted to shrink it — open, minor); body
+  ids in contact queries are identities the segmentation mask already
+  supplies.]
 
 ================================================================================
 #P3. [OPEN T1]  ALL OBJECTS MUST SPAWN WITHIN REACHABLE RANGE (TAMPURA-STYLE)
