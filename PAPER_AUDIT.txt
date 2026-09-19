@@ -618,7 +618,18 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       RECOMMENDATION: strict + net.  Overfitting caveat: rounds 1-4
       all used seeds 0-19; the landed config must be confirmed on
       fresh seeds before CB#113.]
-      [F6 WORK 2026-09-19, A/B pending.  (1) FORENSICS, done offline with
+      [F6 DECISION 2026-09-19 (A/B on adf5320, same code, one flag): gate
+      OFF stays the default.  Seeds 0-19: strict 15/20 (mean planning
+      8.0 s, median 2.9 s) vs off 15/20 (4.0 s, 3.9 s); seeds 100-119:
+      strict 13/20 (7.3 s, 3.6 s) vs off 17/20 (6.8 s, 5.0 s).  The
+      strict gate's median speedup is real but small once the F7 fix
+      removed the binding-death searches, its MEAN planning time is
+      higher on 0-19 (the fragments it refuses force relocations and
+      longer searches), and it loses four seeds net on fresh seeds.
+      With the F7 fix the speed argument for the gate is gone; the
+      flag stays for the paper's ablation.  Per-seed diffs:
+      tools/_eval_report_f2021.py (f6_adf5320 vs f7_adf5320).]
+  [F6 WORK 2026-09-19, A/B pending.  (1) FORENSICS, done offline with
       tools/_probe_f6_gate.py over 45 seeds (0-24, 100-119, 999; 78
       hidden targets): for every hidden target the fragment containing
       its true centre is tested with the strict criterion.  The audit-
@@ -2490,6 +2501,47 @@ DELIVERABLES:
   SUPPORT_FOOTPRINT_MIN_FRACTION 0.25 — all conservative by
   construction, none tuned on a seed, all to be reported as design
   choices.]
+  [REVIEW ROUND 2 (2026-09-19, over f6ae28e..adf5320; report
+  scratchpad/review_cheats_round2.md; no new oracle read, no plan
+  post-processing, no seed-specific code; the F7 fix and the reach
+  centre verified against the URDF).  Acted on: (1) COST MODEL — with
+  stack at 2 and place_hiding at 3 a held occluder was cheaper to
+  stack on a 3 cm cube than to place where it would hide a body; now
+  place 1 < place_hiding 2 < stack 3, a placement of any kind stays
+  cheaper than stacking; preferences under the weighted search, not
+  guarantees, and --unit-costs disables both (help says so).  (2) the
+  monitor's registration of a newly seen body now counts as a belief
+  change: the plan client is re-synced (the body was parked below the
+  table until the next replan's sync) and the plan breaks for a replan
+  with an empty hand.  (3) the disturbance cap is per PLAN and its
+  suppression is printed.  (4) the initial problem export syncs the
+  plan client from the belief first (under --sense-gate strict its
+  raycast saw true spawn poses).  (5) a target that was seen, then
+  observed gone from its region and never re-detected ends as
+  exit_reason target_lost, not all_searched; the knocked_off_table
+  message no longer says "or lost".  (7) the held object gets no
+  obj_at_boxel / on_table fact while held (holding is its state; its
+  stale box had re-pinned it as the blocker of its own fragment for a
+  whole plan).  (8) register_new_detections skips a body partly behind
+  the arm in the render it was given (first registrations from a
+  sliver made wrong boxes).  (13) the reach sphere centre is a world
+  height (REACH_SPHERE_CENTER_Z_WORLD 0.066), independent of which
+  frame PyBullet reports for the base link.  Disclosed, not changed:
+  (6) --corridor-test object removes the census-margin (5 %) cell test
+  entirely, so placements in the 5-15 % band become admissible for
+  every cell — the arm f32 measures exactly that; (9) F31 facts are
+  static per replan (a body placed earlier in the same plan is
+  unprotected at its new pose) and stack onto the tray is exempt;
+  (10) under --sense-gate strict the dense raycast also runs for
+  registered objects whose Know-If facts already exclude sensing
+  (wasted work, no effect); (11) the tray has an OBJECT boxel and an
+  obj_at_boxel fact (unpickable only through GRASP_MAX_SPAN), and
+  belief.occluders_moved is dead plumbing (kept for the eye's
+  display); (12) the plan client poses a toppled body upright with its
+  URDF shape at the lower centre; (14) init-fact order changed with
+  the F6 fact set, so seed-for-seed comparisons against pre-F6
+  references are not order-identical (the noise floor already covers
+  this).]
 
 ================================================================================
 #P3. [OPEN T1]  ALL OBJECTS MUST SPAWN WITHIN REACHABLE RANGE (TAMPURA-STYLE)

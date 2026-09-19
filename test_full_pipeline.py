@@ -984,6 +984,11 @@ def main(gui=True, run_logger=None, scene_config=None,
         else [target_name]
     )
 
+    # Review round 2 (2026-09-19): the export runs the same _build_init
+    # as the first plan, and under --sense-gate strict that raycasts the
+    # plan client — pose it from the belief first, exactly as the loop
+    # does before every plan(), so the artefact is the planner's init.
+    env.sync_to_plan_client(registry=registry)
     problem_path = planner.export_problem_pddl(
         target_objects=planner_target_objects,
         goal=goal,
@@ -1090,7 +1095,8 @@ def main(gui=True, run_logger=None, scene_config=None,
     # honest ending; episode_over ends the loop from inside a plan.
     integrity_events: list = []
     stack_fail_counts: Dict[tuple, int] = {}
-    disturbed_counts: Dict[str, int] = {}
+    disturbed_counts: Dict[str, int] = {}   # reset every plan
+    target_lost_seen = False                # a goal object's region observed empty
     episode_over = False
 
     def _integrity_after(label: str) -> bool:
@@ -1103,10 +1109,10 @@ def main(gui=True, run_logger=None, scene_config=None,
         release observation and replan absorb it.  Returns True when
         the dispatcher should break out of the plan.
         """
-        nonlocal exit_reason, episode_over
+        nonlocal exit_reason, episode_over, target_lost_seen
         _held_name = (body_id_to_name.get(held_body_id)
                       if held_body_id is not None else None)
-        events, _dets = world_integrity_check(
+        events, _dets, _render = world_integrity_check(
             env=env, registry=registry, belief=belief, viz=viz,
             shadows=shadows, occluders=occluders,
             shadow_occluder_map=shadow_occluder_map,
@@ -1115,21 +1121,25 @@ def main(gui=True, run_logger=None, scene_config=None,
         # Review 2026-09-19: this render is an observation of the whole
         # workspace like the sense render — a body it shows for the
         # first time (a target uncovered by a knocked-away occluder)
-        # enters the belief here, not only at the next sense.
-        register_new_detections(
+        # enters the belief here, not only at the next sense.  A body
+        # partly behind the arm in this render is left for a clearer one
+        # (round 2: a first registration from a sliver made a wrong box).
+        _registered = register_new_detections(
             env=env, registry=registry, belief=belief, viz=viz,
             detections=_dets, target_name=target_name, shadows=shadows,
             occluders=occluders, shadow_occluder_map=shadow_occluder_map,
             boxel_centers=boxel_centers, boxel_to_pybullet=boxel_to_pybullet,
             object_body_ids=object_body_ids,
-            skip_names=frozenset([_held_name] if _held_name else []))
+            skip_names=frozenset([_held_name] if _held_name else []),
+            render=_render)
         for e in events:
             e["plan"] = plan_count
         integrity_events.extend(events)
-        if not events:
+        if not events and not _registered:
             return False
         # The motion planner's world follows the belief at once (the
-        # runtime plan_motion re-solve runs before the next sync).
+        # runtime plan_motion re-solve runs before the next sync): a body
+        # registered a moment ago was parked below the table until now.
         env.sync_to_plan_client(held_body_id=held_body_id, registry=registry)
         knocked = {e["object"] for e in events if e["kind"] == "knocked_off_table"}
         critical = knocked & set(planner_target_objects)
@@ -1142,15 +1152,23 @@ def main(gui=True, run_logger=None, scene_config=None,
             return True
         # A LOST goal object (its believed region observed empty) is not
         # gone: it may resurface through re-detection, so the loop goes
-        # on (the all-searched exit is the honest end if it never does).
-        # Repeated disturbances of one body stop forcing replans after
-        # the third: the belief is updated regardless, the plan runs on.
-        _replan = False
+        # on; if it never does, the ending is reported as target_lost,
+        # not as an exhausted search.  Repeated disturbances of one body
+        # stop forcing replans after the third within one plan (the
+        # belief is updated regardless, the plan runs on, and the
+        # suppression is printed); a registration counts as a change.
+        if {e["object"] for e in events if e["kind"] == "lost"} & set(planner_target_objects):
+            target_lost_seen = True
+        _replan = bool(_registered)
         for e in events:
             if e["kind"] == "disturbed":
                 disturbed_counts[e["object"]] = disturbed_counts.get(e["object"], 0) + 1
                 if disturbed_counts[e["object"]] <= 3:
                     _replan = True
+                else:
+                    print(f"  [integrity] {e['object']} disturbed "
+                          f"{disturbed_counts[e['object']]} times in this plan — "
+                          f"belief updated, no further replan for it this plan")
             else:
                 _replan = True
         if _replan and held_body_id is None:
@@ -1183,6 +1201,7 @@ def main(gui=True, run_logger=None, scene_config=None,
 
     while not _loop_done():
         plan_count += 1
+        disturbed_counts.clear()   # the #P2 disturbance cap is per plan
         unknown_shadows = belief.get_unknown_shadows()
         # #P1 F15: parked-unresolved fragments are withheld from the
         # planner exactly like eliminated ones (or the episode loops on
@@ -2291,6 +2310,11 @@ def main(gui=True, run_logger=None, scene_config=None,
         extra={"physical_failures": physical_failures,
                "physics_failures": physics_failures})
 
+    # Review round 2 (2026-09-19): a goal object that was seen, then
+    # observed gone from its believed region and never seen again ends
+    # as target_lost, not as an exhausted search.
+    if (not success and exit_reason == "all_searched" and target_lost_seen):
+        exit_reason = "target_lost"
     report_run_outcome(
         success=success,
         exit_reason=exit_reason,

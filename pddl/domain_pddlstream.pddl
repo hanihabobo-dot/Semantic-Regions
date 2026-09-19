@@ -304,7 +304,8 @@
   )
 
   ;; F31 soft form: the same placement where it WOULD hide a known body,
-  ;; at three times the cost.  FastDownward's action costs are static, so
+  ;; at twice the cost (below stack's 3: a placement of any kind stays
+  ;; cheaper than stacking).  FastDownward's action costs are static, so
   ;; the penalty is a second action rather than a conditional increase;
   ;; the executor treats place_hiding exactly as place.  Keeps a plan
   ;; available on a crowded table (the hard form alone starved
@@ -332,7 +333,7 @@
       (on_table ?o)
       (not (holding ?o))
       (not (is_free_space ?b))
-      (increase (total-cost) 3)
+      (increase (total-cost) 2)
     )
   )
 
@@ -367,7 +368,13 @@
       (obj_at_boxel_KIF ?o ?o)
       (not (holding ?o))
       (not (clear ?on_obj))
-      (increase (total-cost) 2)
+      ;; 3 since 2026-09-19 (review round 2): a stack must stay dearer
+      ;; than ANY placement, including the F31 place_hiding at 2 — with
+      ;; stack at 2 a held occluder was cheaper to stack on a 3 cm cube
+      ;; than to place where it would hide a body.  Preferences, not
+      ;; guarantees, under the default weighted search; --unit-costs
+      ;; disables both.
+      (increase (total-cost) 3)
     )
   )
 )
