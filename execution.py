@@ -705,7 +705,8 @@ def _observe_release(env, dropped_name, expected_top_z=None, rigid_ext=None,
     does not show at all (hidden by the arm or another body) cannot be
     judged by sight: the release is accepted on the tactile checks and
     the run log says so; the dispatcher's post-action refresh keeps
-    correcting the belief.  Returns (ok, diag).
+    correcting the belief.  Returns (ok, diag, observed_centre) — the
+    centre is None when the object was not observed or the check failed.
     """
     dets_a = env.detect_objects()[0]
     for _ in range(settle_steps):
@@ -715,7 +716,7 @@ def _observe_release(env, dropped_name, expected_top_z=None, rigid_ext=None,
     if da is None or db is None or db.pixel_count < DETECTION_MIN_PIXELS:
         return True, (f"unobserved after the lift "
                       f"({'no detection' if db is None else f'{db.pixel_count} px'}) — "
-                      f"accepted on the tactile checks")
+                      f"accepted on the tactile checks"), None
     top = float(db.est_max[2])
     ext = db.est_max - db.est_min
     shift = float(np.hypot(*((db.est_center - da.est_center)[:2])))
@@ -737,8 +738,8 @@ def _observe_release(env, dropped_name, expected_top_z=None, rigid_ext=None,
             f"footprint {ext[0] * 100:.1f} x {ext[1] * 100:.1f} cm, "
             f"shift {shift * 1000:.1f} mm")
     if problems:
-        return False, diag + " — " + "; ".join(problems)
-    return True, diag
+        return False, diag + " — " + "; ".join(problems), None
+    return True, diag, np.asarray(db.est_center, dtype=float)
 
 
 def release_held_object_in_place(
@@ -801,26 +802,36 @@ def release_held_object_in_place(
         # Helper succeeded via best-effort path; nothing to refresh.
         return True, state_updates
 
-    aabb_min, aabb_max = p.getAABB(held_body_id)
-    aabb_min = np.array(aabb_min)
-    aabb_max = np.array(aabb_max)
+    # #P1 WP2c (2026-09-19): the dropped object's boxel is re-posed from
+    # an OBSERVATION (the rigid-size refresh) instead of p.getAABB; when
+    # the arm hides it, the boxel goes where the hand is (proprioception)
+    # with its bottom on the table, and the next observation corrects it.
     if (held_object_boxel_id is not None
             and registry.get_boxel(held_object_boxel_id) is not None):
         obj_bd = registry.get_boxel(held_object_boxel_id)
-        obj_bd.min_corner = aabb_min
-        obj_bd.max_corner = aabb_max
+        dets = env.detect_objects()[0]
+        det = dets.get(dropped_name)
+        if det is not None and det.pixel_count >= DETECTION_MIN_PIXELS:
+            refresh_object_aabbs(env, registry, viz=viz, detections=dets)
+        else:
+            ee = p.getLinkState(robot_id, END_EFFECTOR_LINK)[0]
+            ext = (np.asarray(obj_bd.max_corner, dtype=float)
+                   - np.asarray(obj_bd.min_corner, dtype=float))
+            obj_bd.min_corner = np.array([ee[0] - ext[0] / 2.0,
+                                          ee[1] - ext[1] / 2.0,
+                                          env.table_surface_height])
+            obj_bd.max_corner = obj_bd.min_corner + ext
+            print(f"    [WP2c] {dropped_name} not visible after the emergency "
+                  f"drop — its boxel is placed under the hand")
+            if viz is not None:
+                viz.remove_boxel_viz(held_object_boxel_id)
+                viz.draw_boxel_data(obj_bd)
         obj_bd.on_surface = (
             "table"
-            if aabb_min[2] <= env.table_surface_height + 0.01
+            if obj_bd.min_corner[2] <= env.table_surface_height + 0.01
             else None
         )
         boxel_centers[held_object_boxel_id] = obj_bd.center
-        if held_object_boxel_id in boxel_to_pybullet:
-            boxel_to_pybullet[held_object_boxel_id]['position'] = \
-                np.array(env.objects[dropped_name].position)
-        if viz is not None:
-            viz.remove_boxel_viz(held_object_boxel_id)
-            viz.draw_boxel_data(obj_bd)
 
     # Free space and shadows must be refreshed: the dropped object now
     # occupies new ground and may block different camera lines of sight.
@@ -837,8 +848,10 @@ def release_held_object_in_place(
         joint_positions=actual_joints,
         name="post_emergency_drop"
     )
-    print(f"    -> Dropped {dropped_name} at "
-          f"{tuple(round(v, 3) for v in env.objects[dropped_name].position)}")
+    _bd = (registry.get_boxel(held_object_boxel_id)
+           if held_object_boxel_id is not None else None)
+    print(f"    -> Dropped {dropped_name}; believed at "
+          f"{tuple(round(float(v), 3) for v in _bd.center) if _bd is not None else '?'}")
 
     return True, state_updates
 
@@ -1408,8 +1421,9 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     # out of the way, the camera checks the placed object's top against
     # table + rigid height, its footprint against the rigid size, and
     # that it is not moving.
+    _obs_centre = None
     if held_body_id is not None:
-        _ok, _diag = _observe_release(
+        _ok, _diag, _obs_centre = _observe_release(
             env, obj_name, expected_top_z=table_z + float(rigid_ext[2]),
             rigid_ext=rigid_ext, enforce_tilt=True)
         print(f"    [release-obs] {obj_name}: {_diag}")
@@ -1419,19 +1433,21 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
                   f"(#P1 WP2b)")
             return None
 
-    # audit #60 fix (ii) — mirror the placed cube's runtime pose into
-    # plan_client so subsequent plan_motion calls see the correct obstacle
-    # layout.  sync_to_plan_client only fires at replan boundaries
-    # (test_full_pipeline.py:882), so without this the placed cube remains
-    # at its pre-place pose in plan_client and plan_motion certifies
-    # trajectories through where it actually sits at runtime.
+    # audit #60 fix (ii) — mirror the placed cube into plan_client so
+    # subsequent plan_motion calls see the correct obstacle layout.
+    # sync_to_plan_client only fires at replan boundaries, so without
+    # this the placed cube remains at its pre-place pose in plan_client
+    # and plan_motion certifies trajectories through where it actually
+    # sits.  #P1 WP2c: the mirror is the BELIEF — the release
+    # observation's centre when the camera saw the placed object, else
+    # the intended destination (cell centre, bottom on the table).
     if held_body_id is not None and held_body_id in env._gui_to_plan:
-        plan_body = env._gui_to_plan[held_body_id]
-        gui_pos, gui_orn = p.getBasePositionAndOrientation(
-            held_body_id, physicsClientId=env.client_id)
+        _mirror = (_obs_centre if _obs_centre is not None
+                   else np.array([place_pos[0], place_pos[1],
+                                  table_z + float(rigid_ext[2]) / 2.0]))
         p.resetBasePositionAndOrientation(
-            plan_body, gui_pos, gui_orn,
-            physicsClientId=env.plan_client_id)
+            env._gui_to_plan[held_body_id], [float(v) for v in _mirror],
+            [0.0, 0.0, 0.0, 1.0], physicsClientId=env.plan_client_id)
 
     # Read actual joint state to prevent drift accumulation (audit #86).
     actual_joints = np.array(
@@ -1664,7 +1680,7 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     # the box top is — so the top check is skipped there and the
     # tray-aware _verify_cube_on (audit #40) remains the geometric
     # gate; upright and still are checked for every support.
-    _ok, _diag = _observe_release(
+    _ok, _diag, _obs_centre = _observe_release(
         env, obj_name,
         expected_top_z=None if support_is_tray else sup_top_z + float(rigid_ext[2]),
         rigid_ext=rigid_ext, enforce_tilt=True)
@@ -1680,13 +1696,15 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     # rationale).  Without this, plan_motion in subsequent plan_motion
     # calls cannot see the stacked cube at its runtime location and may
     # certify trajectories straight through the new tower.
+    # #P1 WP2c: the mirror is the BELIEF — the release observation's
+    # centre when the camera saw the stacked object, else the intended
+    # destination on the support's estimated top.
     if held_body_id in env._gui_to_plan:
-        plan_body = env._gui_to_plan[held_body_id]
-        gui_pos, gui_orn = p.getBasePositionAndOrientation(
-            held_body_id, physicsClientId=env.client_id)
+        _mirror = (_obs_centre if _obs_centre is not None
+                   else np.array([sup_cx, sup_cy, target_obj_z]))
         p.resetBasePositionAndOrientation(
-            plan_body, gui_pos, gui_orn,
-            physicsClientId=env.plan_client_id)
+            env._gui_to_plan[held_body_id], [float(v) for v in _mirror],
+            [0.0, 0.0, 0.0, 1.0], physicsClientId=env.plan_client_id)
 
     actual_joints = np.array(
         [p.getJointState(robot_id, i)[0] for i in range(7)]

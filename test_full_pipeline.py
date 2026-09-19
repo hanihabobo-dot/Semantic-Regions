@@ -858,10 +858,10 @@ def main(gui=True, run_logger=None, scene_config=None,
     boxel_to_pybullet = {}
     for boxel in registry.boxels.values():
         if boxel.object_name and boxel.object_name in env.objects:
+            # Name and body id only (#P1 WP2c): poses come from the registry.
             boxel_to_pybullet[boxel.id] = {
                 'name': boxel.object_name,
                 'pybullet_id': env.objects[boxel.object_name].object_id,
-                'position': np.array(env.objects[boxel.object_name].position)
             }
 
     print(f"  Boxel->PyBullet mapping: {len(boxel_to_pybullet)} objects")
@@ -1211,7 +1211,8 @@ def main(gui=True, run_logger=None, scene_config=None,
         # stays interactive throughout planning.  The old outer
         # `with RenderingLock(env.client_id):` block was the source of the
         # GUI freeze — it's no longer needed.
-        env.sync_to_plan_client(held_body_id=held_body_id)
+        # #P1 WP2c: the collision world is posed from the belief.
+        env.sync_to_plan_client(held_body_id=held_body_id, registry=registry)
         plan_t0 = time.perf_counter()
         plan = planner.plan(
             target_objects=planner_target_objects,
@@ -1785,10 +1786,8 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # Refresh positions after the physics settle step inside
                 # execute_place — objects may have shifted slightly.
                 env.update_object_positions()
-                for bid, binfo in boxel_to_pybullet.items():
-                    bname = binfo['name']
-                    if bname in env.objects:
-                        binfo['position'] = np.array(env.objects[bname].position)
+                # (boxel_to_pybullet carried simulator positions here
+                # until #P1 WP2c; the registry is the pose source now.)
 
                 # --- Re-boxelize free space after placement ---
                 # Re-run the full octree + merge pipeline (same as the
@@ -2018,10 +2017,8 @@ def main(gui=True, run_logger=None, scene_config=None,
                 transit_loss_counts.pop(obj_str, None)
 
                 env.update_object_positions()
-                for bid, binfo in boxel_to_pybullet.items():
-                    bname = binfo['name']
-                    if bname in env.objects:
-                        binfo['position'] = np.array(env.objects[bname].position)
+                # (boxel_to_pybullet carried simulator positions here
+                # until #P1 WP2c; the registry is the pose source now.)
 
                 # Refresh the stacked object's OBJECT boxel from its new
                 # pose so _build_init's next pass sees it above the
