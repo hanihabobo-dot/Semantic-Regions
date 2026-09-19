@@ -38,7 +38,8 @@ from pddlstream.utils import read
 from boxel_data import BoxelRegistry, BoxelType
 from perception import (sense_ray_slices, segment_aabb_hit_mask,
                         SENSE_MARGINAL_BLOCKED_FRACTION)
-from streams import BoxelStreams, RobotConfig, Trajectory, Grasp, REACH_LIMIT_M
+from streams import (BoxelStreams, RobotConfig, Trajectory, Grasp,
+                     REACH_LIMIT_M, NOMINAL_HIDDEN_EXTENTS)
 from robot_utils import REST_POSES
 
 
