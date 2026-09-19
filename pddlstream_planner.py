@@ -143,6 +143,13 @@ class PDDLStreamPlanner:
         self.shadow_occluder_map = shadow_occluder_map or {}
         self.camera_pos = camera_pos
         self.tray_name = tray_name
+        # F6 (2026-09-19): what (boxel_fits ?o ?shadow) means for sense.
+        # 'off'    — emitted for every (object, fragment) pair: sense grounds
+        #            on any view-clear fragment (a0e536b's behaviour);
+        # 'strict' — emitted only where a target-class box can rest fully
+        #            occluded inside the fragment (dense hideability test).
+        # Set from the --sense-gate CLI flag by the pipeline.
+        self.sense_gate = 'off'
 
         self.streams = BoxelStreams(
             registry, robot_id=robot_id, physics_client=physics_client,
@@ -797,15 +804,18 @@ class PDDLStreamPlanner:
                           _offsets[-1])
             for bid in free_ids:
                 _b = self.registry.get_boxel(bid)
-                _ee = np.array([float(_b.center[0]), float(_b.center[1]),
-                                float(_b.min_corner[2]) + _half_h + _z_off])
+                # The same target compute_kin will test: cell centre +
+                # the vertical grasp offset (review 2026-09-19: an
+                # earlier draft used the resting height instead).
+                _ee = np.asarray(_b.center, dtype=float) + np.array([0.0, 0.0, _z_off])
                 if not self.streams.ee_reachable(_ee):
                     continue
                 if self.streams.test_boxel_fits(o, bid):
                     init.append(('boxel_fits', o, bid))
             for bid in shadow_ids:
-                if self.streams.test_target_can_hide_in_shadow(
-                        o, bid, self.camera_pos):
+                if self.sense_gate == 'off' or \
+                        self.streams.test_target_can_hide_in_shadow(
+                            o, bid, self.camera_pos):
                     init.append(('boxel_fits', o, bid))
 
         init.append(('Config', current_config))

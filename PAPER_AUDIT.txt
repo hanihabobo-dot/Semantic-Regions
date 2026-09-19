@@ -618,7 +618,40 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       RECOMMENDATION: strict + net.  Overfitting caveat: rounds 1-4
       all used seeds 0-19; the landed config must be confirmed on
       fresh seeds before CB#113.]
-      [USER DECISION 2026-08-22: PARKED AS THE LAST WORK ITEM — after
+      [F6 WORK 2026-09-19, A/B pending.  (1) FORENSICS, done offline with
+      tools/_probe_f6_gate.py over 45 seeds (0-24, 100-119, 999; 78
+      hidden targets): for every hidden target the fragment containing
+      its true centre is tested with the strict criterion.  The audit-
+      #62 test (3 x 3 candidate grid, 4 cm class prior) REJECTED 20 of
+      the 78 containing fragments.  Two causes, both in the criterion,
+      neither in the fragments: (a) the 3 x 3 grid misses the hiding
+      spot — a grid every 1 cm (HIDE_GRID_SPACING, at most 12 per
+      axis) brings it to 7; (b) the remaining 6 of those 7 fail the
+      EXTENT pre-screen: the carve leaves 2.9-4.0 cm wide slivers
+      beside a caster, a 3.5 cm cube sits hidden in one, and the 4 cm
+      class UPPER bound does not fit — exactly the "nominal prior
+      bigger than the actual targets" trap named on 2026-08-22.  (2)
+      CRITERION ADJUSTED: hideability uses the class LOWER bound
+      (NOMINAL_HIDDEN_EXTENTS_MIN 3 cm — "could any sought-class
+      instance hide here"), place keeps the upper bound ("will my
+      object always fit"), candidates every 1 cm.  Result: 1 of 78
+      containing fragments rejected (seed 113: a 2.9 cm sliver
+      narrower than any class instance; the target overhangs it —
+      F27 territory), the old test 13/78 on the same seeds with the
+      lower bound; the gate keeps 147 of 248 fragments (41 % pruned:
+      the speedup lever).  The plan client the raycast stage queries
+      is belief-posed since WP2c (hidden bodies parked), so the test
+      is belief geometry end to end.  (3) MECHANISM: the domain's
+      sense action requires (boxel_fits ?o ?region) again; what the
+      fact means is the --sense-gate CLI choice: "off" (default until
+      the A/B) emits it for every (object, fragment) pair — a0e536b's
+      behaviour, sense grounds on any view-clear fragment — "strict"
+      only where the dense test passes.  Same code, same domain, one
+      flag; the A/B (strict vs off, seeds 0-19 and 100-119, then the
+      stack arm) decides the default for CB#113.  No pre-flight net
+      (removed 2026-08-23, user directive): a rejected fragment runs to
+      an honest outcome, and F20 re-detection stays the other route.]
+  [USER DECISION 2026-08-22: PARKED AS THE LAST WORK ITEM — after
       every other open issue on this list is fixed.  The task then:
       (1) per-seed forensics on WHY the no-gate arm succeeds on the
       seeds the strict gate loses (which criterion stage rejects the
