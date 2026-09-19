@@ -546,33 +546,30 @@ def _release_and_verify_drop(
     paths, audit #75).
 
     Audit #80 hardened the verify gate from a single-frame non-robot-
-    contact check to a 4-signal check.  The earlier check accepted false
-    positives: a cube touching the table for one frame while still
+    contact check to a multi-signal check.  The earlier check accepted
+    false positives: a cube touching the table for one frame while still
     friction-pinned to a finger pad produced "released" with the cube
     still attached to the EE — the PDDL fact (obj_at_boxel ?o ?b) then
     diverged from physical reality and every subsequent plan was
-    grounded on a fiction.  Now require ALL of:
+    grounded on a fiction.
+
+    #P1 WP2b (2026-09-19): this function is now the TACTILE half of the
+    verification — what the robot senses through its own joints and
+    links:
       (i)   fingers physically reached max open (≥ 0.038 per finger —
             the #P1 friction-grasp analog of the old "constraint gone"
             probe: with the weld removed, a pad that failed to withdraw
             is the only thing that can still bind the object to the EE),
-      (ii)  cube bottom within 2 cm of ``expected_support_z`` (when
-            provided; callers that can't predict it — e.g. the
-            emergency-drop path — pass None and the gate is skipped),
-      (iii) cube COM stationary across an extra 20 settle steps
-            (<1 mm lateral drift — catches cubes pinned to a finger
-            that move with the arm on the next step),
-      (iv)  zero contact between held_body_id and any robot link,
-      (v)   cube tilt ≤ 20° (#P1 F2 — a topple-on-release is a failed
-            placement; opt-in via ``enforce_tilt``, set by the planned
-            place/stack paths INCLUDING tray stacks, while the
-            emergency-drop path leaves it off and tolerates sideways
-            landings.  Decoupled from ``expected_support_z`` because
-            tray stacks skip the height gate but still need the tilt
-            gate — review fix 2026-08-20).
-    Diagnostic info is logged on every attempt (pass or fail) so a
-    future false-positive regression is immediately visible in the run
-    log.
+      (iv)  zero contact between the released body and any robot link.
+    The former simulator-read gates — (ii) bottom within 2 cm of the
+    support, (iii) COM stationary over 20 steps, (v) tilt ≤ 20° — are
+    now OBSERVED after the post-action lift by _observe_release (the
+    camera sees the released object's top and footprint once the hand
+    is out of the way); ``expected_support_z`` / ``enforce_tilt`` are
+    accepted for call compatibility and forwarded nowhere.  A released
+    object that hangs on a pad still moves with the arm — that is
+    contact (iv), which the retries are for.  The [#84-gt-diag] lines
+    are print-only ground-truth diagnostics for the run log.
 
     Failure modes covered:
       • Fingers stall short of max open (motor loses a force fight).
@@ -601,7 +598,7 @@ def _release_and_verify_drop(
     pre_euler = p.getEulerFromQuaternion(pre_orn)
     pre_tilt_deg = max(abs(np.degrees(pre_euler[0])),
                         abs(np.degrees(pre_euler[1])))
-    print(f"    [#84-diag] pre-release {dropped_name}: "
+    print(f"    [#84-gt-diag] pre-release {dropped_name}: "
           f"pos=[{pre_pos[0]:.4f},{pre_pos[1]:.4f},{pre_pos[2]:.4f}] "
           f"aabb=[{pre_aabb_min[0]:.4f},{pre_aabb_min[1]:.4f},"
           f"{pre_aabb_min[2]:.4f}]-[{pre_aabb_max[0]:.4f},"
@@ -642,53 +639,18 @@ def _release_and_verify_drop(
             cur_d, cur_f = robot_link_contacts.get(link_b, (dist, 0.0))
             robot_link_contacts[link_b] = (min(cur_d, dist), cur_f + nf)
 
-        # (ii) cube bottom near the expected support surface.
-        aabb_min, _ = p.getAABB(held_body_id)
-        cube_bottom_z = float(aabb_min[2])
-        if expected_support_z is not None:
-            height_err = cube_bottom_z - expected_support_z
-            height_ok = abs(height_err) <= 0.02  # 2 cm tolerance
-        else:
-            height_err = None
-            height_ok = True  # caller didn't request this gate
-
-        # (iii) cube COM stationary across 20 extra settle steps.  A
-        # cube pinned to a finger pad moves with the arm; a settled
-        # cube doesn't.  Costs ~83 ms at 240 Hz — same order as the
-        # existing base_settle_steps.
-        pos_before, _ = p.getBasePositionAndOrientation(held_body_id)
+        # Ground-truth diagnostic only (print): bottom height and tilt
+        # of the released body, so the run log still shows the physics
+        # next to the robot's own verdict.  The robot's checks of these
+        # quantities are the observation in _observe_release.
         for _ in range(20):
             env.step_simulation()
-        pos_after, held_orn = p.getBasePositionAndOrientation(held_body_id)
-        lateral_drift = float(np.hypot(pos_after[0] - pos_before[0],
-                                        pos_after[1] - pos_before[1]))
-        stationary = lateral_drift <= 1e-3  # 1 mm
+        _gt_aabb_min, _ = p.getAABB(held_body_id)
+        _, _gt_orn = p.getBasePositionAndOrientation(held_body_id)
+        _gt_euler = p.getEulerFromQuaternion(_gt_orn)
+        _gt_tilt_deg = max(abs(np.degrees(_gt_euler[0])),
+                           abs(np.degrees(_gt_euler[1])))
 
-        # Audit #82: cube tilt at release time.  Anything >5° suggests an
-        # off-axis grip from close_gripper — the audit #40 _verify_cube_on
-        # z-range check may then pass visually while the cube sits at a
-        # non-physical angle.
-        held_euler = p.getEulerFromQuaternion(held_orn)
-        cube_tilt_deg = max(abs(np.degrees(held_euler[0])),
-                             abs(np.degrees(held_euler[1])))
-        # #P1 F2(1c): gate on the tilt for PLANNED releases.  A 90°
-        # topple-on-release used to pass "verify ok" because the tilt
-        # was computed but never checked (field report pick_giveup.md
-        # §B3: red_object released lying on its side, verify ok).  20°
-        # sits far above genuine landings (≤ ~2°) and far below a
-        # topple (~90°).  Opt-in via enforce_tilt: place and stack set
-        # it (INCLUDING tray stacks, which skip the height gate); the
-        # emergency-drop path leaves it off — a sideways landing there
-        # is tolerable and failing it would abort the whole run.
-        tilt_ok = (cube_tilt_deg <= 20.0) if enforce_tilt else True
-
-        height_str = (
-            f"bottom_z={cube_bottom_z:.4f} "
-            f"expected={expected_support_z:.4f} "
-            f"err={height_err * 1000:.1f}mm"
-            if expected_support_z is not None
-            else f"bottom_z={cube_bottom_z:.4f} (no_expected)"
-        )
         # finger_pos already read for gate (i) above — reused in diag.
         if robot_link_contacts:
             link_breakdown = "; ".join(
@@ -699,20 +661,14 @@ def _release_and_verify_drop(
             link_breakdown = "none"
         diag = (f"fingers_open={fingers_open} "
                 f"robot_link_contacts={{{link_breakdown}}} "
-                f"non_robot_contacts={sorted(non_robot) or 'none'} "
-                f"{height_str} "
-                f"lateral_drift={lateral_drift * 1000:.2f}mm "
-                f"cube_tilt_deg={cube_tilt_deg:.2f} "
-                f"finger_pos=[{finger_pos[0]:.4f},{finger_pos[1]:.4f}]")
+                f"finger_pos=[{finger_pos[0]:.4f},{finger_pos[1]:.4f}] "
+                f"| gt-diag: bottom_z={float(_gt_aabb_min[2]):.4f} "
+                f"tilt_deg={_gt_tilt_deg:.2f} "
+                f"non_robot_contacts={sorted(non_robot) or 'none'}")
 
-        ok = (fingers_open
-              and not robot_contacts
-              and bool(non_robot)
-              and height_ok
-              and stationary
-              and tilt_ok)
+        ok = fingers_open and not robot_contacts
         if ok:
-            print(f"    -> Released {dropped_name} (audit #80 verify ok; "
+            print(f"    -> Released {dropped_name} (tactile verify ok; "
                   f"{diag})")
             audit_robot_held_state(
                 env, robot_id, expected_held_body_id=None,
@@ -725,6 +681,64 @@ def _release_and_verify_drop(
             tag=f"post-release:{dropped_name}:attempt-{attempt}-fail")
 
     return False
+
+
+def _observe_release(env, dropped_name, expected_top_z=None, rigid_ext=None,
+                     enforce_tilt=False, settle_steps=20):
+    """Verify a release by OBSERVATION after the post-action lift (#P1
+    WP2b, 2026-09-19): the camera half of the drop verification.
+
+    Two renders ``settle_steps`` apart (env.detect_objects).  On the
+    released object's detection:
+      top      — its estimated top within 2 cm of ``expected_top_z``
+                 (support top + the object's rigid height; None skips
+                 the check, e.g. a tray whose floor is not a modelled
+                 support);
+      upright  — with ``enforce_tilt``, the horizontal extents no wider
+                 than the rigid size + 1.5 cm and the top no higher than
+                 expected + 1.5 cm (a toppled box grows sideways and
+                 shrinks in height; a hanging one is too high);
+      still    — the centre moved no more than 3 mm between the renders
+                 (a body riding on the retreating arm moves).
+    The tops of resting bodies are the best-observed surface of this
+    camera (probe: +0.1 cm), so 2 cm is generous.  An object the render
+    does not show at all (hidden by the arm or another body) cannot be
+    judged by sight: the release is accepted on the tactile checks and
+    the run log says so; the dispatcher's post-action refresh keeps
+    correcting the belief.  Returns (ok, diag).
+    """
+    dets_a = env.detect_objects()[0]
+    for _ in range(settle_steps):
+        env.step_simulation()
+    dets_b = env.detect_objects()[0]
+    da, db = dets_a.get(dropped_name), dets_b.get(dropped_name)
+    if da is None or db is None or db.pixel_count < DETECTION_MIN_PIXELS:
+        return True, (f"unobserved after the lift "
+                      f"({'no detection' if db is None else f'{db.pixel_count} px'}) — "
+                      f"accepted on the tactile checks")
+    top = float(db.est_max[2])
+    ext = db.est_max - db.est_min
+    shift = float(np.hypot(*((db.est_center - da.est_center)[:2])))
+    problems = []
+    if expected_top_z is not None and abs(top - expected_top_z) > 0.02:
+        problems.append(f"top {top:.4f} is {(top - expected_top_z) * 1000:+.0f} mm "
+                        f"from the expected {expected_top_z:.4f}")
+    if enforce_tilt and rigid_ext is not None:
+        if (ext[0] > rigid_ext[0] + 0.015) or (ext[1] > rigid_ext[1] + 0.015):
+            problems.append(f"footprint {ext[0] * 100:.1f} x {ext[1] * 100:.1f} cm "
+                            f"exceeds the rigid {rigid_ext[0] * 100:.1f} x "
+                            f"{rigid_ext[1] * 100:.1f} cm — toppled")
+        if expected_top_z is not None and top > expected_top_z + 0.015:
+            problems.append("top above the expected top — tilted or hanging")
+    if shift > 0.003:
+        problems.append(f"moved {shift * 1000:.1f} mm between two renders")
+    diag = (f"observed {db.pixel_count} px, top {top:.4f}"
+            f"{'' if expected_top_z is None else f' (expected {expected_top_z:.4f})'}, "
+            f"footprint {ext[0] * 100:.1f} x {ext[1] * 100:.1f} cm, "
+            f"shift {shift * 1000:.1f} mm")
+    if problems:
+        return False, diag + " — " + "; ".join(problems)
+    return True, diag
 
 
 def release_held_object_in_place(
@@ -1242,8 +1256,24 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
     return obj_id, final_config
 
 
+def _grasp_ee_to_obj_z(held_aabb, table_z: float) -> float:
+    """EE-to-object-centre vertical offset the pick established (#P1
+    WP2b, 2026-09-19).  execute_pick descends to max(top - 5 mm,
+    table + 35 mm finger-tip depth) and pinches there, so with the
+    object's rigid box (the registry estimate it was picked with) the
+    offset is known without reading the held body's pose.  Negative:
+    the object's centre hangs below the EE.  A vertical slip inside the
+    pads is the residual the drop observation catches.
+    """
+    top = float(held_aabb[1][2])
+    bottom = float(held_aabb[0][2])
+    half_h = (top - bottom) / 2.0
+    contact_z = max(top - 0.005, table_z + 0.035)   # mirrors execute_pick
+    return (top - half_h) - contact_z
+
+
 def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
-                  held_body_id, gui) -> Optional[RobotConfig]:
+                  held_body_id, gui, held_aabb=None) -> Optional[RobotConfig]:
     """
     Execute place action using the plan's grasp pose.
 
@@ -1286,19 +1316,26 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     # table surface.  The live EE-to-object Z offset accounts for
     # whatever grip height the friction grasp established at pick time.
     table_z = env.table_surface_height
+    rigid_ext = None
     if held_body_id is not None:
         # #P1 F1(c): held-contact entry assert — raises EmptyHandError
         # (dedicated dispatcher path) when the object was lost in
         # transport or the hold was phantom all along.
         _assert_held_contact(robot_id, held_body_id, obj_name, gui,
                              action="place")
-        held_aabb_min, held_aabb_max = p.getAABB(held_body_id)
-        obj_half_height = (held_aabb_max[2] - held_aabb_min[2]) / 2.0
-
-        ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
-        ee_z = ee_state[0][2]
-        obj_cur_z = p.getBasePositionAndOrientation(held_body_id)[0][2]
-        ee_to_obj_z = obj_cur_z - ee_z
+        # #P1 WP2b (2026-09-19): the held object's height and the
+        # EE-to-object offset come from the ESTIMATED box it was picked
+        # with (registry, rigid size) and the pick's own contact rule,
+        # not from p.getAABB / p.getBasePositionAndOrientation.
+        if held_aabb is None:
+            print(f"    ERROR: execute_place({obj_name}) needs the held "
+                  f"object's estimated box (#P1 WP2b) — none passed; "
+                  f"aborting")
+            return None
+        rigid_ext = (np.asarray(held_aabb[1], dtype=float)
+                     - np.asarray(held_aabb[0], dtype=float))
+        obj_half_height = float(rigid_ext[2]) / 2.0
+        ee_to_obj_z = _grasp_ee_to_obj_z(held_aabb, table_z)
 
         target_obj_z = table_z + obj_half_height
         contact_z = target_obj_z - ee_to_obj_z
@@ -1346,14 +1383,10 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     # caller's post-place lift + plan-client sync run normally; on
     # failure return None and let the dispatcher replan.
     if held_body_id is not None:
-        # audit #80: pass expected support Z so the verify gate can
-        # reject cubes pinned mid-air or floating above the table.
-        # execute_place IKs the cube to land at table_z + obj_half_height
-        # (lines 642-647 above), so the cube's bottom should sit at table_z.
+        # Tactile half of the drop verification (fingers open, no robot-
+        # link contact); the observed half runs after the lift below.
         if not _release_and_verify_drop(env, robot_id, gui,
-                                         held_body_id, obj_name,
-                                         expected_support_z=table_z,
-                                         enforce_tilt=True):
+                                         held_body_id, obj_name):
             print(f"    ERROR: drop verification failed for {obj_name} "
                   f"after place — aborting (audit #75/#80)")
             return None
@@ -1370,6 +1403,21 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
     # next plan_motion ~10 cm of safe headroom over the just-placed cube.
     _apply_post_action_lift(robot_id, contact_ee, grasp.orientation,
                             contact_joints, pc, gui)
+
+    # Observed half of the drop verification (#P1 WP2b): with the hand
+    # out of the way, the camera checks the placed object's top against
+    # table + rigid height, its footprint against the rigid size, and
+    # that it is not moving.
+    if held_body_id is not None:
+        _ok, _diag = _observe_release(
+            env, obj_name, expected_top_z=table_z + float(rigid_ext[2]),
+            rigid_ext=rigid_ext, enforce_tilt=True)
+        print(f"    [release-obs] {obj_name}: {_diag}")
+        if not _ok:
+            print(f"    ERROR: drop verification failed for {obj_name} "
+                  f"after place — the observation disagrees; aborting "
+                  f"(#P1 WP2b)")
+            return None
 
     # audit #60 fix (ii) — mirror the placed cube's runtime pose into
     # plan_client so subsequent plan_motion calls see the correct obstacle
@@ -1394,7 +1442,8 @@ def execute_place(robot_id, env, obj_name, place_pos, grasp, config,
 
 
 def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
-                  held_body_id, gui) -> Optional[RobotConfig]:
+                  held_body_id, gui, held_aabb=None,
+                  support_aabb=None) -> Optional[RobotConfig]:
     """
     Drop the held object on top of ``on_obj_name`` (audit #30, --goal stack).
 
@@ -1456,19 +1505,26 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     _assert_held_contact(robot_id, held_body_id, obj_name, gui,
                          action="stack")
 
-    support_id = env.objects[on_obj_name].object_id
-    sup_min, sup_max = p.getAABB(support_id)
+    # #P1 WP2b (2026-09-19): the destination is the support's ESTIMATED
+    # box (registry: re-posed by every observation and by the post-stack
+    # refresh, so a settled tower is still followed) and the held
+    # object's height and EE offset come from the box it was picked
+    # with — no p.getAABB / p.getBasePositionAndOrientation for control.
+    if held_aabb is None or support_aabb is None:
+        print(f"    ERROR: execute_stack({obj_name} on {on_obj_name}) needs "
+              f"the estimated boxes of the held object and the support "
+              f"(#P1 WP2b) — missing; aborting")
+        return None
+    sup_min = np.asarray(support_aabb[0], dtype=float)
+    sup_max = np.asarray(support_aabb[1], dtype=float)
     sup_top_z = float(sup_max[2])
-    sup_cx = (sup_min[0] + sup_max[0]) / 2.0
-    sup_cy = (sup_min[1] + sup_max[1]) / 2.0
+    sup_cx = float((sup_min[0] + sup_max[0]) / 2.0)
+    sup_cy = float((sup_min[1] + sup_max[1]) / 2.0)
 
-    held_aabb_min, held_aabb_max = p.getAABB(held_body_id)
-    held_half_height = (held_aabb_max[2] - held_aabb_min[2]) / 2.0
-
-    ee_state = p.getLinkState(robot_id, END_EFFECTOR_LINK)
-    ee_z = ee_state[0][2]
-    obj_cur_z = p.getBasePositionAndOrientation(held_body_id)[0][2]
-    ee_to_obj_z = obj_cur_z - ee_z
+    rigid_ext = (np.asarray(held_aabb[1], dtype=float)
+                 - np.asarray(held_aabb[0], dtype=float))
+    held_half_height = float(rigid_ext[2]) / 2.0
+    ee_to_obj_z = _grasp_ee_to_obj_z(held_aabb, env.table_surface_height)
 
     target_obj_z = sup_top_z + held_half_height
     contact_z = target_obj_z - ee_to_obj_z
@@ -1481,21 +1537,21 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
 
     # Audit #84 pre-lower diag - bracket the stack approach so a cube
     # that ends up on the plane instead of the support surfaces WHICH
-    # input (support pose, grasp tilt, EE-obj Z) was wrong.
+    # input (support pose, grasp tilt, EE-obj Z) was wrong.  The tilt
+    # and the true boxes are print-only ground truth.
     held_orn = p.getBasePositionAndOrientation(held_body_id)[1]
     held_euler = p.getEulerFromQuaternion(held_orn)
     held_tilt_deg = max(abs(np.degrees(held_euler[0])),
                          abs(np.degrees(held_euler[1])))
+    _gt_sup = p.getAABB(env.objects[on_obj_name].object_id)
     print(f"    [#84-diag] stack {obj_name} on {on_obj_name}: "
           f"contact_ee=[{contact_ee[0]:.4f},{contact_ee[1]:.4f},"
           f"{contact_ee[2]:.4f}] target_obj_z={target_obj_z:.4f} "
           f"sup_top_z={sup_top_z:.4f} ee_to_obj_z={ee_to_obj_z:.4f} "
           f"held_half_height={held_half_height:.4f} "
-          f"sup_aabb=[{sup_min[0]:.4f},{sup_min[1]:.4f},{sup_min[2]:.4f}]"
+          f"sup_est=[{sup_min[0]:.4f},{sup_min[1]:.4f},{sup_min[2]:.4f}]"
           f"-[{sup_max[0]:.4f},{sup_max[1]:.4f},{sup_max[2]:.4f}] "
-          f"held_aabb=[{held_aabb_min[0]:.4f},{held_aabb_min[1]:.4f},"
-          f"{held_aabb_min[2]:.4f}]-[{held_aabb_max[0]:.4f},"
-          f"{held_aabb_max[1]:.4f},{held_aabb_max[2]:.4f}] "
+          f"| gt-diag: sup_true_top={float(_gt_sup[1][2]):.4f} "
           f"held_tilt_deg={held_tilt_deg:.2f}")
 
     pc = env.client_id
@@ -1586,13 +1642,12 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     # of support shape.
     support_info = env.objects.get(on_obj_name)
     support_is_tray = bool(getattr(support_info, 'is_tray', False))
-    verify_support_z = None if support_is_tray else sup_top_z
 
+    # Tactile half of the drop verification (fingers open, no robot-
+    # link contact); the observed half runs after the lift below.
     if not _release_and_verify_drop(env, robot_id, gui,
                                      held_body_id, obj_name,
-                                     base_settle_steps=60,
-                                     expected_support_z=verify_support_z,
-                                     enforce_tilt=True):
+                                     base_settle_steps=60):
         print(f"    ERROR: drop verification failed for {obj_name} on "
               f"{on_obj_name} — aborting (audit #75/#80)")
         return None
@@ -1602,6 +1657,23 @@ def execute_stack(robot_id, env, obj_name, on_obj_name, grasp, config,
     # so the next plan_motion has safe headroom over the column.
     _apply_post_action_lift(robot_id, contact_ee, grasp.orientation,
                             contact_joints, pc, gui)
+
+    # Observed half (#P1 WP2b): the stacked object's top should sit at
+    # the support's estimated top + its rigid height.  A tray is a
+    # container — the cube settles on the tray floor, not on the rim
+    # the box top is — so the top check is skipped there and the
+    # tray-aware _verify_cube_on (audit #40) remains the geometric
+    # gate; upright and still are checked for every support.
+    _ok, _diag = _observe_release(
+        env, obj_name,
+        expected_top_z=None if support_is_tray else sup_top_z + float(rigid_ext[2]),
+        rigid_ext=rigid_ext, enforce_tilt=True)
+    print(f"    [release-obs] {obj_name} on {on_obj_name}: {_diag}")
+    if not _ok:
+        print(f"    ERROR: drop verification failed for {obj_name} on "
+              f"{on_obj_name} — the observation disagrees; aborting "
+              f"(#P1 WP2b)")
+        return None
 
     # audit #60 fix (ii) — mirror the stacked cube's runtime pose into
     # plan_client (mirror of execute_place's sync; see that function for
