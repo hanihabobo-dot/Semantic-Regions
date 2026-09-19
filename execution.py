@@ -1894,7 +1894,7 @@ def world_integrity_check(*, env, registry, belief, viz, shadows, occluders,
                     if bd.id in dets and dets[bd.id].pixel_count >= DETECTION_MIN_PIXELS)
         print(f"    [integrity] after {label}: {n_obs}/{len(obj_boxels)} "
               f"believed bodies observed where believed, none disturbed")
-    return events, dets
+    return events, dets, render
 
 
 def refresh_object_aabbs(env, registry, viz=None, detections=None,
@@ -2255,7 +2255,7 @@ def sweep_all_fragments(*, registry, belief, viz, shadows,
 def register_new_detections(*, env, registry, belief, viz, detections,
                             target_name, shadows, occluders,
                             shadow_occluder_map, boxel_centers,
-                            boxel_to_pybullet, object_body_ids,
+                            boxel_to_pybullet, object_body_ids, render=None,
                             skip_names=frozenset()):
     """Register every detected object that has no registry boxel (#P1 F20).
 
@@ -2288,6 +2288,7 @@ def register_new_detections(*, env, registry, belief, viz, detections,
     """
     registered = []
     table_z = env.table_surface_height
+    _robot_id = env.objects["robot"].object_id if "robot" in env.objects else None
     for name in sorted(detections):
         if name in skip_names or registry.get_boxel(name) is not None:
             continue
@@ -2298,6 +2299,20 @@ def register_new_detections(*, env, registry, belief, viz, detections,
         det = detections[name]
         aabb_min = np.array(det.est_min, dtype=float)
         aabb_max = np.array(det.est_max, dtype=float)
+        # Review round 2 (2026-09-19): a FIRST registration from a body
+        # the arm partly hides makes a wrong box that then casts wrong
+        # fragments; with the render at hand, leave such a body for a
+        # clearer observation (the refresh applies the same guard).
+        if render is not None and _robot_id is not None:
+            _g = [np.linspace(aabb_min[k], aabb_max[k], 3) for k in range(3)]
+            _pts = np.array([[x, y, z] for x in _g[0] for y in _g[1] for z in _g[2]])
+            _icp, _hids, _ = first_surface_interceptors(
+                _pts, render[0], render[1], render[2], render[3])
+            if np.any(_icp & (_hids == _robot_id)):
+                print(f"    [F20] {name} is visible ({det.pixel_count} px) but "
+                      f"partly behind the arm — not registered from this "
+                      f"render")
+                continue
         # A body seen BELOW the table surface is on the floor (knocked
         # off, #P2 territory): it is not a workspace object any more and
         # must not get on_table facts or a shadow.  Logged, not

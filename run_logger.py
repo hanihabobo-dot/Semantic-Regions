@@ -339,13 +339,22 @@ def report_run_outcome(
                   f"aborted to avoid double-grasp "
                   f"({len(remaining)} unsearched shadows remaining)")
         elif exit_reason == "knocked_off_table":
-            # #P2 (a): the monitor saw a goal-critical object leave the
-            # belief (below the table surface, or its believed region
-            # rendered empty) — the episode ended at once, honestly.
+            # #P2 (a): the monitor saw a goal-critical object below the
+            # table surface — the episode ended at once, honestly.
             _gone = sorted({e.get("object") for e in (integrity_events or [])
-                            if e.get("kind") in ("knocked_off_table", "lost")})
+                            if e.get("kind") == "knocked_off_table"})
             print(f"FAILED: goal-critical object(s) {_gone} knocked off the "
-                  f"table or lost from view (#P2 world-integrity monitor; "
+                  f"table (#P2 world-integrity monitor; "
+                  f"{len(remaining)} unsearched shadows remaining)")
+        elif exit_reason == "target_lost":
+            # Review round 2: the target was seen and registered, then its
+            # believed region was observed empty (shoved out of view) and
+            # it never resurfaced — a manipulation loss, not a search that
+            # came up empty.
+            _lost = sorted({e.get("object") for e in (integrity_events or [])
+                            if e.get("kind") == "lost"})
+            print(f"FAILED: the target was seen, then lost from view "
+                  f"({_lost}) and never re-detected (#P2 monitor; "
                   f"{len(remaining)} unsearched shadows remaining)")
         elif exit_reason == "stack_giveup":
             _worst = sorted((stack_fail_counts or {}).items(),
@@ -560,7 +569,9 @@ def parse_pipeline_args(argv=None):
         help='Pass unit_costs=True to PDDLStream solve(): override the '
              'domain numeric (increase (total-cost) ...) effects so every '
              'action is cost 1. Default off keeps the domain costs '
-             '(stack=2, others=1; see THESIS_NOTES section 17). Useful '
+             '(place_hiding=2, stack=3, others=1; see THESIS_NOTES section '
+             '17); unit costs therefore also disable the F31 hiding-'
+             'placement penalty and the place-before-stack preference. Useful '
              'for evaluation sweeps that compare planner behaviour with '
              'and without the stack-cost bias.',
     )

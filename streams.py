@@ -51,7 +51,9 @@ REACH_LIMIT_M = 0.80
 # let a 0.83 m cell through that IK then failed by 11-13 mm at every
 # seed (the seed-119 binding death right after the F7 fix).  The gate
 # uses R = 0.815 (8 mm inside the measured boundary) AND the flat limit.
-REACH_SPHERE_CENTER_DZ = 0.016
+# The centre is a WORLD height (the base is fixed at a known pose): it
+# does not depend on which frame PyBullet reports for the base link.
+REACH_SPHERE_CENTER_Z_WORLD = 0.066
 REACH_SPHERE_R_M = 0.815
 
 # #P1 step (2d): nominal size prior for objects the robot has not yet
@@ -245,8 +247,8 @@ class BoxelStreams:
         base_pos, _ = p.getBasePositionAndOrientation(
             self.robot_id, physicsClientId=self.physics_client)
         self._robot_base_xy = np.asarray(base_pos[:2], dtype=float)
-        self._reach_center = np.asarray(base_pos, dtype=float) + np.array(
-            [0.0, 0.0, REACH_SPHERE_CENTER_DZ])
+        self._reach_center = np.array([float(base_pos[0]), float(base_pos[1]),
+                                       REACH_SPHERE_CENTER_Z_WORLD])
 
         # Home configuration — the Panda's neutral rest pose, used as the
         # default start/end for transit motions.

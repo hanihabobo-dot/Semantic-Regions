@@ -630,9 +630,14 @@ class PDDLStreamPlanner:
                 # on the dead binding (the "silent re-pick binding death",
                 # 15 -> 45 -> 140 s of search per iteration).  Every
                 # registered object is where its own boxel says it is; the
-                # moved record stays a belief annotation only.
-                init.append(('obj_at_boxel', boxel.id, boxel.id))
-                init.append(('obj_at_boxel_KIF', boxel.id, boxel.id))
+                # moved record stays a belief annotation only.  Review
+                # round 2: the HELD object is the exception — (holding o)
+                # is its state, its boxel is the stale pick-time box, and a
+                # location fact there re-pinned it as the blocker of its
+                # own fragment for a whole plan.
+                if boxel.id != held_obj:
+                    init.append(('obj_at_boxel', boxel.id, boxel.id))
+                    init.append(('obj_at_boxel_KIF', boxel.id, boxel.id))
 
                 # KIF for target objects: only emit "known not here" if this
                 # region has been observed clear.  When observed_clear_regions
@@ -895,9 +900,9 @@ class PDDLStreamPlanner:
             if obj_id not in supports_with_obj_on_top:
                 init.append(('clear', obj_id))
             # audit #41: a cube not stacked on another cube is
-            # table-resting at planning time.  At a replan boundary
-            # (handempty) is true, so no held cube exists here.
-            if obj_id not in stacked_objs:
+            # table-resting at planning time — unless it is the held one
+            # (audit #58 replans while holding; review round 2).
+            if obj_id not in stacked_objs and obj_id != held_obj:
                 init.append(('on_table', obj_id))
 
         if stackable_objects is not None:
