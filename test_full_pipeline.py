@@ -1683,7 +1683,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                         retire_lost_objects(
                             _lost, registry, viz, shadows,
                             shadow_occluder_map, boxel_centers,
-                            occluders, belief)
+                            occluders, belief, env=env)
                     break
                 held_body_id, current_config = result
                 # #P1 F2: a successful pick proves the object is
@@ -1797,7 +1797,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                         retire_lost_objects(
                             _lost, registry, viz, shadows,
                             shadow_occluder_map, boxel_centers,
-                            occluders, belief)
+                            occluders, belief, env=env)
                     break
                 if place_result is None:
                     # audit #79 (#P1 rework) — distinguish IK failure
@@ -2033,7 +2033,7 @@ def main(gui=True, run_logger=None, scene_config=None,
                         retire_lost_objects(
                             _lost, registry, viz, shadows,
                             shadow_occluder_map, boxel_centers,
-                            occluders, belief)
+                            occluders, belief, env=env)
                     break
                 if stack_result is None:
                     # audit #79 (#P1 rework) — mirror of the place
@@ -2151,33 +2151,29 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # cube wobbling or already on the floor; writing the
                 # relation in that case would lie to goal_satisfied(),
                 # the next _build_init, AND the end-of-run summary.
+                # Review 2026-09-19: the audit-#40 ground-truth verifier is
+                # SCORING ONLY now.  The robot's own verdict is execute_
+                # stack's release observation (it returned None otherwise),
+                # so the on-relation is written from the belief; a physics
+                # disagreement is logged and persisted here, and the #P2
+                # monitor's off_support check plus the end-of-run physics
+                # check (physics_mismatch) keep the outcome honest.  The F28
+                # strikes count only the robot's own failures.
                 stack_ok, stack_reason = _verify_cube_on(
                     env, obj_str, on_obj_str)
                 if not stack_ok:
-                    print(f"    PHYSICAL_FAILURE: stack {obj_str} on "
-                          f"{on_obj_str} — {stack_reason}")
+                    print(f"    PHYSICAL_FAILURE (scoring): stack {obj_str} on "
+                          f"{on_obj_str} — {stack_reason} — the robot's "
+                          f"observation accepted this stack; recorded, not "
+                          f"acted on")
                     physical_failures.append({
                         "action": "stack",
                         "obj": obj_str,
                         "on": on_obj_str,
                         "reason": stack_reason,
                         "plan": plan_count,
+                        "scoring_only": True,
                     })
-                    # #P2 F28: bounded physical stack failures (the
-                    # released cube is loose somewhere; the refresh above
-                    # re-posed it, so the retry aims at the new estimate).
-                    _sk = (obj_str, on_obj_str)
-                    stack_fail_counts[_sk] = stack_fail_counts.get(_sk, 0) + 1
-                    print(f"    stack failure {stack_fail_counts[_sk]}/3 for "
-                          f"{obj_str} on {on_obj_str} (#P2 F28 strike counter)")
-                    if stack_fail_counts[_sk] >= 3:
-                        exit_reason = "stack_giveup"
-                        episode_over = True
-                        print(f"    ERROR: {obj_str} on {on_obj_str} failed "
-                              f"{stack_fail_counts[_sk]} physical stack "
-                              f"attempts — ending the episode honestly "
-                              f"(#P2 F28).")
-                    break  # replan — on_relations stays as-is
                 # Replace any prior support of obj_str (re-stacking) —
                 # the conditional pick effect in the domain already
                 # cleared the old support symbolically.

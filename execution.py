@@ -1848,7 +1848,7 @@ def world_integrity_check(*, env, registry, belief, viz, shadows, occluders,
     gone = floor + lost
     if gone:
         retire_lost_objects(gone, registry, viz, shadows, shadow_occluder_map,
-                            boxel_centers, occluders, belief)
+                            boxel_centers, occluders, belief, render=render)
     if events:
         setattr(registry, "_dirty", True)
         for bd in registry.get_boxels_by_type(BoxelType.OBJECT):
@@ -1923,13 +1923,21 @@ def refresh_object_aabbs(env, registry, viz=None, detections=None,
     caller owns the retirement bookkeeping (retire_lost_objects).
     """
     _aabb_tol = 1e-4
-    if detections is None or (check_lost and render is None):
+    if detections is None or render is None:
         _dets, _, _depth_buf, _seg = env.detect_objects()
         if detections is None:
             detections = _dets
         if render is None:
             render = (env._depth_buffer_to_meters(_depth_buf), _seg,
                       *env._view_and_projection_matrices())
+    # Arm-occlusion guard (review 2026-09-19): a body the ARM partly hides
+    # renders as a partial cloud whose centre is off — re-posing the
+    # rigid box on it would move the belief by centimetres and the #P2
+    # monitor would call that "disturbed" after every move the arm ends
+    # near a bystander.  A body whose box lattice (3 x 3 x 3) has any
+    # point behind the robot in this render keeps its last estimate.
+    _robot_id = env.objects["robot"].object_id if "robot" in env.objects else None
+    _depth_m, _seg_m, _view_m, _proj_m = render
     stale = []
     for obj_boxel in registry.get_boxels_by_type(BoxelType.OBJECT):
         obj_info = env.objects.get(obj_boxel.id)
@@ -1946,6 +1954,16 @@ def refresh_object_aabbs(env, registry, viz=None, detections=None,
         if det is None:
             stale.append(obj_boxel.id)
             continue
+        if _robot_id is not None:
+            _g = [np.linspace(float(obj_boxel.min_corner[k]),
+                              float(obj_boxel.max_corner[k]), 3) for k in range(3)]
+            _pts = np.array([[x, y, z] for x in _g[0] for y in _g[1] for z in _g[2]])
+            _icp, _hids, _ = first_surface_interceptors(
+                _pts, _depth_m, _seg_m, _view_m, _proj_m)
+            if np.any(_icp & (_hids == _robot_id)):
+                print(f"    [perception] {obj_boxel.id} partly behind the arm "
+                      f"in this render — keeping its last estimate")
+                continue
         cur_ext = np.asarray(obj_boxel.max_corner, dtype=float) \
             - np.asarray(obj_boxel.min_corner, dtype=float)
         est_ext = det.est_max - det.est_min
@@ -2011,27 +2029,60 @@ def refresh_object_aabbs(env, registry, viz=None, detections=None,
     return lost
 
 
+def _fragment_renders_empty(bd, render) -> bool:
+    """Is every sense slice of this fragment visible-through in ``render``
+    (depth_m, seg, view, proj) up to the shared marginal tolerance?  The
+    same test refresh_object_aabbs applies to a stale object's region."""
+    depth_m, seg, view_m, proj_m = render
+    slices, _ = sense_ray_slices(bd.min_corner, bd.max_corner)
+    if not slices:
+        return False
+    for sl in slices:
+        icp, _hids, in_view = first_surface_interceptors(
+            sl.points, depth_m, seg, view_m, proj_m)
+        if (np.count_nonzero(icp | ~in_view) / len(sl.points)
+                > SENSE_MARGINAL_BLOCKED_FRACTION):
+            return False
+    return True
+
+
 def retire_lost_objects(lost_ids, registry, viz, shadows,
                         shadow_occluder_map, boxel_centers, occluders,
-                        belief):
-    """Remove a LOST object's boxel and shadow fragments (#P1 step 3c).
+                        belief, render=None, env=None):
+    """Remove a LOST object's boxel and, where observed empty, its shadow
+    fragments (#P1 step 3c).
 
     A lost object's believed region was OBSERVED empty
-    (refresh_object_aabbs check_lost), so its OBJECT boxel is a stale
-    fiction and its shadow fragments describe occlusion from a pose the
-    object no longer occupies.  Those regions are now camera-visible —
-    had the target been there it would have been detected — so removing
-    the fragments is observation-backed, mirroring the sense's
-    clear_but_empty removal (each fragment is marked not_here in
-    belief).  The object may re-enter later through detection or a
-    contains_nontarget discovery, which re-registers it at the new pose.
+    (refresh_object_aabbs check_lost) or its detection lies below the
+    table (#P2 knocked_off_table), so its OBJECT boxel is a stale
+    fiction.  Its shadow fragments describe occlusion from a pose the
+    object no longer occupies, but "the caster is gone" does not by
+    itself observe them empty — another body may stand in front (review
+    2026-09-19).  With a ``render`` (or an ``env`` to take one), each
+    fragment is tested with the sense slices: an observed-empty fragment
+    is marked not_here and removed, mirroring clear_but_empty; one that
+    is still occluded is KEPT as an unknown region without a caster and
+    left to the sense action.  Without either, every fragment is removed
+    as before (the pre-review behaviour, now only for callers that have
+    no observation at hand).  The object may re-enter later through
+    detection or a contains_nontarget discovery.
     """
+    if render is None and env is not None:
+        _, _, _depth_buf, _seg = env.detect_objects()
+        render = (env._depth_buffer_to_meters(_depth_buf), _seg,
+                  *env._view_and_projection_matrices())
     for oid in lost_ids:
         bd = registry.get_boxel(oid)
         if bd is None:
             continue
+        kept = []
         for sid in list(getattr(bd, "shadow_boxel_ids", [])):
-            if registry.get_boxel(sid) is not None:
+            sbd = registry.get_boxel(sid)
+            if sbd is not None and render is not None \
+                    and not _fragment_renders_empty(sbd, render):
+                kept.append(sid)
+                continue
+            if sbd is not None:
                 belief.mark_sensed(sid, found=False)
                 registry.remove_boxel(sid)
             if viz is not None:
@@ -2046,8 +2097,8 @@ def retire_lost_objects(lost_ids, registry, viz, shadows,
         boxel_centers.pop(oid, None)
         if oid in occluders:
             occluders.remove(oid)
-        print(f"    -> retired LOST {oid}: OBJECT boxel + its shadow "
-              f"fragments removed (regions observed empty)")
+        print(f"    -> retired LOST {oid}: OBJECT boxel removed; shadow "
+              f"fragments {'observed empty and removed' if not kept else 'removed where observed empty, kept (still occluded): ' + str(kept)}")
 
 
 def _shrink_shadow_fragment(registry, shadow_bd, blocked_min, blocked_max,
@@ -2509,7 +2560,9 @@ def handle_sense_action(
         if _lost:
             retire_lost_objects(_lost, registry, viz, shadows,
                                 shadow_occluder_map, boxel_centers,
-                                occluders, belief)
+                                occluders, belief,
+                                render=(sense_depth_m, sense_seg,
+                                        sense_view, sense_proj))
         return ActionResult(continue_=True, reason="sense_found_target")
 
     # #P1 step (3): a contains_nontarget where NO discovered body is
@@ -2659,7 +2712,9 @@ def handle_sense_action(
             if _lost:
                 retire_lost_objects(_lost, registry, viz, shadows,
                                     shadow_occluder_map, boxel_centers,
-                                    occluders, belief)
+                                    occluders, belief,
+                                    render=(sense_depth_m, sense_seg,
+                                            sense_view, sense_proj))
             return ActionResult(continue_=False,
                                 reason="sense_contains_unlocalizable")
 
@@ -2931,7 +2986,9 @@ def handle_sense_action(
         if _lost:
             retire_lost_objects(_lost, registry, viz, shadows,
                                 shadow_occluder_map, boxel_centers,
-                                occluders, belief)
+                                occluders, belief,
+                                render=(sense_depth_m, sense_seg,
+                                        sense_view, sense_proj))
         reboxelize_free_space(
             registry, env, boxel_centers, viz, show_free)
 
@@ -2994,5 +3051,7 @@ def handle_sense_action(
     if _lost:
         retire_lost_objects(_lost, registry, viz, shadows,
                             shadow_occluder_map, boxel_centers,
-                            occluders, belief)
+                            occluders, belief,
+                            render=(sense_depth_m, sense_seg,
+                                    sense_view, sense_proj))
     return ActionResult(continue_=False, reason="sense_still_blocked")
