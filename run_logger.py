@@ -222,6 +222,8 @@ def report_run_outcome(
     shadows: list,
     blocked_giveup_shadows: set,
     pick_giveup_objects: Optional[set] = None,  # #P1 F2 pick 3-strike giveup
+    integrity_events: Optional[list] = None,    # #P2 (a) monitor verdicts
+    stack_fail_counts: Optional[dict] = None,   # #P2 F28 strikes
     plan_times: list,
     total_plan_time: float,
     physical_failures: list,
@@ -259,6 +261,14 @@ def report_run_outcome(
             print(f"  Stack goal: {goal}")
             print(f"  Final on-relations: {on_relations}")
             print(f"  Plans executed: {plan_count}")
+        if integrity_events:
+            # #P2 / F18: a success that disturbed, toppled or lost a
+            # bystander is not a clean success — say so, and persist it.
+            _kinds = Counter(e.get("kind") for e in integrity_events)
+            print(f"  NOTE: success with {len(integrity_events)} world-"
+                  f"integrity event(s) — {dict(_kinds)}; objects "
+                  f"{sorted({e.get('object') for e in integrity_events})} "
+                  f"(#P2 monitor; not a clean success)")
     else:
         remaining = belief.get_unknown_shadows()
         # #P1 F15(c): fragments parked UNRESOLVED were never observed
@@ -328,6 +338,21 @@ def report_run_outcome(
             print(f"FAILED: Could not release held object after retries — "
                   f"aborted to avoid double-grasp "
                   f"({len(remaining)} unsearched shadows remaining)")
+        elif exit_reason == "knocked_off_table":
+            # #P2 (a): the monitor saw a goal-critical object leave the
+            # belief (below the table surface, or its believed region
+            # rendered empty) — the episode ended at once, honestly.
+            _gone = sorted({e.get("object") for e in (integrity_events or [])
+                            if e.get("kind") in ("knocked_off_table", "lost")})
+            print(f"FAILED: goal-critical object(s) {_gone} knocked off the "
+                  f"table or lost from view (#P2 world-integrity monitor; "
+                  f"{len(remaining)} unsearched shadows remaining)")
+        elif exit_reason == "stack_giveup":
+            _worst = sorted((stack_fail_counts or {}).items(),
+                            key=lambda kv: -kv[1])[:3]
+            print(f"FAILED: gave up stacking after repeated physical stack "
+                  f"failures — {[(f'{o} on {s}', n) for (o, s), n in _worst]} "
+                  f"(#P2 F28, 3-strike counter)")
         elif exit_reason == "physics_mismatch":
             # Audit S-18: belief says target was found, but the
             # end-of-run physics check disagreed (gripper empty
@@ -409,6 +434,17 @@ def report_run_outcome(
                 # so eval tooling (#9) can filter false-positive successes.
                 "physical_failures_per_action": physical_failures,
                 "physical_failures_at_goal": physics_failures,
+                # #P2 (d) CB#124 (2026-09-19): the classifications that
+                # used to be printed only.  integrity_events are the
+                # monitor's perception-only verdicts per action.
+                "integrity_events": integrity_events or [],
+                "n_integrity_events": len(integrity_events or []),
+                "integrity_event_kinds": dict(Counter(
+                    e.get("kind") for e in (integrity_events or []))),
+                "stack_fail_counts": {f"{o} on {s}": n for (o, s), n
+                                      in (stack_fail_counts or {}).items()},
+                "blocked_giveup_shadows": sorted(blocked_giveup_shadows or []),
+                "pick_giveup_objects": sorted(pick_giveup_objects or []),
                 # Audit #73 step 2(d) plot 11: per-replan boxel count
                 # snapshots (one dict per planner.plan() iteration) for the
                 # adaptive-partition evolution plot.  LIST_VALUED keeps the

@@ -464,6 +464,11 @@ def _rest_on_support(detections: Dict[str, "ObjectDetection"],
     """
     for det in detections.values():
         bottom = float(det.est_min[2])
+        if float(det.est_max[2]) < support_z - DETECTION_SUPPORT_SNAP:
+            # The whole cloud lies below the support: a body that fell
+            # off the table (#P2 knocked_off_table).  Snapping it up would
+            # hide that; leave the observed box.
+            continue
         if bottom <= support_z + DETECTION_SUPPORT_SNAP:
             det.est_min[2] = support_z
             continue
