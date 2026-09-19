@@ -100,7 +100,7 @@ from execution import (audit_robot_held_state,
                        retire_lost_objects,
                        execute_pick, execute_place, execute_stack,
                        handle_sense_action, EmptyHandError,
-                       world_integrity_check)
+                       world_integrity_check, register_new_detections)
 
 
 def goal_satisfied(goal, on_relations=None, target_found=False) -> bool:
@@ -959,6 +959,7 @@ def main(gui=True, run_logger=None, scene_config=None,
     # F6: the meaning of the sense hideability fact is a CLI choice
     # until the A/B settles the default (see run_logger --sense-gate).
     planner.sense_gate = getattr(args, 'sense_gate', 'off')
+    planner.corridor_test = getattr(args, 'corridor_test', 'cell+object')
 
     # World eye (2026-09-18): textual snapshots of world + belief + camera
     # view at every decision and observation point of the loop, into
@@ -1089,6 +1090,7 @@ def main(gui=True, run_logger=None, scene_config=None,
     # honest ending; episode_over ends the loop from inside a plan.
     integrity_events: list = []
     stack_fail_counts: Dict[tuple, int] = {}
+    disturbed_counts: Dict[str, int] = {}
     episode_over = False
 
     def _integrity_after(label: str) -> bool:
@@ -1102,30 +1104,56 @@ def main(gui=True, run_logger=None, scene_config=None,
         the dispatcher should break out of the plan.
         """
         nonlocal exit_reason, episode_over
-        events = world_integrity_check(
+        _held_name = (body_id_to_name.get(held_body_id)
+                      if held_body_id is not None else None)
+        events, _dets = world_integrity_check(
             env=env, registry=registry, belief=belief, viz=viz,
             shadows=shadows, occluders=occluders,
             shadow_occluder_map=shadow_occluder_map,
             boxel_centers=boxel_centers, on_relations=on_relations,
-            held_name=(body_id_to_name.get(held_body_id)
-                       if held_body_id is not None else None),
-            label=label)
+            held_name=_held_name, label=label)
+        # Review 2026-09-19: this render is an observation of the whole
+        # workspace like the sense render — a body it shows for the
+        # first time (a target uncovered by a knocked-away occluder)
+        # enters the belief here, not only at the next sense.
+        register_new_detections(
+            env=env, registry=registry, belief=belief, viz=viz,
+            detections=_dets, target_name=target_name, shadows=shadows,
+            occluders=occluders, shadow_occluder_map=shadow_occluder_map,
+            boxel_centers=boxel_centers, boxel_to_pybullet=boxel_to_pybullet,
+            object_body_ids=object_body_ids,
+            skip_names=frozenset([_held_name] if _held_name else []))
         for e in events:
             e["plan"] = plan_count
         integrity_events.extend(events)
         if not events:
             return False
-        gone = {e["object"] for e in events
-                if e["kind"] in ("knocked_off_table", "lost")}
-        critical = gone & set(planner_target_objects)
+        # The motion planner's world follows the belief at once (the
+        # runtime plan_motion re-solve runs before the next sync).
+        env.sync_to_plan_client(held_body_id=held_body_id, registry=registry)
+        knocked = {e["object"] for e in events if e["kind"] == "knocked_off_table"}
+        critical = knocked & set(planner_target_objects)
         if critical:
             exit_reason = "knocked_off_table"
             episode_over = True
-            print(f"  ERROR: goal-critical object(s) {sorted(critical)} left "
-                  f"the belief after {label} (knocked off the table or lost "
-                  f"from view) — ending the episode honestly (#P2).")
+            print(f"  ERROR: goal-critical object(s) {sorted(critical)} fell "
+                  f"off the table after {label} — ending the episode "
+                  f"honestly (#P2).")
             return True
-        if held_body_id is None:
+        # A LOST goal object (its believed region observed empty) is not
+        # gone: it may resurface through re-detection, so the loop goes
+        # on (the all-searched exit is the honest end if it never does).
+        # Repeated disturbances of one body stop forcing replans after
+        # the third: the belief is updated regardless, the plan runs on.
+        _replan = False
+        for e in events:
+            if e["kind"] == "disturbed":
+                disturbed_counts[e["object"]] = disturbed_counts.get(e["object"], 0) + 1
+                if disturbed_counts[e["object"]] <= 3:
+                    _replan = True
+            else:
+                _replan = True
+        if _replan and held_body_id is None:
             print(f"  belief changed after {label} — replanning "
                   f"(#P2 integrity)")
             return True
@@ -2382,6 +2410,7 @@ if __name__ == "__main__":
         "unit_costs":   args.unit_costs,
         "planner":      args.planner,
         "sense_gate":   args.sense_gate,
+        "corridor_test": args.corridor_test,
         "baseline":     args.baseline,
         "uniform_cell_size": args.uniform_cell_size,
         "min_boxel_size": args.min_boxel_size,  # audit #77 step 2

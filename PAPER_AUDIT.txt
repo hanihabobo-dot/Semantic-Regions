@@ -697,7 +697,45 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   construction failures still abort (no scene to show); never for
   eval sweeps.]
 
-  F7. [DONE] SILENT RE-PICK STREAM-BINDING NO-PLAN (2026-08-21): when the
+  F7. [ROOT CAUSE FOUND AND FIXED 2026-09-19 — analyst over four
+      binding-death logs (10-29-51 #4, 22-12-06 #4, 17-14-10 #8,
+      10-06-42 #4): the dead stream is ALWAYS compute-kin(obj, free_XXX,
+      g) where obj was relocated in an EARLIER plan and free_XXX is the
+      destination recorded in belief.occluders_moved.  That cell no
+      longer exists: update_after_place removes the consumed free cell
+      (boxel_data.py) and re-poses the object's OWN boxel to the placed
+      pose, and the next reboxelize would drop it anyway — yet
+      _build_init asserted (Boxel free_XXX) (obj_at_boxel obj free_XXX)
+      from the moved record, FastDownward grounded pick(obj, free_XXX,
+      g, q), and compute_kin_solution returned SILENTLY on
+      registry.get_boxel(free_XXX) is None (every other early exit logs).
+      Re-picks inside one plan (place then pick from the same cell in
+      the same skeleton) DID bind — "pick from a cell placed in an
+      earlier plan" was the trigger, not re-picking as such, and not the
+      one-output grasp generator.  The 2x-per-iteration wall-clock
+      blow-up is a BUSY-WAIT in pddlstream, not FastDownward: with every
+      remaining binding STANDBY (check_downstream False, skeleton.py
+      process_root re-pushes STANDBY bindings; the "TODO: if readd ==
+      STANDBY" at :346), timed_process spins the whole
+      search_sample_ratio-sized budget with zero stream calls — 10-29-51
+      #4 spent ~100 of its 164 s spinning; 10-06-42 #4 90 %.  FIX:
+      _build_init locates every registered object at its own boxel
+      (obj_at_boxel o o) — the moved record is a belief annotation
+      only — and compute_kin prints "[F7] ... boxel not in the registry"
+      instead of returning silently; the blocks_view_at facts are keyed
+      to the occluder's own boxel too (they had switched to the same
+      dead cell, which the derived blocks_view could never match against
+      obj_at_boxel).  SMOKE: seed 13 — the binding death of every run
+      since 2026-08-21 — SUCCESS in 6 plans, every search under 2.4 s
+      (green, the target's blocker, relocated in plan 6); seed 5 SUCCESS
+      in 1 plan.  The analyst's other remedy, pddlstream's
+      search_sample_ratio (1 -> e.g. 0.2 caps the STANDBY spin at the
+      cost of one resample pass per iteration for streams that need
+      several calls), is left at the default for this checkpoint: with
+      the dead facts gone the spin only follows a genuinely unbindable
+      skeleton; revisit if such cases dominate the sweep's wall clock.
+      Analysis: scratchpad f7_analysis.md.  Previous entry:]
+      SILENT RE-PICK STREAM-BINDING NO-PLAN (2026-08-21): when the
       only way forward is to RE-PICK an occluder the robot itself already
       placed (relocate it a second time), PDDLStream finds valid action
       skeletons but binding dies silently (sample_time ~0 s, no
@@ -1203,7 +1241,31 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       find-and-tray-stack 999 SUCCESS, F5 diag + perception probe
       PASS.]
 
-  F12. [OPEN] VIEW_BLOCKED GATES SENSE ABSOLUTELY WHILE THE EXECUTED
+  F12. [STILL OPEN; soft form TRIED AND WITHDRAWN 2026-09-19] VIEW_BLOCKED
+      GATES SENSE ABSOLUTELY WHILE THE EXECUTED SENSE MAKES PROGRESS ON
+      PARTIALLY BLOCKED FRAGMENTS.  Trigger for the attempt: with the F7
+      fix and the blocking facts keyed consistently, seed 13 plan 4 had
+      two blocked fragments (7 % on the worst slice), four on-surface
+      cells and every corridor blocked: no relocation admissible, no
+      plan (F32).  Tried: compute_shadow_blockers keeps the worst
+      slice's blocked-by-known-bodies fraction on each fragment
+      (BoxelData.blocked_fraction; KEPT, diagnostic), _build_init emits
+      (marginally_blocked ?region) for a blocked fragment with fraction
+      <= 0.5 (KEPT, nothing consumes it), and a :action sense_partial
+      (cost 3, view_blocked + marginally_blocked in place of view_clear).
+      Result on seed 13: twelve one-second plans, every one a
+      sense_partial — at cost 3 it beats any relocation (pick + move +
+      place + move >= 4) — every one still_blocked: a fragment grazed
+      along its length by a body at its edge shrinks to (almost) itself
+      ("12.2 x 36.2 -> 7.5 x 34.4 cm"), the audit-#21 three strikes
+      parked all four fragments, and the run ended all_searched with
+      the target unfound.  Worse than the honest no-plan.  A usable
+      soft form needs a PROGRESS criterion (the blocked rays' bounding
+      box strictly smaller than the fragment, or the blocked fraction
+      confined to one side) that only the census can compute, and a
+      cost that does not undercut relocation; both are design work for
+      the F6 round, not a same-day patch.  Original:]
+      VIEW_BLOCKED GATES SENSE ABSOLUTELY WHILE THE EXECUTED
       SENSE MAKES PROGRESS ON PARTIALLY BLOCKED FRAGMENTS (2026-08-22,
       runs 15-25-35 / 15-58-09): the domain derives view_clear by
       stratified negation over blocks_view, so ANY census-listed
@@ -2190,6 +2252,28 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       (reach-bounded placement candidates: fewer cells, more pressure)
       and F11 (the corridor facts already remove many cells).
 
+  F32. [OPEN — PLANNING, found 2026-09-19 by the F7 fix] CROWDED-TABLE
+      DEAD END: with every belief fact consistent (F7), seed 13 plan 4
+      is an honest no-plan — two unknown fragments, each blocked (the
+      target's blocker green plus orange on one, purple on the other),
+      the free space merged to 10 cells of which 4 are on-surface, and
+      every on-surface cell inside a protected corridor (blocks_view_at
+      pair facts), so no relocation can end in a sensable fragment.
+      Before the fix the same seed "succeeded" only because the moved
+      blocker's facts pointed at a dead cell and the derived
+      blocks_view ignored it — a belief error, not a plan.  Levers, all
+      inside the model: (a) the F11 PAIR criterion keys corridor facts
+      to the CELL's AABB — a coarse merged cell blocks a corridor its
+      centre placement would not; the per-object virtual-box test
+      (what the census will see) is the exact prediction and would
+      free such cells — the F11 note reverted an honest-MARGIN attempt,
+      not this; (b) finer free-space cells near corridors; (c) a
+      progress-aware partial sense (F12).  Lever (a) is behind
+      --corridor-test {cell+object (default, F11), object} and gets its
+      own A/B arm in the post-F7 checkpoint (arm f32); with the reach
+      centre corrected the same day, seeds 13 and 119 end in this
+      honest no-plan at plan 3 within seconds instead of the minutes-
+      long binding deaths.
   [WORLD EYE, 2026-09-18 (commit 4940420), user request: every run now
   writes eye.log / eye.jsonl (world_eye.py) — snapshots at the initial
   observation, every replan (planner init facts + plan), before every
@@ -2365,6 +2449,47 @@ DELIVERABLES:
   a full-view detection is trusted to shrink it — open, minor); body
   ids in contact queries are identities the segmentation mask already
   supplies.]
+  [REVIEW FOLLOW-UP 2 (same day, the reviewer's final report, 14
+  findings; the first three were the ones above).  Acted on: (2) the
+  monitor's render is an observation of the whole workspace — its
+  detections go through register_new_detections (held body skipped),
+  so a target uncovered by a knocked-away occluder enters the belief
+  there and a run cannot end "all searched" with the target in plain
+  view; (3) "lost" (believed region observed empty) no longer ends the
+  episode like knocked_off_table — the object may resurface through
+  re-detection, the loop goes on and the all-searched exit is the
+  honest end if it never does; (4) disturbances of one body force a
+  replan at most three times (the belief is updated regardless, the
+  plan runs on) so an arm-adjacent bystander cannot churn the loop —
+  together with the arm-occlusion guard above; (6) a toppled body is
+  re-initialised from the raw detection (its box IS a new rigid size
+  until it stands again) instead of being unioned into a box no grasp
+  spans; (7) a re-posing refresh sets the registry dirty flag so the
+  next replan re-carves free space (a rejected release could leave a
+  consumed cell reading free); (9) after events the plan client is re-
+  synced from the belief at once (the runtime plan_motion re-solve
+  runs before the next replan's sync); (13) _build_init's placement
+  filter tests the same target compute_kin tests (cell centre + the
+  vertical grasp offset).  Disclosed, not changed: (5) a release the
+  camera cannot see after the lift is accepted on the tactile checks
+  and logged "unobserved" — the next observation (monitor, sense)
+  corrects the belief, and the eye records it; (8) stack_giveup now
+  counts only the robot's own (observation) failures; (10) tactile
+  contact queries are filtered by the target's body id — an identity
+  the segmentation mask supplies for free, stated in the paper as the
+  sim-grade identity assumption; (12) the reach-constrained
+  scalability spawns change the benchmark distribution — every pre-
+  range A/B is on random-pairs (already constrained), CB#113 is the
+  re-sweep; (13) constants without a measurement behind them are
+  named as such: INTEGRITY_DISTURB_M 15 mm (above the ~2 mm estimate
+  noise and the 8 mm pre-grasp clearance), INTEGRITY_SUPPORT_TOL_M
+  2 cm (the release observation's own tolerance), toppled 3 cm, the
+  release observation's 1.5 cm upright margins, the 3 mm / 20-step
+  stillness test, the 1 cm re-observation top test, the +8 mm width
+  slack, the 0.5 mm/step tactile close, IK_ORN_TOL_DEG 10,
+  SUPPORT_FOOTPRINT_MIN_FRACTION 0.25 — all conservative by
+  construction, none tuned on a seed, all to be reported as design
+  choices.]
 
 ================================================================================
 #P3. [OPEN T1]  ALL OBJECTS MUST SPAWN WITHIN REACHABLE RANGE (TAMPURA-STYLE)
@@ -2422,7 +2547,11 @@ folds into the post-#P1 canonical sweep (CB#113).
   tools/_probe_reach_envelope.py measured the top-down IK envelope on
   an empty table with the real 8-seed FK-gated IK (342 XY targets x 6
   heights x 2 yaws): the boundary is a sphere of radius ~0.823 m
-  centred 0.066 m above the robot base — reach 0.765 m at 4.5 cm above
+  centred at world z 0.066 m (1.6 cm above the Panda's base frame,
+  which PyBullet reports at z 0.05; a first cut placed the centre
+  0.066 above the base, 5 cm too high, and let a 0.83 m cell through
+  that IK failed by 11-13 mm at every seed — the seed-119 binding
+  death after the F7 fix) — reach 0.765 m at 4.5 cm above
   the table, 0.743 at 10 cm, 0.711 at 16 cm, 0.680 at 20 cm, 0.652 at
   24.5 cm, 0.604 at 30 cm (fit within 3 mm of every row; both yaws
   identical to 1 %).  streams.ee_reachable(target) = inside that

@@ -58,6 +58,7 @@
     (boxel_fits ?o ?b)            ; Boxel ?b is large enough to contain ?o (place dest or sense region; audit #62)
     (on_surface ?b)               ; Boxel ?b rests on a support surface (table)
     (placement_hides ?o ?b)       ; Placing ?o at ?b would hide a KNOWN body from the camera (F31, 2026-09-19)
+    (marginally_blocked ?region)  ; Blocked fragment whose worst slice is still mostly observable (F12, 2026-09-19)
     
     ;; --- Stacking (audit #30, #41, --goal stack) ---
     ;; (on ?o ?support) means ?o sits directly on top of ?support.
@@ -188,7 +189,16 @@
       (increase (total-cost) 1)
     )
   )
-  
+
+  ;; F12 (2026-09-19): a cost-3 "sense_partial" over marginally blocked
+  ;; fragments (view_blocked + a census blocked fraction <= 0.5) was
+  ;; tried and withdrawn the same day: the planner preferred it to any
+  ;; relocation, a fragment grazed along its length cannot be shrunk by
+  ;; sensing, and three strikes parked every fragment (seed 13: twelve
+  ;; one-second plans, all_searched, target never found).  The
+  ;; (marginally_blocked ?region) fact is still emitted for diagnosis;
+  ;; nothing consumes it.  See PAPER_AUDIT F12 / F32.
+
   ;; =========================================================================
   ;; MOVE: Move robot from one configuration to another
   ;; =========================================================================

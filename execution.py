@@ -393,6 +393,15 @@ def compute_shadow_blockers(camera_pos, registry, shadow_ids, object_ids, env):
             if hit_id in pybullet_to_boxel:
                 counts = per_slice_obj_hits[ray_slice[i]]
                 counts[hit_id] = counts.get(hit_id, 0) + 1
+        # F12 (2026-09-19): the worst slice's blocked fraction by known
+        # bodies, kept on the fragment so the planner can tell a
+        # marginally blocked fragment (still mostly observable: the
+        # executed sense reveals the clear part and shrinks the rest)
+        # from one that needs its blocker relocated first.
+        sb.blocked_fraction = max(
+            (sum(per_slice_obj_hits[si].values()) / len(sl.points)
+             for si, sl in enumerate(slices) if len(sl.points)),
+            default=0.0)
         for si, sl in enumerate(slices):
             counts = per_slice_obj_hits[si]
             remaining = sum(counts.values())
