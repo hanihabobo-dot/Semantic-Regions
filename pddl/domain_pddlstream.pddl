@@ -57,6 +57,7 @@
     (config_for_boxel ?q ?b)      ; Config ?q targets boxel ?b (EE inside ?b)
     (boxel_fits ?o ?b)            ; Boxel ?b is large enough to contain ?o (place dest or sense region; audit #62)
     (on_surface ?b)               ; Boxel ?b rests on a support surface (table)
+    (placement_hides ?o ?b)       ; Placing ?o at ?b would hide a KNOWN body from the camera (F31, 2026-09-19)
     
     ;; --- Stacking (audit #30, #41, --goal stack) ---
     ;; (on ?o ?support) means ?o sits directly on top of ?support.
@@ -267,6 +268,12 @@
       (on_surface ?b)
       (boxel_fits ?o ?b)
       (kin_solution ?o ?b ?g ?q)
+      ;; F31 (2026-09-19): the blocks_view_at facts protect only the
+      ;; sense corridors to SHADOW fragments; this static fact keeps a
+      ;; placement from standing between the camera and a body the
+      ;; robot already knows (its belief would go stale unobserved).
+      ;; Stack onto an object is exempt: the support is what is covered.
+      (not (placement_hides ?o ?b))
     )
     :effect (and
       (handempty)
@@ -276,6 +283,39 @@
       (not (holding ?o))
       (not (is_free_space ?b))
       (increase (total-cost) 1)
+    )
+  )
+
+  ;; F31 soft form: the same placement where it WOULD hide a known body,
+  ;; at three times the cost.  FastDownward's action costs are static, so
+  ;; the penalty is a second action rather than a conditional increase;
+  ;; the executor treats place_hiding exactly as place.  Keeps a plan
+  ;; available on a crowded table (the hard form alone starved
+  ;; placements: seed 13 plan 4 went from a binding death to no plan at
+  ;; all) while every non-hiding placement is cheaper.
+  (:action place_hiding
+    :parameters (?o ?b ?g ?q)
+    :precondition (and
+      (Obj ?o)
+      (Boxel ?b)
+      (Grasp ?g)
+      (Config ?q)
+      (holding ?o)
+      (at_config ?q)
+      (is_free_space ?b)
+      (on_surface ?b)
+      (boxel_fits ?o ?b)
+      (kin_solution ?o ?b ?g ?q)
+      (placement_hides ?o ?b)
+    )
+    :effect (and
+      (handempty)
+      (obj_at_boxel ?o ?b)
+      (obj_at_boxel_KIF ?o ?b)
+      (on_table ?o)
+      (not (holding ?o))
+      (not (is_free_space ?b))
+      (increase (total-cost) 3)
     )
   )
 

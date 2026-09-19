@@ -1715,7 +1715,10 @@ def main(gui=True, run_logger=None, scene_config=None,
                     belief.target_found_in = visible_target_locations.get(
                         target_name, "picked")
 
-            elif action_name == 'place':
+            elif action_name in ('place', 'place_hiding'):
+                # F31: place_hiding is the same placement at cost 3 (it
+                # would hide a known body from the camera); executed
+                # exactly as place.
                 # PLACE: approach above destination → lower to contact →
                 # open gripper (motor-driven, #P1) → settle → retreat.
                 # After placing, we refresh all object positions from the
