@@ -42,12 +42,16 @@ REACH_LIMIT_M = 0.80
 # first step-(4) A/B burned a 900 s cap on cells 0.69 m out at z 0.57.
 # tools/_probe_reach_envelope.py measured the top-down IK envelope on
 # an empty table (342 XY targets x 6 heights x 2 yaws, the real 8-seed
-# FK-gated IK): the boundary is a sphere of radius ~0.823 m centred
-# 0.066 m above the robot base (reach 0.765 m at 4.5 cm above the table,
-# 0.743 at 10 cm, 0.711 at 16 cm, 0.680 at 20 cm, 0.652 at 24.5 cm,
-# 0.604 at 30 cm; the fit reproduces every row within 3 mm).  The gate
+# FK-gated IK): the boundary is a sphere of radius ~0.823 m centred at
+# WORLD z 0.066 m (reach 0.765 m at 4.5 cm above the table, 0.743 at
+# 10 cm, 0.711 at 16 cm, 0.680 at 20 cm, 0.652 at 24.5 cm, 0.604 at
+# 30 cm; the fit reproduces every row within 3 mm).  The Panda's base
+# frame as PyBullet reports it sits at z 0.05, so the centre is 0.016 m
+# above it — a first cut wrote 0.066 above the base, 5 cm too high, and
+# let a 0.83 m cell through that IK then failed by 11-13 mm at every
+# seed (the seed-119 binding death right after the F7 fix).  The gate
 # uses R = 0.815 (8 mm inside the measured boundary) AND the flat limit.
-REACH_SPHERE_CENTER_DZ = 0.066
+REACH_SPHERE_CENTER_DZ = 0.016
 REACH_SPHERE_R_M = 0.815
 
 # #P1 step (2d): nominal size prior for objects the robot has not yet
@@ -1283,6 +1287,15 @@ class BoxelStreams:
         # --- Look up the boxel's 3D center from the grid registry ---------------
         boxel = self.registry.get_boxel(boxel_id)
         if boxel is None:
+            # F7 (2026-09-19): never silent — a fact named a boxel the
+            # registry does not hold, which is a planner-side inconsistency
+            # (the moved-occluder facts were exactly this until today).
+            logger.warning("compute_kin: %s at %s — no such boxel in the "
+                           "registry; the init facts name a region that "
+                           "does not exist (F7 class), no kin possible",
+                           obj_id, boxel_id)
+            print(f"  [F7] compute_kin({obj_id}, {boxel_id}): boxel not in "
+                  f"the registry — the init facts are inconsistent")
             return
 
         # --- Compute the world-frame EE target pose ---------------------------

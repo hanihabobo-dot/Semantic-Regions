@@ -150,6 +150,12 @@ class PDDLStreamPlanner:
         #            occluded inside the fragment (dense hideability test).
         # Set from the --sense-gate CLI flag by the pipeline.
         self.sense_gate = 'off'
+        # F32 (2026-09-19): how placement-blocking corridor facts are
+        # tested — 'cell+object' (the F11 default: the cell's AABB at the
+        # census margin plus per-object virtual boxes at the looser
+        # margin) or 'object' (virtual boxes only: exactly what the
+        # census will see).  Set from --corridor-test.
+        self.corridor_test = 'cell+object'
 
         self.streams = BoxelStreams(
             registry, robot_id=robot_id, physics_client=physics_client,
@@ -371,6 +377,12 @@ class PDDLStreamPlanner:
     # A grazed corner is not a hidden body.
     PLACEMENT_HIDES_MIN_FRACTION = 0.5
 
+    # F12: a fragment counts as marginally blocked — sensable as it is at
+    # cost 3 (sense_partial) — when the census's worst-slice blocked
+    # fraction is at most this.  Half the rays clear means the sense
+    # observes half the fragment; less than that is a relocation job.
+    SENSE_PARTIAL_MAX_BLOCKED = 0.5
+
     def _compute_placement_hides(self):
         """F31 (2026-09-19): the set of (object, free cell) pairs where
         the object's estimated box, placed at the cell (footprint centred
@@ -496,17 +508,26 @@ class PDDLStreamPlanner:
                 continue
             slices, _ = sense_ray_slices(sb.min_corner, sb.max_corner)
 
+            # F32 (2026-09-19): with --corridor-test object the PAIR
+            # criterion (the cell's own AABB) is skipped and every object
+            # class is tested as the virtual box the census will see —
+            # a coarse merged cell blocks a corridor its centre placement
+            # would not, and on a crowded table that leaves no admissible
+            # cell at all (seed 13 / 119 plan 3 after the F7 fix).
+            _object_only = (getattr(self, 'corridor_test', 'cell+object')
+                            == 'object')
             for fb in free_boxels:
                 fmin = np.asarray(fb.min_corner, dtype=float)
                 fmax = np.asarray(fb.max_corner, dtype=float)
                 pair_blocked = False
-                for sl in slices:
-                    hits = segment_aabb_hit_mask(cam, sl.points, fmin, fmax)
-                    if (float(np.count_nonzero(hits)) / len(sl.points)
-                            > SENSE_MARGINAL_BLOCKED_FRACTION):
-                        blocking.add((fb.id, shadow_id))
-                        pair_blocked = True
-                        break
+                if not _object_only:
+                    for sl in slices:
+                        hits = segment_aabb_hit_mask(cam, sl.points, fmin, fmax)
+                        if (float(np.count_nonzero(hits)) / len(sl.points)
+                                > SENSE_MARGINAL_BLOCKED_FRACTION):
+                            blocking.add((fb.id, shadow_id))
+                            pair_blocked = True
+                            break
                 if pair_blocked:
                     continue
                 cx, cy = float(fb.center[0]), float(fb.center[1])
@@ -518,7 +539,8 @@ class PDDLStreamPlanner:
                     vmax = np.array([cx + ext[0] / 2.0,
                                      cy + ext[1] / 2.0,
                                      floor_z + ext[2]])
-                    if (np.all(vmin >= fmin - 1e-9)
+                    if (not _object_only
+                            and np.all(vmin >= fmin - 1e-9)
                             and np.all(vmax <= fmax + 1e-9)):
                         continue
                     for sl in slices:
@@ -595,14 +617,22 @@ class PDDLStreamPlanner:
             elif boxel.boxel_type == BoxelType.OBJECT:
                 init.append(('is_object', boxel.id))
                 init.append(('Obj', boxel.id))
-                if boxel.id in moved_occluders:
-                    dest = moved_occluders[boxel.id]
-                    init.append(('Boxel', dest))
-                    init.append(('obj_at_boxel', boxel.id, dest))
-                    init.append(('obj_at_boxel_KIF', boxel.id, dest))
-                else:
-                    init.append(('obj_at_boxel', boxel.id, boxel.id))
-                    init.append(('obj_at_boxel_KIF', boxel.id, boxel.id))
+                # F7 ROOT CAUSE (2026-09-19, analyst over four binding-death
+                # logs): an object relocated in an EARLIER plan used to be
+                # located at the free cell it was placed in
+                # (belief.occluders_moved[o] = free_XXX), with ('Boxel',
+                # free_XXX) asserted here — but update_after_place removes
+                # that cell from the registry and re-poses the object's OWN
+                # boxel to the placed pose.  FastDownward then grounded
+                # pick(o, free_XXX, ...) and compute_kin(o, free_XXX, g)
+                # found no such boxel and returned silently: the skeleton
+                # could never bind, and PDDLStream spun its sampling budget
+                # on the dead binding (the "silent re-pick binding death",
+                # 15 -> 45 -> 140 s of search per iteration).  Every
+                # registered object is where its own boxel says it is; the
+                # moved record stays a belief annotation only.
+                init.append(('obj_at_boxel', boxel.id, boxel.id))
+                init.append(('obj_at_boxel_KIF', boxel.id, boxel.id))
 
                 # KIF for target objects: only emit "known not here" if this
                 # region has been observed clear.  When observed_clear_regions
@@ -634,18 +664,16 @@ class PDDLStreamPlanner:
                     init.append(('obj_at_boxel_KIF', boxel.id, shadow_id))
 
         # Geometric facts: blocks_view_at(occ, occ_current_boxel, shadow).
-        # shadow_occluder_map comes from compute_shadow_blockers' LIVE
-        # raycast, so a listed blocker blocks the shadow from wherever it
-        # CURRENTLY stands.  The fact must therefore be keyed to the
-        # occluder's current boxel: for a relocated occluder that is
-        # moved_occluders[occ] (its destination), because the OBJECT loop
-        # above stops emitting obj_at_boxel(occ, occ) the moment the
-        # occluder is recorded as moved — keying the fact to the original
-        # boxel id made blocks_view underivable forever after one
-        # relocation, and the planner walked straight into doomed sense
-        # actions until the audit-#21 3-strike giveup burned the shadow
-        # (#P1 F2, the concrete audit-#47/#51 mechanism; field report
-        # archive/p1_field_reports_2026-08-20/pick_giveup.md).
+        # shadow_occluder_map comes from compute_shadow_blockers' census
+        # over the registry, so a listed blocker blocks the shadow from
+        # wherever it CURRENTLY stands.  The fact is keyed to the
+        # occluder's own OBJECT boxel — the same key obj_at_boxel uses
+        # above, which is what the derived blocks_view needs (F7 root
+        # cause, 2026-09-19: both used to switch to the consumed free
+        # cell of a relocated occluder, a boxel the registry no longer
+        # held; the 2026-08-20 fix that introduced that keying was
+        # itself repairing a mismatch between the two — they must always
+        # agree, and now both are the object's own boxel).
         #
         # shadow_occluder_map is Dict[shadow_id, List[blocker_ids]] — includes
         # ALL objects that block the camera's LOS to each shadow, not just the
@@ -655,17 +683,27 @@ class PDDLStreamPlanner:
                 if isinstance(blocker_ids, str):
                     blocker_ids = [blocker_ids]
                 for occluder_id in blocker_ids:
-                    current_boxel = moved_occluders.get(occluder_id,
-                                                        occluder_id)
                     init.append(('blocks_view_at', occluder_id,
-                                 current_boxel, shadow_id))
+                                 occluder_id, shadow_id))
+                # F12 (2026-09-19): (marginally_blocked ?region) names a
+                # blocked fragment whose worst slice is still mostly
+                # observable (census blocked fraction at most
+                # SENSE_PARTIAL_MAX_BLOCKED).  Diagnostic only: the cost-3
+                # sense_partial action that consumed it was withdrawn the
+                # same day (a grazed fragment cannot be shrunk by sensing;
+                # the planner preferred it to every relocation and parked
+                # all fragments on strikes) — see PAPER_AUDIT F12 / F32.
+                _sb = self.registry.get_boxel(shadow_id)
+                _frac = float(getattr(_sb, 'blocked_fraction', 1.0) or 0.0) \
+                    if _sb is not None else 1.0
+                if blocker_ids and _frac <= self.SENSE_PARTIAL_MAX_BLOCKED:
+                    init.append(('marginally_blocked', shadow_id))
         else:
             for shadow_id in shadows:
                 shadow_boxel = self.registry.get_boxel(shadow_id)
                 if shadow_boxel and shadow_boxel.created_by_boxel_id:
                     occ_id = shadow_boxel.created_by_boxel_id
-                    current_boxel = moved_occluders.get(occ_id, occ_id)
-                    init.append(('blocks_view_at', occ_id, current_boxel,
+                    init.append(('blocks_view_at', occ_id, occ_id,
                                  shadow_id))
 
         # Placement-blocking facts (audit #5): for each free-space boxel,

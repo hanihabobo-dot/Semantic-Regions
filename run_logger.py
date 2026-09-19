@@ -565,6 +565,16 @@ def parse_pipeline_args(argv=None):
              'and without the stack-cost bias.',
     )
     parser.add_argument(
+        '--corridor-test', choices=['cell+object', 'object'],
+        default='cell+object',
+        help='F32 (2026-09-19): how placement-blocking corridor facts are '
+             'tested. cell+object (default, F11): the free cell\'s own AABB '
+             'at the census margin plus per-object virtual boxes at the '
+             'looser margin. object: virtual boxes only, the volume the '
+             'census will actually see after the place (a coarse merged '
+             'cell no longer blocks a corridor its centre placement would '
+             'not). A/B decides.')
+    parser.add_argument(
         '--sense-gate', choices=['off', 'strict'], default='off',
         help='F6 (2026-09-19): what (boxel_fits ?o ?shadow) means for the '
              'sense action. off (default): every view-clear fragment is '
