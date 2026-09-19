@@ -1744,6 +1744,132 @@ class ActionResult:
     reason: str = ""
 
 
+INTEGRITY_DISTURB_M = 0.015      # a believed body found this far away was disturbed
+INTEGRITY_SUPPORT_TOL_M = 0.02   # a stacked body's bottom this far off its support's top has fallen
+
+
+def world_integrity_check(*, env, registry, belief, viz, shadows, occluders,
+                          shadow_occluder_map, boxel_centers, on_relations,
+                          held_name=None, label=""):
+    """#P2 (a) world-integrity monitor (2026-09-19): after an executed
+    action, observe the scene once and reconcile every registered
+    object's belief with what the camera shows.
+
+    Decisions come from perception only (env.detect_objects, the same
+    render the sense action uses); the simulator is never read.  Per
+    registered OBJECT boxel, except the held one (F26: its region is
+    legitimately empty — exclude_ids) and the tray (fixed):
+      knocked_off_table — its detection lies wholly below the table
+                          surface: retired (retire_lost_objects);
+      lost              — no detection and its believed region renders
+                          empty on every slice (refresh_object_aabbs'
+                          check): retired;
+      disturbed         — detected more than INTEGRITY_DISTURB_M from
+                          its believed centre: the boxel is re-posed
+                          (rigid-size fusion) and the census re-run;
+      toppled           — its raw detection is far lower and wider than
+                          its rigid box (a box on its side; a cube's
+                          topple is not visible in an AABB): re-posed,
+                          reported;
+      off_support       — it is believed stacked (on_relations) but its
+                          bottom is no longer at its support's top: the
+                          relation is dropped so the planner re-stacks.
+    An object the render does not show and whose region is occluded is
+    kept as believed (cannot see, cannot claim).  Telemetry's ground-
+    truth DISTURBED / TOPPLE / OFF_SUPPORT events are the validation
+    labels for these verdicts in the run log.  Returns the event list
+    (dicts with kind, object, label and a measure); mutates the registry,
+    belief, shadows, boxel_centers, on_relations and shadow_occluder_map
+    exactly as the sense action's discovery paths do.
+    """
+    dets, _, depth_buf, seg = env.detect_objects()
+    render = (env._depth_buffer_to_meters(depth_buf), seg,
+              *env._view_and_projection_matrices())
+    table_z = env.table_surface_height
+    obj_boxels = [bd for bd in registry.get_boxels_by_type(BoxelType.OBJECT)
+                  if bd.id != held_name
+                  and not getattr(env.objects.get(bd.id), "is_tray", False)]
+    before = {bd.id: (np.asarray(bd.center, dtype=float).copy(),
+                      np.asarray(bd.max_corner, dtype=float)
+                      - np.asarray(bd.min_corner, dtype=float))
+              for bd in obj_boxels}
+    events = []
+    floor = []
+    toppled = []
+    for bd in obj_boxels:
+        det = dets.get(bd.id)
+        if det is None or det.pixel_count < DETECTION_MIN_PIXELS:
+            continue
+        if float(det.est_max[2]) < table_z - DETECTION_SUPPORT_SNAP:
+            floor.append(bd.id)
+            events.append({"kind": "knocked_off_table", "object": bd.id,
+                           "label": label,
+                           "top_below_table_mm": round(
+                               (table_z - float(det.est_max[2])) * 1000, 1)})
+            continue
+        raw_ext = np.asarray(det.est_max - det.est_min, dtype=float)
+        rigid = before[bd.id][1]
+        if (raw_ext[2] < rigid[2] - 0.03
+                and max(raw_ext[0], raw_ext[1]) > max(rigid[0], rigid[1]) + 0.03):
+            toppled.append(bd.id)
+    exclude = set(floor)
+    if held_name is not None:
+        exclude.add(held_name)
+    lost = refresh_object_aabbs(env, registry, viz, detections=dets,
+                                render=render, check_lost=True,
+                                exclude_ids=frozenset(exclude))
+    for name in lost:
+        events.append({"kind": "lost", "object": name, "label": label})
+    for bd in obj_boxels:
+        if bd.id in floor or bd.id in lost:
+            continue
+        shift = float(np.hypot(*((np.asarray(bd.center, dtype=float)
+                                  - before[bd.id][0])[:2])))
+        if bd.id in toppled:
+            events.append({"kind": "toppled", "object": bd.id, "label": label,
+                           "shift_mm": round(shift * 1000, 1)})
+        elif shift > INTEGRITY_DISTURB_M:
+            events.append({"kind": "disturbed", "object": bd.id,
+                           "label": label, "shift_mm": round(shift * 1000, 1)})
+    for obj, sup in list(on_relations.items()):
+        if obj in floor or obj in lost or obj == held_name:
+            on_relations.pop(obj, None)
+            continue
+        obd, sbd = registry.get_boxel(obj), registry.get_boxel(sup)
+        if obd is None or sbd is None:
+            continue
+        if getattr(env.objects.get(sup), "is_tray", False):
+            continue      # container: the cube rests on the tray floor
+        gap = float(obd.min_corner[2]) - float(sbd.max_corner[2])
+        if abs(gap) > INTEGRITY_SUPPORT_TOL_M:
+            events.append({"kind": "off_support", "object": obj, "support": sup,
+                           "label": label, "gap_mm": round(gap * 1000, 1)})
+            on_relations.pop(obj, None)
+    gone = floor + lost
+    if gone:
+        retire_lost_objects(gone, registry, viz, shadows, shadow_occluder_map,
+                            boxel_centers, occluders, belief)
+    if events:
+        setattr(registry, "_dirty", True)
+        for bd in registry.get_boxels_by_type(BoxelType.OBJECT):
+            boxel_centers[bd.id] = bd.center
+        new_map = compute_shadow_blockers(env.camera_position, registry,
+                                          shadows, occluders, env)
+        shadow_occluder_map.clear()
+        shadow_occluder_map.update(new_map)
+        for e in events:
+            extra = {k: v for k, v in e.items()
+                     if k not in ("kind", "object", "label")}
+            print(f"    [integrity] {e['kind']}: {e['object']} after {label}"
+                  f"{' ' + str(extra) if extra else ''}")
+    else:
+        n_obs = sum(1 for bd in obj_boxels
+                    if bd.id in dets and dets[bd.id].pixel_count >= DETECTION_MIN_PIXELS)
+        print(f"    [integrity] after {label}: {n_obs}/{len(obj_boxels)} "
+              f"believed bodies observed where believed, none disturbed")
+    return events
+
+
 def refresh_object_aabbs(env, registry, viz=None, detections=None,
                          render=None, check_lost=False,
                          exclude_ids=frozenset()):

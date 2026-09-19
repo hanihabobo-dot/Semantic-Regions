@@ -99,7 +99,8 @@ from execution import (audit_robot_held_state,
                        release_held_object_in_place,
                        retire_lost_objects,
                        execute_pick, execute_place, execute_stack,
-                       handle_sense_action, EmptyHandError)
+                       handle_sense_action, EmptyHandError,
+                       world_integrity_check)
 
 
 def goal_satisfied(goal, on_relations=None, target_found=False) -> bool:
@@ -1078,6 +1079,54 @@ def main(gui=True, run_logger=None, scene_config=None,
     # like the audit-#21 giveup this is absorbing — the belief may end
     # incomplete, and the episode ends honestly if the target hid there.
     nontarget_rediscovery_counts: Dict[str, int] = {}
+    # #P2 (a)/(d) (2026-09-19): world-integrity events (perception-only
+    # verdicts after every move/pick/place/stack: disturbed, toppled,
+    # off_support, lost, knocked_off_table) persisted in the summary;
+    # F28: physical stack failures per (object, support) with a 3-strike
+    # honest ending; episode_over ends the loop from inside a plan.
+    integrity_events: list = []
+    stack_fail_counts: Dict[tuple, int] = {}
+    episode_over = False
+
+    def _integrity_after(label: str) -> bool:
+        """Run the world-integrity monitor after an executed action and
+        react (#P2 (a)): a goal-critical object that left the belief
+        (knocked off the table / lost) ends the episode honestly; any
+        other belief change with an empty hand breaks the plan for a
+        replan (the loop's reactive replanning on an unexpected
+        observation); while holding, the plan continues and the next
+        release observation and replan absorb it.  Returns True when
+        the dispatcher should break out of the plan.
+        """
+        nonlocal exit_reason, episode_over
+        events = world_integrity_check(
+            env=env, registry=registry, belief=belief, viz=viz,
+            shadows=shadows, occluders=occluders,
+            shadow_occluder_map=shadow_occluder_map,
+            boxel_centers=boxel_centers, on_relations=on_relations,
+            held_name=(body_id_to_name.get(held_body_id)
+                       if held_body_id is not None else None),
+            label=label)
+        for e in events:
+            e["plan"] = plan_count
+        integrity_events.extend(events)
+        if not events:
+            return False
+        gone = {e["object"] for e in events
+                if e["kind"] in ("knocked_off_table", "lost")}
+        critical = gone & set(planner_target_objects)
+        if critical:
+            exit_reason = "knocked_off_table"
+            episode_over = True
+            print(f"  ERROR: goal-critical object(s) {sorted(critical)} left "
+                  f"the belief after {label} (knocked off the table or lost "
+                  f"from view) — ending the episode honestly (#P2).")
+            return True
+        if held_body_id is None:
+            print(f"  belief changed after {label} — replanning "
+                  f"(#P2 integrity)")
+            return True
+        return False
 
     # #P1 F29 (2026-09-18): a holding goal ends when the target IS HELD,
     # not when the belief says "found".  A sense that finds the target
@@ -1496,6 +1545,11 @@ def main(gui=True, run_logger=None, scene_config=None,
                     label=f"move to {dest_boxel_id}",
                     body_names=body_id_to_name)
                 print(f"    -> Arrived at {dest_boxel_id}")
+                # #P2 (a): a transit is the action that most often
+                # disturbs bystanders (F18, F10) and nothing re-read the
+                # scene after it until now.
+                if _integrity_after(f"plan#{plan_count} move({dest_boxel_id})"):
+                    break
 
             elif action_name == 'sense':
                 # Audit #73 step 3(c) plot 4: count every attempted
@@ -1647,6 +1701,10 @@ def main(gui=True, run_logger=None, scene_config=None,
                     label=f"after pick {pick_obj_name}",
                     body_names=body_id_to_name)
                 print(f"    *** {pick_obj_name} PICKED UP! ***")
+                # #P2 (a): the descent and the lift can shove neighbours;
+                # the held object is excluded (F26).
+                if _integrity_after(f"plan#{plan_count} pick({pick_obj_name})"):
+                    break
                 # Audit #48: clear the symbolic stack relation so the next
                 # _build_init does not re-emit a stale (on obj_str ?x) fact
                 # while also asserting (holding obj_str).  Mirrors the PDDL
@@ -1904,6 +1962,10 @@ def main(gui=True, run_logger=None, scene_config=None,
                     registry=registry, belief=belief, plan_count=plan_count,
                     save_image=True, on_relations=on_relations,
                     shadow_occluder_map=shadow_occluder_map)
+                # #P2 (a): bystanders after the place (the placed object's
+                # own belief was just refreshed by the carve above).
+                if _integrity_after(f"plan#{plan_count} place({obj_str})"):
+                    break
 
             elif action_name == 'stack':
                 # STACK: drop the held object on top of ?on_obj.  Mirrors
@@ -1988,6 +2050,18 @@ def main(gui=True, run_logger=None, scene_config=None,
                         print(f"    drop-verify failed for {obj_str} on "
                               f"{on_obj_str}; clearing held state and "
                               f"replanning (audit #79).")
+                        # #P2 F28: bounded physical stack failures.
+                        _sk = (obj_str, on_obj_str)
+                        stack_fail_counts[_sk] = stack_fail_counts.get(_sk, 0) + 1
+                        print(f"    stack failure {stack_fail_counts[_sk]}/3 for "
+                              f"{obj_str} on {on_obj_str} (#P2 F28 strike counter)")
+                        if stack_fail_counts[_sk] >= 3:
+                            exit_reason = "stack_giveup"
+                            episode_over = True
+                            print(f"    ERROR: {obj_str} on {on_obj_str} failed "
+                                  f"{stack_fail_counts[_sk]} physical stack "
+                                  f"attempts — ending the episode honestly "
+                                  f"(#P2 F28).")
                         held_body_id = None
                         held_object_boxel_id = None
                         # Audit #82: mirror of the place branch above —
@@ -2086,6 +2160,20 @@ def main(gui=True, run_logger=None, scene_config=None,
                         "reason": stack_reason,
                         "plan": plan_count,
                     })
+                    # #P2 F28: bounded physical stack failures (the
+                    # released cube is loose somewhere; the refresh above
+                    # re-posed it, so the retry aims at the new estimate).
+                    _sk = (obj_str, on_obj_str)
+                    stack_fail_counts[_sk] = stack_fail_counts.get(_sk, 0) + 1
+                    print(f"    stack failure {stack_fail_counts[_sk]}/3 for "
+                          f"{obj_str} on {on_obj_str} (#P2 F28 strike counter)")
+                    if stack_fail_counts[_sk] >= 3:
+                        exit_reason = "stack_giveup"
+                        episode_over = True
+                        print(f"    ERROR: {obj_str} on {on_obj_str} failed "
+                              f"{stack_fail_counts[_sk]} physical stack "
+                              f"attempts — ending the episode honestly "
+                              f"(#P2 F28).")
                     break  # replan — on_relations stays as-is
                 # Replace any prior support of obj_str (re-stacking) —
                 # the conditional pick effect in the domain already
@@ -2102,9 +2190,15 @@ def main(gui=True, run_logger=None, scene_config=None,
                     registry=registry, belief=belief, plan_count=plan_count,
                     save_image=True, on_relations=on_relations,
                     shadow_occluder_map=shadow_occluder_map)
+                # #P2 (a): bystanders and the tower after the stack.
+                if _integrity_after(f"plan#{plan_count} stack({obj_str})"):
+                    break
 
             if gui:
                 env.refresh_debug_camera_views()
+
+        if episode_over:
+            break
 
     # =========================================================
     # PHASE 6: Results & Cleanup
@@ -2148,6 +2242,12 @@ def main(gui=True, run_logger=None, scene_config=None,
                 goal, env, held_body_id=held_body_id)
             for pf in physics_failures:
                 print(f"  PHYSICAL_FAILURE (goal): {pf}")
+            # #P2 (c) CB#122 (2026-09-19): the stack branch used to leave
+            # exit_reason None here, so a symbolic success the physics
+            # rejected was filed as "timeout" — the reason holding
+            # produced physics_mismatch and stack never did.
+            if physics_failures and exit_reason is None:
+                exit_reason = "physics_mismatch"
         success = symbolic_ok and not physics_failures
 
     world_eye.snapshot(
@@ -2166,6 +2266,8 @@ def main(gui=True, run_logger=None, scene_config=None,
         exit_reason=exit_reason,
         goal_kind=goal_kind,
         pick_giveup_objects=pick_giveup_objects,
+        integrity_events=integrity_events,
+        stack_fail_counts=stack_fail_counts,
         goal=goal,
         target_name=target_name,
         on_relations=on_relations,

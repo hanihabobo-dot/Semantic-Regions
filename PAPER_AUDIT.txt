@@ -1001,17 +1001,38 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   expected 0.4525), tray-stack 343879192 SUCCESS (4 plans; stack on
   cyan: top 0.3971 vs 0.3982), stack h=2 seed 0 and h=3 seed 3 SUCCESS
   (tops within 1.3 mm of expected).
-  REMAINING ORACLE READS (WP2c, next): sync_to_plan_client mirrors
-  every body's TRUE pose into the motion planner's collision world at
-  each replan (#P1 inventory item (j)) and the post-place / post-stack
-  blocks mirror the placed body's true pose; release_held_object_in_
-  place (the audit-#58 emergency drop) re-poses the dropped boxel from
-  p.getAABB; boxel_to_pybullet carries spawn-time positions.  Design:
-  the plan client is posed from the REGISTRY (estimate centres, upright;
-  bodies the belief does not hold are parked out of the workspace —
-  the planner cannot avoid what the robot does not know is there),
-  the post-action mirrors use the release observation, the emergency
-  drop uses a refresh.
+  (4e) WP2c, THE COLLISION WORLD IS THE BELIEF (2026-09-19): #P1
+  inventory item (j).  sync_to_plan_client(registry=) now poses the
+  motion planner's plan client from the registry — the robot's joints
+  (proprioception); the plane, the table and the tray at their true
+  poses (static bodies known at design time, like sizes); every other
+  body at its registry boxel's centre, upright; a body the belief does
+  not hold (a hidden target never seen, a retired lost object) parked
+  at _PLAN_CLIENT_PARK [5, 5, -5] — the planner cannot avoid what the
+  robot does not know is there, and a motion that hits it is a
+  physical failure the #P2 monitor reports; the held body at the end
+  effector.  The post-place / post-stack plan-client mirrors use the
+  release observation's centre (else the intended destination), the
+  audit-#58 emergency drop re-poses the dropped boxel with the rigid-
+  size refresh (under the hand when the arm hides it), and
+  boxel_to_pybullet carries names and body ids only.  Without a
+  registry (probes) the old simulator mirror remains.  Smokes: seed
+  999 holding SUCCESS (5 plans), seed 13 F7 as always, tray-stack
+  SUCCESS (3 plans), stack h=3 SUCCESS.
+  (4f) SAMPLER CORRECTION (2026-09-19, same day): the first A/B arm of
+  the step-(4) sampler stalled on seed 5 plan 5 — the third, higher
+  altitude offered to tall objects (half-height + 8 cm) put the EE
+  at z 0.57 for a cell 0.69 m out, IK failed all 8 seeds by 36 mm at
+  every such cell, and with three grasps per occluder instead of one
+  each FastDownward search took > 30 s until the 900 s cap.  Withdrawn:
+  offsets are 0.10 / 0.06 (gated) again, and a square footprint
+  (extents within GRASP_SQUARE_TOL 5 mm) gets yaw 0 only, so the
+  planner's grasp count is unchanged for every current scene object
+  (all square); a rectangular footprint gets both yaws, shorter span
+  first.  The "more grasps = harder to exhaust" F7 lead is therefore
+  NOT pursued through grasp multiplicity: it costs search time
+  linearly at every doomed cell.  The arm was stopped and re-run on
+  the corrected code (wp2 arms).
   Smokes: seed 999 holding SUCCESS in 5 plans (measured half-widths
   26.5 / 26.3 mm vs estimates 25.6 / 25.5 mm, pad force ~100 N, every
   pre-descent observation within 2 mm of the registry), seed 13 the
@@ -2211,6 +2232,52 @@ DELIVERABLES:
   Related backlog if stacking is re-scoped: stack size-compat check, safe-inset
   XY landing test, trajectory-clipping edge case (branch audit-55-pose-aware-stack),
   all in the archived FOR LATER list.
+
+  [#P2 (a), (c), (d) + F28 + F26 LANDED 2026-09-19.
+  (a) WORLD-INTEGRITY MONITOR: execution.world_integrity_check runs
+  after every executed move, pick, place and stack (test_full_pipeline
+  _integrity_after): ONE render (env.detect_objects, the sense
+  action's own channel; the simulator is never read) reconciles every
+  registered OBJECT boxel with what the camera shows — knocked_off_
+  table (its detection lies wholly below the table surface; the F22
+  support completion now leaves such a cloud alone instead of snapping
+  it up), lost (no detection and its believed region renders empty on
+  every slice: the step-(3c) check), disturbed (detected more than
+  INTEGRITY_DISTURB_M 15 mm from its believed centre; the boxel is
+  re-posed with the rigid-size fusion), toppled (raw detection far
+  lower and wider than its rigid box — a box on its side; a cube's
+  topple is not visible in an AABB, stated), off_support (believed
+  stacked but its bottom is no longer at its support's top within
+  INTEGRITY_SUPPORT_TOL_M 2 cm: the on-relation is dropped so the
+  planner re-stacks).  Knocked-off and lost bodies are retired
+  (retire_lost_objects); after any event the census is re-run.  The
+  held body is excluded (F26's first while-holding site: exclude_ids
+  is passed), the tray is fixed.  REACTION: a goal-critical object
+  that left the belief ends the episode at once with exit_reason
+  knocked_off_table (honest failure, no blind retry); any other
+  belief change with an empty hand breaks the plan for a replan (the
+  loop's reactive replanning on an unexpected observation); while
+  holding, the plan continues and the release observation / next
+  replan absorb it.  Telemetry's ground-truth DISTURBED / TOPPLE /
+  OFF_SUPPORT events remain the validation labels for these verdicts
+  in the run log; a "[integrity] after <action>: n/m believed bodies
+  observed where believed, none disturbed" line is printed otherwise.
+  (c) CB#122 half: a stack goal whose symbolic success the end-of-run
+  physics rejected used to leave exit_reason None ("timeout") — it is
+  physics_mismatch now, like holding.  The other half (why holding
+  produced false successes) is the F29 fix of 2026-09-18.
+  (d) CB#124: timing_summary.json now carries integrity_events (per
+  action, with kind / object / plan / measure), n_integrity_events,
+  integrity_event_kinds, stack_fail_counts, blocked_giveup_shadows and
+  pick_giveup_objects; a SUCCESS with integrity events prints "not a
+  clean success" with the kinds (F18: a bystander toppled by a
+  transit is on the record even when the goal did not need it).
+  F28: physical stack failures are counted per (object, support) at
+  both failure sites (drop verification, audit-#40 on-check); the
+  third ends the episode honestly with exit_reason stack_giveup.
+  OPEN in #P2: (b) the h=4 root cause with the monitor's data (needs
+  the stack sweep), F7 root cause (binding death), F8 grip slip data,
+  F18's mechanism question (arm link vs cargo).]
 
 ================================================================================
 #P3. [OPEN T1]  ALL OBJECTS MUST SPAWN WITHIN REACHABLE RANGE (TAMPURA-STYLE)
