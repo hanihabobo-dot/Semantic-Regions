@@ -50,7 +50,8 @@ NOMINAL_HIDDEN_EXTENTS = np.array([0.04, 0.04, 0.04])
 from boxel_data import BoxelRegistry, BoxelData, BoxelType
 from robot_utils import (ARM_JOINT_INDICES, END_EFFECTOR_LINK, FINGER_JOINTS,
                          JOINT_LIMITS_LOW, JOINT_LIMITS_HIGH, JOINT_RANGES,
-                         REST_POSES, RenderingLock,
+                         REST_POSES, RenderingLock, IK_ORN_TOL_DEG,
+                         quat_angle_deg,
                          is_config_collision_free, is_path_collision_free)
 
 
@@ -128,10 +129,11 @@ class Grasp:
     Grasp transformation relative to object frame.
 
     Produced by ``sample_grasp``.  ``position`` is a [x, y, z] offset
-    added to the boxel center to get the world-frame EE target.
-    ``orientation`` is a [x, y, z, w] quaternion for the EE.
-    Currently all grasps are top-down (pitch=180deg) with only Z-height
-    variation — no side grasps, angled approaches, or yaw rotation.
+    added to the boxel center to get the world-frame EE target (always
+    [0, 0, z]: straight above the centre).  ``orientation`` is a
+    [x, y, z, w] quaternion for the EE: top-down (pitch pi) at yaw 0 or
+    yaw pi/2, which selects the pinch axis (world y or world x,
+    robot_utils.pinch_axis).  No side grasps or angled approaches.
     """
     position: np.ndarray   # [x, y, z] offset from boxel center
     orientation: np.ndarray  # [x, y, z, w] quaternion
@@ -361,6 +363,7 @@ class BoxelStreams:
                 #    approach); restarts recover convergence when the
                 #    pose is actually reachable.
                 fk_err = None
+                orn_err = None
                 for refine_round in range(3):
                     for i, angle in zip(ARM_JOINT_INDICES, arm_joints):
                         p.resetJointState(self.robot_id, i, angle,
@@ -369,12 +372,15 @@ class BoxelStreams:
                     # it getLinkState can return the transform cached from
                     # the last simulation step, decoupling fk_err from the
                     # candidate solution (see robot_utils.solve_ik's gate).
-                    fk_pos = p.getLinkState(self.robot_id, END_EFFECTOR_LINK,
-                                            computeForwardKinematics=True,
-                                            physicsClientId=pc)[0]
+                    fk_state = p.getLinkState(self.robot_id, END_EFFECTOR_LINK,
+                                              computeForwardKinematics=True,
+                                              physicsClientId=pc)
                     fk_err = float(np.linalg.norm(
-                        np.asarray(fk_pos) - np.asarray(ee_pos, dtype=float)))
-                    if fk_err <= 0.010:
+                        np.asarray(fk_state[0]) - np.asarray(ee_pos, dtype=float)))
+                    # #P1 step (4): the orientation must hold too — a
+                    # yawed grasp pinches along a chosen axis.
+                    orn_err = quat_angle_deg(fk_state[1], ee_orn)
+                    if fk_err <= 0.010 and orn_err <= IK_ORN_TOL_DEG:
                         return RobotConfig(joint_positions=arm_joints)
                     if refine_round == 2:
                         break  # last candidate already checked — done
@@ -400,8 +406,10 @@ class BoxelStreams:
                     arm_joints = np.clip(cand, JOINT_LIMITS_LOW,
                                          JOINT_LIMITS_HIGH)
                 logger.debug("_pybullet_ik: rejected solution with FK "
-                             "error %.1f mm after refinement for target %s",
-                             (fk_err or 0.0) * 1000, ee_pos.tolist())
+                             "error %.1f mm / orientation error %.1f deg "
+                             "after refinement for target %s",
+                             (fk_err or 0.0) * 1000, (orn_err or 0.0),
+                             ee_pos.tolist())
                 return None
 
             except Exception as e:
@@ -625,20 +633,28 @@ class BoxelStreams:
     # wrist out of the camera cone (the reverted experiment was 2 cm)
     # while giving the sampler a reachable option when 0.10 fails.
     _GRASP_Z_OFFSETS = [0.10, 0.06]
+    # #P1 step (4): widest pinch span a top-down grasp is offered for.
+    # The Panda opens 0.04 m per finger; 2 mm of descent clearance on
+    # each side is the minimum the friction grasp has worked with.
+    GRASP_MAX_SPAN = 0.076
+    # Extra approach altitude offered above a tall object's half-height.
+    GRASP_TALL_CLEARANCE = 0.08
 
     def sample_grasp(self, obj_id: str) -> Iterator[Tuple[Grasp]]:
         """
-        Generate grasp poses for an object with varying clearance.
+        Generate top-down grasp poses for an object over its ESTIMATED box.
 
-        Yields a single top-down grasp at a fixed 0.10 m above the
-        object center.  #P1 (2026-08-20): execution grasps by pad
-        friction now (the constraint weld is gone), so grip security
-        DOES depend on precise lateral centering at the contact pose —
-        the FK-verified IK gates (solve_ik / _pybullet_ik) and
-        execute_pick's grip verification enforce it.  The contact-pose
-        IK is seeded from the planner's q (audit #37/#38) so it stays
-        in the same IK branch.  Replacing this single fixed grasp with
-        a real sampler is #P1 step (4) / #P5.
+        #P1 step (4) (2026-09-18): one grasp per (pinch axis, approach
+        altitude) that fits — yaw 0 / yaw pi/2 select the pinch axis,
+        the box's extent along it must be within GRASP_MAX_SPAN, and the
+        altitude must clear the box top (altitude gate).  #P1
+        (2026-08-20): execution grasps by pad friction (the constraint
+        weld is gone), so grip security DOES depend on precise lateral
+        centering at the contact pose — the FK-verified IK gates
+        (solve_ik / _pybullet_ik, position and orientation) and
+        execute_pick's tactile grip verification enforce it.  The
+        contact-pose IK is seeded from the planner's q (audit #37/#38)
+        so it stays in the same IK branch.
 
         PDDLStream declaration (see pddl/stream.pddl):
             (:stream sample-grasp
@@ -653,62 +669,93 @@ class BoxelStreams:
         Yields:
             Tuples of (grasp,) for the object — one per Z offset.
         """
-        # #P1 F2: pick 3-strike giveup — with the single fixed top-down
-        # grasp, a toppled object regenerates a byte-identical doomed
-        # attempt on every replan; after the dispatcher's strike counter
-        # trips, stop offering grasps so the planner changes course or
-        # honestly reports no plan instead of looping until an external
-        # kill (field report pick_giveup.md: 8 identical misses, run
-        # killed by the user).  The real remedy is the step-(4)
-        # yaw-aware sampler.
+        # #P1 F2: pick 3-strike giveup — after the dispatcher's strike
+        # counter trips, stop offering grasps so the planner changes
+        # course or honestly reports no plan instead of looping until an
+        # external kill (field report pick_giveup.md: 8 identical
+        # misses, run killed by the user).
         if str(obj_id) in self.ungraspable_objects:
             logger.info("sample_grasp: %s marked ungraspable after "
                         "repeated pick failures — no grasp offered "
                         "(#P1 F2 giveup)", obj_id)
             return
 
-        # Top-down orientation: pitch=180deg = gripper pointing straight down
-        orn = np.array(p.getQuaternionFromEuler([0, np.pi, 0]))
-        # Yield one grasp per Z-offset (currently 0.10 m above object).
-        # Execution lowers from this height to contact via solve_ik
-        # seeded from this q (audit #37/#38) so the contact pose stays
-        # in the same IK branch the planner validated.
-        # position=[0,0,z] means no X/Y offset — directly above boxel center.
-        # compute_kin_solution later adds this to boxel.center to get the
-        # world-frame EE target position.
+        # #P1 step (4) (2026-09-18): the sampler reads the object's
+        # ESTIMATED box (registry boxel: perception's estimate, rigid-
+        # size tracked) — a pre-sense object without a boxel gets the
+        # class prior NOMINAL_HIDDEN_EXTENTS — and offers every top-down
+        # grasp whose pinch fits the Panda's opening:
+        #   yaw 0    pinches along world y (span = the box's y extent),
+        #   yaw pi/2 pinches along world x (span = the box's x extent)
+        # (robot_utils.pinch_axis, measured by tools/_probe_f24_xy.py).
+        # A span wider than GRASP_MAX_SPAN cannot be closed on, so that
+        # yaw is not offered; the shorter span comes first (more descent
+        # clearance on each side), then the other.  A box that grew
+        # because the object yawed on the table can exceed the span on
+        # both axes and get no grasp at all — honest, and the case the
+        # F2 giveup covers; a principal-axis yaw from the segmentation
+        # is the follow-up if it matters.
+        obj_boxel = self.registry.get_boxel(str(obj_id))
+        if obj_boxel is not None:
+            ext = (np.asarray(obj_boxel.max_corner, dtype=float)
+                   - np.asarray(obj_boxel.min_corner, dtype=float))
+        else:
+            ext = np.asarray(NOMINAL_HIDDEN_EXTENTS, dtype=float)
+        half_height = float(ext[2]) / 2.0
+        candidates = sorted([(0.0, float(ext[1])), (np.pi / 2.0, float(ext[0]))],
+                            key=lambda c: c[1])
+
+        # Z offsets: the validated 0.10 m and the F4 0.06 m (comments at
+        # _GRASP_Z_OFFSETS), plus for a tall object one offset
+        # GRASP_TALL_CLEARANCE above its half-height, so a 13 cm
+        # occluder is not left with exactly one approach altitude (the
+        # F7 generator-exhaustion lead, audit F7 refined evidence).
+        # Deterministic best-first order: 0.10 first, then the rest
+        # ascending — no shuffle.
         offsets = list(self._GRASP_Z_OFFSETS)
-        random.shuffle(offsets)
+        tall = half_height + self.GRASP_TALL_CLEARANCE
+        if tall > max(offsets) + 0.005:
+            offsets.append(round(tall, 3))
+        offsets = [offsets[0]] + sorted(offsets[1:])
         # #P1 step (2) altitude gate: a z-offset at or below the object's
         # top parks the grasp frame INSIDE the block — the approach swing
         # then plows the open fingers through its top (seed 0 field
         # observation: the F4 0.06 m offset bound for a 12.6 cm occluder,
         # grasp point 8 mm below the top, and the move clipped the block;
         # the kin stream cannot catch it because the pick target is
-        # ignored_body there).  Gate on the object's REGISTRY boxel
-        # half-height (belief geometry): the F4 offset keeps serving the
-        # reach-margin stack levels, whose 3-4 cm cubes still pass.  A
+        # ignored_body there).  Gate on the estimated half-height; a
         # pre-sense object without a boxel keeps every offset.
-        obj_boxel = self.registry.get_boxel(str(obj_id))
-        min_z_offset = None
-        if obj_boxel is not None:
-            min_z_offset = (float(obj_boxel.max_corner[2])
-                            - float(obj_boxel.min_corner[2])) / 2.0 + 0.01
-        for z in offsets:
-            if min_z_offset is not None and z < min_z_offset:
-                logger.debug("sample_grasp: %s skipping z=%.2f — below "
-                             "half-height %.3f + 1 cm clearance (#P1 "
-                             "altitude gate)", obj_id, z,
-                             min_z_offset - 0.01)
+        min_z_offset = half_height + 0.01 if obj_boxel is not None else None
+        offered = 0
+        for yaw, span in candidates:
+            if span > self.GRASP_MAX_SPAN:
+                logger.debug("sample_grasp: %s yaw=%.2f skipped — pinch "
+                             "span %.3f m exceeds %.3f m (#P1 step 4)",
+                             obj_id, yaw, span, self.GRASP_MAX_SPAN)
                 continue
-            self._grasp_counter += 1
-            grasp = Grasp(
-                position=np.array([0, 0, z]),
-                orientation=orn,
-                name=f"grasp_{obj_id}_{self._grasp_counter}"
-            )
-            logger.debug("sample_grasp: %s -> %s (z=%.2f)", obj_id,
-                         grasp.name, z)
-            yield (grasp,)
+            orn = np.array(p.getQuaternionFromEuler([0, np.pi, yaw]))
+            for z in offsets:
+                if min_z_offset is not None and z < min_z_offset:
+                    logger.debug("sample_grasp: %s skipping z=%.2f — below "
+                                 "half-height %.3f + 1 cm clearance (#P1 "
+                                 "altitude gate)", obj_id, z,
+                                 min_z_offset - 0.01)
+                    continue
+                self._grasp_counter += 1
+                grasp = Grasp(
+                    position=np.array([0, 0, z]),
+                    orientation=orn,
+                    name=f"grasp_{obj_id}_{self._grasp_counter}"
+                )
+                logger.debug("sample_grasp: %s -> %s (yaw=%.2f span=%.3f "
+                             "z=%.2f)", obj_id, grasp.name, yaw, span, z)
+                offered += 1
+                yield (grasp,)
+        if offered == 0:
+            logger.info("sample_grasp: %s — no top-down grasp fits: box "
+                        "%.3f x %.3f m, pinch limit %.3f m (#P1 step 4)",
+                        obj_id, float(ext[0]), float(ext[1]),
+                        self.GRASP_MAX_SPAN)
     
     # =========================================================================
     # STREAM 3: Plan Motion (RRT-Connect with shortcut smoothing)

@@ -918,6 +918,79 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   vanished occluder (p.removeBody, the knocked-off-table simulation)
   is reported LOST with zero false positives.]
 
+  [STEP (4) GRASP SAMPLER OVER THE ESTIMATE + F24 — 2026-09-19.
+  (4a) SAMPLER (streams.sample_grasp): reads the object's ESTIMATED
+  box (registry boxel; the class prior NOMINAL_HIDDEN_EXTENTS for a
+  pre-sense hidden object) and offers every top-down grasp whose
+  pinch fits: yaw 0 pinches along world y, yaw pi/2 along world x
+  (robot_utils.pinch_axis; measured with tools/_probe_f24_xy.py: the
+  finger separation vector at yaw 0 is |dy| = 0.100 m, at yaw pi/2
+  |dx| = 0.100 m); a span above GRASP_MAX_SPAN 0.076 m is not
+  offered, the shorter span comes first; approach altitudes 0.10 /
+  0.06 (altitude gate unchanged) plus one GRASP_TALL_CLEARANCE 0.08 m
+  above a tall object's half-height, so a 13 cm occluder no longer
+  has exactly one altitude (the F7 generator-exhaustion lead).
+  Deterministic best-first order, no shuffle.  Grasp.position stays
+  [0, 0, z], so the world-frame offset convention of the collision
+  checker (held-cargo pose), place and stack is untouched.  Both IK
+  gates (streams._pybullet_ik, robot_utils.solve_ik) now also require
+  the FK ORIENTATION within IK_ORN_TOL_DEG 10 deg: they were
+  position-only, so a yawed grasp satisfied positionally but not
+  rotationally would have passed planning and failed on the descent.
+  Limitation, stated: the box is axis-aligned, so an object that
+  yawed on the table grows on both axes and may get no grasp (the F2
+  giveup covers it; a principal-axis yaw from the segmentation is the
+  follow-up if it ever matters).
+  (4b) F24, THE PICK AIMS AT THE ESTIMATE: the dispatcher resolves the
+  pick from registry.get_boxel(obj) (centre + box) and execute_pick
+  takes obj_aabb=; without a boxel the pick is refused with a log and
+  the loop replans (a pick is grounded on obj_at_boxel_KIF, which
+  comes from a registered boxel).  execute_pick re-observes the scene
+  once before the descent (env.detect_objects; the arm is parked at
+  the approach altitude) and re-poses the box on the fresh detection
+  when it is consistent with the known size (>= DETECTION_MIN_PIXELS,
+  top within 1 cm), logging "[F24] pick re-aim" above 2 mm; an
+  occluded or inconsistent detection keeps the registry box, logged.
+  This replaces the 2026-08-21 live re-aim that read
+  p.getBasePositionAndOrientation.  contact_z, the pre-grasp aperture
+  and the width plausibility come from the estimate (top - 5 mm; the
+  pinch-axis half-extent + 8 mm).
+  (4c) TACTILE CLOSE (robot_utils.close_gripper_until_contact): the
+  fingers advance 0.5 mm per step under the 60 N close force until
+  BOTH pad links report a contact with a body other than the robot,
+  the table and the ground; the finger position at that moment is the
+  MEASURED half-width along the pinch axis, and the motors then hold
+  3 mm inside it, the same squeeze close_gripper used to place from a
+  p.getAABB width.  Nothing between the fingers -> None -> the
+  existing pad-contact failure path.  The F1(d) plausibility check
+  becomes a width window [5 mm, estimate pinch half-extent + 8 mm] (a
+  standing-on-top phantom reads ~0; wider means the pads closed on
+  something else or across the wrong axis).
+  ACCURACY OF THE AIM (tools/_probe_f24_xy.py, seeds 0-24 + 999, 66
+  detections): estimate centre error |cx| mean 1.0 max 2.3 mm, |cy|
+  mean 0.2 max 0.8 mm, extents within -2.1..+0.1 mm, with the square-
+  footprint completion ON (the raw cloud under-estimates the y extent
+  by up to 9 mm: the completion is right for this camera).  The
+  "small pick-success cost" F24 expected is therefore not visible at
+  spawn; post-manipulation staleness is what the pre-descent
+  observation and the F2 strikes absorb.
+  REMAINING ORACLE READS IN EXECUTION (WP2b, next): execute_place and
+  execute_stack read p.getAABB of the held body and of the support
+  and p.getBasePositionAndOrientation of the held body for the drop
+  heights; _release_and_verify_drop verifies the release from the
+  simulator's AABB / velocity / orientation of the released body.
+  The #P1 charter ("all oracle reads") covers them: heights from the
+  registry (rigid size) and the grasp geometry, verification from a
+  post-release observation plus tactile / proprioceptive signals.
+  Smokes: seed 999 holding SUCCESS in 5 plans (measured half-widths
+  26.5 / 26.3 mm vs estimates 25.6 / 25.5 mm, pad force ~100 N, every
+  pre-descent observation within 2 mm of the registry), seed 13 the
+  known F7 binding death (unchanged).  The seed-999 trace also shows
+  the #P2 case in the open: orange placed at free_021 (belief 2 mm),
+  then the next EMPTY-HAND transit swept it 85 mm sideways and the
+  belief stayed at the cell until the next sense re-posed it (46 mm
+  residual, partly occluded).  A/B: arm wp2a_<sha>.]
+
   F11. [DONE] PLACEMENT-BLOCKING FACTS USE THE FREE BOXEL'S OWN AABB AS
       THE BLOCKING VOLUME, NOT THE PLACED OBJECT'S (2026-08-22, user
       GUI run 12-09-28 seed 0 + no-gate eval arm seed 0, same
@@ -1798,7 +1871,10 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       carves against both.  Aligning the discovery branch is a small
       follow-up.
 
-  F24. [OPEN — #P1 LEFTOVER ORACLE READ] THE PICK HANDLER AIMS AT THE
+  F24. [DONE 2026-09-19, with #P1 step (4): see the STEP (4) note —
+      the dispatcher passes the registry box, execute_pick re-observes
+      before the descent, closes by touch, and never reads the
+      simulator pose for control] THE PICK HANDLER AIMS AT THE
       SIMULATOR POSE, NOT THE ESTIMATE: test_full_pipeline.py pick branch
       resolves pick_pos from env.objects[name].position (ground truth)
       for both the boxel_to_pybullet path and the target special case,

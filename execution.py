@@ -50,7 +50,8 @@ from perception import (DETECTION_MIN_PIXELS, DETECTION_SUPPORT_SNAP,
 from reboxelize import reboxelize_free_space
 from streams import NOMINAL_HIDDEN_EXTENTS, RobotConfig
 from robot_utils import (END_EFFECTOR_LINK, FINGER_JOINTS, solve_ik,
-                         move_robot_smooth, open_gripper, close_gripper)
+                         move_robot_smooth, open_gripper, close_gripper,
+                         close_gripper_until_contact, pinch_axis)
 
 
 def _capture_freeze(label: str) -> None:
@@ -852,7 +853,7 @@ def _apply_post_action_lift(robot_id, contact_ee, orientation, contact_joints,
 
 
 def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
-                 _retry: bool = False
+                 obj_aabb=None, _retry: bool = False
                  ) -> Tuple[Optional[int], Optional[RobotConfig]]:
     """
     Execute pick action using the plan's grasp pose.
@@ -866,8 +867,15 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
       close gripper (friction squeeze)  →  verify both pads contact
       the object.
 
-    The contact waypoint is computed from the object's actual AABB so
-    the Panda's finger pads physically wrap around the object.
+    The contact waypoint is computed from the object's ESTIMATED box
+    (``obj_aabb``, the registry estimate the dispatcher passes; #P1
+    F24, 2026-09-18) re-observed once before the descent, so the
+    Panda's finger pads wrap around the object the robot believes is
+    there.  The close is tactile (close_gripper_until_contact): the
+    fingers advance until both pads touch, and the finger position at
+    contact is the measured half-width the squeeze is set from.  The
+    simulator's pose and AABB are read here only for print-only
+    diagnostics and for the body-identity contact query.
 
     #P1 friction grasp (2026-08-20): the JOINT_FIXED constraint weld
     (the audit-#7-part-B "accepted simulation simplification") is
@@ -891,10 +899,13 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
         robot_id: PyBullet body ID of the robot
         env: BoxelTestEnv instance
         obj_name: Name key in env.objects (e.g. "blue_object", "red_object")
-        obj_pos: Current object position [x, y, z] (from PyBullet)
+        obj_pos: Believed object position [x, y, z] (the registry
+            estimate's centre; kept for logging, the aim is obj_aabb)
         grasp: Grasp object from the plan (position, orientation)
         config: RobotConfig from the plan's compute_kin_solution (fallback)
         gui: Whether GUI is active (for step_simulation timing)
+        obj_aabb: (min_corner, max_corner) of the object's estimated
+            box — required; the pick aborts without it.
 
     Returns:
         Tuple[int, RobotConfig]: PyBullet body ID of the held object
@@ -912,12 +923,11 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
     # below the cube top (good wrap-around), but for larger cubes
     # the grasptarget sat at the cube CENTRE, leaving pads to wrap
     # only the lower half so the cube could rotate forward out of
-    # the grip.  Now we measure cube top from getAABB and offset
+    # the grip.  Now we take the top of the ESTIMATED box and offset
     # down by a fixed 5 mm so the % grip height is invariant in
     # cube size — small cubes match the previous "clamped to
     # table_z + 0.035" behaviour, large cubes get a proportionally
-    # higher grasp.  cube_hw (smaller of XY half-widths) is reused
-    # for the close_gripper target below.
+    # higher grasp.
     #
     # User direction 2026-05-15: "when the gripper is targeting a
     # big object, the centre it's targeting should be higher.  make
@@ -930,11 +940,59 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
     # handempty, physics says we're friction-pinned to a ghost).
     audit_robot_held_state(env, robot_id, expected_held_body_id=None,
                             tag=f"pre-pick:{obj_name}")
-    aabb_min, aabb_max = p.getAABB(obj_id)
-    cube_top_z = float(aabb_max[2])
-    x_half = (aabb_max[0] - aabb_min[0]) / 2.0
-    y_half = (aabb_max[1] - aabb_min[1]) / 2.0
-    cube_hw = min(x_half, y_half)
+    # #P1 F24 / step (4) (2026-09-18): the object's geometry is the
+    # ESTIMATE the dispatcher passes (the registry box perception
+    # registered and has re-posed at every observation since), never
+    # p.getAABB.  Before the descent the scene is observed once more —
+    # the planned move parked the arm at the approach altitude, so the
+    # object is usually still in view — and the box is re-posed on that
+    # detection when it is consistent with the known size (XY centred on
+    # the fresh estimate, rigid extents, top where the fresh render sees
+    # it).  A transit sweep that shoved the object 10-28 mm (GUI field
+    # runs 10-53-50 / 10-55-47) is caught here the honest way; an
+    # occluded or inconsistent detection keeps the registry box, and
+    # the F2 strike counter absorbs the residual.
+    if obj_aabb is None:
+        print(f"    ERROR: execute_pick({obj_name}) needs the object's "
+              f"estimated box (#P1 F24) — none passed; aborting")
+        return None, None
+    est_min = np.asarray(obj_aabb[0], dtype=float).copy()
+    est_max = np.asarray(obj_aabb[1], dtype=float).copy()
+    rigid_ext = est_max - est_min
+    fresh = env.detect_objects()[0].get(obj_name)
+    if fresh is None:
+        _why = "no detection"
+    elif fresh.pixel_count < DETECTION_MIN_PIXELS:
+        _why = f"{fresh.pixel_count} px"
+    elif abs(float(fresh.est_max[2]) - float(est_max[2])) > 0.01:
+        _why = (f"top {abs(float(fresh.est_max[2]) - float(est_max[2])) * 1000:.0f} mm "
+                f"from the known top — partly hidden")
+    else:
+        _why = None
+    if _why is None:
+        _cxy = (fresh.est_min[:2] + fresh.est_max[:2]) / 2.0
+        _new_max = np.array([_cxy[0] + rigid_ext[0] / 2.0,
+                             _cxy[1] + rigid_ext[1] / 2.0,
+                             float(fresh.est_max[2])])
+        _new_min = _new_max - rigid_ext
+        _old_c = (est_min + est_max) / 2.0
+        reaim_xy = float(np.hypot(_cxy[0] - _old_c[0], _cxy[1] - _old_c[1]))
+        if reaim_xy > 0.002:
+            print(f"    [F24] pick re-aim {obj_name}: the pre-descent "
+                  f"observation puts it {reaim_xy * 1000:.1f} mm from the "
+                  f"registry estimate ({fresh.pixel_count} px)")
+        est_min, est_max = _new_min, _new_max
+    else:
+        print(f"    [F24] {obj_name} not re-observed before the descent "
+              f"({_why}) — aiming at the registry estimate")
+    est_centre = (est_min + est_max) / 2.0
+    cube_top_z = float(est_max[2])
+    x_half = float(rigid_ext[0]) / 2.0
+    y_half = float(rigid_ext[1]) / 2.0
+    # The grasp's yaw fixes the pinch axis (robot_utils.pinch_axis); the
+    # aperture and the width plausibility are sized on THAT extent.
+    _pinch = pinch_axis(grasp.orientation)
+    pinch_half = (x_half, y_half)[_pinch]
 
     _GRASP_MARGIN_FROM_TOP = 0.005  # 5 mm below cube top
     _FINGER_TIP_DEPTH = 0.035
@@ -942,22 +1000,13 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
     min_contact_z = table_z + _FINGER_TIP_DEPTH
     contact_z = max(cube_top_z - _GRASP_MARGIN_FROM_TOP, min_contact_z)
 
-    # #P1 pick re-aim (2026-08-21, investigation synthesis): the
-    # dispatcher's obj_pos can be STALE by the time the descent starts —
-    # transit finger sweeps shove objects 10-28 mm between the position
-    # read and the pick (GUI field runs 10-53-50 / 10-55-47: 7 of 9
-    # picks failed with single-pad grips at exactly that misalignment).
-    # Aim the final descent at the object's LIVE pose; the AABB-derived
-    # contact_z above is already live.
-    obj_pos_live = p.getBasePositionAndOrientation(obj_id)[0]
-    reaim_xy = float(np.hypot(obj_pos_live[0] - obj_pos[0],
-                              obj_pos_live[1] - obj_pos[1]))
-    if reaim_xy > 0.002:
-        print(f"    [#P1-diag] pick re-aim {obj_name}: live pose "
-              f"{reaim_xy * 1000:.1f}mm from the dispatcher's position")
+    # The descent aims at the (re-observed) estimate centre; contact_z
+    # above comes from the same box.  (The 2026-08-21 live-pose re-aim
+    # read p.getBasePositionAndOrientation here; the pre-descent
+    # observation above replaces it.)
     contact_ee = np.array([
-        obj_pos_live[0] + grasp.position[0],
-        obj_pos_live[1] + grasp.position[1],
+        est_centre[0] + grasp.position[0],
+        est_centre[1] + grasp.position[1],
         contact_z,
     ])
 
@@ -986,7 +1035,7 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
     # Pre-grasp aperture first (see the comment further down) so the
     # horizontal align above the block also sweeps with narrowed
     # fingers, not the full-open 0.04 m.
-    pregrasp_aperture = min(0.04, max(x_half, y_half) + 0.008)
+    pregrasp_aperture = min(0.04, pinch_half + 0.008)
     close_gripper(robot_id, gui, target_finger_pos=pregrasp_aperture)
 
     live_ee_now = p.getLinkState(robot_id, END_EFFECTOR_LINK)[0]
@@ -1025,9 +1074,9 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
     # the fingers are sized to the object BEFORE the horizontal align
     # above (see there) — the narrower sweep keeps the pads from
     # clipping neighbours (or the object itself on a marginal arrival)
-    # during both the align and the descent.  The pinch axis can be
-    # either horizontal AABB axis (yaw-less grasp), so the aperture is
-    # sized on the LARGER half-extent, +8 mm clearance per finger.
+    # during both the align and the descent.  The grasp's yaw names the
+    # pinch axis (#P1 step (4)), so the aperture is sized on the
+    # estimate's half-extent along it, +8 mm clearance per finger.
 
     # settle=True: the contact descent is precision-critical (#P1) —
     # the friction grasp needs lateral centering within the descent
@@ -1038,7 +1087,8 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
     # With the weld gone, a lateral arrival error beyond the descent
     # clearance is the prime suspect when grip verification below
     # reports a miss — log EE-vs-target and EE-vs-object XY offsets so
-    # failed grips are attributable from headless logs.  Print-only:
+    # failed grips are attributable from headless logs.  Print-only
+    # GROUND-TRUTH diagnostic (p.getBasePositionAndOrientation):
     # nothing here feeds control.
     live_ee_pos = p.getLinkState(robot_id, END_EFFECTOR_LINK)[0]
     ee_xy_err = float(np.hypot(live_ee_pos[0] - contact_ee[0],
@@ -1051,16 +1101,24 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
           f"ee_vs_obj_xy={ee_vs_obj_xy * 1000:.2f}mm "
           f"ee_z={live_ee_pos[2]:.4f} contact_z={contact_z:.4f}")
 
-    # Close target = 3 mm INSIDE the cube surface along the finger-
-    # closing axis (use the smaller of XY half-widths as a conservative
-    # bound since the grasp orientation may yaw the gripper).  The pads
-    # stop at the surface; the unreachable target keeps the motors
-    # pressing at close_gripper's force budget, and that normal force ×
-    # pad friction is the grip — there is no constraint weld any more
-    # (#P1, deferred #59).  Floor at 2 mm so a degenerate cube_hw can't
-    # drive the target to zero or negative.
-    close_gripper(robot_id, gui,
-                  target_finger_pos=max(0.002, cube_hw - 0.003))
+    # Tactile close (#P1 step (4), 2026-09-18): the fingers advance until
+    # both pads touch, the finger position at contact is the object's
+    # measured half-width along the pinch axis, and the motors then hold
+    # 3 mm inside it — the pads stop at the surface, the unreachable
+    # target keeps them pressing at the close force budget, and that
+    # normal force × pad friction is the grip (no constraint weld, #P1,
+    # deferred #59).  close_gripper used to place the same 3 mm target
+    # from a p.getAABB width; the measured width needs no oracle and is
+    # right for an estimate that over-approximates the object.  The
+    # table and the ground are the only bodies the pads may brush
+    # without it counting as contact.
+    _static_ids = frozenset(env.objects[n].object_id
+                            for n in ("table", "plane") if n in env.objects)
+    measured_half = close_gripper_until_contact(
+        robot_id, gui, force=60.0, squeeze=0.003, ignore_body_ids=_static_ids)
+    if measured_half is None:
+        print(f"    [step 4] {obj_name}: the fingers closed without both "
+              f"pads touching anything")
 
     # Grip verification (#P1): a friction grasp only exists if BOTH
     # finger pads are in contact with the object after the close.  A
@@ -1095,33 +1153,33 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
                        else config.joint_positions)
             move_robot_smooth(robot_id, retreat, gui, settle=True)
             return execute_pick(robot_id, env, obj_name, obj_pos, grasp,
-                                config, gui, _retry=True)
+                                config, gui, obj_aabb=obj_aabb, _retry=True)
         return None, None
-    # #P1 F1(d) aperture plausibility: link identity alone cannot
+    # #P1 F1(d) width plausibility: link identity alone cannot
     # distinguish a pinch from both fingertips STANDING ON the object
     # top (the phantom first pick read both pads "in contact" with the
     # fingers at ~0.000 m).  A genuine pinch parks each finger at the
-    # object's half-extent ALONG THE PINCH AXIS — which, with the
-    # yaw-less grasp, may be either horizontal AABB axis of a
-    # non-square footprint (a toppled 4x6 cm box pinched across its
-    # 6 cm side is a real grasp at finger_pos 0.03 while min-half is
-    # 0.02).  Accept an aperture within 6 mm of EITHER horizontal
-    # half-extent; a phantom reads ~0.000-0.005, far below the
-    # >= 0.015 m half-extents of every scene object, so the
-    # standing-on-top signature is still caught.
-    # x_half / y_half hoisted to the AABB read at the top of the
-    # function (also sizes the pre-grasp aperture).
+    # object's half-extent ALONG THE PINCH AXIS; the grasp's yaw names
+    # that axis now (#P1 step (4)), so the measured half-width must lie
+    # between 5 mm (a phantom reads ~0.000-0.005, far below the
+    # >= 0.015 m half-extents of every scene object) and the estimate's
+    # pinch half-extent + 8 mm (the estimate over-approximates by at
+    # most a few mm; wider means the pads closed on something else or
+    # across the wrong axis).
     finger_pos = [p.getJointState(robot_id, fj)[0] for fj in FINGER_JOINTS]
-    aperture_err = min(
-        max(abs(fp - h) for fp in finger_pos)
-        for h in (x_half, y_half)
-    )
-    if aperture_err > 0.006:
-        print(f"    ERROR: grip aperture implausible for {obj_name} — "
-              f"finger_pos=[{finger_pos[0]:.4f},{finger_pos[1]:.4f}] vs "
-              f"half_extents=[{x_half:.4f},{y_half:.4f}] "
-              f"(err={aperture_err * 1000:.1f}mm > 6mm; standing-on-top "
-              f"phantom or partial pinch). Opening gripper (#P1 F1).")
+    width = (measured_half if measured_half is not None
+             else float(np.mean(finger_pos)))
+    width_lo, width_hi = 0.005, pinch_half + 0.008
+    aperture_err = 0.0 if width_lo <= width <= width_hi else \
+        min(abs(width - width_lo), abs(width - width_hi))
+    if aperture_err > 0.0:
+        print(f"    ERROR: grip width implausible for {obj_name} — "
+              f"measured half-width {width * 1000:.1f} mm "
+              f"(finger_pos=[{finger_pos[0]:.4f},{finger_pos[1]:.4f}]) "
+              f"outside [{width_lo * 1000:.0f}, {width_hi * 1000:.0f}] mm for "
+              f"the estimate's pinch half-extent {pinch_half * 1000:.1f} mm "
+              f"(standing-on-top phantom, partial pinch or wrong axis). "
+              f"Opening gripper (#P1 F1).")
         open_gripper(robot_id, gui)
         if not _retry:
             # #P1 grasp resample — same one-shot retry as the pad-contact
@@ -1133,11 +1191,11 @@ def execute_pick(robot_id, env, obj_name, obj_pos, grasp, config, gui,
                        else config.joint_positions)
             move_robot_smooth(robot_id, retreat, gui, settle=True)
             return execute_pick(robot_id, env, obj_name, obj_pos, grasp,
-                                config, gui, _retry=True)
+                                config, gui, obj_aabb=obj_aabb, _retry=True)
         return None, None
     print(f"    Grip verified for {obj_name}: both pads in contact, "
-          f"pad_normal_force={grip_nf:.2f}N, "
-          f"aperture_err={aperture_err * 1000:.1f}mm")
+          f"pad_normal_force={grip_nf:.2f}N, measured half-width "
+          f"{width * 1000:.1f} mm vs estimate {pinch_half * 1000:.1f} mm")
 
     # Audit #82: post-pick assertion — only the newly grasped cube should
     # be in contact with the robot.  Anything else surfaces a ghost from

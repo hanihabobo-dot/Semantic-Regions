@@ -22,6 +22,36 @@ ARM_JOINT_INDICES = [0, 1, 2, 3, 4, 5, 6]
 FINGER_JOINTS = [9, 10]  # panda_finger_joint1, panda_finger_joint2
 END_EFFECTOR_LINK = 11   # panda_grasptarget
 
+# #P1 step (4) (2026-09-18): an IK solution is accepted only when the
+# end effector's ORIENTATION is also within this angle of the request.
+# Both FK gates used to check position only, so a yawed grasp that the
+# solver satisfied positionally but not rotationally would have passed
+# planning and failed on the physical descent.
+IK_ORN_TOL_DEG = 10.0
+
+
+def quat_angle_deg(q_a, q_b) -> float:
+    """Rotation angle (degrees) between two [x, y, z, w] quaternions."""
+    d = abs(float(np.dot(np.asarray(q_a, dtype=float),
+                         np.asarray(q_b, dtype=float))))
+    return float(np.degrees(2.0 * np.arccos(min(1.0, d))))
+
+
+def pinch_axis(orientation) -> int:
+    """World axis (0 = x, 1 = y) the finger pads close along for an EE
+    orientation quaternion.
+
+    The Panda's fingers slide along the hand's local y axis.  For the
+    top-down grasp family (pitch pi, yaw psi) that is world y at yaw 0
+    and world x at yaw pi/2 (measured: tools/_probe_f24_xy.py,
+    2026-09-18).  The grasp sampler and execute_pick size the pinch on
+    the object's estimated extent along this axis.
+    """
+    rot = np.asarray(p.getMatrixFromQuaternion(
+        [float(v) for v in orientation])).reshape(3, 3)
+    axis = rot @ np.array([0.0, 1.0, 0.0])
+    return 0 if abs(axis[0]) > abs(axis[1]) else 1
+
 JOINT_LIMITS_LOW = np.array([
     -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973
 ])
@@ -539,6 +569,7 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
             # restarts recover convergence when the pose is reachable.
             # Twin of the streams._pybullet_ik refinement.
             fk_err = None
+            orn_err = None
             for refine_round in range(3):
                 for i, angle in zip(ARM_JOINT_INDICES, arm_joints):
                     p.resetJointState(robot_id, i, angle,
@@ -549,12 +580,15 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
                 # call), decoupling fk_err from the candidate solution.
                 # Same idiom as the reset-then-read block in
                 # is_config_collision_free above.
-                fk_pos = p.getLinkState(robot_id, END_EFFECTOR_LINK,
-                                        computeForwardKinematics=True,
-                                        physicsClientId=physics_client)[0]
+                fk_state = p.getLinkState(robot_id, END_EFFECTOR_LINK,
+                                          computeForwardKinematics=True,
+                                          physicsClientId=physics_client)
                 fk_err = float(np.linalg.norm(
-                    np.asarray(fk_pos) - np.asarray(target_pos, dtype=float)))
-                if fk_err <= 0.010:
+                    np.asarray(fk_state[0]) - np.asarray(target_pos, dtype=float)))
+                # #P1 step (4): the orientation must hold too (yawed
+                # grasps pinch along a chosen axis).
+                orn_err = quat_angle_deg(fk_state[1], orn_list)
+                if fk_err <= 0.010 and orn_err <= IK_ORN_TOL_DEG:
                     return arm_joints
                 if refine_round == 2:
                     break  # last candidate already checked — done
@@ -579,8 +613,9 @@ def solve_ik(robot_id: int, target_pos: np.ndarray,
                                      JOINT_LIMITS_HIGH)
 
             logger.debug("solve_ik: rejected solution with FK error "
-                         "%.1f mm after refinement for target %s",
-                         (fk_err or 0.0) * 1000,
+                         "%.1f mm / orientation error %.1f deg after "
+                         "refinement for target %s",
+                         (fk_err or 0.0) * 1000, (orn_err or 0.0),
                          np.asarray(target_pos).tolist())
             return None
 
@@ -798,3 +833,61 @@ def close_gripper(robot_id: int, gui: bool = False,
         telemetry.tick()
         if gui:
             time.sleep(1 / 120)
+
+
+def close_gripper_until_contact(robot_id: int, gui: bool = False,
+                                force: float = 60.0, squeeze: float = 0.003,
+                                ignore_body_ids=frozenset(),
+                                step: float = 0.0005, max_steps: int = 240):
+    """Close the fingers until BOTH pads touch something, then hold a
+    squeeze target ``squeeze`` inside the measured width (#P1 step (4),
+    2026-09-18).
+
+    The load path of execute_pick.  close_gripper needs the object's
+    width to place its target 3 mm inside the surface; that width used
+    to come from p.getAABB.  The robot's own sensing replaces it: the
+    fingers advance ``step`` per simulation step under the close force
+    until the pads report contact, the finger position at that moment
+    IS the object's half-width along the pinch axis (proprioception),
+    and the motors then hold ``squeeze`` inside it so the pads keep
+    pressing through transport exactly as close_gripper does.
+
+    The contact test is tactile: any contact point on a finger-pad
+    link with a body other than the robot itself and
+    ``ignore_body_ids`` (the table and the ground: known static
+    geometry the pads may brush at the descent floor).  Returns the
+    measured half-width (m), or None when the fingers closed to (near)
+    zero without both pads touching, i.e. nothing was between them.
+    """
+    import time
+    target = min(p.getJointState(robot_id, fj)[0] for fj in FINGER_JOINTS)
+    for _ in range(max_steps):
+        target = max(0.0, target - step)
+        for fj in FINGER_JOINTS:
+            p.setJointMotorControl2(robot_id, fj, p.POSITION_CONTROL,
+                                    targetPosition=target, force=force)
+        p.stepSimulation()
+        telemetry.tick()
+        if gui:
+            time.sleep(1 / 120)
+        pads = set()
+        for c in p.getContactPoints(bodyA=robot_id):
+            if (c[3] in FINGER_JOINTS and c[2] != robot_id
+                    and c[2] not in ignore_body_ids and c[8] <= 0.0005):
+                pads.add(c[3])
+        finger_pos = [p.getJointState(robot_id, fj)[0] for fj in FINGER_JOINTS]
+        if pads == set(FINGER_JOINTS):
+            width = float(np.mean(finger_pos))
+            hold = max(0.0, width - squeeze)
+            for _ in range(60):
+                for fj in FINGER_JOINTS:
+                    p.setJointMotorControl2(robot_id, fj, p.POSITION_CONTROL,
+                                            targetPosition=hold, force=force)
+                p.stepSimulation()
+                telemetry.tick()
+                if gui:
+                    time.sleep(1 / 120)
+            return width
+        if target <= 0.0 and max(finger_pos) <= 0.0015:
+            break
+    return None

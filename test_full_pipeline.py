@@ -1532,8 +1532,11 @@ def main(gui=True, run_logger=None, scene_config=None,
             elif action_name == 'pick':
                 # PICK: approach → open gripper → lower to contact →
                 # close gripper (friction squeeze, #P1) → verify grip →
-                # lift.  Uses the object's CURRENT simulator position
-                # (not the boxel center from planning) to handle drift.
+                # lift.  Aims at the object's REGISTRY ESTIMATE (#P1 F24,
+                # 2026-09-18): the box perception registered and has
+                # re-posed at every observation since; execute_pick
+                # re-observes once more before the descent.  The
+                # simulator pose is never read for control.
                 obj, boxel_id, grasp, config = params
                 obj_str = str(obj)
                 print(f"    Picking {obj_str} from {boxel_id}...")
@@ -1554,17 +1557,31 @@ def main(gui=True, run_logger=None, scene_config=None,
                 # handle it as a special case.
                 if obj_str in boxel_to_pybullet:
                     pick_obj_name = boxel_to_pybullet[obj_str]['name']
-                    pick_pos = np.array(env.objects[pick_obj_name].position)
                 elif obj_str == target_name:
                     pick_obj_name = target_name
-                    pick_pos = np.array(env.objects[target_name].position)
                 else:
                     print(f"    ERROR: Cannot resolve PyBullet object for '{obj_str}'")
                     break
+                # #P1 F24: the pick aims at the registry estimate.  A
+                # pick is grounded on obj_at_boxel_KIF, which _build_init
+                # emits from a registered OBJECT boxel (a sense that
+                # found the target registers one at the render estimate,
+                # audit #76), so a missing boxel means the planner acted
+                # on a stale fact — say so and replan instead of reading
+                # the simulator.
+                _pick_bd = registry.get_boxel(obj_str)
+                if _pick_bd is None:
+                    print(f"    ERROR: no registry estimate for {obj_str} — "
+                          f"the pick was grounded on a fact the belief no "
+                          f"longer holds; replanning (#P1 F24)")
+                    break
+                pick_pos = np.asarray(_pick_bd.center, dtype=float).copy()
+                pick_aabb = (np.asarray(_pick_bd.min_corner, dtype=float).copy(),
+                             np.asarray(_pick_bd.max_corner, dtype=float).copy())
 
                 result = execute_pick(
                     robot_id, env, pick_obj_name, pick_pos,
-                    grasp, config, gui)
+                    grasp, config, gui, obj_aabb=pick_aabb)
                 if result[0] is None:
                     print(f"    IK or grip failure during pick — replanning "
                           f"(audit #82 / #P1 grip verification)")
