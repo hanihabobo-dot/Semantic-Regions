@@ -565,6 +565,14 @@ def parse_pipeline_args(argv=None):
              'and without the stack-cost bias.',
     )
     parser.add_argument(
+        '--sense-gate', choices=['off', 'strict'], default='off',
+        help='F6 (2026-09-19): what (boxel_fits ?o ?shadow) means for the '
+             'sense action. off (default): every view-clear fragment is '
+             'sensable (a0e536b behaviour). strict: only fragments in which '
+             'a target-class box can rest fully occluded (dense hideability '
+             'test, streams.test_target_can_hide_in_shadow). A/B decides '
+             'the default for CB#113.')
+    parser.add_argument(
         '--planner',
         choices=['ff-astar1', 'ff-astar2', 'ff-astar', 'ff-wastar1',
                  'ff-wastar2', 'dijkstra'],
