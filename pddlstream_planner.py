@@ -43,6 +43,10 @@ from streams import (BoxelStreams, RobotConfig, Trajectory, Grasp,
 from robot_utils import REST_POSES
 
 
+# F7 remedy 3 (2026-09-19): pddlstream solve() search_sample_ratio (its
+# default is 1).  See the comment at the solve() call in plan().
+SEARCH_SAMPLE_RATIO = 0.25
+
 # F11 (2026-08-22): prospective per-object placement-blocking tolerance.
 # The census lists a placed blocker at SENSE_MARGINAL_BLOCKED_FRACTION
 # (0.05), but forbidding placements prospectively at that same margin
@@ -1109,7 +1113,19 @@ class PDDLStreamPlanner:
                 max_time=max_time,
                 unit_costs=unit_costs,
                 planner=planner,       # F30: search weight is a CLI choice
-                verbose=verbose
+                verbose=verbose,
+                # F7 remedy 3 (2026-09-19): pddlstream's adaptive loop
+                # allocates search_sample_ratio x search_time of sampling
+                # per iteration and its timed_process busy-waits that
+                # whole budget on STANDBY bindings (skeleton.py
+                # process_root re-pushes them), so a skeleton that can
+                # never bind doubles the wall clock every iteration
+                # (10-29-51 plan 4: ~100 of 164 s; the 2026-09-19 tray
+                # smoke: a 900 s cap in plan 6).  A quarter of the
+                # default keeps every binding's one call per iteration
+                # (greedily_process + process_complexity) and cuts the
+                # spin fourfold.
+                search_sample_ratio=SEARCH_SAMPLE_RATIO,
             )
         finally:
             sys.stdout = _tee._stream
