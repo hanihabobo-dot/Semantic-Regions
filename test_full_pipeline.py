@@ -956,6 +956,9 @@ def main(gui=True, run_logger=None, scene_config=None,
                                 support_body_ids=planner_support_body_ids,
                                 camera_pos=env.camera_position,
                                 tray_name=tray_name)
+    # F6: the meaning of the sense hideability fact is a CLI choice
+    # until the A/B settles the default (see run_logger --sense-gate).
+    planner.sense_gate = getattr(args, 'sense_gate', 'off')
 
     # World eye (2026-09-18): textual snapshots of world + belief + camera
     # view at every decision and observation point of the loop, into
@@ -2378,6 +2381,7 @@ if __name__ == "__main__":
         "stack_height": args.stack_height,
         "unit_costs":   args.unit_costs,
         "planner":      args.planner,
+        "sense_gate":   args.sense_gate,
         "baseline":     args.baseline,
         "uniform_cell_size": args.uniform_cell_size,
         "min_boxel_size": args.min_boxel_size,  # audit #77 step 2
