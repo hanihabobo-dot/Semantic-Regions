@@ -350,11 +350,19 @@ def scalability_scene(n_occluders: int = 3, n_targets: int = 4,
         spec.color = OBJECT_COLORS[ck]
         spec.name = base if count == 1 else f"{base}_{count}"
 
+    # #P3(a) (2026-09-19): every eval scene spawns inside the Panda's
+    # reach (TAMPURA's env_generator pattern).  This scene never set the
+    # flag, so the eval sweep's scalability cells sampled the wide
+    # unconstrained window (x [-0.20, 0.60], y [-0.50, 0.50]) and the
+    # thesis sentence "random reachable positions" was not guaranteed
+    # for them.  Changes every scalability seed's layout: the canonical
+    # re-sweep (CB#113) is planned after this lands.
     return SceneConfig(
         occluders=occluders,
         targets=targets,
         seed=seed,
         n_hidden_targets=n_hidden,
+        constrain_to_reach=True,
     )
 
 
