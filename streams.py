@@ -59,6 +59,15 @@ REACH_SPHERE_R_M = 0.815
 # reasoning is conservative: anything that fits the largest possible
 # target fits the real one.
 NOMINAL_HIDDEN_EXTENTS = np.array([0.04, 0.04, 0.04])
+# F6 (2026-09-19): the class LOWER bound (targets draw half-extents in
+# [0.015, 0.020] -> 3-4 cm cubes) for the HIDEABILITY question "could any
+# sought-class instance hide in this fragment".  The upper bound above
+# stays the PLACE question "will my object always fit".  With the upper
+# bound the strict sense gate rejected the fragment the target actually
+# sat in on 6 of 78 hidden targets (tools/_probe_f6_gate.py): the carve
+# leaves 2.9-4.0 cm wide slivers next to a caster, and a 3.5 cm cube in
+# one is hidden while a 4 cm box would not fit.
+NOMINAL_HIDDEN_EXTENTS_MIN = np.array([0.03, 0.03, 0.03])
 
 from boxel_data import BoxelRegistry, BoxelData, BoxelType
 from robot_utils import (ARM_JOINT_INDICES, END_EFFECTOR_LINK, FINGER_JOINTS,
@@ -533,9 +542,16 @@ class BoxelStreams:
     # registry via min over SHADOW boxel z_min values (shadow_calculator
     # clamps every shadow to table_z).
 
+    # F6 (2026-09-19): candidate resting positions are sampled every
+    # HIDE_GRID_SPACING along x and y inside the fragment (capped per
+    # axis); the 3 x 3 grid of the audit-#62 test missed the actual
+    # hiding spot on 3 of 20 seeds (the a0e536b false-negative trap).
+    HIDE_GRID_SPACING = 0.01
+    HIDE_GRID_MAX_PER_AXIS = 12
+
     def test_target_can_hide_in_shadow(self, obj_id: str, shadow_id: str,
                                        camera_pos: 'Optional[np.ndarray]' = None,
-                                       n_grid: int = 3) -> bool:
+                                       n_grid: Optional[int] = None) -> bool:
         """
         Whether a target can be physically hidden, fully occluded, inside a
         shadow region (audit #62 refinement).
@@ -557,30 +573,36 @@ class BoxelStreams:
             obj_id: target object / boxel ID
             shadow_id: shadow boxel ID to test as hiding region
             camera_pos: fixed-scene camera position; if None, skip raycast
-            n_grid: per-axis grid resolution for candidate placements
-                (default 3 → up to 9 candidates × 8 corners = 72 rays per
-                pair)
+            n_grid: per-axis grid resolution for candidate placements;
+                None (default, F6) samples every HIDE_GRID_SPACING up to
+                HIDE_GRID_MAX_PER_AXIS per axis (up to 144 candidates x
+                8 corners per pair), an int forces that many per axis
 
         Returns:
             True iff target physically fits, stably and fully occluded,
             somewhere inside the shadow.
         """
-        if not self.test_boxel_fits(obj_id, shadow_id):
-            return False
-        if camera_pos is None:
-            return True
-
         shadow = self.registry.get_boxel(shadow_id)
         if shadow is None:
             return False
 
         obj_boxel = self.registry.get_boxel(obj_id)
         if obj_boxel is not None:
-            obj_extent = (obj_boxel.max_corner - obj_boxel.min_corner) / 2.0
+            obj_full = np.asarray(obj_boxel.max_corner - obj_boxel.min_corner,
+                                  dtype=float)
         else:
             # #P1 step (2d): class prior, not the hidden instance's true
-            # size (see NOMINAL_HIDDEN_EXTENTS).
-            obj_extent = NOMINAL_HIDDEN_EXTENTS / 2.0
+            # size.  F6: the class LOWER bound here — "could any instance
+            # of the sought class hide in this fragment" (see
+            # NOMINAL_HIDDEN_EXTENTS_MIN); the upper bound is for place.
+            obj_full = np.asarray(NOMINAL_HIDDEN_EXTENTS_MIN, dtype=float)
+        # Stage 1: extent pre-screen with the same bound.
+        shadow_full = np.asarray(shadow.max_corner - shadow.min_corner, dtype=float)
+        if not bool(np.all(shadow_full >= obj_full)):
+            return False
+        if camera_pos is None:
+            return True
+        obj_extent = obj_full / 2.0
         hx, hy, hz = float(obj_extent[0]), float(obj_extent[1]), float(obj_extent[2])
 
         # Stable resting pose: target must rest on the table (the only
@@ -607,10 +629,15 @@ class BoxelStreams:
 
         cz = table_z + hz
 
-        xs = (np.linspace(cx_min, cx_max, n_grid)
-              if cx_max > cx_min else np.array([cx_min]))
-        ys = (np.linspace(cy_min, cy_max, n_grid)
-              if cy_max > cy_min else np.array([cy_min]))
+        def _axis(lo, hi):
+            if hi <= lo:
+                return np.array([lo])
+            if n_grid is not None:
+                return np.linspace(lo, hi, n_grid)
+            n = int(np.ceil((hi - lo) / self.HIDE_GRID_SPACING)) + 1
+            return np.linspace(lo, hi, min(max(n, 2), self.HIDE_GRID_MAX_PER_AXIS))
+        xs = _axis(cx_min, cx_max)
+        ys = _axis(cy_min, cy_max)
 
         corners: list = []
         starts: list = []

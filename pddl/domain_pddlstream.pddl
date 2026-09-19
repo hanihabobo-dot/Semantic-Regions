@@ -173,6 +173,13 @@
       (handempty)
       (view_clear ?region)
       (not (obj_at_boxel_KIF ?o ?region))  ; Only sense if unknown
+      ;; F6 (2026-09-19): the hideability fact (audit #62) is back on
+      ;; sense.  What it MEANS is the planner's --sense-gate: "off"
+      ;; emits it for every (object, fragment) pair (a0e536b's
+      ;; behaviour: sense grounds on any view-clear fragment), "strict"
+      ;; only where a target-class box can rest fully occluded inside
+      ;; the fragment (streams.test_target_can_hide_in_shadow, dense).
+      (boxel_fits ?o ?region)
     )
     :effect (and
       (obj_at_boxel_KIF ?o ?region)        ; Now we know
