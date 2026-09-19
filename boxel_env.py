@@ -683,30 +683,69 @@ class BoxelTestEnv:
         """
         return self._gui_to_plan[gui_id]
 
-    def sync_to_plan_client(self, held_body_id: Optional[int] = None) -> None:
-        """Mirror the live GUI-client state into the plan client.
+    # Where the plan client parks a body the belief does not hold (#P1
+    # WP2c): far below the workspace, out of every reachable pose.
+    _PLAN_CLIENT_PARK = [5.0, 5.0, -5.0]
+
+    def sync_to_plan_client(self, held_body_id: Optional[int] = None,
+                            registry=None) -> None:
+        """Mirror the robot's state into the plan client.
 
         Call this once per replan (right before planner.plan()).  Cheap —
         a few dozen p.* calls — and avoids the per-IK save/restore handshake
         that the single-client design needed.
 
-        Copies:
-          * Base pose of every mirrored body (objects, plane, table, robot
-            base — the latter is fixed but cheap to refresh).
-          * All robot joint states (arm 0-6 + fingers + any fixed joints).
-          * The held body (if any) inherits the EE pose via its base-pose
-            sync; planning-time collision checks reposition it to each
-            hypothetical EE config in is_config_collision_free.
-
-        held_body_id is accepted for symmetry with execute_pick / pre-replan
-        bookkeeping; it isn't required for correctness because the held
-        body's base pose is already covered by the loop above.
+        #P1 WP2c (2026-09-19): with ``registry`` given, the plan client —
+        the motion planner's collision world — is posed from the robot's
+        BELIEF, not from the simulator (#P1 inventory item (j)):
+          * the robot: every joint state from the executing robot
+            (proprioception);
+          * the plane, the table and the tray: their true poses (static
+            bodies known at design time, like their sizes);
+          * every other body: the centre of its registry boxel (the
+            perception estimate), upright; a body with NO boxel (a hidden
+            target the robot has never seen, a retired lost object) is
+            parked at _PLAN_CLIENT_PARK — the planner cannot avoid what
+            the robot does not know is there, and a motion that hits it
+            is a physical failure the world-integrity monitor reports;
+          * the held body: at the end effector (proprioception);
+            planning-time collision checks reposition it to each
+            hypothetical EE config in is_config_collision_free anyway.
+        Without ``registry`` the pre-WP2c behaviour remains (every body's
+        simulator pose) for probes and tools that have no belief.
         """
-        for gid, pid in self._gui_to_plan.items():
-            pos, orn = p.getBasePositionAndOrientation(
-                gid, physicsClientId=self.client_id)
-            p.resetBasePositionAndOrientation(
-                pid, pos, orn, physicsClientId=self.plan_client_id)
+        if registry is None:
+            for gid, pid in self._gui_to_plan.items():
+                pos, orn = p.getBasePositionAndOrientation(
+                    gid, physicsClientId=self.client_id)
+                p.resetBasePositionAndOrientation(
+                    pid, pos, orn, physicsClientId=self.plan_client_id)
+        else:
+            static = {"plane", "table", "robot"}
+            ee_pos = None
+            if held_body_id is not None and "robot" in self.objects:
+                ee_pos = p.getLinkState(self.objects["robot"].object_id, 11,
+                                        physicsClientId=self.client_id)[0]
+            for name, info in self.objects.items():
+                gid = info.object_id
+                pid = self._gui_to_plan.get(gid)
+                if pid is None:
+                    continue
+                if name in static or getattr(info, "is_tray", False):
+                    pos, orn = p.getBasePositionAndOrientation(
+                        gid, physicsClientId=self.client_id)
+                    p.resetBasePositionAndOrientation(
+                        pid, pos, orn, physicsClientId=self.plan_client_id)
+                    continue
+                if gid == held_body_id and ee_pos is not None:
+                    pos = [float(v) for v in ee_pos]
+                else:
+                    bd = registry.get_boxel(name)
+                    pos = ([float(v) for v in bd.center] if bd is not None
+                           else list(self._PLAN_CLIENT_PARK))
+                p.resetBasePositionAndOrientation(
+                    pid, pos, [0.0, 0.0, 0.0, 1.0],
+                    physicsClientId=self.plan_client_id)
         if self.plan_robot_id is not None:
             gui_robot = self.objects["robot"].object_id
             n_joints = p.getNumJoints(gui_robot,

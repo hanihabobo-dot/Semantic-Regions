@@ -637,8 +637,9 @@ class BoxelStreams:
     # The Panda opens 0.04 m per finger; 2 mm of descent clearance on
     # each side is the minimum the friction grasp has worked with.
     GRASP_MAX_SPAN = 0.076
-    # Extra approach altitude offered above a tall object's half-height.
-    GRASP_TALL_CLEARANCE = 0.08
+    # Footprints whose two extents differ by no more than this are
+    # square for the sampler: one yaw, not two.
+    GRASP_SQUARE_TOL = 0.005
 
     def sample_grasp(self, obj_id: str) -> Iterator[Tuple[Grasp]]:
         """
@@ -689,8 +690,9 @@ class BoxelStreams:
         #   yaw pi/2 pinches along world x (span = the box's x extent)
         # (robot_utils.pinch_axis, measured by tools/_probe_f24_xy.py).
         # A span wider than GRASP_MAX_SPAN cannot be closed on, so that
-        # yaw is not offered; the shorter span comes first (more descent
-        # clearance on each side), then the other.  A box that grew
+        # yaw is not offered; for a rectangular footprint the shorter
+        # span comes first (more descent clearance on each side), then
+        # the other; a square footprint gets yaw 0 only.  A box that grew
         # because the object yawed on the table can exceed the span on
         # both axes and get no grasp at all — honest, and the case the
         # F2 giveup covers; a principal-axis yaw from the segmentation
@@ -702,21 +704,27 @@ class BoxelStreams:
         else:
             ext = np.asarray(NOMINAL_HIDDEN_EXTENTS, dtype=float)
         half_height = float(ext[2]) / 2.0
-        candidates = sorted([(0.0, float(ext[1])), (np.pi / 2.0, float(ext[0]))],
-                            key=lambda c: c[1])
+        # A near-square footprint (within GRASP_SQUARE_TOL) gets the
+        # wrist-neutral yaw 0 only: the second yaw would pinch the same
+        # span and only multiply the planner's grasp facts — the first
+        # A/B of this sampler (seed 5, plan 5) showed what that costs:
+        # every extra grasp per object is another doomed compute-kin
+        # candidate at every far cell, and FastDownward's searches grew
+        # past 30 s each until the 900 s cap.  A rectangular footprint
+        # gets both yaws, the shorter span first.
+        if abs(float(ext[0]) - float(ext[1])) <= self.GRASP_SQUARE_TOL:
+            candidates = [(0.0, max(float(ext[0]), float(ext[1])))]
+        else:
+            candidates = sorted([(0.0, float(ext[1])),
+                                 (np.pi / 2.0, float(ext[0]))],
+                                key=lambda c: c[1])
 
         # Z offsets: the validated 0.10 m and the F4 0.06 m (comments at
-        # _GRASP_Z_OFFSETS), plus for a tall object one offset
-        # GRASP_TALL_CLEARANCE above its half-height, so a 13 cm
-        # occluder is not left with exactly one approach altitude (the
-        # F7 generator-exhaustion lead, audit F7 refined evidence).
-        # Deterministic best-first order: 0.10 first, then the rest
-        # ascending — no shuffle.
+        # _GRASP_Z_OFFSETS), deterministic order — no shuffle.  (A third,
+        # higher altitude for tall objects was tried on 2026-09-19 and
+        # withdrawn the same day: at the reach margin it never bound and
+        # it multiplied the search, see above.)
         offsets = list(self._GRASP_Z_OFFSETS)
-        tall = half_height + self.GRASP_TALL_CLEARANCE
-        if tall > max(offsets) + 0.005:
-            offsets.append(round(tall, 3))
-        offsets = [offsets[0]] + sorted(offsets[1:])
         # #P1 step (2) altitude gate: a z-offset at or below the object's
         # top parks the grasp frame INSIDE the block — the approach swing
         # then plows the open fingers through its top (seed 0 field
