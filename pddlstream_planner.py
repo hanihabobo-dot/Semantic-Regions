@@ -413,22 +413,29 @@ class PDDLStreamPlanner:
         known = []
         ext_classes: Dict[Tuple, List[str]] = {}
         for b in self.registry.boxels.values():
-            # Review round 3 (2026-09-20): the HELD object is not a body
-            # the camera can lose sight of — its boxel is the stale
-            # pick-time box, the same one the location facts drop for
-            # (see _build_init), and refresh_object_aabbs never re-poses
-            # it.  Protecting the position it has already left made
-            # OTHER objects' placements cost 2 instead of 1 at cells
-            # that hide nothing.
-            if (b.boxel_type != BoxelType.OBJECT
-                    or b.id == self.tray_name
-                    or (held_obj is not None and b.id == held_obj)):
+            if b.boxel_type != BoxelType.OBJECT or b.id == self.tray_name:
                 continue
             bmin = np.asarray(b.min_corner, dtype=float)
             bmax = np.asarray(b.max_corner, dtype=float)
             _g = [np.linspace(bmin[k], bmax[k], 3) for k in range(3)]
             pts = np.array([[x, y, z] for x in _g[0] for y in _g[1] for z in _g[2]])
-            known.append((b.id, pts))
+            # Review round 3 (2026-09-20), corrected by round 4 the same
+            # day: the two halves of this loop need OPPOSITE treatment of
+            # the held object.  Its POSITION is the stale pick-time box
+            # (the same staleness the location facts drop for in
+            # _build_init; refresh_object_aabbs never re-poses a held
+            # body), so it is not a body the camera can lose sight of and
+            # it must not enter `known` — protecting a position it has
+            # already left made OTHER objects' placements cost 2 instead
+            # of 1 at cells that hide nothing.  Its EXTENTS, on the other
+            # hand, are unchanged by being carried, and `ext_classes` is
+            # keyed on extents alone: that is the side that decides where
+            # IT may be placed.  Round 3 excluded it from both, which
+            # silently disabled F31 on the only action it constrains —
+            # place and place_hiding both require (holding ?o), so the
+            # placed object is ALWAYS the held one.
+            if held_obj is None or b.id != held_obj:
+                known.append((b.id, pts))
             key = tuple(int(v) for v in np.round((bmax - bmin) * 1000.0))
             ext_classes.setdefault(key, []).append(b.id)
         hides = set()

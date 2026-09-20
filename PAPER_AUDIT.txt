@@ -2606,12 +2606,31 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       flagged placement_hides and cost 2 instead of 1.  Bounded, and
       conservative in direction: place and place_hiding have identical
       preconditions and effects and differ only in the polarity of the
-      fact and in cost, so nothing became infeasible and nothing got
-      CHEAPER than it should be; the held object's own placement was
-      already exempt (the emitter skips pairs naming the hidden body),
-      so the disposal fallback was never affected.  Under --unit-costs
-      the fact is inert.  Fix: the function takes held_obj and skips it,
-      like the tray.  Provenance: the defect is a41cb12's, i.e. F31's
+      fact and in cost, so nothing became infeasible.  Under
+      --unit-costs the fact is inert.  Fix: the function takes held_obj
+      and skips it when collecting the bodies to protect.
+      [CORRECTION 2026-09-20, round 4, on BOTH the fix and this note.
+      (1) THE NOTE WAS WRONG where it said "the held object's own
+      placement was already exempt (the emitter skips pairs naming the
+      hidden body)".  The inner guard is `if obj_id != tid`, which
+      exempts the held object only as the HIDDEN body, never as the
+      PLACED one, so (held, cell) pairs were emitted before the fix and
+      the disposal fallback WAS affected.  (2) THE FIRST FIX OVERSHOT
+      and silently disabled F31 on the only action it constrains.  The
+      loop feeds two different structures: `known`, the bodies whose
+      sight lines are protected, which is POSITION data and where the
+      held object's staleness genuinely disqualifies it; and
+      `ext_classes`, keyed on EXTENTS alone, which is where the emitted
+      pairs draw their placed object from.  Extents do not go stale
+      when an object is carried.  Excluding the held object from both
+      meant no placement_hides fact could ever name it — and since
+      place and place_hiding both require (holding ?o), the placed
+      object is ALWAYS the held one, so every placement became cost 1
+      and F31 stopped discriminating.  Corrected: skip it in `known`
+      only.  Log-unobserved (no F31-era log has a plan with a non-None
+      held_obj), but live on the replan-while-holding and disposal
+      paths, which August-and-later logs exercise in 84 % of holding
+      replans.]  Provenance: the defect is a41cb12's, i.e. F31's
       own, not the round-2 commits'.  NOTE for anyone reproducing it:
       the [F31-diag] block keys on the PLACED object and never names
       the hidden body, so this case is invisible in that log, and every
