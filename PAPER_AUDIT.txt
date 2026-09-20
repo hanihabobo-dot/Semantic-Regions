@@ -785,7 +785,23 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       worth carrying into the paper: the ratio also changes which
       FAILURE LABEL a dead end gets, since the binding-death classifier
       keys on whether the summary reports skeletons, so failure-mode
-      tables are only comparable within one ratio.  Re-smoke on the same seed (physics diverged:
+      tables are only comparable within one ratio.
+      STRONGER EVIDENCE than the A/B, from the round-3 review's reading
+      of the vendored library and of the accused logs: the parameter is
+      consumed at exactly one place (focused.py's allocated_sample_time
+      = ratio * search_time - sample_time) and bounds exactly one call,
+      skeleton.py's timed_process, which IS the STANDBY busy-wait.  The
+      guaranteed one-call-per-binding pass is greedily_process plus
+      process_complexity and NEITHER takes a time budget, so shrinking
+      the ratio cannot starve a bindable skeleton; all three claims in
+      the call-site comment check out against the library source.  And
+      the three seeds that looked like a regression never reached that
+      code at all: every failing plan() ends "sample_time: 0.000,
+      skeletons: 0, solved: False, timeout: False" against max_time
+      1800 s — FastDownward returned no skeleton and the queue exited
+      before timed_process was called.  The 17->14 gap on seeds 100-119
+      is NOT a sampling regression; those episodes are F32 dead ends.
+      Re-smoke on the same seed (physics diverged:
       blue slipped out at the stack entry, fell off the table and was
       retired LOST, and the remaining fragments sat behind the toppled
       11.6 cm orange box that no yaw can pinch): honest no-plan in plan 7
@@ -2463,6 +2479,30 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       fix's, not F31's.  F31 is not behind a flag, so isolating it needs
       a revert arm; CB#113 carries the final numbers either way.  The
       eye --audit acceptance test (step 5) has NOT been run.]
+      [DEFECT FOUND AND FIXED 2026-09-20 by the round-3 adversarial
+      review (two of seven readers found it independently, and it
+      survived the refutation pass): _compute_placement_hides built its
+      "known bodies that must not be occluded" set from every OBJECT
+      boxel except the tray, with NO held-object filter.  On a replan
+      while holding, the held object's boxel is the stale pick-time box
+      — the same staleness that made this commit drop its location
+      facts, and refresh_object_aabbs never re-poses a held body — so
+      the planner protected a position the object had already left, and
+      OTHER objects' placements at cells on that dead sight line were
+      flagged placement_hides and cost 2 instead of 1.  Bounded, and
+      conservative in direction: place and place_hiding have identical
+      preconditions and effects and differ only in the polarity of the
+      fact and in cost, so nothing became infeasible and nothing got
+      CHEAPER than it should be; the held object's own placement was
+      already exempt (the emitter skips pairs naming the hidden body),
+      so the disposal fallback was never affected.  Under --unit-costs
+      the fact is inert.  Fix: the function takes held_obj and skips it,
+      like the tray.  Provenance: the defect is a41cb12's, i.e. F31's
+      own, not the round-2 commits'.  NOTE for anyone reproducing it:
+      the [F31-diag] block keys on the PLACED object and never names
+      the hidden body, so this case is invisible in that log, and every
+      [F31-diag] line on disk comes from a plan with held_obj=None —
+      there is no recorded instance, only the code path.]
 
   F32. [OPEN — PLANNING, found 2026-09-19 by the F7 fix] CROWDED-TABLE
       DEAD END: with every belief fact consistent (F7), seed 13 plan 4
