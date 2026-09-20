@@ -1878,16 +1878,46 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       halves.  So the SMOOTHER fix is what moves the number, and adding
       the resolution did not help — the three largest shoves in the
       whole comparison (106, 131 and 187 mm) are all in the resolution
-      arm, against a 37 mm maximum without it.  The obvious explanation,
-      that rejected direct paths push motion onto longer RRT detours
-      certified with relaxed fingers, is NOT supported: the rejection
-      rate barely moved and 6 of the 8 events still follow a 10-waypoint
-      direct-path move.  With 3 versus 8 events over 35 runs the
-      difference is not separable from trajectory noise either way, so
-      the honest statement is that raising the direct-path resolution
-      has NOT been shown to reduce what it was built to reduce, on
-      these scenes.  The tray-stack arms (long loaded transits, where
-      the original event happened) are the decisive test.]
+      arm, against a 37 mm maximum without it.
+        tray-stack seeds 0-7   resolution on     resolution off
+        success                4/8               3/8
+        mean planning          23.6 s            23.5 s
+        bystander events       4 (2 topples,     2 (both 26 mm)
+                                 114 and 123 mm)
+        cargo lost in transit  2                 4
+      Both goal types agree, so this is not one arm's luck: over 43 runs
+      per configuration, resolution OFF gives 5 bystander events and
+      NONE above 50 mm, resolution ON gives 12 events including five
+      shoves of 106 to 187 mm, at the same success and the same
+      planning time.  Normalising by plans executed does not remove it
+      (0.029 vs 0.075 events per plan on holding, 0.07 vs 0.15 on
+      tray).  For reference the pre-F18 arm sits at 14 events over 35
+      runs, so the SMOOTHER half improved the record and the resolution
+      half gave part of it back.
+      MECHANISM NOT ESTABLISHED, and I will not pretend otherwise.  The
+      natural explanation is that more rejected direct paths push motion
+      onto RRT detours whose surviving edges are certified with the
+      fingers relaxed (the residual above), but the rejection rate only
+      moves from 5.0 % to 7.5 %, which looks too small to carry it.  An
+      attempt to attribute each event to the path kind that preceded it,
+      by reading the planner's own log lines, was DISCARDED as invalid:
+      plan_motion logs every SAMPLING call, not just the trajectory that
+      gets executed, so "the last path line before the event" is usually
+      some rejected candidate.  The only reliable provenance in the log
+      is the executed move's waypoint count, and a direct path (always
+      10, by _linear_trajectory's default) is not distinguishable there
+      from a smoothed RRT path that happens to have 10.  Settling it
+      needs the executed trajectory's provenance logged at the move,
+      which is a one-line addition worth making before the next attempt.
+      DECISION 2026-09-20: the resolution default is OFF
+      (streams.path_check_step = 0.0, i.e. exactly the configuration the
+      pcold arms measured), the smoother fix is unconditional, and the
+      finer check stays one flag away at --path-check-step 0.0286.
+      Shipping the coarse check as the default is a measured choice, not
+      an oversight: it IS unsound on long edges, that is stated here and
+      in the wiki, and if the residual is ever fixed the resolution must
+      be re-A/B'd, because the soundness argument for it has not gone
+      away.]
 
   F17. [DONE] HEADLESS RUNS RECORDED DECISIONS BUT NOT PHYSICS
       (2026-08-22, user-directed): a GUI run let the user WATCH the
