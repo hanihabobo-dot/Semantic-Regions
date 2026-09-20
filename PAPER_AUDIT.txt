@@ -766,7 +766,26 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       rejected the stack, and the next skeleton could not bind): the
       STANDBY spin is the pddlstream busy-wait, and a quarter of the
       budget keeps every binding's one call per iteration while cutting
-      the spin fourfold.  Re-smoke on the same seed (physics diverged:
+      the spin fourfold.  ISOLATED A/B 2026-09-20 (commit 7ec8574, the
+      ONLY difference between the arms is --search-sample-ratio, so this
+      measures the parameter and nothing else):
+        seeds   library 1.0        pipeline 0.25
+        0-19    15/20  8.3 s mean  16/20  5.1 s mean
+        100-119 15/20  5.5 s mean  15/20  7.5 s mean
+        total   30/40              31/40
+      Success is identical within the measured +/-1-2 noise floor, and
+      the mean planning time is a wash across the two blocks, so the
+      fear that a quarter budget starves bindable skeletons is NOT
+      borne out: it costs no seed either block.  What it does buy is the
+      worst case — seed 13, the crowded-table dead end, spends 72 s
+      spinning at 1.0 and 29 s at 0.25 for the same honest no-plan (and
+      4 s in an earlier run of the same config, so the spin's cost is
+      itself highly variable).  DECISION: 0.25 stays the default, the
+      flag stays for anyone who wants the library behaviour.  Caveat
+      worth carrying into the paper: the ratio also changes which
+      FAILURE LABEL a dead end gets, since the binding-death classifier
+      keys on whether the summary reports skeletons, so failure-mode
+      tables are only comparable within one ratio.  Re-smoke on the same seed (physics diverged:
       blue slipped out at the stack entry, fell off the table and was
       retired LOST, and the remaining fragments sat behind the toppled
       11.6 cm orange box that no yaw can pinch): honest no-plan in plan 7
