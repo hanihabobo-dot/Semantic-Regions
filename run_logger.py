@@ -598,12 +598,13 @@ def parse_pipeline_args(argv=None):
         '--path-check-step', type=float, default=None,
         help='F18 (2026-09-20): the resolution of every motion-plan '
              'collision check, in radians of the largest-moving joint '
-             'between consecutive samples along an edge (default 0.2/7, '
-             'exactly what an RRT edge already gets). 0 restores the old '
-             'fixed 8 samples per edge, which certified the direct-path '
-             'shortcut from samples 9 cm apart at the end effector and '
-             'let the carried object sweep a bystander flat between two '
-             'of them. A/B lever.')
+             'between consecutive samples along an edge. DEFAULT 0 = a '
+             'fixed 8 samples per edge, whatever its length. Pass 0.0286 '
+             '(0.2/7, what an RRT edge already gets) for the finer check: '
+             'it is the sounder test, since 8 samples cannot certify a '
+             '63 cm end-effector sweep, but the A/B measured more and '
+             'larger bystander disturbances with it on, at equal success '
+             'and planning time, so it is not the default.')
     parser.add_argument(
         '--search-sample-ratio', type=float, default=None,
         help='F7 remedy 3 (2026-09-19): the sampling-to-search budget '

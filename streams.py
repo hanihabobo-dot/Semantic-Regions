@@ -271,10 +271,18 @@ class BoxelStreams:
         # instance per PDDLStreamPlanner, which lives for the episode).
         self.ungraspable_objects: set = set()
         # F18 (2026-09-20): the resolution of every path collision check,
-        # in radians of the largest-moving joint between samples.  An
-        # attribute so --path-check-step can A/B it against the old
-        # fixed-count behaviour (0 restores it).
-        self.path_check_step: float = PATH_CHECK_MAX_STEP_RAD
+        # in radians of the largest-moving joint between samples.
+        # DEFAULT 0 = the fixed RRT_EDGE_CHECKS count, because that is
+        # what measured best: over 43 runs per arm on two goal types,
+        # resolution OFF gave 5 bystander events and none above 50 mm,
+        # resolution ON gave 12 with five shoves of 106 to 187 mm, at
+        # identical success and planning time.  The finer check is
+        # sounder on paper — 8 samples cannot certify a 63 cm sweep —
+        # and it is one flag away (--path-check-step, recommended value
+        # PATH_CHECK_MAX_STEP_RAD), but it has not been shown to reduce
+        # what it was built to reduce.  The smoother fix below is the
+        # half that moved the number, and it is unconditional.
+        self.path_check_step: float = 0.0
         # F18: the residual measurement below costs an extra strict check
         # per interior segment of every trajectory the stream yields, and
         # most yielded trajectories are never executed, so it is OFF
