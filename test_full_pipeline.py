@@ -963,6 +963,10 @@ def main(gui=True, run_logger=None, scene_config=None,
     _ssr = getattr(args, 'search_sample_ratio', None)
     if _ssr is not None:
         planner.search_sample_ratio = _ssr
+    _pcs = getattr(args, 'path_check_step', None)
+    if _pcs is not None:
+        planner.streams.path_check_step = _pcs
+    planner.streams.path_check_diag = bool(getattr(args, 'path_check_diag', False))
 
     # World eye (2026-09-18): textual snapshots of world + belief + camera
     # view at every decision and observation point of the loop, into
@@ -2439,6 +2443,8 @@ if __name__ == "__main__":
         "sense_gate":   args.sense_gate,
         "corridor_test": args.corridor_test,
         "search_sample_ratio": getattr(args, 'search_sample_ratio', None),
+        "path_check_step": getattr(args, 'path_check_step', None),
+        "path_check_diag": bool(getattr(args, 'path_check_diag', False)),
         "baseline":     args.baseline,
         "uniform_cell_size": args.uniform_cell_size,
         "min_boxel_size": args.min_boxel_size,  # audit #77 step 2

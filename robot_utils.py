@@ -6,6 +6,7 @@ here once. Every module that needs robot parameters imports from this file.
 """
 
 import logging
+import math
 import numpy as np
 import pybullet as p
 
@@ -28,6 +29,16 @@ END_EFFECTOR_LINK = 11   # panda_grasptarget
 # solver satisfied positionally but not rotationally would have passed
 # planning and failed on the physical descent.
 IK_ORN_TOL_DEG = 10.0
+
+# F18 (2026-09-20): the resolution of a path collision check, in radians
+# of the largest-moving joint between consecutive samples.  0.2 / 7 is
+# exactly what an RRT edge already gets (streams.RRT_STEP_SIZE over
+# RRT_EDGE_CHECKS - 1 gaps), so RRT edges are unchanged and only the
+# arbitrarily long edges — the direct-path shortcut and the smoother's
+# replacement edges, which are the ones that become executed transits —
+# gain samples.  See is_path_collision_free.
+PATH_CHECK_MAX_STEP_RAD = 0.2 / 7.0
+PATH_CHECK_MAX_SAMPLES = 128
 
 
 def quat_angle_deg(q_a, q_b) -> float:
@@ -323,22 +334,32 @@ def is_path_collision_free(robot_id: int, q_start, q_end,
                             allow_gripper_collisions: bool = False,
                             held_body_ids=None,
                             held_body_ee_offset=None,
-                            strict_gripper_interior: bool = False) -> bool:
+                            strict_gripper_interior: bool = False,
+                            max_step_rad: float = PATH_CHECK_MAX_STEP_RAD,
+                            max_samples: int = PATH_CHECK_MAX_SAMPLES) -> bool:
     """
     Check a straight-line joint-space path for collisions.
 
-    Evaluates *n_checks* evenly-spaced configurations (including the
-    endpoints) along the linear interpolation from *q_start* to *q_end*.
+    Evaluates evenly-spaced configurations (including the endpoints)
+    along the linear interpolation from *q_start* to *q_end*.  The count
+    is at least *n_checks* and is raised until consecutive samples are no
+    more than *max_step_rad* apart in every joint, so the RESOLUTION of
+    the check does not depend on how long the edge is (F18, below).
 
     Args:
         robot_id:        PyBullet body ID of the robot.
         q_start:         Start joint positions (array-like, length 7).
         q_end:           End joint positions (array-like, length 7).
         physics_client:  PyBullet physics client ID.
-        n_checks:        Number of intermediate configurations to test.
+        n_checks:        MINIMUM number of configurations to test.
                          Default 8 matches BoxelStreams.RRT_EDGE_CHECKS —
                          see the RRT-Connect parameter block in streams.py
                          for the empirical-tuning rationale.
+        max_step_rad:    Maximum per-joint gap between consecutive
+                         samples.  0 or None restores the old fixed-count
+                         behaviour.
+        max_samples:     Upper bound on the sample count, so a wild edge
+                         cannot cost unbounded time.
         ignored_bodies:  Optional set/frozenset of body IDs to skip.
         allow_gripper_collisions: If True, exempt gripper/wrist links
             from environment collision reporting (same as in
@@ -363,8 +384,30 @@ def is_path_collision_free(robot_id: int, q_start, q_end,
     """
     q_s = np.asarray(q_start, dtype=float)
     q_e = np.asarray(q_end, dtype=float)
+    # F18 (2026-09-20): sample at a fixed RESOLUTION, not a fixed count.
+    # An RRT edge is capped at RRT_STEP_SIZE and its 8 samples already sit
+    # ~0.029 rad apart, but the direct-path shortcut and the smoother hand
+    # this function edges of arbitrary length: the seed-343879192 transit
+    # "Moving to tray (2 waypoints)" was one edge of 63 cm of end-effector
+    # travel certified from 8 samples, i.e. 9.1 cm apart — wider than the
+    # 3.3 cm cargo, so the bystander sitting between two samples was never
+    # tested and the cargo swept it flat (telemetry: orange_object's
+    # contact list names cyan_object, the cargo, not an arm link).
+    n_samples = int(n_checks)
+    if max_step_rad and max_step_rad > 0.0 and q_s.size:
+        span = float(np.max(np.abs(q_e - q_s)))
+        n_samples = max(n_samples,
+                        min(int(math.ceil(span / max_step_rad)) + 1,
+                            int(max_samples)))
+    # Coarse samples first, then the refinement.  A collision at ANY
+    # configuration rejects the edge, so testing the cheap spread first
+    # is sound and returns early on the edges that are plainly blocked —
+    # which is most of what the shortcut smoother proposes in clutter.
+    ts = np.linspace(0.0, 1.0, n_checks)
+    if n_samples > n_checks:
+        ts = np.concatenate((ts, np.linspace(0.0, 1.0, n_samples)))
     with RenderingLock(physics_client):
-        for t in np.linspace(0.0, 1.0, n_checks):
+        for t in ts:
             q = (1.0 - t) * q_s + t * q_e
             relax_here = allow_gripper_collisions
             if strict_gripper_interior and 0.2 < t < 0.8:

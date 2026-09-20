@@ -79,7 +79,7 @@ from boxel_data import BoxelRegistry, BoxelData, BoxelType
 from robot_utils import (ARM_JOINT_INDICES, END_EFFECTOR_LINK, FINGER_JOINTS,
                          JOINT_LIMITS_LOW, JOINT_LIMITS_HIGH, JOINT_RANGES,
                          REST_POSES, RenderingLock, IK_ORN_TOL_DEG,
-                         quat_angle_deg,
+                         quat_angle_deg, PATH_CHECK_MAX_STEP_RAD,
                          is_config_collision_free, is_path_collision_free)
 
 
@@ -270,6 +270,16 @@ class BoxelStreams:
         # reports no plan.  Persistent across replans (one BoxelStreams
         # instance per PDDLStreamPlanner, which lives for the episode).
         self.ungraspable_objects: set = set()
+        # F18 (2026-09-20): the resolution of every path collision check,
+        # in radians of the largest-moving joint between samples.  An
+        # attribute so --path-check-step can A/B it against the old
+        # fixed-count behaviour (0 restores it).
+        self.path_check_step: float = PATH_CHECK_MAX_STEP_RAD
+        # F18: the residual measurement below costs an extra strict check
+        # per interior segment of every trajectory the stream yields, and
+        # most yielded trajectories are never executed, so it is OFF
+        # unless --path-check-diag asks for the number.
+        self.path_check_diag: bool = False
         
         # IK solver parameters (PyBullet's iterative Jacobian-based IK).
         # 100 iterations is the PyBullet recommended default; convergence
@@ -984,7 +994,8 @@ class BoxelStreams:
                                   allow_gripper_collisions=is_pick_place,
                                   held_body_ids=held_body_ids,
                                   held_body_ee_offset=held_body_ee_offset,
-                                  strict_gripper_interior=is_pick_place):
+                                  strict_gripper_interior=is_pick_place,
+                                  max_step_rad=self.path_check_step):
             logger.info("plan_motion: direct path clear — linear trajectory")
             yield (self._linear_trajectory(q1, q2),)
             return
@@ -1014,6 +1025,45 @@ class BoxelStreams:
                                      held_body_ee_offset=held_body_ee_offset)
         logger.info("plan_motion: RRT path %d wps -> smoothed %d wps",
                      len(path), len(smoothed))
+
+        # F18 (2026-09-20): state plainly whether the path that is about
+        # to be EXECUTED passes the direct check's own rule on every
+        # segment.  The tree was grown with the relaxed gripper rule
+        # applied per edge (an RRT edge is a 0.2 rad step, so "the first
+        # and last 20 % of the path" has no meaning inside one), which
+        # leaves the interior waypoints of an unsmoothed path certified
+        # more permissively than the direct path ever was.  This does
+        # not reject the path — at a pick or place the fingers genuinely
+        # sit in clutter and rejecting would strand the planner — it
+        # makes the residual countable instead of invisible.
+        if self.path_check_diag and is_pick_place and len(smoothed) > 2:
+            # Whether a segment may relax the fingers is decided by where
+            # it sits along the WHOLE path, not within itself: the first
+            # and last fifth of the joint-space distance is the clutter
+            # the endpoints legitimately reach into, the rest is transit.
+            _steps = [float(np.max(np.abs(smoothed[k + 1] - smoothed[k])))
+                      for k in range(len(smoothed) - 1)]
+            _total = sum(_steps) or 1.0
+            _weak, _acc = [], 0.0
+            for k, _d in enumerate(_steps):
+                _mid = (_acc + 0.5 * _d) / _total
+                _acc += _d
+                if _mid < 0.2 or _mid > 0.8:
+                    continue           # an endpoint segment: relaxation is fine
+                if not is_path_collision_free(
+                        self.robot_id, smoothed[k], smoothed[k + 1], pc,
+                        self.RRT_EDGE_CHECKS,
+                        ignored_bodies=path_ignored,
+                        allow_gripper_collisions=False,
+                        held_body_ids=held_body_ids,
+                        held_body_ee_offset=held_body_ee_offset,
+                        max_step_rad=self.path_check_step):
+                    _weak.append(k)
+            if _weak:
+                logger.info(
+                    "plan_motion: [F18] %d of %d interior segment(s) of the "
+                    "executed path pass only with the gripper relaxed "
+                    "(segments %s)", len(_weak), len(_steps), _weak)
 
         # Wrap the joint-space waypoints into RobotConfig objects
         waypoints = []
@@ -1100,7 +1150,8 @@ class BoxelStreams:
                                           ignored_bodies=ignored_bodies,
                                           allow_gripper_collisions=allow_gripper_collisions,
                                           held_body_ids=held_body_ids,
-                                          held_body_ee_offset=held_body_ee_offset):
+                                          held_body_ee_offset=held_body_ee_offset,
+                                          max_step_rad=self.path_check_step):
                 return None
             new_idx = len(nodes)
             nodes.append(q_new)
@@ -1175,7 +1226,8 @@ class BoxelStreams:
                                           ignored_bodies=ignored_bodies,
                                           allow_gripper_collisions=allow_gripper_collisions,
                                           held_body_ids=held_body_ids,
-                                          held_body_ee_offset=held_body_ee_offset):
+                                          held_body_ee_offset=held_body_ee_offset,
+                                          max_step_rad=self.path_check_step):
                 nodes_a, nodes_b = nodes_b, nodes_a
                 parents_a, parents_b = parents_b, parents_a
                 swapped = not swapped
@@ -1235,12 +1287,24 @@ class BoxelStreams:
                 break
             i = random.randint(0, len(smoothed) - 3)
             j = random.randint(i + 2, len(smoothed) - 1)
+            # F18 (2026-09-20): the shortcut is certified under EXACTLY
+            # the rule the direct path had to pass — including
+            # strict_gripper_interior.  Without it the smoother was a
+            # second, more permissive gate on the same geometry: the
+            # seed-343879192 tray transit went "direct path blocked —
+            # running RRT-Connect" and then "RRT path 12 wps -> smoothed
+            # 2 wps", i.e. the smoother handed back the very straight
+            # line the direct check had just rejected, and the cargo
+            # swept a bystander flat along it.  A shortcut that cannot
+            # pass the direct check's rule is not a shortcut.
             if is_path_collision_free(self.robot_id, smoothed[i], smoothed[j],
                                       pc, self.RRT_EDGE_CHECKS,
                                       ignored_bodies=ignored_bodies,
                                       allow_gripper_collisions=allow_gripper_collisions,
                                       held_body_ids=held_body_ids,
-                                      held_body_ee_offset=held_body_ee_offset):
+                                      held_body_ee_offset=held_body_ee_offset,
+                                      strict_gripper_interior=allow_gripper_collisions,
+                                      max_step_rad=self.path_check_step):
                 smoothed = smoothed[:i + 1] + smoothed[j:]
         return smoothed
     
