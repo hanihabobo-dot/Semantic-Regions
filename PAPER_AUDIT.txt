@@ -544,7 +544,9 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       spacing changes EVERY seed's scene — eval_corpus.json pre-vetted
       seeds and all old per-seed expectations are stale until the CB#113
       re-sweep.]
-  F6. [OPEN] SENSE UN-GATED BY HIDEABILITY SINCE a0e536b — PLANNER SENSES
+  F6. [DECIDED 2026-09-19: the gate stays OFF, the strict form stays
+      behind --sense-gate; see the F6 DECISION block further down]
+      SENSE UN-GATED BY HIDEABILITY SINCE a0e536b — PLANNER SENSES
       IMPOSSIBLE FRAGMENTS (2026-08-21): a0e536b (2026-05-27,
       "experimental sense relaxation") dropped the boxel_fits precondition
       from :action sense, so sense grounds on ANY view_clear shadow,
@@ -819,6 +821,18 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       planning): the F5 re-roll seed reaches the target but cannot hold
       it.  Fold into #P2(b)'s root-cause round alongside the level-4
       pad-contact finding.
+      [CANDIDATE MECHANISM 2026-09-20, from the F18 root cause: a cargo
+      that sweeps THROUGH a bystander mid-transit is exactly what twists
+      it out of a friction pinch, and F18 proves that happened on this
+      very seed (orange_object's contact list names the cargo, on an edge
+      certified from samples 9.1 cm apart).  The same 2026-09-19 tray
+      smoke lost blue_object in transit twice on the same run.  So some
+      share of the F8 slips may be collisions the path check never
+      tested, not grasp-force failures.  The F18 A/B measures it
+      directly: count "transit loss" and "grip lost" lines per arm with
+      --path-check-step at the new resolution versus 0.  If they fall,
+      F8 is partly a planning bug rather than a physical one; whatever
+      remains is the genuine pick-reliability data point #P2(b) wants.]
   F9. [DONE] CONTAINS_NONTARGET REDISCOVERY HAS NO STRIKE COUNTER
       (2026-08-21): blocked-view, pick, and transit-loss failures all
       carry 3-strike giveups, but senses that end contains_nontarget
@@ -1663,8 +1677,9 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       senses on plainly visible targets now return found_target instead
       of three unlocalizable strikes.]
 
-  F18. [OPEN] A TRANSIT KNOCKS A BYSTANDER FLAT AND THE EPISODE STILL
-      REPORTS SUCCESS (2026-08-22, found BY the new F17 telemetry on the
+  F18. [ROOT CAUSE FOUND AND FIXED 2026-09-20; honest-reporting half
+      landed with #P2] A TRANSIT KNOCKS A BYSTANDER FLAT AND THE EPISODE
+      STILL REPORTS SUCCESS (2026-08-22, found BY the new F17 telemetry on the
       first tray run after F15/F16 landed, run 19-07-38, seed
       343879192, find-and-tray-stack): during
       "plan#1 action 3/9: move(tray)" — carrying cyan_object — the arm
@@ -1689,6 +1704,48 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       Wiring that event into the run outcome (a success that toppled a
       bystander is not a clean success) is the natural next step and
       would give the paper an honest per-episode integrity flag.
+
+      [REPORTING HALF DONE with #P2 (37c811a): the world-integrity
+      monitor runs after every move/pick/place/stack, the same topple is
+      now detected and replanned against, report_run_outcome prints
+      "NOTE: success with N world-integrity event(s) ... not a clean
+      success" and timing_summary.json persists the event list, so the
+      per-episode integrity flag the entry asks for exists.]
+
+      [ROOT CAUSE 2026-09-20, from the telemetry frames of the 09-19
+      16-04-57 reproduction (same seed, same action) — the entry's two
+      candidates were "the executed motion diverges from the validated
+      one" or "the ARM's own links swept it".  BOTH ARE WRONG.  What
+      touched orange_object is in its own contact list, frame by frame:
+        step 1432 t=5.967  tilt  4.6 deg  contacts=['table','cyan_object']
+        step 1434 t=5.975  tilt  8.1 deg  contacts=['cyan_object']
+        step 1436 t=5.983  tilt 11.5 deg  contacts=['table','cyan_object']
+      cyan_object is the CARGO, and the arm's own links never appear.
+      So F10's fix was right and the cargo WAS in the collision world at
+      the correct pose — the check simply never looked where it mattered.
+      is_path_collision_free sampled a FIXED 8 configurations per edge,
+      whatever the edge's length, and this transit was the direct-path
+      shortcut: "Moving to tray (2 waypoints)" is a SINGLE straight-line
+      joint-space edge, 63.4 cm of end-effector travel (measured from the
+      telemetry frames of that action), so consecutive collision checks
+      sat 9.1 cm apart at the end effector while the cargo is 3.3 cm
+      wide.  A body standing between two samples was never tested.  The
+      RRT was never the problem: _steer caps an edge at RRT_STEP_SIZE
+      0.2 rad, and 8 samples over 0.2 rad is 0.029 rad apart.  It is the
+      two places that hand the function an arbitrarily long edge — the
+      direct-path shortcut and the smoother's replacement edges, which
+      are exactly the edges that become executed transits.
+      FIX (2026-09-20): the check is now RESOLUTION-based, not
+      count-based.  robot_utils.PATH_CHECK_MAX_STEP_RAD = 0.2/7 is the
+      resolution an RRT edge already gets; is_path_collision_free raises
+      its sample count until no two samples are further apart than that
+      in any joint (floor still n_checks, ceiling
+      PATH_CHECK_MAX_SAMPLES 128).  An RRT edge is unchanged at 8
+      samples by construction; a 1.5 rad shortcut edge goes from 8 to 54.
+      Lever --path-check-step (0 restores the fixed count) for the A/B.
+      Cost: rejected shortcuts fall through to RRT, which is the
+      behaviour the 2026-08-21 strict_gripper_interior note already
+      wanted; the A/B measures the planning-time price.]
 
   F17. [DONE] HEADLESS RUNS RECORDED DECISIONS BUT NOT PHYSICS
       (2026-08-22, user-directed): a GUI run let the user WATCH the
@@ -2069,7 +2126,7 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       analytically (as the miss branch already does) instead of using
       a ground-plane hit.
 
-  F26. [OPEN, LATENT] refresh_object_aabbs' exclude_ids hook has NO
+  F26. [DONE 2026-09-19, f6ae28e] refresh_object_aabbs' exclude_ids hook had NO
       CALLER, and the held object's boxel survives a successful pick;
       every current refresh site runs handempty (sense requires it, the
       pipeline sites clear held state first), so nothing is wrong today,
@@ -2084,6 +2141,15 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       relies on this.  The #P2 monitor's post-move/post-pick hooks are
       the first while-holding refreshes and must pass
       exclude_ids={held name}.]
+      [SURFACED AND FIXED 2026-09-19 (f6ae28e): the #P2 monitor WAS the
+      first while-holding refresh site, exactly as predicted, and it bit
+      immediately — the post-pick refresh re-posed the held object's
+      boxel to its in-air detection and the F22 support completion then
+      stretched that box down to the table, 20 cm tall.  The fix is
+      stronger than passing exclude_ids through: refresh_object_aabbs
+      now SKIPS excluded objects entirely, so a held object is neither
+      re-posed nor completed nor considered for "lost", and the
+      dispatcher passes the held name at every monitor site.]
 
   F27. [OPEN, MINOR] SHADOW AABBs MISS THE SIDE LOBES OF OFF-AXIS
       OCCLUDERS (theory review 2026-09-18, pre-existing, unchanged by
@@ -2104,7 +2170,7 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       all corners whose outward face is visible, or build the fragment
       from the frustum's table footprint instead of hit-point extremes.
 
-  F28. [OPEN — #P2] REPEATED PHYSICAL STACK FAILURES ARE UNBOUNDED
+  F28. [DONE 2026-09-19, 37c811a] REPEATED PHYSICAL STACK FAILURES WERE UNBOUNDED
       (2026-09-18, tray-stack smoke seed 343879192 after the F20
       follow-up, run 17-07-01): plan 2's place of red_object failed on
       a transit slip (F8/F10 class, red's belief stayed 43 mm off), the
@@ -2122,6 +2188,16 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       and end the episode honestly after N.  The earlier smoke of the
       same seed (16-4x) succeeded in 3 plans: the seed is trajectory-
       intermittent, not F20/F21-related.
+      [FIXED 2026-09-19 with #P2 (37c811a): stack_fail_counts keys
+      (object, support) and a third failure of the same pair ends the
+      episode with exit_reason "stack_giveup"; the strike is taken at
+      the drop-verification failure, i.e. only when the robot's own
+      observation says the cube is not on its support, never from
+      ground truth.  report_run_outcome prints the counts and
+      timing_summary.json persists them.  Re-aiming from the refreshed
+      estimate happens anyway because every retry replans from a fresh
+      observation.  The 2026-09-20 stack h=3 arm on seeds 0-19 scores
+      18/20 with this in place.]
 
   F29. [DONE 2026-09-18] THE HOLDING LOOP STOPS ON "FOUND", NOT ON
       "HELD" (2026-09-18 A/B, seeds 112 and 117 on both arms; the
@@ -2212,7 +2288,8 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       (placement corridor blocking) and #P3(c) (reach-bounded
       placements).
 
-  F31. [DONE 2026-09-19, A/B pending] A PLACEMENT MAY HIDE A KNOWN BODY
+  F31. [DONE 2026-09-19; dedicated A/B NOT RUN, see the status note at
+      the end of this entry] A PLACEMENT MAY HIDE A KNOWN BODY
       FROM THE CAMERA.  LANDED: pddlstream_planner._compute_placement_
       hides emits a static (placement_hides ?o ?b) for every (movable
       object, free cell) whose virtual box at the cell (footprint
@@ -2276,6 +2353,17 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       test: zero entries on the smoke battery.  Interacts with #P3(c)
       (reach-bounded placement candidates: fewer cells, more pressure)
       and F11 (the corridor facts already remove many cells).
+      [A/B STATUS 2026-09-20, stated honestly: the dedicated F31 arm was
+      never completed — chain 2's arm was discarded when the F7 fix
+      landed on top of it, and no arm on disk isolates F31.  The only
+      pre/post pair available is CONFOUNDED with the F7 fix: wp3
+      (f6ae28e, no F31) 15/20 and 16/20 versus f7 (adf5320, F31 + the F7
+      fix) 15/20 and 17/20 on seeds 0-19 / 100-119.  That bounds F31's
+      cost at "no measurable success loss" but does not measure its
+      benefit, and the planning-time change in that pair is the F7
+      fix's, not F31's.  F31 is not behind a flag, so isolating it needs
+      a revert arm; CB#113 carries the final numbers either way.  The
+      eye --audit acceptance test (step 5) has NOT been run.]
 
   F32. [OPEN — PLANNING, found 2026-09-19 by the F7 fix] CROWDED-TABLE
       DEAD END: with every belief fact consistent (F7), seed 13 plan 4
