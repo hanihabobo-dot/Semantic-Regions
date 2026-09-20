@@ -2758,10 +2758,11 @@ DELIVERABLES:
       false-success physics checks; hooks where the discarded collision returns
       already flow.
   (b) [ANSWERED 2026-09-20 — see the ROOT CAUSE block after the
-      deliverables.  The arm-tower collision hypothesis is REFUTED for
-      the episode traced; the mechanism is the GRIPPER'S OWN FINGERS
-      knocking a neighbour over during a pick, and the toppled cube
-      then cannot be stacked.]
+      deliverables.  The supervisor's position is essentially SUPPORTED
+      with one refinement: what rams the tower is the CARGO at the
+      placement descent, not an arm link, which is why the arm's own
+      collision checking never saw it.  A first version of that block
+      claimed the opposite and was corrected the same day.]
       Root-cause the h=4 collapse with the monitor's data: confirm (or refute)
       arm-tower collision as the mechanism (deferred #84's three hypotheses:
       IK drift, grasp tilt, rim interference; #85 tilt compounding).  Fix what is
@@ -2813,55 +2814,95 @@ DELIVERABLES:
   physics_mismatch now, like holding.  The other half (why holding
   produced false successes) is the F29 fix of 2026-09-18.
 
-  #P2(b) ROOT CAUSE, 2026-09-20 — THE ARM-TOWER HYPOTHESIS IS REFUTED
-  FOR THE TRACED EPISODE.  Three h=4 runs with a dense telemetry
-  cadence (--telemetry-period 0.02; seeds 0, 3, 7; scratchpad
-  p2b_h4.sh):
+  #P2(b) ROOT CAUSE, 2026-09-20.  READ THE CORRECTION: an earlier
+  version of this block, written the same day, claimed "the arm-tower
+  hypothesis is REFUTED" and "the tower was never touched".  That was
+  WRONG, and the round-4 review caught it from the same run.  I had
+  traced one window (t=22.5 s) and never looked at t=16.6 s, where the
+  tower actually died.  The corrected account follows; the supervisor's
+  long-standing position is essentially SUPPORTED, with one refinement
+  that matters for the fix.
+  Three h=4 runs with a dense telemetry cadence (--telemetry-period
+  0.02; seeds 0, 3, 7; scratchpad p2b_h4.sh):
     seed 0  FAILED pick_giveup (3 failed picks of red_object, whose
             belief had drifted 45 mm)
     seed 3  SUCCESS — a clean four-level tower
-    seed 7  FAILED stack_giveup after 3 rejected drops of blue on green
-  Seed 7 traced frame by frame (tools/_p2b_tilt.py, _p2b_chain.py):
-    step 5400 t=22.500  plan#3 action 2/12: pick(red_object)
-      orange_object tilt 75.3 deg  contacts ['table', 'robot:9',
-                                             'red_object', 'blue_object']
-      blue_object   tilt  5.9 deg  contacts ['table', 'orange_object']
-    step 5460 t=22.750
-      orange_object tilt 69.1 deg  contacts ['table', 'robot:9']
-      blue_object   tilt 71.6 deg  contacts ['table']
-  Link 9 is a Panda FINGER.  The robot was picking red_object; its own
-  finger pushed orange_object over; orange fell into blue_object; blue
-  ended flat on the table at tilt 90.  The tower was never touched.
-  The rest of the episode is the consequence: a cube on its side is not
-  distinguishable from an upright one in an AABB (stated in the monitor
-  note above), so the belief kept treating blue as stackable, the robot
-  picked it up sideways — "[#84-gt-diag] pre-release blue_object:
-  tilt_deg=90.15" — and the drop verification correctly rejected the
-  result three times until F28's counter ended the episode.  So what
-  looks like "stacking collapses with height" is here a BYSTANDER
-  KNOCK-DOWN during a pick plus an undetectable topple, not a collapse
-  at all, and the failure is honest at every step.
-  WHY THE PLANNER DID NOT PREVENT IT: gripper-link collisions are
-  deliberately EXEMPTED at pick and place (allow_gripper_collisions =
-  is_pick_place, and the 2026-08-21 strict_gripper_interior confines
-  the exemption to the first and last fifth of a transit).  The
-  exemption exists because at a grasp the fingers must legitimately sit
-  in clutter — but it exempts them against EVERY body, not just the one
-  being grasped, so a finger sweeping a neighbour over is certified
-  collision-free by construction.  This is the same residual that F18
-  records for RRT interiors, and it also explains part of F8: an object
-  the fingers shove is an object that later resists a clean pick.
-  PROPOSED FIX, unmeasured, and the top pre-bridge item for the next
-  cycle: replace the blanket gripper exemption with an IGNORED-BODY
-  one — exempt finger contacts with the grasp target (and its support)
-  and check them strictly against everything else.  The plumbing
-  exists (ignored_bodies / path_ignored already flow through every
-  check).  It will reject approaches that currently succeed, so it
-  needs its own A/B on stack h=3 and h=4 plus holding, measuring
-  bystander events and success together; do not ship it on argument
-  alone.  The evidence above is one episode traced end to end; seeds 0
-  and 3 show the other two outcomes (a drifted-belief pick giveup, and
-  a clean success), so h=4 is not one failure mode but at least three.
+    seed 7  FAILED stack_giveup
+  So h=4 is not one failure mode: it is at least three, and one of the
+  three seeds succeeds outright.
+  SEED 7, THE WHOLE CHAIN (logs/run_2026-09-20_15-14-17;
+  timing_summary.json: exit_reason stack_giveup, plan_count 9,
+  n_integrity_events 9).  ONE initiating event with a long tail:
+  (1) THE CARGO DESTROYS THE TOWER, at plan#1's own fourth-level
+      placement, 6 s before anything else:
+        step 3987 t=16.6125  stack(blue_object, green_object)
+          orange tilt 0.04 z .350 | red tilt 0.04 z .400 |
+          green tilt 0.03 z .450   (the three-level tower, upright)
+          blue  tilt 0.45 speed 0.7046 contacts ['robot:9','robot:10']
+        step 3990 t=16.6250  <- the held cube reaches the tower top
+          green tilt 3.18 speed 0.5976 (was 0) contacts [red, blue]
+        step 4032            tilts 48.93 / 48.94 / 48.96 — LOCKSTEP,
+                             i.e. the stack topples as a rigid unit
+        step 4054            tilts 92.96 / 85.69 / 92.79 — all flat
+      Upright to flat in about 0.28 s, beginning in the exact frame the
+      gripper-held cube, still descending at 0.67-0.70 m/s, touched the
+      top of the tower.  The monitor's own first two integrity events
+      are that collapse: off_support red_object on orange_object,
+      gap -51.2 mm, and green_object on red_object, -51.1 mm.  The run
+      log independently prints DISTURBED red 4.5 mm "though the arm
+      never grasped it" and FLING green 0.60-0.62 m/s "untouched by the
+      arm" — that phrase means no robot LINK is in the contact set, and
+      it does not exclude the robot-held cargo, which is what hit it.
+      The same signature recurs at plan#7 (t=42.26) and plan#9
+      (t=58.90), with further off_support events at plan#7 (-21.7 mm)
+      and plan#8 (-51.1 mm).
+  (2) A FINGER THEN ROLLS A FALLEN CUBE INTO AN UPRIGHT ONE, during a
+      later pick:
+        step 5111 t=21.2958  orange tilt 90.00  contacts ['table']
+        step 5116 t=21.3167  orange tilt 89.92  contacts ['table',
+                                                          'robot:9']
+        step 5400 t=22.5000  orange tilt 75.28  contacts ['table',
+                             'robot:9','red_object','blue_object']
+        step 5460 t=22.7500  orange tilt 69.07  contacts ['table',
+                                                          'robot:9']
+      Orange had ALREADY been flat for 4.4 s (214 frames, table as its
+      only contact) before a finger ever touched it — it fell in the
+      collapse at (1), being the tower's bottom cube — and under the
+      finger its tilt DECREASES, 90 to 75 to 69.  The finger rolled an
+      already-fallen cube; it did not topple it.  What the finger DID
+      cause is the next link: the rolled orange drove the still-upright
+      blue_object over (blue's only non-table contact through its whole
+      topple is orange, never the robot), and blue reached 90.14 deg.
+  (3) THE UNDETECTABLE TOPPLE THEN COSTS THE EPISODE.  A cube on its
+      side is not distinguishable from an upright one in an AABB
+      (stated in the monitor note above), so the belief kept treating
+      blue as stackable, the robot picked it up sideways and the drop
+      verification correctly rejected the result.  Strike accounting,
+      corrected: strike 1 belongs to plan#1 at t=16.4-17.0, BEFORE the
+      knock-down, with blue upright (pre-release tilt 0.69, released
+      0.00); only strikes 2 (plan#7, pre-release 89.93) and 3 (plan#9,
+      90.15) are the sideways-blue mechanism.
+  WHAT THIS MEANS FOR THE PAPER.  Deferred #84's surviving mechanism is
+  CARGO-INTO-TOWER INTERFERENCE AT PLACEMENT — the rim hypothesis —
+  not arm-link collision.  The supervisor's "the simulated arm rams the
+  tower" is right in substance; the refinement is that the thing that
+  rams it is the object being carried, not a link, which is why the
+  arm's own collision checking never saw it: the executed descent is a
+  straight drop to the release height at transit speed, and the cargo's
+  swept volume during that descent is not what plan_motion certified.
+  ACTIONABLE, and it is NOT the gripper exemption: the descent should
+  approach the support slowly and stop on contact, the way
+  close_gripper_until_contact already does for grasping, instead of
+  arriving at 0.7 m/s.  A force- or contact-terminated placement would
+  have prevented event (1) outright.  The blanket gripper-collision
+  exemption (see F18's residual) explains only event (2), and the
+  ignored-body fix proposed there would NOT have saved this episode.
+  Both remain worth doing; this one first.
+  Evidence tools: tools/_p2b_tilt.py, _p2b_chain.py.  METHOD NOTE for
+  whoever reads telemetry next: trace the WHOLE episode before naming a
+  mechanism.  The error above came from reading one window, and the
+  phrase "untouched by the arm" in the run log is exactly the kind of
+  line that invites it.
   (d) CB#124: timing_summary.json now carries integrity_events (per
   action, with kind / object / plan / measure), n_integrity_events,
   integrity_event_kinds, stack_fail_counts, blocked_giveup_shadows and
