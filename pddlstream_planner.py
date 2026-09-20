@@ -392,7 +392,7 @@ class PDDLStreamPlanner:
     # observes half the fragment; less than that is a relocation job.
     SENSE_PARTIAL_MAX_BLOCKED = 0.5
 
-    def _compute_placement_hides(self):
+    def _compute_placement_hides(self, held_obj=None):
         """F31 (2026-09-19): the set of (object, free cell) pairs where
         the object's estimated box, placed at the cell (footprint centred
         on the cell, bottom on the cell floor — what the camera would
@@ -413,7 +413,16 @@ class PDDLStreamPlanner:
         known = []
         ext_classes: Dict[Tuple, List[str]] = {}
         for b in self.registry.boxels.values():
-            if b.boxel_type != BoxelType.OBJECT or b.id == self.tray_name:
+            # Review round 3 (2026-09-20): the HELD object is not a body
+            # the camera can lose sight of — its boxel is the stale
+            # pick-time box, the same one the location facts drop for
+            # (see _build_init), and refresh_object_aabbs never re-poses
+            # it.  Protecting the position it has already left made
+            # OTHER objects' placements cost 2 instead of 1 at cells
+            # that hide nothing.
+            if (b.boxel_type != BoxelType.OBJECT
+                    or b.id == self.tray_name
+                    or (held_obj is not None and b.id == held_obj)):
                 continue
             bmin = np.asarray(b.min_corner, dtype=float)
             bmax = np.asarray(b.max_corner, dtype=float)
@@ -767,7 +776,7 @@ class PDDLStreamPlanner:
         # detected, and may be the next target.  Static per-(object,
         # cell) facts; :action place requires (not (placement_hides)).
         if self.camera_pos is not None:
-            hides = self._compute_placement_hides()
+            hides = self._compute_placement_hides(held_obj)
             for (obj_id, free_id) in sorted(hides):
                 init.append(('placement_hides', obj_id, free_id))
             self._last_placement_hides = sorted(hides)
