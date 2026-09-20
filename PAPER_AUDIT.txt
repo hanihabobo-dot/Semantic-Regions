@@ -1755,17 +1755,52 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       two places that hand the function an arbitrarily long edge — the
       direct-path shortcut and the smoother's replacement edges, which
       are exactly the edges that become executed transits.
-      FIX (2026-09-20): the check is now RESOLUTION-based, not
-      count-based.  robot_utils.PATH_CHECK_MAX_STEP_RAD = 0.2/7 is the
-      resolution an RRT edge already gets; is_path_collision_free raises
-      its sample count until no two samples are further apart than that
-      in any joint (floor still n_checks, ceiling
-      PATH_CHECK_MAX_SAMPLES 128).  An RRT edge is unchanged at 8
-      samples by construction; a 1.5 rad shortcut edge goes from 8 to 54.
+      SECOND MECHANISM, found the same day and the sharper of the two:
+      that transit did NOT come from the direct-path shortcut at all.
+      The log of the same action reads
+        plan_motion: direct path blocked — running RRT-Connect
+        plan_motion: RRT path 12 wps -> smoothed 2 wps
+      A smoothed path of 2 waypoints is the single edge start->goal —
+      the exact straight line the direct check had just REJECTED.  The
+      two gates disagreed because they were not the same gate:
+      plan_motion passes strict_gripper_interior=is_pick_place to the
+      direct check (the 2026-08-21 fix, so a transit's interior is
+      checked with the fingers STRICT), while _smooth_path passed only
+      allow_gripper_collisions and never strict_gripper_interior.  So
+      every shortcut was certified with the gripper relaxed along its
+      whole length, and the smoother could hand back any edge the
+      direct check had refused.  The 2026-08-21 fix was live but a
+      second, more permissive gate stood behind it.  Prevalence over
+      the 55 recorded runs of the 09-20 arms: 13 runs (24 %) contain a
+      bystander event, and NONE of those follows a 10-waypoint move
+      (the direct-path trajectory shape) — they follow the 3- and
+      2-waypoint smoothed paths.
+      FIX (2026-09-20), both halves:
+      (1) the check is RESOLUTION-based, not count-based.
+      robot_utils.PATH_CHECK_MAX_STEP_RAD = 0.2/7 is the resolution an
+      RRT edge already gets; is_path_collision_free raises its sample
+      count until no two samples are further apart than that in any
+      joint (floor still n_checks, ceiling PATH_CHECK_MAX_SAMPLES 128),
+      testing the coarse spread first so a plainly blocked edge still
+      rejects in 8 evaluations.  An RRT edge is unchanged at 8 samples
+      by construction; a 1.5 rad shortcut edge goes from 8 to 54.
+      (2) _smooth_path certifies a shortcut under EXACTLY the direct
+      check's rule, strict_gripper_interior included.  A shortcut that
+      cannot pass the direct check's rule is not a shortcut.
       Lever --path-check-step (0 restores the fixed count) for the A/B.
-      Cost: rejected shortcuts fall through to RRT, which is the
-      behaviour the 2026-08-21 strict_gripper_interior note already
-      wanted; the A/B measures the planning-time price.]
+      RESIDUAL, made countable rather than fixed: the tree itself is
+      grown with the relaxed rule applied PER EDGE, and "the first and
+      last 20 % of the path" is meaningless inside a 0.2 rad step, so
+      an unsmoothed RRT path's interior waypoints are still certified
+      more permissively than the direct path ever was.  Rejecting them
+      would strand the planner at pick and place poses where the
+      fingers genuinely sit in clutter, so plan_motion now LOGS
+      "[F18] n of m executed segment(s) pass only with the gripper
+      relaxed" for the path it is about to return.  Count that line in
+      the arms; it is the honest measure of what is left.
+      Cost: rejected shortcuts keep the RRT detour, so paths get longer
+      and both planning and execution time rise; the A/B measures the
+      price against the bystander and transit-loss counts.]
 
   F17. [DONE] HEADLESS RUNS RECORDED DECISIONS BUT NOT PHYSICS
       (2026-08-22, user-directed): a GUI run let the user WATCH the
