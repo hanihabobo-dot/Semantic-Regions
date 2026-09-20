@@ -2702,7 +2702,12 @@ DELIVERABLES:
       FAILURE (object gone), never a blind retry.  Builds on the existing
       false-success physics checks; hooks where the discarded collision returns
       already flow.
-  (b) Root-cause the h=4 collapse with the monitor's data: confirm (or refute)
+  (b) [ANSWERED 2026-09-20 — see the ROOT CAUSE block after the
+      deliverables.  The arm-tower collision hypothesis is REFUTED for
+      the episode traced; the mechanism is the GRIPPER'S OWN FINGERS
+      knocking a neighbour over during a pick, and the toppled cube
+      then cannot be stacked.]
+      Root-cause the h=4 collapse with the monitor's data: confirm (or refute)
       arm-tower collision as the mechanism (deferred #84's three hypotheses:
       IK drift, grasp tilt, rim interference; #85 tilt compounding).  Fix what is
       fixable (approach paths that clear the tower; grasp tilt goes away with
@@ -2752,6 +2757,56 @@ DELIVERABLES:
   physics rejected used to leave exit_reason None ("timeout") — it is
   physics_mismatch now, like holding.  The other half (why holding
   produced false successes) is the F29 fix of 2026-09-18.
+
+  #P2(b) ROOT CAUSE, 2026-09-20 — THE ARM-TOWER HYPOTHESIS IS REFUTED
+  FOR THE TRACED EPISODE.  Three h=4 runs with a dense telemetry
+  cadence (--telemetry-period 0.02; seeds 0, 3, 7; scratchpad
+  p2b_h4.sh):
+    seed 0  FAILED pick_giveup (3 failed picks of red_object, whose
+            belief had drifted 45 mm)
+    seed 3  SUCCESS — a clean four-level tower
+    seed 7  FAILED stack_giveup after 3 rejected drops of blue on green
+  Seed 7 traced frame by frame (tools/_p2b_tilt.py, _p2b_chain.py):
+    step 5400 t=22.500  plan#3 action 2/12: pick(red_object)
+      orange_object tilt 75.3 deg  contacts ['table', 'robot:9',
+                                             'red_object', 'blue_object']
+      blue_object   tilt  5.9 deg  contacts ['table', 'orange_object']
+    step 5460 t=22.750
+      orange_object tilt 69.1 deg  contacts ['table', 'robot:9']
+      blue_object   tilt 71.6 deg  contacts ['table']
+  Link 9 is a Panda FINGER.  The robot was picking red_object; its own
+  finger pushed orange_object over; orange fell into blue_object; blue
+  ended flat on the table at tilt 90.  The tower was never touched.
+  The rest of the episode is the consequence: a cube on its side is not
+  distinguishable from an upright one in an AABB (stated in the monitor
+  note above), so the belief kept treating blue as stackable, the robot
+  picked it up sideways — "[#84-gt-diag] pre-release blue_object:
+  tilt_deg=90.15" — and the drop verification correctly rejected the
+  result three times until F28's counter ended the episode.  So what
+  looks like "stacking collapses with height" is here a BYSTANDER
+  KNOCK-DOWN during a pick plus an undetectable topple, not a collapse
+  at all, and the failure is honest at every step.
+  WHY THE PLANNER DID NOT PREVENT IT: gripper-link collisions are
+  deliberately EXEMPTED at pick and place (allow_gripper_collisions =
+  is_pick_place, and the 2026-08-21 strict_gripper_interior confines
+  the exemption to the first and last fifth of a transit).  The
+  exemption exists because at a grasp the fingers must legitimately sit
+  in clutter — but it exempts them against EVERY body, not just the one
+  being grasped, so a finger sweeping a neighbour over is certified
+  collision-free by construction.  This is the same residual that F18
+  records for RRT interiors, and it also explains part of F8: an object
+  the fingers shove is an object that later resists a clean pick.
+  PROPOSED FIX, unmeasured, and the top pre-bridge item for the next
+  cycle: replace the blanket gripper exemption with an IGNORED-BODY
+  one — exempt finger contacts with the grasp target (and its support)
+  and check them strictly against everything else.  The plumbing
+  exists (ignored_bodies / path_ignored already flow through every
+  check).  It will reject approaches that currently succeed, so it
+  needs its own A/B on stack h=3 and h=4 plus holding, measuring
+  bystander events and success together; do not ship it on argument
+  alone.  The evidence above is one episode traced end to end; seeds 0
+  and 3 show the other two outcomes (a drifted-belief pick giveup, and
+  a clean success), so h=4 is not one failure mode but at least three.
   (d) CB#124: timing_summary.json now carries integrity_events (per
   action, with kind / object / plan / measure), n_integrity_events,
   integrity_event_kinds, stack_fail_counts, blocked_giveup_shadows and
