@@ -160,6 +160,11 @@ class PDDLStreamPlanner:
         # margin) or 'object' (virtual boxes only: exactly what the
         # census will see).  Set from --corridor-test.
         self.corridor_test = 'cell+object'
+        # F7 remedy 3 (2026-09-19): the sampling-to-search budget ratio
+        # handed to pddlstream's solve() (see SEARCH_SAMPLE_RATIO and the
+        # comment at the call site).  A flag so the ratio can be A/B'd
+        # against the library default on the same code.
+        self.search_sample_ratio = SEARCH_SAMPLE_RATIO
 
         self.streams = BoxelStreams(
             registry, robot_id=robot_id, physics_client=physics_client,
@@ -1125,7 +1130,7 @@ class PDDLStreamPlanner:
                 # default keeps every binding's one call per iteration
                 # (greedily_process + process_complexity) and cuts the
                 # spin fourfold.
-                search_sample_ratio=SEARCH_SAMPLE_RATIO,
+                search_sample_ratio=self.search_sample_ratio,
             )
         finally:
             sys.stdout = _tee._stream

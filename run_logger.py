@@ -586,6 +586,15 @@ def parse_pipeline_args(argv=None):
              'cell no longer blocks a corridor its centre placement would '
              'not). A/B decides.')
     parser.add_argument(
+        '--search-sample-ratio', type=float, default=None,
+        help='F7 remedy 3 (2026-09-19): the sampling-to-search budget '
+             'ratio pddlstream\'s adaptive loop uses per iteration. The '
+             'pipeline default is 0.25 (planner.SEARCH_SAMPLE_RATIO); the '
+             'library default is 1.0, which busy-waits the full budget on '
+             'bindings that are standing by, so one unbindable skeleton '
+             'doubles the wall clock every iteration. Pass 1.0 to A/B the '
+             'library behaviour on the same code.')
+    parser.add_argument(
         '--sense-gate', choices=['off', 'strict'], default='off',
         help='F6 (2026-09-19): what (boxel_fits ?o ?shadow) means for the '
              'sense action. off (default): every view-clear fragment is '

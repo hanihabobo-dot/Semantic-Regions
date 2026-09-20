@@ -960,6 +960,9 @@ def main(gui=True, run_logger=None, scene_config=None,
     # until the A/B settles the default (see run_logger --sense-gate).
     planner.sense_gate = getattr(args, 'sense_gate', 'off')
     planner.corridor_test = getattr(args, 'corridor_test', 'cell+object')
+    _ssr = getattr(args, 'search_sample_ratio', None)
+    if _ssr is not None:
+        planner.search_sample_ratio = _ssr
 
     # World eye (2026-09-18): textual snapshots of world + belief + camera
     # view at every decision and observation point of the loop, into
@@ -2435,6 +2438,7 @@ if __name__ == "__main__":
         "planner":      args.planner,
         "sense_gate":   args.sense_gate,
         "corridor_test": args.corridor_test,
+        "search_sample_ratio": getattr(args, 'search_sample_ratio', None),
         "baseline":     args.baseline,
         "uniform_cell_size": args.uniform_cell_size,
         "min_boxel_size": args.min_boxel_size,  # audit #77 step 2
