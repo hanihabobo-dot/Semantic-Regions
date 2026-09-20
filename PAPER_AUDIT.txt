@@ -1770,11 +1770,26 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       every shortcut was certified with the gripper relaxed along its
       whole length, and the smoother could hand back any edge the
       direct check had refused.  The 2026-08-21 fix was live but a
-      second, more permissive gate stood behind it.  Prevalence over
-      the 55 recorded runs of the 09-20 arms: 13 runs (24 %) contain a
-      bystander event, and NONE of those follows a 10-waypoint move
-      (the direct-path trajectory shape) — they follow the 3- and
-      2-waypoint smoothed paths.
+      second, more permissive gate stood behind it.
+      PREVALENCE, and which mechanism dominates (55 recorded runs of
+      the 09-20 arms, tools/_f18_prevalence in the scratchpad): 13 runs
+      (24 %) contain at least one bystander event, 32 events in all
+      (22 disturbed, 8 off_support, 2 toppled).  Attributing each event
+      to the move that preceded it, by that move's waypoint count —
+      10 waypoints is the direct-path linear trajectory
+      (_linear_trajectory's default), anything smaller is a smoothed
+      RRT path —
+        10 waypoints (direct path)        : 25 events
+         3 waypoints (smoothed RRT path)  :  7 events
+         2 waypoints (smoothed to one edge):  0 events
+      so in THESE arms mechanism (1), the fixed sample count on a
+      full-length direct edge, accounts for most of what is observed,
+      and mechanism (2) for the rest.  The seed-343879192 tray
+      reproduction is a 2-waypoint smoothed path, i.e. mechanism (2);
+      it does not appear in this table because these arms run holding
+      and stack goals, which do far fewer long loaded transits than a
+      tray-stack does.  Both mechanisms are real and both are fixed;
+      do not quote one without the other.
       FIX (2026-09-20), both halves:
       (1) the check is RESOLUTION-based, not count-based.
       robot_utils.PATH_CHECK_MAX_STEP_RAD = 0.2/7 is the resolution an
