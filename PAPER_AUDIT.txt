@@ -1810,9 +1810,15 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       more permissively than the direct path ever was.  Rejecting them
       would strand the planner at pick and place poses where the
       fingers genuinely sit in clutter, so plan_motion now LOGS
-      "[F18] n of m executed segment(s) pass only with the gripper
-      relaxed" for the path it is about to return.  Count that line in
-      the arms; it is the honest measure of what is left.
+      "[F18] n of m interior segment(s) of the executed path pass only
+      with the gripper relaxed" for the path it is about to return.
+      That check decides relaxation by where a segment sits along the
+      WHOLE path (first/last fifth of the joint-space distance is
+      endpoint clutter, the rest is transit) rather than within the
+      segment, which is the very confusion that created the residual —
+      a per-segment test would relax the ends of every segment and
+      measure nothing.  Count that line in the arms; it is the honest
+      measure of what is left.
       Cost: rejected shortcuts keep the RRT detour, so paths get longer
       and both planning and execution time rise; the A/B measures the
       price against the bystander and transit-loss counts.]
