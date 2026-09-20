@@ -697,7 +697,27 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
   scene fail outright; before CB#113 the seed corpus must be
   PRE-VETTED (run the pre-flight over the candidate list and keep
   N passing seeds) or such cells counted explicitly as scene
-  failures; (2) all "deterministic re-roll to 343879192"-era
+  failures; [THE EXISTING CORPUS IS STALE — found 2026-09-20,
+  CB#113 PREREQUISITE: eval_corpus.json was collected 2026-05-15
+  (202 seeds from 600 candidates, 5400 probes) against the PRE-#P1
+  scene builder.  Everything that decides constructibility has
+  changed since: the real grasp and perception work, the measured
+  reach envelope, and #P3's constrain_to_reach=True in
+  scalability_scene.  The proof is in the A/B arms: seed 4 IS in
+  the corpus (it is the 3rd entry) and yet every arm on seeds 0-19
+  records it as a spawn-time failure, exit code 1 after 3.5 s with
+  no run directory and no planning time — as do seeds 6 and 12, and
+  106 and 115 in the fresh block.  (Exit before the run logger opens
+  a directory is what the loud pre-flight rejection does; the stderr
+  line itself is not retained by the A/B harness, so confirm it with
+  one manual run before quoting a reason.)  Those three depress
+  EVERY arm on 0-19 by the same 3/20 and are not planning failures
+  at all, which is worth stating in the paper: an arm reported as
+  15/20 is 15/17 of the scenes that were built.  Re-probe with
+  collect_eval_corpus.py into a NEW file before the sweep (the old
+  one is a historical record, not a working list), and report the
+  sweep's scene-rejection count separately from its planning
+  outcomes.]  (2) all "deterministic re-roll to 343879192"-era
   expectations (F5 notes, smoke lists) are historical; seed 999 now
   = loud rejection, full stop; (3) the /eval skill and
   tools/_eval_ab.py defaults updated — --seed-retry only ever
