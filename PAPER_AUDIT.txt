@@ -1860,7 +1860,34 @@ WHAT MUST GO (full inventory, from the 2026-08-15 code scout):
       measurement run and count the line.
       Cost: rejected shortcuts keep the RRT detour, so paths get longer
       and both planning and execution time rise; the A/B measures the
-      price against the bystander and transit-loss counts.]
+      price against the bystander and transit-loss counts.
+      [A/B 2026-09-20 (commit 54f982d, chain 9; BOTH arms carry the
+      smoother fix, the flag switches only the RESOLUTION half, so this
+      isolates (1) and not (2)):
+        holding seeds  resolution on        resolution off
+        0-19           16/20  7.0 s mean    15/20  5.1 s mean
+        100-119        17/20  5.3 s mean    16/20  6.9 s mean
+        total          33/40                31/40
+      Success and planning time are a wash — the smoke's 2.5x slowdown
+      on the stack scene does NOT generalise to the holding scenes, and
+      the direct-path rejection rate only moves from 5.0 % (416 clear /
+      22 blocked) to 7.5 % (392 / 32).
+      WHAT THE SAFETY NUMBERS ACTUALLY SAY, stated against my own
+      expectation: over 35 runs per arm, bystander events are 14 in the
+      pre-F18 arm (f8), 3 with the smoother fix alone, and 8 with both
+      halves.  So the SMOOTHER fix is what moves the number, and adding
+      the resolution did not help — the three largest shoves in the
+      whole comparison (106, 131 and 187 mm) are all in the resolution
+      arm, against a 37 mm maximum without it.  The obvious explanation,
+      that rejected direct paths push motion onto longer RRT detours
+      certified with relaxed fingers, is NOT supported: the rejection
+      rate barely moved and 6 of the 8 events still follow a 10-waypoint
+      direct-path move.  With 3 versus 8 events over 35 runs the
+      difference is not separable from trajectory noise either way, so
+      the honest statement is that raising the direct-path resolution
+      has NOT been shown to reduce what it was built to reduce, on
+      these scenes.  The tray-stack arms (long loaded transits, where
+      the original event happened) are the decisive test.]
 
   F17. [DONE] HEADLESS RUNS RECORDED DECISIONS BUT NOT PHYSICS
       (2026-08-22, user-directed): a GUI run let the user WATCH the
