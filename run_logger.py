@@ -586,6 +586,25 @@ def parse_pipeline_args(argv=None):
              'cell no longer blocks a corridor its centre placement would '
              'not). A/B decides.')
     parser.add_argument(
+        '--path-check-diag', action='store_true',
+        help='F18 (2026-09-20): report, for every trajectory the motion '
+             'stream yields, how many INTERIOR segments of it pass only '
+             'with the gripper relaxed — the residual left by growing '
+             'the RRT with the relaxed rule applied per edge. Off by '
+             'default because it costs a strict check per segment of '
+             'every sampled trajectory, most of which are never '
+             'executed.')
+    parser.add_argument(
+        '--path-check-step', type=float, default=None,
+        help='F18 (2026-09-20): the resolution of every motion-plan '
+             'collision check, in radians of the largest-moving joint '
+             'between consecutive samples along an edge (default 0.2/7, '
+             'exactly what an RRT edge already gets). 0 restores the old '
+             'fixed 8 samples per edge, which certified the direct-path '
+             'shortcut from samples 9 cm apart at the end effector and '
+             'let the carried object sweep a bystander flat between two '
+             'of them. A/B lever.')
+    parser.add_argument(
         '--search-sample-ratio', type=float, default=None,
         help='F7 remedy 3 (2026-09-19): the sampling-to-search budget '
              'ratio pddlstream\'s adaptive loop uses per iteration. The '
